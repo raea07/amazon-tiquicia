@@ -197,6 +197,11 @@ async function refreshTokenOf(context) {
   // An ordinary session (no reset link or code) cannot set a password without
   // the current one: the reset page sends it to the account page instead.
   await go(fresh.page, BASE + "/recuperar/nueva");
+  // The answer streams in after the page's frame: wait for it, whichever it is.
+  await fresh.page
+    .locator('main:visible [role="status"], main:visible [role="alert"], main:visible input[name="password"]')
+    .first()
+    .waitFor();
   const ordinary = await text(fresh.page.locator("main:visible").first());
   log("reset page for an ordinary session:", ordinary.slice(0, 160));
   check(/restablecer la contraseña/.test(ordinary), "the page explains it is for a reset");
