@@ -152,7 +152,7 @@ consent.
 | Response                        | Proposed target: 5 business days to acknowledge and 10 business days to complete; the lawyer to confirm the legal deadline |
 | Access                          | A readable copy of profile, addresses, orders, reviews, consents                                                           |
 | Rectification                   | Self-service for profile and addresses; by request for the rest                                                            |
-| Deletion                        | Self-service in every app (_Su cuenta → Eliminar mi cuenta_), immediate; see [Deleting an account](#deleting-an-account)  |
+| Deletion                        | Self-service in every app (_Su cuenta → Eliminar mi cuenta_), immediate; see [Deleting an account](#deleting-an-account)   |
 | Withdrawal of marketing consent | Immediate, from any message and from the account                                                                           |
 | Record                          | Every request and its outcome is logged                                                                                    |
 
@@ -183,19 +183,19 @@ removes those first).
 
 **What is erased**, in one transaction:
 
-| Where                                   | What happens                                                                                   |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Profile                                 | Name and phone erased, phone verification and marketing choice cleared                         |
-| Addresses                               | Deleted                                                                                        |
-| Consents                                | Deleted                                                                                        |
-| Past orders and their route stops       | Recipient name, phone, _señas_ and Plus Code erased; the map pin rounded to about 1 km         |
-| Returns and complaints (closed)         | The person's own text erased                                                                   |
-| Content reports they filed              | The e-mail given erased                                                                        |
-| Reviews                                 | Stay published, shown as «Cliente»: the name they came from is gone                            |
-| Shop memberships, inactive staff row    | Deleted; a former driver's record keeps no name, phone or ID number                            |
-| Second factors, sessions, sign-in links | Deleted: every session ends                                                                    |
+| Where                                   | What happens                                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Profile                                 | Name and phone erased, phone verification and marketing choice cleared                           |
+| Addresses                               | Deleted                                                                                          |
+| Consents                                | Deleted                                                                                          |
+| Past orders and their route stops       | Recipient name, phone, _señas_ and Plus Code erased; the map pin rounded to about 1 km           |
+| Returns and complaints (closed)         | The person's own text erased                                                                     |
+| Content reports they filed              | The e-mail given erased                                                                          |
+| Reviews                                 | Stay published, shown as «Cliente»: the name they came from is gone                              |
+| Shop memberships, inactive staff row    | Deleted; a former driver's record keeps no name, phone or ID number                              |
+| Second factors, sessions, sign-in links | Deleted: every session ends                                                                      |
 | Sign-in record (`auth.users`)           | E-mail replaced by `<id>@cuenta-eliminada.invalid`, password and metadata erased, sign-in banned |
-| Auth's own sign-in log, where kept      | Entries for the account deleted                                                                |
+| Auth's own sign-in log, where kept      | Entries for the account deleted                                                                  |
 
 **What is kept, and why.** Orders, their lines, payments, shipments,
 electronic invoices and ledger entries, for the legal retention period (five

@@ -14,8 +14,8 @@ Three more cover account security, reading e-mails from the stand-in's local
 mailbox (`GET /dev/mail`) and switching Auth settings for their own database
 (`POST /dev/settings`):
 
-| Journey               | App        | What it walks through                                                                                                                                                         |
-| --------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Journey               | App        | What it walks through                                                                                                                                                        |
+| --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `password-reset`      | `apps/web` | Same answer for an unknown address, the e-mail link, new password, old one refused, other session ended; then by 6-digit code; a reused and an expired link; a wrong code    |
 | `staff-second-factor` | `apps/ops` | Enrolment with computed codes, the second step after a wrong code, `require_staff_mfa` on (database refuses aal1 staff, colleague sent to enrolment), admin resets colleague |
 | `account-deletion`    | `apps/web` | Sign-up with confirmation on, resend limit, sign-in before confirming, code, deletion (wrong password first), same address signs up again, a shopper with an order refused   |
