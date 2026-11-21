@@ -1,6 +1,6 @@
 import { parsePhone } from "@yuntera/core";
 import { messageOf } from "@yuntera/expo-kit/api";
-import { useSession } from "@yuntera/expo-kit/auth";
+import { SignOutButton, useSession } from "@yuntera/expo-kit/auth";
 import { useApiMutation, useApiQuery } from "@yuntera/expo-kit/data";
 import { space } from "@yuntera/expo-kit/theme";
 import {
@@ -146,8 +146,7 @@ function PayoutDetailsForm({
 /** Cuenta: the shop's data as registered, where it is paid, and the way out. */
 export default function AccountScreen() {
   const shop = useShop();
-  const { viewer, signOut } = useSession();
-  const [leaving, setLeaving] = useState(false);
+  const { viewer } = useSession();
   const overview = useApiQuery(shopKey(shop.id, "overview"), (api) => api.sellerOverview(shop.id), {
     personal: true,
   });
@@ -283,19 +282,7 @@ export default function AccountScreen() {
             Ingresó como {viewer.email}.
           </Text>
         ) : null}
-        <Button
-          variant="ghost"
-          block
-          loading={leaving}
-          loadingLabel="Cerrando sesión…"
-          onPress={async () => {
-            setLeaving(true);
-            await signOut();
-          }}
-          testID="account-sign-out"
-        >
-          Cerrar sesión
-        </Button>
+        <SignOutButton testID="account-sign-out" />
       </Stack>
     </Screen>
   );

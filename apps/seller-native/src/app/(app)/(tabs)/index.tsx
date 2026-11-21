@@ -1,9 +1,8 @@
-import { useSession } from "@yuntera/expo-kit/auth";
+import { SignOutButton, useSession } from "@yuntera/expo-kit/auth";
 import { useApiQuery } from "@yuntera/expo-kit/data";
 import {
   Alert,
   Badge,
-  Button,
   Card,
   ErrorState,
   formatPrice,
@@ -13,7 +12,6 @@ import {
   Stack,
   Text,
 } from "@yuntera/expo-kit/ui";
-import { useState } from "react";
 import { View } from "react-native";
 import { Stat, StatGrid } from "@/components/parts";
 import { SELLER_HEALTH } from "@/lib/labels";
@@ -28,8 +26,7 @@ import { todayItems, todaySentence } from "@/lib/today";
 export default function HomeScreen() {
   const shop = useShop();
   const { justRegistered } = useShops();
-  const { viewer, signOut } = useSession();
-  const [leaving, setLeaving] = useState(false);
+  const { viewer } = useSession();
   const overview = useApiQuery(shopKey(shop.id, "overview"), (api) => api.sellerOverview(shop.id), {
     personal: true,
   });
@@ -202,19 +199,7 @@ export default function HomeScreen() {
               Ingresó como {viewer.email}.
             </Text>
           ) : null}
-          <Button
-            variant="ghost"
-            block
-            loading={leaving}
-            loadingLabel="Cerrando sesión…"
-            onPress={async () => {
-              setLeaving(true);
-              await signOut();
-            }}
-            testID="sign-out"
-          >
-            Cerrar sesión
-          </Button>
+          <SignOutButton />
         </Stack>
       </View>
     </Screen>

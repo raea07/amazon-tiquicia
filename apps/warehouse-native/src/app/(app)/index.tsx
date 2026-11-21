@@ -1,9 +1,8 @@
-import { useSession } from "@yuntera/expo-kit/auth";
+import { SignOutButton, useSession } from "@yuntera/expo-kit/auth";
 import { useApiQuery } from "@yuntera/expo-kit/data";
 import { colors, radius, space } from "@yuntera/expo-kit/theme";
 import {
   Badge,
-  Button,
   ChoiceList,
   ErrorState,
   formatDate,
@@ -27,7 +26,7 @@ import { keys, useWarehouse } from "@/lib/warehouse";
  * to several warehouses chooses which one they are in.
  */
 export default function BoardScreen() {
-  const { viewer, signOut } = useSession();
+  const { viewer } = useSession();
   const { warehouse, warehouses, choose } = useWarehouse();
   const board = useApiQuery(keys.board(warehouse.id), (api) => api.wmsBoard(warehouse.id), {
     personal: true,
@@ -148,9 +147,7 @@ export default function BoardScreen() {
         </View>
       )}
 
-      <Button variant="ghost" block onPress={() => void signOut()} testID="sign-out">
-        Cerrar sesión
-      </Button>
+      <SignOutButton />
     </Screen>
   );
 }

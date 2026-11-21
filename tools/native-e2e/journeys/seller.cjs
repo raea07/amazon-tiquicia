@@ -10,14 +10,23 @@
 // other shop, the first shop's messages are gone and each balance matches
 // the API. Then a shop in review sees what the web shows it, and a newcomer
 // creates an account, registers a shop (a wrong identification first) and
-// marks its pickup point with the short Plus Code Google Maps shows.
+// marks its pickup point with the short Plus Code Google Maps shows. Last, a
+// seller whose account has an authenticator app is held at the second step:
+// a wrong code says how many tries are left, the right one opens the shop,
+// and after five wrong codes the pause holds even the right one.
+//
+// node:crypto computes the authenticator's codes in this test script only;
+// nothing of it is in the app.
 //
 // Fails on any console error, uncaught exception or 5xx response. Takes a
 // screenshot at each step; they are meant to be looked at.
 
-const { chromium } = require("playwright");
+const { createHmac } = require("node:crypto");
+const { chromium, request } = require("playwright");
 
 const BASE = process.env.NATIVE_SELLER_URL || "http://127.0.0.1:3011";
+const API = process.env.API_URL || "http://127.0.0.1:54321";
+const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const log = (...args) => console.log(...args);
@@ -30,6 +39,66 @@ const NNBSP = "\u202f";
 function check(condition, message) {
   if (!condition) throw new Error(message);
   log("  ok:", message);
+}
+
+/** True while the second-step checks run: Auth's 422 for a wrong code is expected then. */
+let authRefusals = false;
+
+/** A call to Auth's HTTP API (setting up the authenticator app, as the website does). */
+async function auth(method, path, data, token) {
+  const ctx = await request.newContext();
+  const r = await ctx.fetch(`${API}${path}`, {
+    method,
+    headers: {
+      apikey: KEY,
+      "x-supabase-api-version": "2024-01-01",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    data,
+  });
+  const body = r.status() === 204 ? null : await r.json().catch(() => null);
+  await ctx.dispose();
+  return { status: r.status(), body };
+}
+
+// An authenticator app in a few lines (RFC 6238: SHA-1, 6 digits, 30 s), as
+// in tools/e2e/journeys/staff-second-factor.cjs.
+const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function base32(text) {
+  let bits = 0;
+  let value = 0;
+  const out = [];
+  for (const char of text.replace(/\s+/g, "").toUpperCase()) {
+    value = (value << 5) | ALPHABET.indexOf(char);
+    bits += 5;
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(out);
+}
+function codeAt(secret, step) {
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(step));
+  const mac = createHmac("sha1", base32(secret)).update(counter).digest();
+  const offset = mac[mac.length - 1] & 15;
+  const n =
+    ((mac[offset] & 127) << 24) |
+    (mac[offset + 1] << 16) |
+    (mac[offset + 2] << 8) |
+    mac[offset + 3];
+  return String(n % 1e6).padStart(6, "0");
+}
+/** A code Auth has not taken yet for this secret: the current step, or the next one. */
+const lastStep = new Map();
+async function freshCode(secret) {
+  let step = Math.floor(Date.now() / 30000);
+  const used = lastStep.get(secret) ?? -1;
+  if (step <= used) step = used + 1;
+  while (step > Math.floor(Date.now() / 30000) + 1) await new Promise((r) => setTimeout(r, 1000));
+  lastStep.set(secret, step);
+  return codeAt(secret, step);
 }
 
 /** "₡16 203,20" or "−₡1 500" → céntimos. */
@@ -60,7 +129,10 @@ function colones(text) {
     });
     const page = await context.newPage();
     page.on("console", (m) => {
-      if (m.type() === "error") errors.push(`${name} console: ${m.text().slice(0, 300)}`);
+      if (m.type() !== "error") return;
+      // A wrong second-step code: Auth answers 422 and the browser logs it.
+      if (authRefusals && /status of 422/.test(m.text())) return;
+      errors.push(`${name} console: ${m.text().slice(0, 300)}`);
     });
     page.on("pageerror", (e) => errors.push(`${name} pageerror: ${String(e).slice(0, 300)}`));
     page.on("response", (r) => {
@@ -520,6 +592,97 @@ function colones(text) {
   check(true, "the pickup place is saved and the inventory lists it, ready for a stock count");
   await p.screenshot({ path: `${SHOTS}/native-seller-17-inventory-new-place.png` });
   await newcomer.context.close();
+
+  // 13. A seller with an authenticator app gives its code in the app. The
+  // factor is turned on through the API (as the website does), and the codes
+  // are computed here as an authenticator app would.
+  const SECOND = "cafetal@yuntera.example";
+  const aal1 = (
+    await auth("POST", "/auth/v1/token?grant_type=password", { email: SECOND, password: PASSWORD })
+  ).body.access_token;
+  const factor = (await auth("POST", "/auth/v1/factors", { factor_type: "totp" }, aal1)).body;
+  const challenge = (await auth("POST", `/auth/v1/factors/${factor.id}/challenge`, {}, aal1)).body;
+  const enrolled = await auth(
+    "POST",
+    `/auth/v1/factors/${factor.id}/verify`,
+    { challenge_id: challenge.id, code: await freshCode(factor.totp.secret) },
+    aal1,
+  );
+  check(enrolled.status === 200, "the seller's authenticator app is set up");
+  const wrongCode = () => codeAt(factor.totp.secret, Math.floor(Date.now() / 30000) - 20);
+
+  const twoStep = await open("second-step");
+  const q = twoStep.page;
+  const on = (id) => q.getByTestId(id).filter({ visible: true }).first();
+  const said = async (id) => (await on(id).innerText()).replace(/\s+/g, " ").trim();
+  authRefusals = true; // a wrong code is a 422 from Auth, which the browser logs
+  await signIn(q, SECOND);
+  await on("second-step").waitFor();
+  check(
+    /Verificación en dos pasos/.test(await said("second-step")) &&
+      !(await q.getByTestId("seller-overview").count()),
+    "the right password leads to the second step, not into the shop",
+  );
+  await q.screenshot({ path: `${SHOTS}/native-seller-18-second-step.png` });
+  await on("second-step-code").fill(wrongCode());
+  await on("second-step-submit").click();
+  await on("second-step-message").waitFor();
+  check(
+    /El código no es correcto.*Le quedan 4 intentos antes de una pausa de 15 minutos/.test(
+      await said("second-step-message"),
+    ),
+    "a wrong code is refused, saying how many tries are left",
+  );
+  check((await on("second-step-code").inputValue()) === "", "the code typed is cleared");
+  await on("second-step-code").fill(await freshCode(factor.totp.secret));
+  await on("second-step-submit").click();
+  await on("seller-overview").waitFor();
+  check(true, "the right code opens the shop");
+  const kept = await q.evaluate(() => Object.values(localStorage).join("\n"));
+  check(!/"code"\s*:\s*"\d{6}"/.test(kept), "no code is kept on the phone");
+  await on("sign-out").click();
+  await on("sign-in-email").waitFor();
+
+  // Too many wrong codes: the database pauses the account, and says for how long.
+  await signIn(q, SECOND);
+  await on("second-step").waitFor();
+  for (let left = 3; left >= 0; left--) {
+    await on("second-step-code").fill(wrongCode());
+    await on("second-step-submit").click();
+    await q
+      .getByTestId("second-step-message")
+      .filter({ visible: true, hasText: left > 0 ? `Le quedan ${left} intento` : "espere" })
+      .first()
+      .waitFor();
+  }
+  check(
+    /Por seguridad, espere \d+ minutos? antes de intentarlo de nuevo/.test(
+      await said("second-step-message"),
+    ),
+    "the fifth wrong code starts the pause",
+  );
+  await on("second-step-code").fill(await freshCode(factor.totp.secret));
+  await on("second-step-submit").click();
+  await q
+    .getByTestId("second-step-message")
+    .filter({ visible: true, hasText: "demasiados códigos" })
+    .first()
+    .waitFor();
+  check(
+    /Escribió demasiados códigos incorrectos.*Podrá intentarlo de nuevo en/.test(
+      await said("second-step-message"),
+    ) && !(await q.getByTestId("seller-overview").count()),
+    "during the pause even the right code is not sent, and the message says how long to wait",
+  );
+  await q.screenshot({ path: `${SHOTS}/native-seller-19-second-step-paused.png` });
+  await on("second-step-cancel").click();
+  await on("sign-in-email").waitFor();
+  check(
+    !(await q.evaluate(() => Object.keys(localStorage).some((k) => k.startsWith("sb-")))),
+    "cancelling the second step leaves no session on the phone",
+  );
+  authRefusals = false;
+  await twoStep.context.close();
 
   log("\nERRORS:", errors.length ? errors : "none");
   await browser.close();

@@ -1,4 +1,4 @@
-import { useSession } from "@yuntera/expo-kit/auth";
+import { SignOutButton, useSession } from "@yuntera/expo-kit/auth";
 import { Button, Card, Logo, Screen, Stack, Text } from "@yuntera/expo-kit/ui";
 import { useState } from "react";
 import { View } from "react-native";
@@ -16,7 +16,7 @@ const STEPS = [
  * to register a new one. Once registered, the app opens on the new shop.
  */
 export default function RegisterScreen() {
-  const { signOut, viewer, reloadRoles, rolesLoading } = useSession();
+  const { viewer, reloadRoles, rolesLoading } = useSession();
   const [registering, setRegistering] = useState(false);
 
   return (
@@ -62,9 +62,7 @@ export default function RegisterScreen() {
           </Button>
         </Stack>
       )}
-      <Button variant="ghost" block onPress={() => void signOut()}>
-        Salir e ingresar con otra cuenta
-      </Button>
+      <SignOutButton label="Salir e ingresar con otra cuenta" testID="no-access-sign-out" />
     </Screen>
   );
 }

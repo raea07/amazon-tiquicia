@@ -50,7 +50,7 @@ function Navigator() {
 
 export default function RootLayout() {
   return (
-    <AppProviders env={env}>
+    <AppProviders env={env} secondStep="in-app">
       <ShopProvider>
         <Navigator />
       </ShopProvider>
