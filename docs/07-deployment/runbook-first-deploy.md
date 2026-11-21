@@ -6,11 +6,12 @@ production, with the Supabase and Vercel dashboards open.
 
 **Read this first.**
 
-- **Steps 1–6 were done for the preview on 21 November 2026** (project
+- **Steps 1–8 were done for the preview on 21 November 2026** (project
   `yuntera`, reference `lfulotisyeyooxecwnox`, US East, Postgres 17, free
-  plan). Each step says what was actually run and what differed from the local
-  build. Steps 7 and 8 are being done next. Places that differed, or still may,
-  are marked ⚠.
+  plan), first up to migration `082400` and then again for `082500` to
+  `082700` (account security, notifications, product photos). Each step says
+  what was actually run and what differed from the local build. Places that
+  differed, or still may, are marked ⚠.
 - **It costs money or it does not, depending on step 1.** Decide before
   starting.
 - **Do not touch the existing production project** of the other product in the
@@ -115,63 +116,138 @@ privileges of `postgres` (nothing is granted to `anon`, `authenticated` or
 `public` and `graphql_public`, `pg_graphql` is not enabled, and `anon` has a
 3-second and `authenticated` an 8-second statement timeout.
 
-### Migrations 20261121082500 to 20261121082700 (not applied anywhere yet)
+### Migrations 20261121082500 to 20261121082700
 
-Account security, notifications and product photos were merged on
-21 November 2026 and have run only on local PostgreSQL. Four things can be
-settled only on the hosted project. Apply the three files, then check, in
-this order:
+Account security, notifications and product photos. **Applied to the preview
+on 21 November 2026** with `remote-db.sh push`, in order, each in one
+transaction; all three went through at the first try (1.7 s together), so
+the project has 25 migrations. Nothing in them had to change for the
+platform. What was checked there, and how to repeat it:
 
-1. **The per-request check is registered and honoured.** `082500` runs
-   `alter role authenticator in database <db> set pgrst.db_pre_request =
-   'public.check_request'`. Confirm it took:
+1. **The per-request check is registered and honoured.** `082500` registers
+   `public.check_request` as `pgrst.db_pre_request` for role `authenticator`
+   in this database (`alter role … in database … set`) and sends
+   `notify pgrst, 'reload config'`. On the hosted project `postgres` holds `authenticator` with the admin option, so
+   the statement is allowed. Confirm it took:
 
    ```sql
    select s.setdatabase, s.setconfig from pg_db_role_setting s
    join pg_roles r on r.oid = s.setrole where r.rolname = 'authenticator';
    ```
 
-   If it is missing (the statement was refused), run Supabase's documented
-   form as `postgres`: `alter role authenticator set pgrst.db_pre_request =
-   'public.check_request'; notify pgrst, 'reload config';`. Then sign a
-   throwaway account in, keep its access token, sign it out and call
-   `/rest/v1/rpc/my_orders` with that token: expect 400 `session_ended`.
-   Measure the time of a few calls before and after (it adds indexed lookups
-   of `auth.users`, `auth.sessions` and `auth.mfa_factors` to every request).
-   Call `worker_notify_plan` with the worker's secret key: it must answer
-   (the check returns at once for it).
-2. **The functions that write the sign-in tables may do so.**
-   `delete_my_account` and `close_abandoned_shop` update `auth.users` and
-   delete from `auth.sessions`, `auth.identities`, `auth.mfa_factors`,
-   `auth.one_time_tokens` and `auth.audit_log_entries`; `ops_reset_staff_factor`
-   deletes factors and sessions. Check the owner's rights, then run the test
-   file, which exercises exactly these writes and rolls back:
+   On the preview: the platform's own row for all databases
+   (`session_preload_libraries`, the 8-second timeouts) and ours for database
+   `postgres`, `pgrst.db_pre_request=public.check_request`. The Data API
+   honours it straight away: a throwaway account signed up, called
+   `my_orders` (200), signed out, and the same access token then got
+   `400 session_ended` from `my_orders` and `my_roles`; a new sign-in worked
+   again.
+
+   **What it costs.** Inside the database, `check_request` for a signed-in
+   caller with a live session takes about 0.1 ms (95–108 µs over 2 000 calls,
+   against 3 µs for an empty loop and 0.7–0.8 ms for `my_roles` itself).
+   Through the API from outside, 30 sequential calls in two rounds as the
+   demo shopper: `my_roles` median 54–55 ms before the migration and 59–60 ms
+   after (fastest 48–49 ms before, 56–57 ms after); a visitor's call
+   (`shop_path_exists`) 56–60 ms before and 62–63 ms after, which is within
+   the noise of the network. A signed-in request is about 5 ms slower end
+   to end, most of it the extra statement PostgREST runs, not the check.
+   Not tried: the notification worker's secret key (never used here).
+
+2. **The second factor counts in the database.** With a throwaway account:
+   enrolled a TOTP factor through Auth's own API (`POST /auth/v1/factors`,
+   challenge, verify with a code computed locally); a new password-only
+   session (aal1) got `second_factor_required` from `my_orders` and
+   `my_addresses` and was answered by `my_security` and `mfa_attempt_status`;
+   the second step (reserve, challenge, verify) gave aal2 and `my_orders`
+   answered. Five wrong codes sent the apps' way (`mfa_reserve_attempt` before
+   each, Auth answering `422 mfa_verification_failed`) locked the account:
+   the sixth reservation came back with `locked: true` and
+   `retry_after_seconds: 899`. The factor was then removed with the aal2
+   session. Auth's factor e-mails (`mailer_notifications_mfa_*`) are off, so
+   none of this sent mail.
+3. **The functions that write the sign-in tables may do so.** The tables
+   belong to `supabase_auth_admin`, and `postgres`, which owns our functions,
+   has select, insert, update and delete on `auth.users`, `auth.sessions`,
+   `auth.identities`, `auth.mfa_factors`, `auth.mfa_challenges`,
+   `auth.one_time_tokens`, `auth.refresh_tokens` and `auth.audit_log_entries`:
 
    ```sql
-   select t, has_table_privilege(p.proowner, t, 'update,delete')
+   select t, has_table_privilege(p.proowner, t, 'select,update,delete')
    from pg_proc p, unnest(array['auth.users','auth.sessions','auth.identities',
-     'auth.mfa_factors','auth.one_time_tokens']) t
-   where p.proname = 'delete_my_account';
+     'auth.mfa_factors','auth.one_time_tokens','auth.audit_log_entries']) t
+   where p.proname = 'ops_reset_staff_factor';
    ```
 
-   ```bash
-   supabase/scripts/remote-db.sh test <project-reference>
+   `ops_reset_staff_factor` was run as the demo administrator's claims on a
+   throwaway account made staff for the purpose, which had a real verified
+   factor and a session, in a transaction that was rolled back: it removed
+   1 factor and ended 1 session and wrote its audit row; after the rollback
+   the factor was still there. `delete_my_account` was run for real three
+   times (once over the API, twice from the shop's "Eliminar mi cuenta"):
+   the old token got `session_ended`, the refresh token was refused, the old
+   address got `invalid_credentials`, and the same address signed up again as
+   a new account. Searching every row of every table in `public`, `private`,
+   `auth` and `storage` for the person's address, names, phone and address
+   text found nothing; the sign-in row was left with the
+   `cuenta-eliminada.invalid` address, an empty password, no NULL in the
+   token columns (Auth fails on those) and no identity or session. Auth's own
+   user listing (`GET /auth/v1/admin/users`) needs the secret key, which this
+   runbook never uses, so it was not called; Auth did load the row without
+   error when the old token was presented (`403 session_not_found`, not a
+   500). **Open Authentication → Users in the dashboard once** to see the
+   listing itself.
+
+   One thing the deletion does not touch: `auth.flow_state`, where Auth keeps
+   the state of a sign-in or reset that used PKCE. It holds the user id, not
+   personal data; one row was left after a deletion and removed by hand.
+
+4. **A migration may create the storage buckets and rules.** It may:
+
+   ```sql
+   select id, public, file_size_limit, allowed_mime_types from storage.buckets;
+   select policyname, cmd, roles from pg_policies where schemaname = 'storage';
    ```
 
-   After one real test deletion, open Authentication → Users: the deleted
-   user (banned for 100 years) must still load.
-3. **A migration may create the storage buckets and rules.** `082700` inserts
-   into `storage.buckets` and creates three policies on `storage.objects`.
-   Confirm with `select id, public from storage.buckets` (pending private,
-   public public) and `select policyname from pg_policies where tablename =
-   'objects'`. Then, as a test seller, `createSignedUrl` on
-   `product-photos-pending` must be refused and `createSignedUploadUrl` with
-   `upsert: true` must give AccessDenied: that proves the service sets
-   `storage.operation` and `request.headers`, which the rules read.
-4. **The image library works in the hosted console.** Approve one test photo
-   in `/catalogo` on the deployed console: the public 400, 800 and 1600 files
-   must appear and the shop must show them. `apps/ops` needs `sharp` at
-   runtime.
+   gave `product-photos-pending` (private) and `product-photos` (public),
+   both 2 MiB and JPEG/PNG/WebP, and the three rules (add, read, delete) for
+   `authenticated` exactly as the migration writes them. `storage.buckets`
+   has triggers that refuse lifecycle settings to anyone but the storage
+   service; the migration sets none, so the insert passes. The service then
+   behaved as the rules say, from outside (the photo journey, step 8): a
+   visitor gets `NoSuchBucket` from the private bucket's public address and
+   `NoSuchKey` for a download or a signed link; the shop's own seller cannot
+   sign a link to a waiting file (for 60 s or ten years) but can download it;
+   an upload address asked for with `x-upsert: true` is refused by the rule
+   (`AccessDenied`); a 3 MB file gets `EntityTooLarge` and an SVG
+   `InvalidMimeType` from the service; another shop gets `AccessDenied` or
+   `NoSuchKey` for signing, deleting and copying. So the service does set
+   `storage.operation` and `request.headers`.
+
+5. **The image library works in the hosted console.** It does. Staff
+   approved test photos in `/catalogo` on the deployed console; the 400, 800
+   and 1600 files appeared in the public bucket, each the reviewed picture at
+   exactly that width, and the shop showed them with their alternative text.
+
+Differences found on the platform, and what was done:
+
+| Difference                                                                                                                                                                                                                               | Fix                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The seed ran before `082600`, and the migration gives jobs only to events written after it, so the seed's 87 events have none (nothing old is ever sent). `100_notifications.sql` expected them                                          | The suite routes them itself inside its rolled-back transaction                                                                                                                                                     |
+| A hosted database refuses a `dblink` connection to itself without a password, and the Management API holds none. Part 2 of `100_notifications.sql` (two workers at once) needs that                                                      | It detects this and ends with a row named `skipped`; `remote-db.sh test` prints it, `local-db.sh test` prints it and fails in CI (`CI=true`). It runs locally                                                       |
+| `storage.objects` refuses any `DELETE` unless `storage.allow_delete_query` is `'true'` (the service sets it for its own deletes); its unique index on `(bucket_id, name)` is partial (object versioning), so `ON CONFLICT` cannot use it | `105_product_photos.sql` sets the setting, as the service does, and no longer imitates the upsert probe with `ON CONFLICT`. The console's own deletions through the service worked (every waiting copy was cleaned) |
+| A deleted public photo was still served by the CDN for a short while after the deletion (seen at once; gone when checked three minutes later)                                                                                            | Nothing to fix; a taken-down photo is visible for a few minutes, besides browsers' own caches                                                                                                                       |
+
+The suites: `remote-db.sh test` passes all 14 files on the preview, with
+part 2 of `100_notifications.sql` reported as skipped. Row counts of all 111
+tables in `public`, `private`, `auth` and `storage` were the same before and
+after; `dblink` was not left installed.
+
+Scheduled jobs: `082600` enables `pg_net` and schedules `notify-sweep` every
+30 seconds and `cron-history-cleanup` weekly. Without the Vault secrets the
+sweep does nothing and succeeds (60 runs in the first half hour, about 15 ms
+each, no HTTP request queued). It writes a row of job history every 30
+seconds; the weekly clean-up keeps a week of them.
 
 ## 4. Confirm the database is what the migrations say
 
@@ -182,7 +258,8 @@ Write these to a file and run it with `remote-db.sh sql <project-reference>
 select count(*) from public.districts;            -- 494
 select id, active from public.delivery_zones;      -- gam-core and gam-extended active; national not
 select key, value from public.app_settings;        -- payments_mode "sandbox"
-select jobname, schedule from cron.job;            -- expire-unpaid-orders, refresh-product-signals
+select jobname, schedule from cron.job;            -- expire-unpaid-orders, refresh-product-signals,
+                                                   -- notify-sweep, cron-history-cleanup (082600)
 ```
 
 Then, once the project has been up for ten minutes, check that the scheduler
@@ -326,24 +403,54 @@ Through the Management API (`PATCH /v1/projects/<ref>/config/auth`) or
 Authentication → settings in the dashboard. Read the current values first;
 the full object contains secrets, so print only the fields you change.
 
-| Setting                            | Management API field                                  | Preview (set 21 Nov 2026)      | Production                    |
-| ---------------------------------- | ----------------------------------------------------- | ------------------------------ | ----------------------------- |
-| Site URL                           | `site_url`                                            | Not set yet (`localhost:3000`) | `https://www.yuntera.cr`      |
-| Additional redirect URLs           | `uri_allow_list`                                      | Not set yet                    | Each app's production address |
-| Sign-ups allowed                   | `disable_signup` = false                              | Yes                            | Yes                           |
-| E-mail provider                    | `external_email_enabled`                              | Enabled                        | Enabled                       |
-| Confirm e-mail                     | `mailer_autoconfirm` (true means **no** confirmation) | **Off**: turn on with SMTP     | On                            |
-| Minimum password length            | `password_min_length`                                 | 8, to match the apps' forms    | 8 or more                     |
-| Leaked-password protection         | `password_hibp_enabled`                               | Off: needs the Pro plan        | On                            |
-| Multi-factor authentication (TOTP) | `mfa_totp_enroll_enabled`, `mfa_totp_verify_enabled`  | Enabled                        | Enabled                       |
-| Custom SMTP                        | `smtp_*`                                              | Not needed                     | **Required**                  |
+| Setting                            | Management API field                                  | Preview (set 21 Nov 2026)                                     | Production                      |
+| ---------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------- | ------------------------------- |
+| Site URL                           | `site_url`                                            | The shop's `vercel.app` address                               | `https://www.yuntera.cr`        |
+| Additional redirect URLs           | `uri_allow_list`                                      | Each app's `/auth/confirm`                                    | Each app's production address   |
+| Sign-ups allowed                   | `disable_signup` = false                              | Yes                                                           | Yes                             |
+| E-mail provider                    | `external_email_enabled`                              | Enabled                                                       | Enabled                         |
+| Confirm e-mail                     | `mailer_autoconfirm` (true means **no** confirmation) | **Off**: turn on with SMTP                                    | On                              |
+| Minimum password length            | `password_min_length`                                 | 8, to match the apps' forms                                   | 8 or more                       |
+| Leaked-password protection         | `password_hibp_enabled`                               | Off: needs the Pro plan                                       | On                              |
+| Multi-factor authentication (TOTP) | `mfa_totp_enroll_enabled`, `mfa_totp_verify_enabled`  | Enabled                                                       | Enabled                         |
+| Code length in e-mails             | `mailer_otp_length`                                   | 6 (the platform's default was 8)                              | 6                               |
+| E-mail templates and subjects      | `mailer_templates_*`, `mailer_subjects_*`             | ⚠ Supabase's defaults: refused without SMTP on the free plan | Ours, from `supabase/templates` |
+| Custom SMTP                        | `smtp_*`                                              | Not set                                                       | **Required**                    |
 
 The Site URL and redirect URLs are set once the apps' Vercel addresses exist
 (step 7). The redirect list must hold each app's `/auth/confirm` address: every
 e-mail link goes there. `supabase/scripts/auth-config.sh plan <ref> preview`
 shows, and `apply` sets, these settings and the Spanish e-mail templates
 from `supabase/auth/*.json` and `supabase/templates` (it reads the result back
-and lists any field that did not take). It has not been run.
+and lists any field that did not take). Both print field names only.
+
+⚠ **Run on the preview on 21 November 2026**, with
+`YUNTERA_SHOP_URL=https://yuntera-web.vercel.app` and `YUNTERA_REDIRECT_URLS`
+the four apps' `https://<app>.vercel.app/auth/confirm`. The first `apply` was
+refused as a whole: _"Email template modification is not available for free
+tier projects using the default email provider"_. The script now leaves
+templates and subjects out, and says so, while neither the project nor the
+settings file has custom SMTP. It then changed exactly two fields,
+`uri_allow_list` (from the four apps' `/**` to their `/auth/confirm` pages)
+and `mailer_otp_length` (8 to 6), and read back no difference. Confirmation
+stayed off (`mailer_autoconfirm` true).
+
+What that means on the preview until custom SMTP is set:
+
+- Account e-mails would go out in Supabase's default English words, with a
+  link through Auth's `/verify` address rather than the app's
+  `/auth/confirm?token_hash=…`. The apps' confirmation page reads only
+  `token_hash`, so such a link is not expected to finish a reset (not tried).
+- Auth refuses to send anything to a `.example` address
+  (`email_address_invalid`, which the shop logs and hides from the person),
+  and the built-in sender mails only members of the Supabase organisation,
+  about twice an hour. The reset flow was therefore tested by storing a
+  recovery token on a throwaway account the way Auth stores one
+  (`sha224(e-mail + code)` in `auth.users.recovery_token` and
+  `auth.one_time_tokens`) and opening the link our template would send.
+  Sending is not verified.
+
+Run `apply` again once SMTP is set; the templates go then.
 
 **Which e-mails Auth sends.** Until the messaging provider is set up, Auth
 sends the account e-mails itself with the templates in `supabase/templates`,
@@ -457,6 +564,16 @@ deployment at a time):
 VERCEL_ORG_ID=<team id> VERCEL_PROJECT_ID=<project id> vercel deploy --prod
 ```
 
+Redeployed after `082500`–`082700` on 21 November 2026 (Vercel CLI 65.12.1
+through `npx`; where a proxy adds the credential, the CLI still wants a
+`--token`, and it refuses a dummy value that contains `-`). No variable was
+missing: the merged code reads only the ones above. Each build restored the
+project's build cache, ran a full `next build` (turbo cache miss) and took
+23–29 s from start to ready: web `dpl_DS1knYVgsotEko8j1nLFz1bPVJ3E`, vende
+`dpl_Cc6BBRea5HBxNA1zQEabAJJ3fz7Z`, central
+`dpl_53ETd7fLaDxTpe5D7QHxZnA2xZaW`, campo `dpl_Fdj5UcemBzV6g114GziHWQzZHDeq`.
+The console's build installs `sharp`, and it ran there (step 3, point 5).
+
 **Seed the database before building the shop.** Catalogue pages are
 prerendered from the live database at build time. A shop built against an empty
 database serves an empty home page until the cached copy refreshes on the next
@@ -484,6 +601,43 @@ screens added that day: staff, drivers, warehouse workers, payout preview,
 listing edits with review, and the 404 answers. Not yet done there: step 16 on
 a real phone, step 17, a staff role other than administrator (the demo data has
 only an administrator), and creating a payout run.
+
+**After `082500`–`082700`, the same day.** The bypass secrets were made
+without ever showing them: a random value generated in the shell into a
+chmod-600 file and registered with `PATCH
+/v1/projects/<id>/protection-bypass` (`{"generate":{"secret":…}}`), sent by
+Playwright through a route for the four `vercel.app` hosts only, and revoked
+the same way (`{"revoke":{"secret":…,"regenerate":false}}`); afterwards each
+project listed no bypass and every address redirected to the login again.
+Playwright failed a run on any console error, page error, 5xx or failed
+request. Results:
+
+- Regression, at 1280 and 390 px (28 checks): home (with CSP and HSTS),
+  search with a typo, a product, the cart, sign-in as `comprador` (cookie
+  `HttpOnly` and `Secure`), "Mis pedidos", sign-out; the seller centre as
+  `vendedor`, the console as `central` and the field app as `repartidor`, each
+  signed in and out. All passed, nothing scrolled sideways.
+- Photos: the repository's `product-photos` journey, run against the preview
+  with the shop's one-minute cache waited out (the console cannot ask the
+  protected shop to refresh). Everything in step 3 above held. Two checks
+  failed for reasons that were not defects and are now handled: the seller's
+  preview was read before it had loaded (the journey now waits), and a
+  deleted public file was still served by the CDN for a short while. The
+  test listing was archived from the seller centre afterwards; the shop
+  answers 404 for it and the catalogue is back to 26 active listings.
+- Account, at 390 px, with a throwaway shopper signed up through the shop:
+  the reset link (see step 6 for how its token was made), the new password,
+  the old one refused, a change while signed in, the notification settings
+  saved with the commercial consent unticked, "Eliminar mi cuenta" refusing
+  a wrong password and then deleting, the same address signing up again,
+  and that account deleted too. All passed.
+- Console as `central`, read-only, at both widths: an order's "Mensajes"
+  section, the stuck-messages page and the security page, which warns that
+  no administrator has the second factor. All passed.
+- Vercel runtime errors afterwards: the refused reset e-mail
+  (`email_address_invalid`, step 6) on the shop, and "The shop did not
+  refresh its catalogue: HTTP 302, redirected to vercel.com" on the seller
+  centre and the console (below). Nothing on the field app.
 
 While the shop is behind Vercel Authentication, the console's and the seller
 centre's request to refresh the shop's catalogue is redirected to the Vercel
@@ -543,7 +697,21 @@ promoted. The steps are 1–7 again with these differences:
 - [ ] `payments_mode` set to `live` — which disables the payment simulator —
       and only once a real gateway integration exists.
 - [ ] `require_staff_mfa` set to `true`.
-- [ ] E-mail confirmation on; custom SMTP configured and tested.
+- [ ] E-mail confirmation on; custom SMTP configured and tested. Set SMTP
+      **before** `auth-config.sh apply`, or the e-mail templates are left out
+      (step 6). Then send one real reset to a mailbox you can read and follow
+      its link to the end: on the preview the sending and the e-mail's own
+      link were never tried.
+- [ ] After step 3, repeat the checks of "Migrations 20261121082500 to
+      20261121082700" (the per-request check, the second factor, a test
+      deletion, the storage rules) on a throwaway project built the same way;
+      `remote-db.sh test` will report part 2 of `100_notifications.sql` as
+      skipped there, as on the preview.
+- [ ] The notification sweep (`notify-sweep`) starts doing work only once the
+      Vault secrets exist. Events written between the migration and that
+      moment are planned when the worker first runs, so on a project that
+      has had test activity, look at `private.outbox_jobs` before deploying
+      the worker.
 - [ ] Backups confirmed; decide on point-in-time recovery
       ([operations](operations.md#backups-and-the-restore-drill)).
 - [ ] Domains:

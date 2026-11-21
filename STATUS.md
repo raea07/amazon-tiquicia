@@ -2,7 +2,8 @@
 
 Updated 21 November 2026, after account security, notifications and product
 photos were merged with people management, seller payouts, the fixes to known
-limitations and the native apps. This is the honest state
+limitations and the native apps, and then applied and tried on the hosted
+preview. This is the honest state
 of the project: what exists, how far it was checked, and what only the owner
 can do.
 
@@ -19,10 +20,10 @@ Everyone can reset a password, confirm their e-mail and delete their account;
 staff and sellers can add a second factor; messages for every step of an order
 are planned and sent, but only to local fake providers. **A hosted preview
 exists.** The database is a Supabase project in your separate free
-organisation, with the first 22 migrations applied and the demo data loaded.
-**The last three (account security, notifications, product photos, migrations
-`082500` to `082700`) have not been applied there, and nothing they add has run
-on the hosted project.** The
+organisation, with all 25 migrations applied and the demo data loaded. The last
+three (account security, notifications, product photos) were applied and tried
+there on 21 November 2026, and the four apps were redeployed with them; the
+notification worker is not deployed, so nothing is sent. The
 four web apps are deployed as a preview on Vercel at
 `yuntera-web`, `yuntera-vende`, `yuntera-central` and `yuntera-campo` (each
 `.vercel.app`); every address is behind a Vercel login, and the projects are
@@ -92,9 +93,22 @@ In the order that unblocks the most.
       run), Auth's custom SMTP and the Send Email Hook, and the team mailboxes.
    5. The real legal name, legal id and postal address for e-mail footers
       (`NOTIFY_LEGAL_*`).
-6. **Know what the preview costs.** The Vercel projects are on your Pro plan,
+6. **Decide on e-mail for the preview.** Supabase refuses our Spanish e-mail
+   templates on a free project that uses its built-in sender, so the preview
+   still has Supabase's default English ones, whose link the apps' confirmation
+   page does not read. The built-in sender also mails only members of your
+   Supabase organisation, and never a `.example` address. Custom SMTP (or the
+   messaging provider in item 5) fixes all three; then run
+   `supabase/scripts/auth-config.sh apply lfulotisyeyooxecwnox preview` again
+   and send yourself one real password reset. Until then, keep e-mail
+   confirmation off there.
+7. **Open Authentication → Users in the Supabase dashboard once** and check it
+   loads. Accounts deleted through the apps stay there, anonymised; Auth read
+   such a row without error, but its user listing needs the secret key, which
+   nothing here uses, so the listing itself was not opened.
+8. **Know what the preview costs.** The Vercel projects are on your Pro plan,
    which bills by use. The Supabase project is in the free organisation.
-7. **Before the native apps go to a store:**
+9. **Before the native apps go to a store:**
    1. The four store identifiers are settled (you chose them on 21 November
       2026, and they can never change after the first upload):
       `com.yuntera.shop`, `com.yuntera.vende`, `com.yuntera.ruta` and
@@ -194,37 +208,51 @@ zero, a seller's available + pending + in transit equals the ledger balance,
 and the fee example (₡20,000, hogar, card, shipped by the seller) still pays
 out ₡16,203.20.
 
-On the hosted preview (before migrations `082300` and `082400`): sign-in,
-sign-up and the 8 database test files that existed then passed on the real
-Supabase platform. On 21 November 2026 all 11 suites of that time passed
-there too. E-mail confirmation is switched off on the preview.
+On the hosted preview, on 21 November 2026, after applying migrations `082500`
+to `082700` (all three went in unchanged) and redeploying the four apps. The
+commands and numbers are in the
+[runbook](docs/07-deployment/runbook-first-deploy.md#migrations-20261121082500-to-20261121082700).
 
-**None of account security, notifications or product photos has run on the
-hosted project.** Migrations `082500` to `082700` are not applied there. Four
-things can be settled only there, and are listed with the statement for each
-in the [runbook](docs/07-deployment/runbook-first-deploy.md#migrations-20261121082500-to-20261121082700-not-applied-anywhere-yet):
+| Check              | Result                                                                                                                                                                                                                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Database tests     | All 14 files pass on the platform. Part 2 of the notifications file (two workers at once) cannot run there, because a hosted database will not open a second connection to itself without a password; it says "skipped" there and still runs locally and in CI. The suites left every table as they found it |
+| Per-request check  | Switched on by the migration. A token used after sign-out is refused with "session ended" at once. It costs about 0.1 ms inside the database; through the API a signed-in call went from about 55 ms to about 60 ms, and a visitor's call did not measurably change                                          |
+| Second factor      | With an authenticator enrolled through Supabase's own sign-in service, a password-only session gets nothing but the second-step functions; after the code, everything; five wrong codes lock the second step for 15 minutes                                                                                  |
+| Sign-in tables     | The functions may write them. An administrator's reset of a colleague's factor worked (tried and rolled back); three real account deletions left nothing personal in any table, ended the session at once, and the address could sign up again                                                               |
+| Storage            | The migration created both buckets and their rules. The storage service refused what the rules and the buckets say: a visitor, another shop, a link to a waiting photo, an upload that could replace a file, a file too large, an SVG                                                                        |
+| Photos and `sharp` | A seller added photos, staff approved them in the console, the console made the three public sizes from the reviewed copy, the shop showed them with their text; a rejected photo's reason reached the seller                                                                                                |
+| Browser checks     | At 1280 and 390 px, with no console error, failed request or server error: shop, seller centre, console and field app as their demo users; the photo flow; password reset, password change, notification settings and account deletion with a throwaway shopper; the console's messages and security pages   |
 
-1. Whether the per-request check (`check_request`, registered as the Data
-   API's pre-request function) can be switched on, and what it costs in speed.
-2. Whether the functions that write to the sign-in tables (account deletion,
-   an administrator's reset of a colleague's second factor) are allowed to.
-3. Whether a migration may create the storage buckets and their rules.
-4. Whether the image library (`sharp`) works in the hosted console.
+Differences from a local build, all handled: the seed's events from before the
+notifications migration are never sent (the test now accounts for that);
+storage refuses direct deletes and its unique index is partial (the photo test
+now does what the storage service does); a deleted public photo stays served
+by the CDN for a few minutes; Supabase refuses our e-mail templates without
+SMTP and refuses to send to `.example` addresses ("What needs you", item 6).
+
+The test data from this round is gone: the throwaway accounts were removed,
+and the test listing (a coffee maker of TecnoCasa) was archived. What stays:
+that archived listing with its six photo records and the public files of its
+two approved photos, and one notification job for its review, which a worker
+would plan once it is deployed.
 
 What these checks do **not** cover, stated plainly:
 
-- **The hosted preview was smoke-tested, not exhaustively tested**, and only
-  up to migration `082400`. Not tried there: a staff role other than
-  administrator, creating a payout run, and a real phone.
+- **The hosted preview was smoke-tested, not exhaustively tested.** Not tried
+  there: a staff role other than administrator, creating a payout run, a
+  seller with a second factor, the notification worker's secret key, and a
+  real phone.
 - **No real money, messages or invoices.** Payments are in sandbox mode; no
   gateway or electronic-invoicing provider is connected. Messages go only to
   local fake providers; account e-mails land in the local API's own mailbox.
   Payouts are bank transfers made by hand; the list the console produces is
   not any bank's upload format.
-- **Sign-in screens against the real Auth service.** Password reset, e-mail
-  confirmation, the second factor and the e-mail templates were exercised
-  against the local stand-in only; how the real service renders the templates
-  and limits requests is not known yet.
+- **Account e-mails on the real Auth service.** No e-mail was sent: Supabase
+  will not send to the test addresses, and refuses our templates without SMTP.
+  The reset was tried from its link onwards, with the token stored the way
+  Auth stores it. E-mail confirmation (off on the preview), the templates as
+  Auth renders them, and the second step of the staff screens in the console
+  were not tried there.
 - **Photos in real browsers and phones.** Resizing in the browser was tried in
   headless Chromium only; Safari, Firefox on phones, iPhone (HEIC) photos and
   the camera button were not.
@@ -365,7 +393,12 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   was not repeated after the last fixes.
 - Catalogue staff can still sign links of any lifetime to photos waiting for
   review through the API (the console signs them for 15 minutes). A taken-down
-  photo may stay in browsers' and the CDN's caches for up to a week.
+  photo may stay in browsers' caches for up to a week; on the preview,
+  Supabase's CDN stopped serving one within a few minutes.
+- Deleting an account leaves Auth's record of an unfinished sign-in or reset
+  (`auth.flow_state`), which holds the account's id and nothing personal.
+  The deletion should remove them too; one was removed by hand on the
+  preview.
 - Storage abuse is limited per listing (8 photos) and per shop (40 waiting,
   100 new a day), not by total size.
 

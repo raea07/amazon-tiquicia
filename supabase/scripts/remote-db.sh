@@ -5,7 +5,8 @@
 #   remote-db.sh status <project-ref>             which migrations are applied, which are pending
 #   remote-db.sh push   <project-ref>             apply pending migrations in order; stops at the first error
 #   remote-db.sh sql    <project-ref> <file.sql>  run one SQL file
-#   remote-db.sh test   <project-ref>             run supabase/tests against the project (each rolls itself back)
+#   remote-db.sh test   <project-ref>             run supabase/tests against the project (each rolls itself back;
+#                                                 a part that cannot run there is reported as skipped)
 #   remote-db.sh seed   <project-ref>             load supabase/seed.sql: demo accounts and orders (PREVIEW ONLY)
 #
 # Authentication: set SUPABASE_ACCESS_TOKEN to a personal access token of an
@@ -29,7 +30,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMMAND="${1:-}"
 REF="${2:-}"
 API="https://api.supabase.com/v1/projects/$REF/database/query"
-USAGE_LINES='2,25p'
+USAGE_LINES='2,26p'
 
 [ -n "$COMMAND" ] && [ -n "$REF" ] || { sed -n "$USAGE_LINES" "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2; }
 
@@ -136,9 +137,16 @@ case "$COMMAND" in
     failed=0
     log="$(mktemp)"
     trap 'rm -f "$log"' EXIT
+    # A suite that cannot run part of itself here ends with a row named
+    # "skipped" saying what and why; it is shown, never swallowed.
     for file in "$ROOT"/tests/[0-9]*.sql; do
-      if { psql_to_plain "$file" | run_sql > /dev/null; } 2> "$log"; then
+      if result="$({ psql_to_plain "$file" | run_sql; } 2> "$log")"; then
         echo "pass  $(basename "$file")"
+        node -e '
+          let rows; try { rows = JSON.parse(process.argv[1]); } catch { process.exit(0); }
+          for (const row of Array.isArray(rows) ? rows : [])
+            if (row && row.skipped) console.log("      skipped: " + row.skipped);
+        ' "$result"
       else
         echo "FAIL  $(basename "$file")"
         sed 's/^/      /' "$log"

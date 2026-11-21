@@ -14,6 +14,14 @@
 begin;
 \ir _helpers.sql
 
+-- On a hosted project, storage.objects has a trigger (storage.protect_delete)
+-- that refuses any DELETE unless storage.allow_delete_query is 'true', which
+-- the storage service sets for the deletes it performs. This file performs
+-- deletes the way the service does, so it sets the same; row-level security
+-- still decides which rows each caller can delete. Locally there is no such
+-- trigger and the setting changes nothing.
+select set_config('storage.allow_delete_query', 'true', true);
+
 create function pg_temp.logout() returns void
 language sql as $$ select set_config('request.jwt.claims', '', true) $$;
 
@@ -351,11 +359,15 @@ begin
     raise exception 'accepted an upsert';
   exception when insufficient_privilege then null;
   end;
+  -- The service probes with an insert that updates on conflict. Its unique
+  -- index on (bucket_id, name) is partial on a hosted project (one current
+  -- version per name), so no ON CONFLICT clause fits both that and the local
+  -- imitation; the insert rule is what refuses the probe, so a plain insert
+  -- checks the same thing.
   begin
     perform pg_temp.op('storage.object.sign_upload_url');
     insert into storage.objects (bucket_id, name, owner_id, metadata, version)
-    values ('product-photos-pending', r -> 'files' -> 0 ->> 'path', auth.uid()::text, '{}', gen_random_uuid()::text)
-    on conflict (bucket_id, name) do update set version = excluded.version;
+    values ('product-photos-pending', r -> 'files' -> 0 ->> 'path', auth.uid()::text, '{}', gen_random_uuid()::text);
     raise exception 'the upsert probe of a signed upload address passed';
   exception when insufficient_privilege then null;
   end;

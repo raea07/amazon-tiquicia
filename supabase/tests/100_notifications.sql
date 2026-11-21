@@ -111,6 +111,28 @@ $$;
 
 -- ── Planning: exactly once ────────────────────────────────────────────────
 
+-- A database seeded before 20261121082600 (the hosted preview) holds the
+-- seed's events without jobs: the migration routes only events written after
+-- it, so nothing that happened earlier is ever sent. Route them here, inside
+-- this rolled-back transaction, so the checks below run on the same events
+-- whichever came first. On a database seeded after the migrations this adds
+-- nothing.
+do $$
+declare
+  v_routed integer;
+begin
+  insert into private.outbox_jobs (event_id, consumer)
+  select e.id, r.consumer from private.outbox_events e
+  join private.outbox_routes r on r.topic = e.topic
+  where not exists (select 1 from private.outbox_jobs j
+                    where j.event_id = e.id and j.consumer = r.consumer);
+  get diagnostics v_routed = row_count;
+  if v_routed > 0 then
+    raise notice 'routed % events written before the notifications migration', v_routed;
+  end if;
+end
+$$;
+
 do $$
 begin
   assert (select count(*) from private.outbox_jobs where consumer = 'notify' and status = 'pending') > 50,
@@ -1062,41 +1084,57 @@ rollback;
 -- ═══ Part 2: two sessions at once ═════════════════════════════════════════
 -- Each session is a real connection (dblink) that commits, as two workers
 -- would. What they create is removed at the end.
+--
+-- It needs the database to accept a connection to itself. A hosted Supabase
+-- project does not: dblink asks a non-superuser for a password, and the
+-- Management API through which supabase/scripts/remote-db.sh runs the suites
+-- holds none. There this part is skipped, and says so: the file's last result
+-- is a row named "skipped" (psql prints it; remote-db.sh shows it). Locally
+-- and in CI it runs.
 
 begin;
 create extension if not exists dblink;
 
-select dblink_connect('a', format('dbname=%s user=%s', current_database(), current_user));
-select dblink_connect('b', format('dbname=%s user=%s', current_database(), current_user));
-select dblink_connect('admin', format('dbname=%s user=%s', current_database(), current_user));
-
-create temp table pending_jobs as
-select event_id from private.outbox_jobs where consumer = 'notify' and status = 'pending';
-
--- Two planners at once: the second waits for nothing and plans nothing the first holds.
-select dblink_exec('a', 'begin');
-select dblink_exec('a', $q$set request.jwt.claims = '{"role":"service_role"}'$q$);
-select dblink_exec('a', 'set role service_role');
-select dblink_exec('b', $q$set request.jwt.claims = '{"role":"service_role"}'$q$);
-select dblink_exec('b', 'set role service_role');
+select set_config('t.part2_skipped', '', true);
+do $$
+begin
+  perform dblink_connect('probe', format('dbname=%s user=%s', current_database(), current_user));
+  perform dblink_disconnect('probe');
+exception when others then
+  perform set_config('t.part2_skipped',
+    format('part 2 (two workers at once) not run: this database refuses a second connection to itself (%s)', sqlerrm),
+    true);
+end
+$$;
 
 do $$
 declare
   v_a integer;
   v_b integer;
 begin
+  if current_setting('t.part2_skipped') <> '' then
+    return;
+  end if;
+  perform dblink_connect('a', format('dbname=%s user=%s', current_database(), current_user));
+  perform dblink_connect('b', format('dbname=%s user=%s', current_database(), current_user));
+  perform dblink_connect('admin', format('dbname=%s user=%s', current_database(), current_user));
+
+  create temp table pending_jobs as
+  select event_id from private.outbox_jobs where consumer = 'notify' and status = 'pending';
+
+  -- Two planners at once: the second waits for nothing and plans nothing the first holds.
+  perform dblink_exec('a', 'begin');
+  perform dblink_exec('a', $q$set request.jwt.claims = '{"role":"service_role"}'$q$);
+  perform dblink_exec('a', 'set role service_role');
+  perform dblink_exec('b', $q$set request.jwt.claims = '{"role":"service_role"}'$q$);
+  perform dblink_exec('b', 'set role service_role');
+
   select n into v_a from dblink('a', 'select public.worker_notify_plan(1000)') as t (n integer);
   select n into v_b from dblink('b', 'select public.worker_notify_plan(1000)') as t (n integer);
   assert v_a = (select count(*) from pending_jobs), format('first planner: %s', v_a);
   assert v_b = 0, format('the second planner skipped the jobs the first holds: %s', v_b);
-end
-$$;
-select dblink_exec('a', 'commit');
+  perform dblink_exec('a', 'commit');
 
-do $$
-declare
-  v_b integer;
-begin
   select n into v_b from dblink('b', 'select public.worker_notify_plan(1000)') as t (n integer);
   assert v_b = 0, 'and finds nothing afterwards';
   assert (select count(*) from dblink('admin',
@@ -1104,22 +1142,18 @@ begin
           where attempts <> 1) = 0, 'each job planned once';
   assert (select n from dblink('admin', $q$select count(*) - count(distinct dedupe_key) from private.notification_deliveries$q$)
           as t (n bigint)) = 0, 'no duplicate message';
-end
-$$;
 
--- Two workers claiming at once get disjoint messages.
-select dblink_exec('a', 'begin');
-create temp table claims (worker text, id uuid);
-insert into claims
-select 'a', (x ->> 'id')::uuid
-from dblink('a', $q$select public.worker_notify_claim('wa', 10, 120)$q$) as t (c jsonb), jsonb_array_elements(t.c) x;
-insert into claims
-select 'b', (x ->> 'id')::uuid
-from dblink('b', $q$select public.worker_notify_claim('wb', 10, 120)$q$) as t (c jsonb), jsonb_array_elements(t.c) x;
-select dblink_exec('a', 'commit');
+  -- Two workers claiming at once get disjoint messages.
+  perform dblink_exec('a', 'begin');
+  create temp table claims (worker text, id uuid);
+  insert into claims
+  select 'a', (x ->> 'id')::uuid
+  from dblink('a', $q$select public.worker_notify_claim('wa', 10, 120)$q$) as t (c jsonb), jsonb_array_elements(t.c) x;
+  insert into claims
+  select 'b', (x ->> 'id')::uuid
+  from dblink('b', $q$select public.worker_notify_claim('wb', 10, 120)$q$) as t (c jsonb), jsonb_array_elements(t.c) x;
+  perform dblink_exec('a', 'commit');
 
-do $$
-begin
   assert (select count(*) from claims where worker = 'a') = 10, 'first worker claimed a batch';
   assert (select count(*) from claims where worker = 'b') > 0, 'second worker claimed another batch while the first held its own';
   assert not exists (select id from claims where worker = 'a' intersect select id from claims where worker = 'b'),
@@ -1127,23 +1161,21 @@ begin
   assert (select count(*) from dblink('admin',
             $q$select locked_by from private.notification_deliveries where status = 'sending'$q$) as t (locked_by text)
           where locked_by not in ('wa', 'wb')) = 0, 'every lease belongs to one of them';
-end
-$$;
 
--- Put everything back as the seed left it.
-select dblink_exec('admin', $q$
-  delete from private.notification_deliveries;
-  update private.outbox_jobs set status = 'pending', attempts = 0, done_at = null, last_error = null
-  where consumer = 'notify';
-$q$);
-do $$
-begin
+  -- Put everything back as the seed left it.
+  perform dblink_exec('admin', $q$
+    delete from private.notification_deliveries;
+    update private.outbox_jobs set status = 'pending', attempts = 0, done_at = null, last_error = null
+    where consumer = 'notify';
+  $q$);
   assert (select count(*) from pending_jobs) = (select count(*) from private.outbox_jobs where status = 'pending'),
     'restored';
+
+  perform dblink_disconnect('a');
+  perform dblink_disconnect('b');
+  perform dblink_disconnect('admin');
 end
 $$;
 
-select dblink_disconnect('a');
-select dblink_disconnect('b');
-select dblink_disconnect('admin');
+select current_setting('t.part2_skipped') as skipped where current_setting('t.part2_skipped') <> '';
 rollback;

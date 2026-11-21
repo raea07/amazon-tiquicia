@@ -51,9 +51,21 @@ case "${1:-}" in
     failed=0
     # One log per run, so lanes testing at the same time never read each other's output.
     log="$(mktemp "${TMPDIR:-/tmp}/yuntera-db-test.XXXXXX")"
+    # A suite that could not run part of itself ends with a row named
+    # "skipped". It is shown; in CI (CI=true) it fails the run, so nothing that
+    # runs here today can quietly stop running.
     for file in "$ROOT"/tests/[0-9]*.sql; do
       if run -f "$file" >"$log" 2>&1; then
-        echo "pass  $(basename "$file")"
+        skipped="$(awk '/^ *skipped *$/ { getline; getline; print }' "$log" | sed 's/^ *//' | grep -v '^(0 rows)$' || true)"
+        if [ -n "$skipped" ] && [ "${CI:-}" = "true" ]; then
+          echo "FAIL  $(basename "$file") (skipped in CI: $skipped)"
+          failed=1
+        elif [ -n "$skipped" ]; then
+          echo "pass  $(basename "$file")"
+          echo "      skipped: $skipped"
+        else
+          echo "pass  $(basename "$file")"
+        fi
       else
         echo "FAIL  $(basename "$file")"
         sed 's/^/      /' "$log"

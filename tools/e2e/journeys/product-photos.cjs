@@ -293,11 +293,24 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
   // seller's session; sellers cannot sign links to them.
   const previewSrc = await managed.first().locator("img").getAttribute("src");
   check(previewSrc?.startsWith("/fotos/"), `preview is not the seller centre's: ${previewSrc}`);
+  // The preview is fetched from storage by the seller centre, which on a hosted
+  // deployment can take a few seconds; wait for it rather than reading it once.
   check(
     await managed
       .first()
       .locator("img")
-      .evaluate((img) => img.complete && img.naturalWidth > 0),
+      .evaluate(
+        (img) =>
+          new Promise((resolve) => {
+            const done = () => resolve(img.complete && img.naturalWidth > 0);
+            if (img.complete) done();
+            else {
+              img.addEventListener("load", done, { once: true });
+              img.addEventListener("error", done, { once: true });
+              setTimeout(done, 20000);
+            }
+          }),
+      ),
     "the seller cannot see the waiting photo",
   );
   const viaVisitor = await fetch(SELLER + previewSrc);

@@ -271,8 +271,8 @@ evidence are in [access control](../03-data/access-control.md),
 - Edge firewall, rate limits and bot rules configured.
 - Error monitoring, alerting, the incident runbook with real contacts, and the
   first restore drill.
-- Storage buckets and rules confirmed on the hosted project, and a scheduled
-  clean-up of photo files nothing needs.
+- A scheduled clean-up of photo files nothing needs. (The storage buckets and
+  their rules were confirmed on the hosted preview on 21 November 2026.)
 - Retention jobs, once the periods are confirmed.
 - Independent penetration test.
 - Lawyer-reviewed privacy notice and terms.
