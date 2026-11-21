@@ -18,8 +18,7 @@ import { View } from "react-native";
 import { Stat, StatGrid } from "@/components/parts";
 import { SELLER_HEALTH } from "@/lib/labels";
 import { shopKey, useShop, useShops } from "@/lib/shops";
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+import { todayItems, todaySentence } from "@/lib/today";
 
 /**
  * Inicio: what needs doing today in this shop, then how it is going, as the
@@ -34,6 +33,19 @@ export default function HomeScreen() {
   const overview = useApiQuery(shopKey(shop.id, "overview"), (api) => api.sellerOverview(shop.id), {
     personal: true,
   });
+  // Read by Productos and Cuenta too (same keys, so one request): a published
+  // listing whose change was refused, and the bank-account request. Inicio
+  // does not wait for them, and leaves them out if they cannot be read.
+  const edits = useApiQuery(
+    shopKey(shop.id, "listing-edits"),
+    (api) => api.sellerListingEdits(shop.id),
+    { personal: true },
+  );
+  const payout = useApiQuery(
+    shopKey(shop.id, "payout-details"),
+    (api) => api.sellerPayoutDetails(shop.id),
+    { personal: true },
+  );
 
   if (overview.isPending) return <LoadingState />;
   if (overview.isError)
@@ -41,20 +53,9 @@ export default function HomeScreen() {
 
   const { counts, sales_30d: sales, seller } = overview.data;
   const health = SELLER_HEALTH[seller.health];
-  const todo = [
-    counts.to_pack > 0
-      ? plural(counts.to_pack, "paquete por empacar", "paquetes por empacar")
-      : null,
-    counts.offers_out_of_stock > 0
-      ? plural(counts.offers_out_of_stock, "producto sin existencias", "productos sin existencias")
-      : null,
-    counts.listings_rejected > 0
-      ? plural(counts.listings_rejected, "producto rechazado", "productos rechazados")
-      : null,
-    counts.open_returns > 0
-      ? plural(counts.open_returns, "devolución abierta", "devoluciones abiertas")
-      : null,
-  ].filter((item): item is string => item !== null);
+  const todo = todayItems(counts, edits.data, payout.data);
+  const has = (key: string) => todo.some((item) => item.key === key);
+  const rejectedEdits = (edits.data ?? []).filter((e) => e.edit_status === "rejected").length;
 
   return (
     <Screen
@@ -90,11 +91,7 @@ export default function HomeScreen() {
 
         <Stack gap={3}>
           <Text variant="heading">Por atender</Text>
-          <Text testID="today-summary">
-            {todo.length === 0
-              ? "Hoy no tiene nada pendiente. Cuando entre un pedido aparece aquí."
-              : `Hoy tiene ${todo.join(", ")}.`}
-          </Text>
+          <Text testID="today-summary">{todaySentence(todo)}</Text>
           <StatGrid>
             <Stat
               label="Pedidos por empacar"
@@ -119,7 +116,37 @@ export default function HomeScreen() {
               href="/productos"
             />
             <Stat label="Devoluciones abiertas" value={String(counts.open_returns)} />
+            {has("rejected-edits") ? (
+              <Stat
+                label="Cambios no aprobados"
+                value={String(rejectedEdits)}
+                tone="danger"
+                hint="Ver el motivo"
+                href="/productos"
+                testID="stat-rejected-edits"
+              />
+            ) : null}
           </StatGrid>
+          {has("payout-pending") ? (
+            <Alert tone="info" title="Cambio de cuenta en revisión" testID="home-payout-request">
+              Le vamos a llamar al teléfono registrado de la tienda para confirmarlo. Mientras tanto
+              le seguimos pagando a la cuenta actual.
+            </Alert>
+          ) : null}
+          {has("payout-rejected") ? (
+            <Alert
+              tone="danger"
+              title="No aprobamos el cambio de cuenta"
+              testID="home-payout-request"
+            >
+              Su cuenta actual no cambió. En Cuenta ve el motivo y puede enviar una solicitud nueva.
+            </Alert>
+          ) : null}
+          {has("payout-pending") || has("payout-rejected") ? (
+            <LinkButton href="/cuenta" variant="secondary" block testID="home-open-account">
+              Ver la cuenta de pago
+            </LinkButton>
+          ) : null}
           <LinkButton href="/publicar" block testID="home-new-listing">
             Publicar un producto
           </LinkButton>
