@@ -101,6 +101,32 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
   await seller.locator('main:visible form [role="alert"]').first().waitFor();
   log("unchanged:", await text(seller.locator('main:visible form [role="alert"]').first()));
 
+  // a form that comes back with an error keeps everything the seller chose, the category too
+  const category = seller.locator('main:visible select[name="categorySlug"]');
+  const startCategory = await category.inputValue();
+  const otherCategory = await category.evaluate(
+    (select, current) => [...select.options].find((o) => o.value && o.value !== current)?.value,
+    startCategory,
+  );
+  await category.selectOption(otherCategory);
+  await seller.fill('main:visible input[name="title"]', "abc");
+  await seller.click('main:visible button:has-text("Enviar cambios a revisión")');
+  await seller
+    .locator('main:visible form [role="alert"]', { hasText: "al menos 5 letras" })
+    .waitFor();
+  const keptCategory = await category.inputValue();
+  const keptTitle = await seller.locator('main:visible input[name="title"]').inputValue();
+  log("after an error, category:", startCategory, "->", keptCategory, "| title:", keptTitle);
+  check(keptCategory === otherCategory, `the chosen category was lost: ${keptCategory}`);
+  check(keptTitle === "abc", `the typed title was lost: ${keptTitle}`);
+  // start the real edit from what is published
+  await seller.goto(editUrl, { waitUntil: "networkidle" });
+
+  // the way back to the list is a full-size touch target
+  const back = await seller.locator('main:visible a:has-text("← Productos")').boundingBox();
+  log("back link height px:", back?.height);
+  check((back?.height ?? 0) >= 44, `the back link is ${back?.height} px high`);
+
   // 2. The seller changes the title; it goes to review and the listing stays as it is
   await seller.fill('main:visible input[name="title"]', NEW_TITLE);
   await seller.click('main:visible button:has-text("Enviar cambios a revisión")');

@@ -47,7 +47,12 @@ export function ListingEditForm({
           maxLength={200}
           hint="Marca, qué es y la característica principal."
         />
+        {/* React resets the form after each submission, and a select goes back to
+            the option it was first drawn with: a new defaultValue does not move it.
+            Keying it on the value sent draws it afresh, so a form that comes back
+            with an error keeps the category the seller chose. */}
         <SelectField
+          key={typed?.categorySlug ?? content.category_slug}
           label="Categoría"
           name="categorySlug"
           defaultValue={typed?.categorySlug ?? content.category_slug}

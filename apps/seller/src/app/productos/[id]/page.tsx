@@ -22,7 +22,7 @@ export default function EditListingPage(props: PageProps<"/productos/[id]">) {
   return (
     <div className="shell py-8">
       <p className="text-sm">
-        <Link href="/productos" className="text-link underline">
+        <Link href="/productos" className="inline-flex min-h-11 items-center text-link underline">
           ← Productos
         </Link>
       </p>
