@@ -4,6 +4,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   ChevronIcon,
   ChoiceList,
   EmptyState,
@@ -16,7 +17,7 @@ import {
   TextField,
 } from "@yuntera/expo-kit/ui";
 import { Stack as Nav, router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { StopBadges } from "@/components/route-parts";
 import { OfflineBanner, QueueCard } from "@/components/status";
@@ -115,6 +116,8 @@ function DeliverForm({ stop }: { stop: ShownStop }) {
   const { deliver, leaveForLater } = useDriver();
   const cashDue = stop.cod_amount_minor;
   const [handed, setHanded] = useState("");
+  // A large amount of change is confirmed for the amount typed; typing again asks again.
+  const [cashConfirmed, setCashConfirmed] = useState(false);
   const [recipientName, setRecipientName] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +129,7 @@ function DeliverForm({ stop }: { stop: ShownStop }) {
   const submit = async () => {
     setError(null);
     setOffline(false);
-    const invalid = checkDelivery({ pin, recipientName, cash });
+    const invalid = checkDelivery({ pin, recipientName, cash, cashConfirmed });
     if (invalid) {
       setError(invalid);
       return;
@@ -166,7 +169,10 @@ function DeliverForm({ stop }: { stop: ShownStop }) {
           <TextField
             label="Efectivo que le entrega el cliente"
             value={handed}
-            onChangeText={setHanded}
+            onChangeText={(text) => {
+              setHanded(text);
+              setCashConfirmed(false);
+            }}
             inputMode="decimal"
             keyboardType="numeric"
             hint={`Cobre ${formatPrice(cashDue)}. Cuente el dinero antes de entregar el paquete.`}
@@ -181,6 +187,15 @@ function DeliverForm({ stop }: { stop: ShownStop }) {
             >
               {cash.message}
             </Text>
+          ) : null}
+          {cash.state === "ok" && cash.confirm ? (
+            <Checkbox
+              checked={cashConfirmed}
+              onChange={setCashConfirmed}
+              testID="deliver-cash-confirm"
+            >
+              <Text>{`Sí, recibí ${formatPrice(cash.collectedMinor + cash.changeMinor)} y tengo ${formatPrice(cash.changeMinor)} para el vuelto.`}</Text>
+            </Checkbox>
           ) : null}
         </Stack>
       ) : null}
@@ -347,6 +362,12 @@ export default function StopScreen() {
   const driver = useDriver();
   const [arriving, setArriving] = useState(false);
   const [arriveError, setArriveError] = useState<string | null>(null);
+  // The list behind this screen may be a minute old: read the stop again, so
+  // what is shown here (and what the driver records) starts from the server.
+  const { refresh } = driver;
+  useEffect(() => {
+    if (stopId) refresh();
+  }, [refresh, stopId]);
 
   if (driver.loading) return <LoadingState label="Buscando la parada…" />;
   const found = driver.routes ? findStop(driver.routes, stopId) : null;

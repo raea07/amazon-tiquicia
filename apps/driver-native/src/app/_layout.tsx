@@ -1,12 +1,29 @@
 // Defines the location task when the bundle loads, before any screen (expo-task-manager needs it).
 import "@/lib/tracking";
 import { AppProviders } from "@yuntera/expo-kit/auth";
+import { getSupabase, sessionStorage } from "@yuntera/expo-kit/supabase";
 import { colors } from "@yuntera/expo-kit/theme";
 import { LoadingState } from "@yuntera/expo-kit/ui";
 import { Stack } from "expo-router";
 import { View } from "react-native";
 import { DriverProvider, useDriverAccess } from "@/lib/driver";
 import { env } from "@/lib/env";
+import { type AuthLike, keepSessionWithoutSignal, parseStoredSession } from "@/lib/offline-session";
+
+/**
+ * Runs before AppProviders reads the session: a start-up without signal,
+ * after the hour an access token lasts, must not read as signed out (see
+ * lib/offline-session.ts).
+ */
+function keepDriverSignedInWithoutSignal() {
+  const { auth } = getSupabase(env);
+  const storageKey = (auth as unknown as { storageKey?: unknown }).storageKey;
+  if (typeof storageKey !== "string") return;
+  keepSessionWithoutSignal(auth as unknown as AuthLike, async () =>
+    parseStoredSession(await sessionStorage.getItem(storageKey)),
+  );
+}
+keepDriverSignedInWithoutSignal();
 
 /** A screen that fails to draw shows a Spanish message with a retry. */
 export { ScreenErrorBoundary as ErrorBoundary } from "@yuntera/expo-kit/ui";

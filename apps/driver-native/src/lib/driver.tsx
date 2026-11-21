@@ -36,6 +36,7 @@ import {
   type FailPayload,
   flushOutbox,
   isNoAnswer,
+  isRefusal,
   outbox,
   queuedStopActions,
   timed,
@@ -72,6 +73,8 @@ const savedDay = createSnapshotCache<DriverDay>({
 
 const DAY_KEY = ["driver-today"] as const;
 const RETRY_EVERY_MS = 15_000;
+/** Refusals come in bursts (every queued action of a suspended driver): check access at most this often. */
+const RECHECK_ACCESS_EVERY_MS = 10_000;
 /** How long an arrival or a failed delivery waits for the server before it is left queued. */
 const WAIT_FOR_ANSWER_MS = 4_000;
 
@@ -96,6 +99,8 @@ export interface DriverValue {
   savedAt: number | null;
   /** The API did not answer the last time the phone tried. */
   offline: boolean;
+  /** Reads the day again now (a stop screen does when it opens). */
+  refresh(): void;
   queue: QueueSnapshot;
   /** What waited for the signal has just all been sent. */
   drained: boolean;
@@ -142,7 +147,7 @@ const AccessContext = createContext<DriverAccess>({
 
 export function DriverProvider({ children }: { children: ReactNode }) {
   const session = useSession();
-  const { viewer, api, reloadRoles } = session;
+  const { viewer, api, reloadRoles, supabase } = session;
   const access = useAccess("driver");
   const client = useQueryClient();
   const userId = viewer?.id ?? null;
@@ -182,12 +187,31 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     [access, offlineAllowed, savedLoaded],
   );
 
+  // Access is read at sign-in and when the app comes back to the screen, but
+  // during a route the screen stays on and the app never leaves it. So any
+  // refusal from the server (a suspended driver's calls are all refused, a
+  // position report included) is a reason to read it again; a lost access
+  // then stops everything below.
+  const lastRecheck = useRef(0);
+  const recheckAccess = useCallback(() => {
+    const now = Date.now();
+    if (now - lastRecheck.current < RECHECK_ACCESS_EVERY_MS) return;
+    lastRecheck.current = now;
+    void reloadRoles();
+  }, [reloadRoles]);
+  const noteRefusal = useCallback(
+    (error: unknown) => {
+      if (isRefusal(error)) recheckAccess();
+    },
+    [recheckAccess],
+  );
+
   // The queue belongs to whoever is signed in as a driver; nobody else's is shown or sent.
   useEffect(() => {
     void outbox.setOwner(inside ? userId : null);
-    connectOutbox(inside ? api : null);
+    connectOutbox(inside ? api : null, noteRefusal);
     if (inside) void flushOutbox();
-  }, [inside, userId, api]);
+  }, [inside, userId, api, noteRefusal]);
   const queue = useQueue(outbox);
 
   const day = useApiQuery(DAY_KEY, (a) => timed(a.driverToday()), {
@@ -196,22 +220,60 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     refetchInterval: (query) => (query.state.status === "error" ? RETRY_EVERY_MS : 60_000),
   });
 
+  // Nothing of the day stays on the phone, and nothing more is sent from it.
+  const forgetDay = useCallback(async (owner: string | null) => {
+    await stopTracking();
+    setTracking("off");
+    setSaved((current) => ({ ...current, day: null, savedAt: null }));
+    await savedDay.clear();
+    // The server refuses whatever a driver without access sends; positions
+    // never outlive the session.
+    await outbox.discard(
+      (entry) => entry.kind === "position" || (owner !== null && entry.owner === owner),
+    );
+  }, []);
+
   // A good answer is saved for offline use and proves the connection is back.
+  // It also carries the driver's status, read every minute: a driver Central
+  // has suspended stops seeing customers' details and sharing the position
+  // at once, while the roles are read again.
+  const suspended = day.data !== undefined && day.data.driver.status !== "active";
   useEffect(() => {
     if (!day.data || !userId || !inside) return;
+    if (day.data.driver.status !== "active") {
+      void forgetDay(userId);
+      void reloadRoles();
+      return;
+    }
     void savedDay.save(userId, day.data);
     if (access === "unavailable") void reloadRoles();
-  }, [day.data, userId, inside, access, reloadRoles]);
-
-  // Lost access or signed out: nothing of the day stays on the phone.
+  }, [day.data, userId, inside, access, reloadRoles, forgetDay]);
+  // A refusal of the day itself (no longer a driver) also means reading access again.
   useEffect(() => {
-    if (access === "denied" || access === "signedOut") {
-      void savedDay.clear();
+    if (day.isError) noteRefusal(day.error);
+  }, [day.isError, day.error, noteRefusal]);
+
+  // Lost access: the same. The account's unsent actions go too, since the
+  // server would refuse them.
+  useEffect(() => {
+    if (access === "denied") void forgetDay(userId);
+  }, [access, userId, forgetDay]);
+
+  // Signed out (or the session ended on the server). Not the "signed out"
+  // state a start-up without signal can pass through (offline-session.ts):
+  // only an actual SIGNED_OUT event clears the day saved on the phone.
+  useEffect(() => {
+    if (access === "signedOut") {
       void stopTracking();
       setTracking("off");
-      void outbox.discard((entry) => entry.kind === "position");
     }
   }, [access]);
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") void forgetDay(null);
+    });
+    return () => data.subscription.unsubscribe();
+  }, [supabase, forgetDay]);
 
   // Actions the server has just taken stay applied until the day is read
   // again, so a stop does not flick back to "Pendiente" in between.
@@ -233,7 +295,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     void client.invalidateQueries({ queryKey: ["user", queue.owner ?? "anonymous", ...DAY_KEY] });
   }, [queue.entries, queue.owner, client]);
 
-  const shownDay = day.data ?? (saved.owner === userId ? saved.day : null);
+  const shownDay = suspended ? null : (day.data ?? (saved.owner === userId ? saved.day : null));
   const routes = useMemo(() => {
     if (!shownDay) return null;
     const recent = justSent
@@ -272,6 +334,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     () => client.invalidateQueries({ queryKey: ["user", userId ?? "anonymous", ...DAY_KEY] }),
     [client, userId],
   );
+  const refresh = useCallback(() => void refreshDay(), [refreshDay]);
   const sendNow = useCallback(async () => {
     const result = await flushOutbox();
     if (result && (result.sent > 0 || result.rejected > 0)) await refreshDay();
@@ -329,6 +392,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       try {
         await timed(api.driverStartRoute(routeId));
       } catch (error) {
+        noteRefusal(error);
         return isNoAnswer(error)
           ? "Para iniciar la ruta necesita señal: Central tiene que saber que salió. Intente de nuevo en un momento."
           : messageOf(error);
@@ -336,7 +400,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       await refreshDay();
       return null;
     },
-    [api, refreshDay],
+    [api, refreshDay, noteRefusal],
   );
 
   const queueAndSend = useCallback(
@@ -417,6 +481,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         return { kind: "delivered", routeCompleted: result.route_completed };
       } catch (error) {
         if (isNoAnswer(error)) return { kind: "offline" };
+        noteRefusal(error);
         // A first try whose answer was lost may have delivered it already.
         if (error instanceof ApiError && error.code === "invalid_stop_state") {
           await refreshDay();
@@ -429,7 +494,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         return { kind: "error", message: messageOf(error) };
       }
     },
-    [api, refreshDay, client, userId],
+    [api, refreshDay, client, userId, noteRefusal],
   );
 
   const [later, setLater] = useState<ReadonlySet<string>>(new Set());
@@ -459,6 +524,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     loading: !routes && (day.isPending || !savedLoaded),
     error: !routes && day.isError ? day.error : null,
     retry: () => void day.refetch(),
+    refresh,
     refreshing: day.isRefetching,
     savedAt: !day.data && saved.day ? saved.savedAt : null,
     offline,

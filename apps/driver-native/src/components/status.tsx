@@ -27,8 +27,9 @@ function describe(entry: QueueEntry, routes: ShownRoute[] | null): string {
   if (entry.kind === "position") return "Su última ubicación";
   const stopId = (entry.payload as ArrivePayload | FailPayload).stopId;
   const found = routes ? findStop(routes, stopId) : null;
+  // With two routes started, "parada 1" alone could be either: name the route.
   const where = found
-    ? `parada ${found.stop.sequence}, ${found.stop.recipient_name.split(" ")[0]}`
+    ? `parada ${found.stop.sequence} de la ruta ${found.route.code}, ${found.stop.recipient_name.split(" ")[0]}`
     : "una parada";
   if (entry.kind === "arrive") return `Llegada a la ${where}`;
   if (entry.kind === "fail") {
@@ -109,10 +110,14 @@ const TRACKING_TEXT: Record<Tracking, string> = {
   failed: "No pudimos activar su ubicación. Inténtelo de nuevo.",
 };
 
+/** While sharing is on but nothing reaches Central: no signal. */
+const TRACKING_OFFLINE =
+  "Sin señal: su ubicación queda guardada en el teléfono y se envía cuando vuelva la conexión.";
+
 /** Whether the position is being shared, in words, with the one action that changes it. */
 export function TrackingStatus({ onShare }: { onShare: () => void }) {
-  const { tracking } = useDriver();
-  const on = tracking === "on";
+  const { tracking, offline } = useDriver();
+  const on = tracking === "on" && !offline;
   return (
     <View
       style={[styles.tracking, on ? styles.trackingOn : null]}
@@ -122,8 +127,7 @@ export function TrackingStatus({ onShare }: { onShare: () => void }) {
       <View style={styles.trackingLine}>
         <PinIcon size={20} color={on ? tone.success.fg : colors.inkMuted} />
         <Text variant="small" style={[styles.fill, on ? styles.ok : null]}>
-          {TRACKING_TEXT[tracking]}
-          {on && Platform.OS === "android" ? " Verá una notificación fija mientras tanto." : ""}
+          {tracking === "on" && offline ? TRACKING_OFFLINE : TRACKING_TEXT[tracking]}
         </Text>
       </View>
       {tracking === "denied" && canOpenSettings ? (

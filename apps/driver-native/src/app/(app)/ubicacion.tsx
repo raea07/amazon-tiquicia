@@ -75,11 +75,14 @@ export default function LocationScreen() {
           Solo durante la ruta: se detiene sola cuando termina la última parada y al cerrar la
           sesión. No le pedimos permiso para usarla siempre.
         </Text>
-        {Platform.OS === "android" ? (
-          <Text>Mientras se comparte, verá una notificación fija de Yuntera Ruta.</Text>
-        ) : Platform.OS === "ios" ? (
+        {/* Android 13 and later hide the service's notification while the app may not
+            post notifications, which this build does not ask for yet: promise only
+            what the driver will see. */}
+        {Platform.OS === "ios" ? (
           <Text>Mientras se comparte, verá el indicador de ubicación en la parte de arriba.</Text>
-        ) : null}
+        ) : (
+          <Text>Mientras se comparte, la pantalla de su ruta lo indica.</Text>
+        )}
         <Text variant="bodyStrong">
           Al continuar, el teléfono le preguntará si permite el acceso. Elija «Mientras se usa la
           app».

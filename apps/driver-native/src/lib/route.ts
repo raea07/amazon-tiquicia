@@ -6,10 +6,12 @@
  * Pure functions with no React Native import.
  */
 
-import { parseColones } from "@yuntera/core";
+import { format, money, parseColones } from "@yuntera/core";
 import type { DriverDay, DriverRoute, DriverStop } from "@yuntera/db";
 import type { Tone } from "@yuntera/expo-kit/theme";
-import { formatPrice } from "@yuntera/expo-kit/ui";
+
+/** ₡12 500: the kit's formatPrice, the same core function, without the kit's screen components. */
+const formatPrice = (amountMinor: number) => format(money(amountMinor));
 
 export type StopStatus = DriverStop["status"];
 
@@ -131,12 +133,30 @@ export type CashCount =
   | { state: "empty" }
   | { state: "invalid"; message: string }
   | { state: "short"; message: string }
-  | { state: "ok"; collectedMinor: number; changeMinor: number; message: string };
+  | {
+      state: "ok";
+      collectedMinor: number;
+      changeMinor: number;
+      message: string;
+      /** So much change that a typing slip is likelier than a real payment: confirm first. */
+      confirm: boolean;
+    };
+
+/**
+ * Change above this asks the driver to confirm the amount first: a 0 too
+ * many outdoors is easy to type, and it is more than the float a driver
+ * carries (the playbook proposes ₡20 000).
+ */
+export const CONFIRM_CHANGE_ABOVE_MINOR = 2_000_000;
 
 export function countCash(dueMinor: number, typed: string): CashCount {
   if (typed.trim() === "") return { state: "empty" };
   const handed = parseColones(typed);
   if (handed === null) return { state: "invalid", message: "Escriba cuánto efectivo recibió." };
+  // Cash is counted in whole colones: no coin smaller than ₡5 circulates.
+  if (handed % 100 !== 0) {
+    return { state: "invalid", message: "Escriba el monto en colones, sin céntimos." };
+  }
   if (handed < dueMinor) {
     return {
       state: "short",
@@ -144,11 +164,18 @@ export function countCash(dueMinor: number, typed: string): CashCount {
     };
   }
   const change = handed - dueMinor;
+  const confirm = change > CONFIRM_CHANGE_ABOVE_MINOR;
   return {
     state: "ok",
     collectedMinor: dueMinor,
     changeMinor: change,
-    message: change === 0 ? "Monto exacto: no hay vuelto." : `Dé ${formatPrice(change)} de vuelto.`,
+    confirm,
+    message:
+      change === 0
+        ? "Monto exacto: no hay vuelto."
+        : confirm
+          ? `Dé ${formatPrice(change)} de vuelto. Es mucho vuelto: revise que el monto recibido esté bien escrito.`
+          : `Dé ${formatPrice(change)} de vuelto.`,
   };
 }
 
@@ -157,14 +184,17 @@ export function checkDelivery(input: {
   pin: string;
   recipientName: string;
   cash: CashCount | null;
+  /** The driver confirmed a large amount of change (see CashCount.confirm). */
+  cashConfirmed?: boolean;
 }): string | null {
   if (input.pin.replace(/\D/g, "").length !== 4) return "Pídale al cliente su código de 4 dígitos.";
   if (input.recipientName.trim().length < 3) return "Escriba el nombre de quien recibe.";
   if (input.cash) {
-    if (input.cash.state === "empty" || input.cash.state === "invalid") {
-      return "Escriba cuánto efectivo recibió.";
+    if (input.cash.state === "empty") return "Escriba cuánto efectivo recibió.";
+    if (input.cash.state === "invalid" || input.cash.state === "short") return input.cash.message;
+    if (input.cash.confirm && !input.cashConfirmed) {
+      return "Confirme el monto que recibió antes de entregar.";
     }
-    if (input.cash.state === "short") return input.cash.message;
   }
   return null;
 }
@@ -177,6 +207,8 @@ export function refusalMessage(result: {
 }): string {
   switch (result.error) {
     case "wrong_pin":
+      // The last attempt used up: say the same as the lock, not "Quedan 0 intentos".
+      if (result.attempts_left === 0) return refusalMessage({ error: "pin_locked" });
       return `Ese código no es. ${
         result.attempts_left === 1
           ? "Queda 1 intento"
