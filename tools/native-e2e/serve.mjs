@@ -11,7 +11,7 @@
 
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
-import { extname, join, normalize, resolve } from "node:path";
+import { extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const [dir, portText] = process.argv.slice(2);
@@ -38,13 +38,22 @@ const TYPES = {
 
 /** A file under `base` for this URL path, or null. Refuses anything that climbs out. */
 function fileIn(base, path) {
-  const target = normalize(join(base, path));
-  if (!target.startsWith(base)) return null;
+  const target = join(base, path);
+  const rel = relative(base, target);
+  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) return null;
   return existsSync(target) && statSync(target).isFile() ? target : null;
 }
 
 createServer((req, res) => {
-  const path = decodeURIComponent(new URL(req.url ?? "/", "http://localhost").pathname);
+  let path;
+  try {
+    path = decodeURIComponent(new URL(req.url ?? "/", "http://localhost").pathname);
+  } catch {
+    // A malformed escape (%E0%A4%A): refuse this request, keep serving.
+    res.writeHead(400, { "content-type": "text/plain" });
+    res.end("Bad request");
+    return;
+  }
   const file = path.startsWith("/demo/")
     ? fileIn(demo, path.slice("/demo".length))
     : (fileIn(root, path) ?? (extname(path) ? null : join(root, "index.html")));
