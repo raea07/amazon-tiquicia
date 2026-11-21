@@ -14,11 +14,32 @@ Expo **team** account (the team account that already holds the company's
 Apple credentials), not in the personal account. The project in the personal
 account is an earlier one and is no longer used for store builds.
 
-**Where things stand (21 November 2026).** The team-account project exists
-and the first Android store build was started from it. That build created
-the Android upload key for `com.yuntera.shop` on Expo's servers, so the
-Expo upload slot in Part 1, step 5 now exists. Nothing has been uploaded to
-Google Play yet: that waits for the owner's service account key.
+**Where things stand (21 November 2026).**
+
+- **Android.** The build to send to internal testing is
+  `591659eb-3812-42d6-8c3d-6f99062b5c75` (version 0.1.0, version code 3,
+  made from the current main line with the secure-store session). Its
+  page: <https://expo.dev/accounts/raulea07s-team/projects/yuntera/builds/591659eb-3812-42d6-8c3d-6f99062b5c75>.
+  The upload slot in Part 1, step 5 exists; the Google service account key
+  is **not** uploaded yet, so nothing has been sent to Google Play. Once the
+  owner has uploaded it, the developer side sends that build with:
+
+  ```bash
+  cd apps/shop-native
+  npx eas-cli submit --platform android --profile production --id 591659eb-3812-42d6-8c3d-6f99062b5c75 --non-interactive
+  ```
+
+  It arrives in Play Console as a draft release on the internal track; the
+  owner then starts its rollout (Part 1, step 7).
+
+- **iPhone.** No iPhone build exists yet. Expo's tool refused to start one
+  without questions: _"Credentials are not set up. Run this command again
+  in interactive mode."_ The company's distribution certificate and App
+  Store Connect key are in the team account, but neither is yet attached to
+  `com.yuntera.shop`, and attaching them, registering the identifier with
+  Apple and making its provisioning profile can only be done in an
+  interactive run. The owner does that once (Part 2). Nothing was created
+  at Apple.
 
 ## Part 1: Android (Google Play internal testing)
 
@@ -130,19 +151,33 @@ version can take a few minutes to appear for testers.
 > Apple that the app uses no encryption of its own (only the iPhone's: the
 > secure connection and the Keychain), so App Store Connect does not ask the
 > export-compliance question and TestFlight does not hold the build as
-> "Missing Compliance". Run this part once the developer side confirms that
-> this change is on the main branch; a build made from an older copy would
-> still be held until the question is answered by hand.
+> "Missing Compliance". This is on the main line (checked on 21 November
+> 2026: the resolved configuration has `ITSAppUsesNonExemptEncryption`
+> set to false).
 
-This part is done once by the owner, on a computer, because Apple asks the
-account holder to sign in. Every later iPhone version is built and sent by
-the developer side.
+**Why the owner has to do this once.** The team account already holds the
+company's Apple distribution certificate (serial
+`1D30B999373BB96036B3EF8590991BA`, team `6MQVM5UNDL`, valid until
+31 October 2027) and the App Store Connect API key `8A673478NB`. Neither is
+attached to `com.yuntera.shop` yet. Expo's tool attaches them, registers
+the identifier with Apple and makes the App Store provisioning profile only
+in an interactive run, after an Apple sign-in; without questions it stops
+with _"Credentials are not set up. Run this command again in interactive
+mode."_ (tried on 21 November 2026; no build was started). The same run
+also creates the app's record in App Store Connect, which Expo's tool can
+only do with an Apple sign-in, not with the API key.
 
-**The company's Apple credentials are already in Expo.** The team account
-already holds the company's Apple distribution certificate and an App Store
-Connect API key. The command below offers to reuse both: answer **yes**. It
-only needs to register the new app identifier `com.yuntera.shop` with Apple
-and create that app's provisioning profile.
+**One command does all of it**, reusing the certificate and the key: it
+registers the identifier, makes the profile, builds the app on Expo's
+servers, creates the app record and uploads the build to TestFlight. After
+that the developer side builds and uploads every later version alone.
+
+> A browser-only route (register the identifier and make the profile on
+> developer.apple.com, create the app record in App Store Connect) is not
+> shorter: Expo documents no way to attach a profile to a project on its
+> website, only through the same command-line tool, and that needs the
+> certificate's `.p12` file and password, which only Expo holds. It is
+> more clicks and more places to get an identifier wrong. Use the command.
 
 ### Before starting
 
@@ -161,47 +196,91 @@ and create that app's provisioning profile.
 
 ### Build and send to TestFlight
 
-In a terminal, from a copy (clone) of the Yuntera repository:
+In a terminal, from an up-to-date copy (clone) of the Yuntera repository's
+main branch. On a Mac or Linux:
 
 ```bash
 corepack enable
 pnpm install
 cd apps/shop-native
 npx eas-cli@latest login
-npx eas-cli@latest build --platform ios --profile production --auto-submit
+EXPO_APPLE_TEAM_ID=6MQVM5UNDL npx eas-cli@latest build --platform ios --profile production --auto-submit
 ```
 
-`login` asks for the Expo account's e-mail and password. The build command
-then asks questions; answer:
+On Windows (PowerShell), the last line is instead:
 
-| Question (wording may differ slightly)         | Answer                                                   |
-| ---------------------------------------------- | -------------------------------------------------------- |
-| Do you want to log in to your Apple account?   | **Yes**, then sign in with the Apple ID and the 2FA code |
-| Choose the Apple team                          | the company's team                                       |
-| Reuse the existing distribution certificate?   | **Yes**                                                  |
-| Generate a new Apple Distribution Certificate? | **Yes** only if it does not offer to reuse one           |
-| Generate a new Apple Provisioning Profile?     | **Yes**                                                  |
-| Use the existing App Store Connect API key?    | **Yes**                                                  |
-| Generate a new App Store Connect API key?      | **Yes** only if it does not offer to reuse one           |
-| Set up push notifications?                     | **No** (the app does not send notifications yet)         |
+```powershell
+$env:EXPO_APPLE_TEAM_ID="6MQVM5UNDL"; npx eas-cli@latest build --platform ios --profile production --auto-submit
+```
 
-The build runs on Expo's servers (about 15 to 30 minutes), then is sent to
-App Store Connect. Apple processes it for another 10 to 15 minutes. The
-first upload also creates the app's record in App Store Connect.
+`EXPO_APPLE_TEAM_ID` picks the company's Apple team, so the tool does not
+ask which team. `login` asks for the Expo account's e-mail and password.
+The build command then asks these questions, in this order (taken from the
+tool's own code, version 27.11; wording may differ slightly in a later
+version):
 
-### Create an internal testing group
+| Question                                                        | Answer                                                                                         |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Do you want to log in to your Apple account?                    | **Yes**                                                                                        |
+| Apple ID / Password                                             | the owner's Apple ID and its password                                                          |
+| The six-digit code                                              | the code Apple shows on the owner's iPhone or Mac (or by SMS)                                  |
+| Reuse this distribution certificate? (serial `1D30B999…91BA`)   | **Yes**                                                                                        |
+| _(the build starts; the tool says it is ensuring the app exists in App Store Connect and creates it, see below)_ | no question                                     |
+| Reuse this App Store Connect API Key? (Key ID `8A673478NB`)     | **Yes**                                                                                        |
 
-In App Store Connect > **Apps** > **Yuntera** > **TestFlight** > the **+**
-next to **Internal Testing**, enter a group name, **Create**. Then the **+**
-next to **Testers**, tick the testers, **Add**. They receive an e-mail and
-install the app from TestFlight.
+There is no question about the provisioning profile (it is made without
+asking) nor about push notifications (turned off in `eas.json`). The
+identifier `com.yuntera.shop` is registered with Apple without a question.
+If the tool asks for the Apple ID and code a second time before creating
+the app record, give them again.
+
+If the tool asks instead **"Select the App Store Connect Api Key to use for
+your project"**, choose **[Choose an existing key]** and then the key
+`8A673478NB`. **Never** choose **[Add a new key]** or **[Add a new
+certificate]**, and never answer **No** to "Reuse this distribution
+certificate?": the company's other app uses the same certificate and key.
+If the certificate is not offered, stop with **Ctrl+C** and tell the
+developer side.
+
+When it ensures the app exists in App Store Connect, it creates the app record **Yuntera** (primary language
+Spanish (Mexico), the Latin American Spanish App Store Connect offers) and
+an internal TestFlight group called **Team (Expo)** to which it invites the
+team's **Admin** users. If the name "Yuntera" is already taken in the App
+Store, it stops there; tell the developer side.
+
+The build then runs on Expo's servers (about 15 to 30 minutes) and is sent
+to App Store Connect by itself; the terminal can be closed once it shows
+the build's and the submission's addresses. Apple processes the upload for
+another 10 to 15 minutes. This build counts as one of the month's iOS
+builds on Expo's free plan (15 a month).
+
+### Add testers
+
+App Store Connect > **Apps** > **Yuntera** > **TestFlight** > **Team
+(Expo)** (or a new group: the **+** next to **Internal Testing**, a name,
+**Create**). Then the **+** next to **Testers**, tick the testers, **Add**.
+They receive an e-mail and install the app from TestFlight.
 
 ### Send the developer side the app's Apple ID number
 
 App Store Connect > **Apps** > **Yuntera** > **App Information** > under
 **General Information**, **Apple ID** (a number such as `6740000000`). Send
-it to the developer side; it lets later builds be sent without asking the
-owner anything.
+it to the developer side. It goes into `apps/shop-native/eas.json`, as
+`"ascAppId"` in `submit.production.ios`, and is not secret.
+
+### What the developer side then does alone
+
+With the certificate, profile and key attached to `com.yuntera.shop` and
+`ascAppId` in `eas.json`, both commands run without questions:
+
+```bash
+cd apps/shop-native
+npx eas-cli build --platform ios --profile production --non-interactive
+npx eas-cli submit --platform ios --profile production --id <build id> --non-interactive --no-auto-testflight-setup
+```
+
+`--no-auto-testflight-setup` keeps the tool from creating TestFlight groups
+or inviting anyone; the owner manages testers.
 
 ## Afterwards
 
