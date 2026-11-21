@@ -7,15 +7,16 @@ import type { ExpoConfig } from "expo/config";
  * The shopper app, "Yuntera" (com.yuntera.shop). What all four apps share is in
  * packages/expo-kit/src/config.ts; this file adds what only the shop needs.
  *
- * `easProjectId` is the EAS project `eas init` created in the owner's Expo
- * account (not secret). `owner` stays unset: the project belongs to the
- * personal account the EAS command line is signed in to, which is what EAS
- * assumes when `owner` is absent.
+ * `owner` is the Expo team account the project lives in: the company's Apple
+ * certificate and App Store Connect key are stored there, and Expo credentials
+ * belong to an account. `easProjectId` is the project `eas init` created in
+ * that account. Neither is secret.
  */
 export default (): ExpoConfig =>
   defineAppConfig("shop", {
     slug: "yuntera",
-    easProjectId: "d5057c32-2ea7-41ca-9020-4926ee362bac",
+    owner: "raulea07s-team",
+    easProjectId: "77340753-d2c9-40c5-98d0-4ab3baceb9a3",
     plugins: [
       [
         "expo-location",
