@@ -1,10 +1,17 @@
 import { parsePhone } from "@yuntera/core";
+import type { SellerShopChanges, ShopChangeKind } from "@yuntera/db";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Alert, Badge, formatDate, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PayoutDetailsForm } from "@/components/payout-forms";
+import {
+  ContactForm,
+  FiscalForm,
+  ShopNameForm,
+  WithdrawShopChangeForm,
+} from "@/components/shop-change-forms";
 import { getOverview, requireShop } from "@/lib/shop";
 
 export const metadata: Metadata = { title: "Cuenta" };
@@ -44,9 +51,11 @@ export default function AccountPage() {
 
 async function Account() {
   const { shop } = await requireShop("/cuenta");
-  const [{ seller, account }, payout] = await Promise.all([
+  const api = await sessionApi();
+  const [{ seller, account }, payout, changes] = await Promise.all([
     getOverview(shop.id),
-    (await sessionApi()).sellerPayoutDetails(shop.id),
+    api.sellerPayoutDetails(shop.id),
+    api.sellerShopChanges(shop.id),
   ]);
   const request = payout.request;
   const day = (value: string) =>
@@ -65,8 +74,43 @@ async function Account() {
           <Item label="Nombre">{seller.trade_name}</Item>
           <Item label="Dirección en Yuntera">/{seller.slug}</Item>
           <Item label="Correo de contacto">{account.contact_email}</Item>
-          <Item label="Teléfono">{account.contact_phone}</Item>
+          <Item label="Teléfono">
+            {parsePhone(account.contact_phone)?.formatted ?? account.contact_phone}
+          </Item>
         </dl>
+        <ChangeStatus changes={changes} kind="shop_name" />
+        <ChangeStatus changes={changes} kind="contact" />
+        {changes.can_request ? (
+          <div className="mt-5 flex flex-col gap-6 border-t border-border pt-5">
+            <div>
+              <h3 className="font-bold">Cambiar el nombre de la tienda</h3>
+              <p className="mt-1 mb-3 text-sm text-ink-muted">
+                Lo revisamos antes de mostrarlo, para que nadie use un nombre que confunda a los
+                compradores.
+              </p>
+              <ShopNameForm />
+            </div>
+            <div>
+              <h3 className="font-bold">Cambiar el correo o el teléfono</h3>
+              {changes.payout_request_open ? (
+                <p className="mt-1 text-sm">
+                  Hay un cambio de cuenta bancaria en revisión, y lo confirmamos llamando al
+                  teléfono actual. Cuando lo resolvamos podrá pedir este cambio.
+                </p>
+              ) : (
+                <>
+                  <p className="mt-1 mb-3 text-sm text-ink-muted">
+                    Lo confirmamos con usted al teléfono que ya tenemos antes de cambiarlo.
+                  </p>
+                  <ContactForm
+                    email={account.contact_email}
+                    phone={parsePhone(account.contact_phone)?.formatted ?? account.contact_phone}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-lg border border-border bg-surface p-5">
@@ -87,10 +131,21 @@ async function Account() {
             {account.kyc_notes}
           </Alert>
         ) : null}
-        <p className="mt-4 text-sm text-ink-muted">
-          Los datos fiscales no se cambian desde aquí. Si alguno cambió, escríbanos desde su correo
-          de contacto y lo verificamos con usted.
-        </p>
+        <ChangeStatus changes={changes} kind="fiscal" />
+        {changes.can_request ? (
+          <div className="mt-5 border-t border-border pt-5">
+            <h3 className="font-bold">Cambiar los datos fiscales</h3>
+            <p className="mt-1 mb-3 text-sm text-ink-muted">
+              Los verificamos con Hacienda antes de cambiarlos. El nombre o la razón social y la
+              identificación no se cambian: si cambiaron, escríbanos desde su correo de contacto.
+            </p>
+            <FiscalForm taxRegime={account.tax_regime} fiscalAddress={account.fiscal_address} />
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-ink-muted">
+            Solo la persona dueña o administradora de la tienda puede pedir cambios en estos datos.
+          </p>
+        )}
       </section>
 
       <section className="rounded-lg border border-border bg-surface p-5 lg:col-span-2">
@@ -152,6 +207,55 @@ async function Account() {
       </section>
     </div>
   );
+}
+
+const KIND: Record<ShopChangeKind, string> = {
+  shop_name: "nombre de la tienda",
+  fiscal: "datos fiscales",
+  contact: "correo y teléfono",
+};
+
+/** The latest request of one kind: waiting, or why it was not approved. */
+function ChangeStatus({ changes, kind }: { changes: SellerShopChanges; kind: ShopChangeKind }) {
+  const request = changes.requests.find((item) => item.kind === kind);
+  if (!request) return null;
+  const asked =
+    kind === "shop_name"
+      ? `“${request.proposed.trade_name}”`
+      : kind === "contact"
+        ? `${request.proposed.contact_email} y ${
+            parsePhone(request.proposed.contact_phone ?? "")?.formatted ??
+            request.proposed.contact_phone
+          }`
+        : "los datos fiscales nuevos";
+  if (request.status === "pending") {
+    return (
+      <Alert tone="info" className="mt-4" title={`Cambio de ${KIND[kind]} en revisión`}>
+        <p>Pidió cambiar a {asked}. Mientras lo revisamos sigue vigente lo que ya teníamos.</p>
+        {changes.can_request ? (
+          <div className="mt-2">
+            <WithdrawShopChangeForm requestId={request.id} />
+          </div>
+        ) : null}
+      </Alert>
+    );
+  }
+  if (request.status === "rejected") {
+    return (
+      <Alert tone="danger" className="mt-4" title={`No aprobamos el cambio de ${KIND[kind]}`}>
+        <p>
+          Pidió cambiar a {asked}. {request.note}
+        </p>
+        <p className="mt-1">Lo que teníamos no cambió. Puede enviar una solicitud nueva.</p>
+      </Alert>
+    );
+  }
+  return request.decided_at ? (
+    <p className="mt-4 text-sm text-ink-muted">
+      Último cambio de {KIND[kind]} aprobado el{" "}
+      {formatDate(request.decided_at, { day: "numeric", month: "long", year: "numeric" })}.
+    </p>
+  ) : null;
 }
 
 function Item({ label, children }: { label: string; children: React.ReactNode }) {

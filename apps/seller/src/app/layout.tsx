@@ -1,6 +1,7 @@
 import { apps, themeColor } from "@yuntera/brand";
 import { NavLinks } from "@yuntera/next-kit/client";
 import { fontClassName } from "@yuntera/next-kit/fonts";
+import { getViewer } from "@yuntera/next-kit/server";
 import { AppShell } from "@yuntera/next-kit/shell";
 import { buttonClass, Skeleton } from "@yuntera/ui";
 import type { Metadata, Viewport } from "next";
@@ -51,6 +52,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 async function Account() {
   const session = await currentShop();
   if (!session) {
+    // Signed in without a shop yet (registering one, or answering an invitation).
+    if (await getViewer()) {
+      return (
+        <form action={signOut}>
+          <button type="submit" className={buttonClass({ variant: "ghost", size: "sm" })}>
+            Salir
+          </button>
+        </form>
+      );
+    }
     return (
       <Link href="/ingresar" className={buttonClass({ variant: "ghost", size: "sm" })}>
         Ingresar
@@ -106,6 +117,7 @@ async function Sections() {
         { href: "/inventario", label: "Inventario" },
         { href: "/pedidos", label: "Pedidos", count: overview.counts.to_pack },
         { href: "/pagos", label: "Pagos" },
+        { href: "/equipo", label: "Equipo" },
         { href: "/cuenta", label: "Cuenta" },
       ]}
     />
