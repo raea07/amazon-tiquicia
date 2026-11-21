@@ -170,6 +170,11 @@ export function defineAppConfig(app: AppId, options: AppConfigOptions): ExpoConf
       bundleIdentifier: identifier,
       supportsTablet: false,
       infoPlist: {
+        // The apps are Spanish only. Expo's template sets "en", and the first
+        // iOS build carried it with no other language, so text iOS draws
+        // inside the app (permission prompt buttons, the copy and paste menu)
+        // would follow English rather than Spanish. Not yet checked on a device.
+        CFBundleDevelopmentRegion: "es",
         // Expo's prebuild template allows plain HTTP to local-network hosts in
         // every build. Only the development build may: it reaches the local API
         // by the computer's LAN address. Whether this key covers a bare IP
