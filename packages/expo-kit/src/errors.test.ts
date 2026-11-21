@@ -54,6 +54,12 @@ describe("sign-in and sign-up messages", () => {
     );
   });
 
+  it("says the e-mail is not confirmed yet, which Auth tells only after the password matched", () => {
+    const text = signInMessage({ status: 400, code: "email_not_confirmed" });
+    expect(text).toMatch(/confirmado su correo/);
+    expect(text).not.toContain("email_not_confirmed");
+  });
+
   it("explains a rate limit without a code", () => {
     expect(signInMessage({ status: 429, code: "over_request_rate_limit" })).toMatch(/minuto/);
   });

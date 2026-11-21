@@ -36,7 +36,8 @@ export function ProductImage({
   size?: number;
   label?: string;
 }) {
-  const uri = imageUrl(path);
+  // A full-width picture is about as wide as a phone (400 points).
+  const uri = imageUrl(path, size ?? 400);
   // Remembers which address failed, so a new address is tried again.
   const [failedUri, setFailedUri] = useState<string | null>(null);
   const showImage = uri !== null && failedUri !== uri;

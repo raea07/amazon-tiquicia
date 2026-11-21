@@ -7,10 +7,12 @@
  * the apps say the same thing for the same failure.
  */
 
-import { ApiError, messageFor } from "@yuntera/db";
+import { ApiError, authErrorMessage, messageFor } from "@yuntera/db";
 
 export const GENERIC_ERROR = "Algo salió mal de nuestro lado. Inténtelo de nuevo en un momento.";
 export const SIGN_IN_FAILED = "El correo o la contraseña no coinciden.";
+export const SECOND_FACTOR_NOT_IN_APP =
+  "Su cuenta tiene la verificación en dos pasos activada, y esta aplicación todavía no la pide. Ingrese desde el sitio web.";
 
 function looksLikeNetworkFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -49,6 +51,8 @@ export function signInMessage(error: unknown): string {
   if (error.status === 429 || error.code === "over_request_rate_limit") {
     return "Demasiados intentos seguidos. Espere un minuto e inténtelo de nuevo.";
   }
+  // Auth says so only after the password matched, so it reveals nothing.
+  if (error.code === "email_not_confirmed") return authErrorMessage(error, "es-CR");
   return SIGN_IN_FAILED;
 }
 
