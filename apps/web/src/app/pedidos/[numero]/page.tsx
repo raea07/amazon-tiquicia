@@ -1,0 +1,380 @@
+import { ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
+import { ApiError, type OrderDetail } from "@yuntera/db";
+import {
+  Alert,
+  formatDate,
+  formatDateTime,
+  formatPrice,
+  OrderStatusBadge,
+  SHIPMENT_STATUS_LABEL,
+  ShipmentStatusBadge,
+  Skeleton,
+} from "@yuntera/ui";
+import type { Metadata, Route } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import {
+  CancelOrderForm,
+  ReturnForm,
+  ReviewForm,
+  SimulatePaymentForm,
+} from "@/components/order-actions";
+import { requireViewer } from "@/lib/session";
+import { sessionApi } from "@/lib/supabase";
+
+export const metadata: Metadata = { title: "Su pedido", robots: { index: false } };
+
+export default function OrderPage(props: PageProps<"/pedidos/[numero]">) {
+  return (
+    <div className="shell py-8">
+      <Suspense fallback={<Skeleton className="h-96" />}>
+        <Order {...props} />
+      </Suspense>
+    </div>
+  );
+}
+
+const PAYMENT_LABEL = {
+  card: "Tarjeta",
+  sinpe_movil: "SINPE Móvil",
+  cash_on_delivery: "Efectivo contra entrega",
+  bank_transfer: "Transferencia",
+} as const;
+
+async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
+  const [{ numero }, query] = await Promise.all([params, searchParams]);
+  await requireViewer(`/pedidos/${numero}`);
+
+  let order: OrderDetail;
+  try {
+    order = await (await sessionApi()).getOrder(numero);
+  } catch (error) {
+    // Someone else's order and a non-existent one look the same: not found.
+    if (error instanceof ApiError && error.code === "order_not_found") notFound();
+    throw error;
+  }
+
+  await connection();
+  const today = toCostaRicaTime(new Date()).date;
+  const delivered = order.status === "delivered" || order.status === "completed";
+  const withdrawalOpen = delivered && today <= order.withdrawal_deadline;
+  const warrantyOpen = delivered && order.warranty_until !== null && today <= order.warranty_until;
+  const awaitingPayment = order.status === "pending_payment";
+
+  return (
+    <>
+      {query.nuevo === "1" ? (
+        <Alert tone="success" className="mb-6" title="¡Recibimos su pedido!">
+          {awaitingPayment
+            ? "Complete el pago para que empecemos a prepararlo."
+            : "Ya lo estamos preparando. Aquí puede seguirlo en todo momento."}
+        </Alert>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-3xl font-bold">Pedido {order.order_number}</h1>
+        <OrderStatusBadge status={order.status} />
+      </div>
+      <p className="mt-1 text-ink-muted">
+        Realizado el{" "}
+        {formatDate(order.placed_at, { day: "numeric", month: "long", year: "numeric" })}
+      </p>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
+        <div className="flex flex-col gap-6">
+          {awaitingPayment ? <PaymentInstructions order={order} /> : null}
+
+          {order.delivery_pin ? (
+            <section className="rounded-lg border-2 border-brand bg-brand-soft p-5">
+              <h2 className="text-lg font-bold">Su código de entrega</h2>
+              <p className="mt-2 font-display text-5xl font-extrabold tracking-[0.2em] text-link tabular-nums">
+                {order.delivery_pin}
+              </p>
+              <p className="mt-2 text-sm text-ink-muted">
+                Dígaselo al repartidor solo cuando tenga el paquete en sus manos. Es la prueba de
+                que usted lo recibió; nadie de Yuntera se lo va a pedir por teléfono ni por mensaje.
+              </p>
+            </section>
+          ) : null}
+
+          <section aria-labelledby="entrega">
+            <h2 id="entrega" className="text-xl font-bold">
+              Entrega
+            </h2>
+            {delivered && order.delivered_at ? (
+              <p className="mt-2 font-semibold text-success">
+                Entregado el {formatDateTime(order.delivered_at)}
+              </p>
+            ) : order.status === "cancelled" || order.status === "refunded" ? null : (
+              <p className="mt-2 font-semibold text-success">
+                {order.promise_earliest === order.promise_latest
+                  ? `Llega el ${formatDate(order.promise_latest)}`
+                  : `Llega entre el ${formatDate(order.promise_earliest)} y el ${formatDate(order.promise_latest)}`}
+              </p>
+            )}
+            <p className="mt-2 text-sm text-ink-muted">
+              {order.address.recipient_name} · {order.address.senas}. {order.address.district},{" "}
+              {order.address.canton}.
+            </p>
+
+            <ul className="mt-4 flex flex-col gap-3">
+              {order.shipments.map((shipment, index) => (
+                <li key={shipment.id} className="rounded-lg border border-border bg-surface p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold">
+                      {order.shipments.length > 1
+                        ? `Paquete ${index + 1} de ${order.shipments.length}`
+                        : "Paquete"}
+                      <span className="ml-2 font-normal text-ink-muted">
+                        {shipment.tracking_code}
+                      </span>
+                    </p>
+                    <ShipmentStatusBadge status={shipment.status} />
+                  </div>
+                  {shipment.driver_first_name ? (
+                    <p className="mt-2 text-sm">
+                      {shipment.driver_first_name} va en camino con su paquete. Tenga a mano su
+                      código de entrega.
+                    </p>
+                  ) : null}
+                  {shipment.status === "delivery_failed" ? (
+                    <p className="mt-2 text-sm text-warning">
+                      No pudimos entregarlo. Lo intentaremos de nuevo el próximo día hábil; si
+                      necesita cambiar algo, escríbanos.
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section aria-labelledby="productos">
+            <h2 id="productos" className="text-xl font-bold">
+              Productos
+            </h2>
+            <ul className="mt-3 flex flex-col gap-3">
+              {order.items.map((item) => {
+                const returnable = item.quantity - item.returned_quantity;
+                return (
+                  <li key={item.id} className="rounded-lg border border-border bg-surface p-4">
+                    <div className="flex gap-4">
+                      <div className="size-16 shrink-0 overflow-hidden rounded-md bg-arena-100">
+                        {item.image_path ? (
+                          // biome-ignore lint/performance/noImgElement: SVG placeholders gain nothing from next/image
+                          <img
+                            src={item.image_path}
+                            alt=""
+                            width={64}
+                            height={64}
+                            className="size-full object-cover"
+                          />
+                        ) : null}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        {item.product_slug ? (
+                          <Link
+                            href={`/p/${item.product_slug}` as Route}
+                            className="font-semibold hover:underline"
+                          >
+                            {item.title}
+                          </Link>
+                        ) : (
+                          <p className="font-semibold">{item.title}</p>
+                        )}
+                        <p className="text-sm text-ink-muted">
+                          {item.variant_name ? `${item.variant_name} · ` : ""}
+                          {item.quantity} × {formatPrice(item.unit_price_minor)} · Vendido por{" "}
+                          {item.seller_name}
+                        </p>
+                      </div>
+                      <p className="shrink-0 font-semibold tabular-nums">
+                        {formatPrice(item.line_total_minor)}
+                      </p>
+                    </div>
+
+                    {delivered ? (
+                      <div className="mt-4 grid gap-4 border-t border-border pt-4 md:grid-cols-2">
+                        <details className="group">
+                          <summary className="cursor-pointer text-sm font-semibold text-link">
+                            {item.review
+                              ? `Su reseña: ${item.review.rating} de 5 (editar)`
+                              : "Escribir una reseña"}
+                          </summary>
+                          <div className="mt-3">
+                            <ReviewForm orderItemId={item.id} orderNumber={order.order_number} />
+                          </div>
+                        </details>
+                        {returnable > 0 && (withdrawalOpen || warrantyOpen) ? (
+                          <details className="group">
+                            <summary className="cursor-pointer text-sm font-semibold text-link">
+                              Devolver o reclamar garantía
+                            </summary>
+                            <div className="mt-3">
+                              <ReturnForm
+                                orderItemId={item.id}
+                                orderNumber={order.order_number}
+                                maxQuantity={returnable}
+                                withdrawalOpen={withdrawalOpen}
+                              />
+                            </div>
+                          </details>
+                        ) : item.returned_quantity > 0 ? (
+                          <p className="text-sm text-ink-muted">Devolución en trámite.</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          <section aria-labelledby="historial">
+            <h2 id="historial" className="text-xl font-bold">
+              Historial
+            </h2>
+            <ol className="mt-3 space-y-2 border-l-2 border-border pl-4 text-sm">
+              {order.timeline.map((event) => (
+                <li key={`${event.at}-${event.kind}-${event.to_status ?? ""}`}>
+                  <span className="font-medium">{describeEvent(event)}</span>
+                  <span className="ml-2 text-ink-muted">{formatDateTime(event.at)}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        </div>
+
+        <aside aria-label="Resumen" className="flex h-fit flex-col gap-5">
+          <div className="rounded-lg border border-border bg-surface p-5">
+            <h2 className="text-lg font-bold">Resumen</h2>
+            <dl className="mt-3 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <dt>Productos</dt>
+                <dd className="tabular-nums">{formatPrice(order.items_total_minor)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>Envío</dt>
+                <dd className="tabular-nums">
+                  {order.shipping_minor === 0 ? "Gratis" : formatPrice(order.shipping_minor)}
+                </dd>
+              </div>
+              <div className="flex justify-between border-t border-border pt-2 text-base font-bold">
+                <dt>Total</dt>
+                <dd className="tabular-nums">{formatPrice(order.total_minor)}</dd>
+              </div>
+            </dl>
+            <p className="mt-2 text-xs text-ink-muted">
+              Incluye {formatPrice(order.tax_included_minor)} de IVA.
+            </p>
+            <p className="mt-3 text-sm">
+              <span className="text-ink-muted">Pago: </span>
+              {PAYMENT_LABEL[order.payment_method]}
+              {order.payment?.status === "captured" ? " · recibido" : ""}
+              {order.payment?.status === "refunded" ? " · reembolsado" : ""}
+            </p>
+          </div>
+
+          {delivered ? (
+            <div className="rounded-lg border border-border bg-surface p-5 text-sm">
+              <h2 className="text-base font-bold">Sus derechos sobre esta compra</h2>
+              <ul className="mt-2 space-y-1.5 text-ink-muted">
+                <li>
+                  Devolución sin dar motivo hasta el{" "}
+                  <strong className="text-ink">{formatDate(order.withdrawal_deadline)}</strong>.
+                </li>
+                {order.warranty_until ? (
+                  <li>
+                    Garantía legal hasta el{" "}
+                    <strong className="text-ink">
+                      {formatDate(order.warranty_until, {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </strong>
+                    .
+                  </li>
+                ) : null}
+              </ul>
+            </div>
+          ) : null}
+
+          {order.can_cancel ? (
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <h2 className="text-base font-bold">¿Cambió de opinión?</h2>
+              <p className="mt-1 mb-3 text-sm text-ink-muted">
+                Puede cancelar mientras no hayamos empezado a prepararlo.
+              </p>
+              <CancelOrderForm orderId={order.id} orderNumber={order.order_number} />
+            </div>
+          ) : null}
+
+          <p className="text-sm text-ink-muted">
+            ¿Algo no salió bien?{" "}
+            <Link href="/ayuda#reclamos" className="text-link underline">
+              Presente un reclamo
+            </Link>
+            .
+          </p>
+        </aside>
+      </div>
+    </>
+  );
+}
+
+function PaymentInstructions({ order }: { order: OrderDetail }) {
+  const sandbox = order.payment?.provider === "sandbox";
+  return (
+    <section className="rounded-lg border border-maiz-300 bg-maiz-50 p-5">
+      <h2 className="text-lg font-bold">Falta el pago de {formatPrice(order.total_minor)}</h2>
+      {order.payment_method === "sinpe_movil" ? (
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
+          <li>Abra la aplicación de su banco y elija SINPE Móvil.</li>
+          <li>
+            Envíe exactamente <strong>{formatPrice(order.total_minor)}</strong> al número que le
+            indicamos.
+          </li>
+          <li>
+            En el detalle escriba el código{" "}
+            <strong className="tabular-nums">{order.payment?.sinpe_reference}</strong>.
+          </li>
+        </ol>
+      ) : (
+        <p className="mt-2 text-sm">
+          Complete el pago con su tarjeta en la página segura del procesador de pagos.
+        </p>
+      )}
+      <p className="mt-2 text-sm text-ink-muted">
+        Guardamos sus productos por 30 minutos. Si no recibimos el pago, el pedido se cancela solo y
+        no se le cobra nada.
+      </p>
+      {sandbox ? (
+        <div className="mt-4 border-t border-maiz-300 pt-4">
+          <p className="mb-3 text-sm">
+            <strong>Modo de prueba:</strong> este sitio todavía no está conectado a un procesador de
+            pagos. Use este botón para simular que el pago llegó.
+          </p>
+          <SimulatePaymentForm orderId={order.id} orderNumber={order.order_number} />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function describeEvent(event: OrderDetail["timeline"][number]): string {
+  if (event.kind === "note") return event.note ?? "Nota";
+  if (event.kind === "payment") return event.note ?? "Pago";
+  if (event.kind === "order_status" && event.to_status && event.to_status in ORDER_STATUS_LABEL) {
+    return ORDER_STATUS_LABEL[event.to_status as keyof typeof ORDER_STATUS_LABEL]["es-CR"];
+  }
+  if (
+    event.kind === "shipment_status" &&
+    event.to_status &&
+    event.to_status in SHIPMENT_STATUS_LABEL
+  ) {
+    return `Paquete: ${SHIPMENT_STATUS_LABEL[event.to_status as keyof typeof SHIPMENT_STATUS_LABEL].toLowerCase()}`;
+  }
+  return event.to_status ?? "Actualización";
+}

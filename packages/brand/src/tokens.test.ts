@@ -16,19 +16,19 @@ describe("contrast (WCAG 2.2 AA)", () => {
   const AA_LARGE_OR_UI = 3;
 
   const textPairs: Array<[name: string, fg: string, bg: string]> = [
-    ["body text on page", semantic.text, semantic.bg],
-    ["body text on surface", semantic.text, semantic.surface],
-    ["muted text on page", semantic.textMuted, semantic.bg],
-    ["muted text on muted surface", semantic.textMuted, semantic.surfaceMuted],
-    ["white on brand button", semantic.textOnBrand, semantic.brand],
-    ["white on brand hover", semantic.textOnBrand, semantic.brandHover],
+    ["body text on page", semantic.ink, semantic.bg],
+    ["body text on surface", semantic.ink, semantic.surface],
+    ["muted text on page", semantic.inkMuted, semantic.bg],
+    ["muted text on muted surface", semantic.inkMuted, semantic.surfaceMuted],
+    ["white on brand button", semantic.onBrand, semantic.brand],
+    ["white on brand hover", semantic.onBrand, semantic.brandHover],
     ["link on page", semantic.link, semantic.bg],
     ["link on brand-soft", semantic.link, semantic.brandSoft],
     ["white on promo badge", color.white, semantic.promo],
     ["white on success", color.white, semantic.success],
     ["white on danger", color.white, semantic.danger],
     ["warning text on page", semantic.warning, semantic.bg],
-    ["ink on rating yellow", semantic.text, semantic.rating],
+    ["ink on rating yellow", semantic.ink, semantic.rating],
     ["white on dark surface", color.white, color.anil[900]],
     ["celeste on dark surface", color.celeste[300], color.anil[900]],
   ];

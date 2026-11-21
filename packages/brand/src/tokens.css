@@ -73,9 +73,9 @@
   --color-surface-muted: #f5f2ec;
   --color-border: #eae5da;
   --color-border-strong: #c9d1e3;
-  --color-text: #161d33;
-  --color-text-muted: #3f4e76;
-  --color-text-on-brand: #ffffff;
+  --color-ink: #161d33;
+  --color-ink-muted: #3f4e76;
+  --color-on-brand: #ffffff;
   --color-brand: #0b7f8e;
   --color-brand-hover: #0c6775;
   --color-brand-soft: #ecfbfc;

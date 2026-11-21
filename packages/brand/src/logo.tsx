@@ -79,7 +79,7 @@ export function YunteraLogo({ app = "shop", size = 28, className, markOnly = fal
             fontWeight: 700,
             fontSize: size * 0.86,
             letterSpacing: "-0.03em",
-            color: "var(--color-text, #161d33)",
+            color: "var(--color-ink, #161d33)",
           }}
         >
           {brand.slug}

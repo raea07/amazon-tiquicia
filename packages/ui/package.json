@@ -1,0 +1,25 @@
+{
+  "name": "@yuntera/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@yuntera/brand": "workspace:*",
+    "@yuntera/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "react": "19.3.1",
+    "typescript": "5.9.3"
+  }
+}
