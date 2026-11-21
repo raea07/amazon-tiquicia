@@ -23,9 +23,13 @@ select pg_temp.remember('buyer2_order_id',
 select pg_temp.remember('buyer_orders',
   (select count(*)::text from public.orders o join auth.users u on u.id = o.user_id
    where u.email = 'comprador@yuntera.example'));
+-- Their latest order still to be handed over, so that it shows its delivery
+-- code (on a database with more history than the seed, too).
 select pg_temp.remember('buyer_order',
   (select o.order_number from public.orders o join auth.users u on u.id = o.user_id
-   where u.email = 'comprador@yuntera.example' order by o.placed_at desc limit 1));
+   where u.email = 'comprador@yuntera.example'
+     and o.status in ('confirmed', 'processing', 'partially_shipped', 'shipped')
+   order by o.placed_at desc limit 1));
 -- An order with a line sold by TecnoCasa, for the seller's view of it.
 select pg_temp.remember('tecnocasa_sold_order',
   (select o.order_number from public.orders o join public.order_items i on i.order_id = o.id
