@@ -164,7 +164,9 @@ person is responsible; in the Pilot that is the founder.
 ## Deleting an account
 
 What the system does today (`public.delete_my_account`, in
-`supabase/migrations/20261121082500_account_security.sql`; tested table by table
+`supabase/migrations/20261121082500_account_security.sql`, extended by
+`20261121082600_notifications.sql` for what notifications hold and by
+`20261121082700_product_photos.sql` for a closed shop's photos; tested table by table
 in `supabase/tests/095_account_security.sql` and in the browser journey
 `tools/e2e/journeys/account-deletion.cjs`).
 
@@ -187,20 +189,23 @@ factor can be deleted only from a session that has passed it.
 
 **What is erased**, in one transaction:
 
-| Where                                   | What happens                                                                                                                                                                                         |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Profile                                 | Name and phone erased, phone verification and marketing choice cleared                                                                                                                               |
-| Addresses                               | Deleted                                                                                                                                                                                              |
-| Consents                                | Deleted                                                                                                                                                                                              |
-| Past orders and their route stops       | Recipient name, phone, _señas_ and Plus Code erased; the map pin rounded to about 1 km                                                                                                               |
-| Returns and complaints (closed)         | The person's own text erased                                                                                                                                                                         |
-| Content reports they filed              | The e-mail given erased                                                                                                                                                                              |
-| Reviews                                 | Stay published, shown as «Cliente»: the name they came from is gone                                                                                                                                  |
-| Shop memberships, inactive staff row    | Deleted; a former driver's record keeps no name, phone, ID number or plate                                                                                                                           |
-| A shop left with nobody in charge       | Closed. Never traded: its private details (legal name, cédula, contact, bank) deleted. Traded: contact, address and bank details erased; legal name and identification number kept with its invoices |
-| Second factors, sessions, sign-in links | Deleted: every session ends, and every access token issued for them stops working at once                                                                                                            |
-| Sign-in record (`auth.users`)           | E-mail replaced by `<id>@cuenta-eliminada.invalid`, password and metadata erased, sign-in banned for 100 years                                                                                       |
-| Auth's own sign-in log, where kept      | Entries for the account deleted                                                                                                                                                                      |
+| Where                                   | What happens                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Profile                                 | Name and phone erased, phone verification and marketing choice cleared                                                                                                                                                                                                                                                                                                                                    |
+| Addresses                               | Deleted                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Consents                                | Deleted                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Notification settings                   | Channel choices and the WhatsApp/SMS number deleted; the commercial-consent history deleted; push tokens deleted                                                                                                                                                                                                                                                                                          |
+| Messages                                | Anything not yet sent to the person is skipped and never sent; the frozen text of messages to the person or about their orders (which holds the address and name) erased. The delivery rows (template, channel, status, times) stay, as order history does                                                                                                                                                |
+| Suppressions                            | Entries for the person's e-mail and phone numbers deleted, unless another account or shop still uses that address                                                                                                                                                                                                                                                                                         |
+| Past orders and their route stops       | Recipient name, phone, _señas_ and Plus Code erased; the map pin rounded to about 1 km                                                                                                                                                                                                                                                                                                                    |
+| Returns and complaints (closed)         | The person's own text erased                                                                                                                                                                                                                                                                                                                                                                              |
+| Content reports they filed              | The e-mail given erased                                                                                                                                                                                                                                                                                                                                                                                   |
+| Reviews                                 | Stay published, shown as «Cliente»: the name they came from is gone                                                                                                                                                                                                                                                                                                                                       |
+| Shop memberships, inactive staff row    | Deleted; a former driver's record keeps no name, phone, ID number or plate                                                                                                                                                                                                                                                                                                                                |
+| A shop left with nobody in charge       | Closed. Never traded: its private details (legal name, cédula, contact, bank) deleted. Traded: contact, address and bank details erased; legal name and identification number kept with its invoices. Either way its requests to change the payout account are deleted, and its photos leave the review queue and the shop (unless another shop still sells that listing), with their descriptions erased |
+| Second factors, sessions, sign-in links | Deleted: every session ends, and every access token issued for them stops working at once                                                                                                                                                                                                                                                                                                                 |
+| Sign-in record (`auth.users`)           | E-mail replaced by `<id>@cuenta-eliminada.invalid`, password and metadata erased, sign-in banned for 100 years                                                                                                                                                                                                                                                                                            |
+| Auth's own sign-in log, where kept      | Entries for the account deleted                                                                                                                                                                                                                                                                                                                                                                           |
 
 **What is kept, and why.** Orders, their lines, payments, shipments,
 electronic invoices and ledger entries, for the legal retention period (five
@@ -218,6 +223,14 @@ number, contact details, fiscal address and bank account. It keeps that a
 change happened, who made it, and the names of the columns that changed
 (`changed_private`). Rows written before this rule were stripped of those
 columns once, by the migration that introduced it.
+
+**Photo files.** Files are not rows: no database function can delete them.
+A closed shop's photos become disposable, and the console deletes them
+through the storage API at the next catalogue decision. There is no scheduled
+clean-up yet, so until then the files stay in the private bucket, readable
+only by catalogue staff, or (for photos that were public) at their public
+address. The public copy of a photo shown on a past order is kept while the
+order is.
 
 **The e-mail address is free again.** A new sign-up with the same address is a
 new, unrelated account.
@@ -260,6 +273,22 @@ only run on a local imitation of the Auth tables):
    (Auth's own bans are finite; it reads the column into a Go time value). After
    a test deletion, open the dashboard's user list and fetch that user with the
    admin API to see that both still load.
+
+## Messages and photos: what they hold and for how long
+
+- **Planned and sent messages** (`private.notification_deliveries`) hold the
+  template, channel, status, times and ids, never the address: the address
+  is looked up when the message is claimed. The exact text sent is kept only
+  while a retry may need it and cleared at the first final state. These rows
+  are kept without an end date today; a retention clean-up is not built.
+- **Preferences, consent and push tokens** live as long as the account.
+- **Suppressions** (addresses that bounced, complained or sent STOP) are kept
+  so they are not written to again; they go with an account deletion when no
+  one else uses the address.
+- **Photo files** waiting for review are readable only by the shop's members
+  (by download, never by a shareable link) and catalogue staff. Approved
+  photos are public. Publishing re-encodes every photo on the console's
+  server, which drops location and camera data.
 
 ## Second factor for staff
 
@@ -340,8 +369,16 @@ says so.
 
 ### Comunicaciones comerciales (opcional, sin marcar)
 
-> ☐ Quiero recibir ofertas y novedades de Yuntera por correo y WhatsApp. Puedo
-> darme de baja en cualquier momento.
+> ☐ Acepto recibir ofertas y novedades de Yuntera por correo
+
+Wording version `comercial-2026-11`, on the shop's and the seller centre's
+_Notificaciones_ page (with the explanation above it: optional, not needed to
+buy or sell, withdrawn there or with the link in every message, and every such
+message says it is advertising) and in the shopper app's account screen. Saved
+only by `set_my_commercial_consent` (or with the channel choices), with the
+wording version and where it was given; `update_profile` no longer changes it.
+No commercial message can be sent yet: there is no commercial template and no
+one-step unsubscribe page.
 
 ### Ubicación al registrar una dirección
 

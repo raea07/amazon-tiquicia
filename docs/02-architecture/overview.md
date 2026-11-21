@@ -30,12 +30,16 @@ flowchart LR
   field2 --> api
 
   subgraph supabase [Supabase project]
-    api["Data API<br/>function calls only"] --> db[("PostgreSQL<br/>functions + tables + RLS")]
+    api["Data API<br/>function calls only,<br/>check_request first"] --> db[("PostgreSQL<br/>functions + tables + RLS")]
     auth["Auth<br/>sessions, MFA"] --> db
+    storage["Storage<br/>product photos"] --> db
     cron[pg_cron] --> db
+    fn["Edge Functions<br/>notify-worker, bird-webhook,<br/>auth-email"] -- "secret key,<br/>worker_* only" --> api
   end
 
-  db -. outbox events .-> later[["Not built yet:<br/>e-mail, payment gateway,<br/>electronic invoices"]]
+  db -. outbox events .-> fn
+  fn --> bird[["Bird (e-mail, WhatsApp, SMS)<br/>and Expo push:<br/>not connected yet"]]
+  db -. outbox events .-> later[["Not built yet:<br/>payment gateway,<br/>electronic invoices"]]
 ```
 
 | App                                            | Who uses it                                       | State                                                                              | Notes                                                                                                                                                        |
@@ -131,6 +135,26 @@ Three properties follow.
 per function, and every response is validated against a schema
 (`packages/db/src/schemas.ts`) so a drifted payload fails loudly at the edge
 instead of rendering wrong.
+
+### Before every request, and outside the Data API
+
+The Data API runs `public.check_request()` before every call
+(`pgrst.db_pre_request`). It refuses a deleted account, an ended session and a
+password-only session of an account with a second factor, so ending a session
+takes effect at once. Storage and Realtime do not run it; the storage rules
+call the same helpers (`private.session_alive`, `private.factor_ok`).
+
+Server-side work that has no user, so far only notifications, runs outside the
+apps as Edge Functions with their own secret key, which reaches only the
+`worker_*` functions. The flow is described in
+[notifications](../06-operations/notifications.md); the stand-in for local work
+is `tools/dev-notify` (a host for the same handlers and fake providers),
+started by `tools/dev/stack.sh up`.
+
+Product photos are files in Supabase Storage: a private bucket for what
+sellers upload and a public one for approved photos, decided by rules on
+`storage.objects`. The console publishes a photo by re-encoding it on its own
+server (`sharp`) under the staff member's session.
 
 ## Caching model
 
@@ -240,11 +264,14 @@ These are not built. They are listed here so that no reader assumes otherwise.
   server-side webhook handler that calls `private.capture_payment`.
 - **Refunds are booked, not paid.** Cancellations and returns post to the
   ledger; nothing sends money back to a shopper.
-- **No consumer for the outbox.** Events are written transactionally to
-  `private.outbox_events` and nothing reads them. No e-mail is sent; no
+- **One consumer for the outbox, and it sends nothing real yet.** The
+  notification worker (`packages/notifications`, run as Edge Functions under
+  `supabase/functions`) plans and sends messages, but no provider account is
+  connected: locally it talks to the fakes in `tools/dev-notify`. No
   electronic invoice is issued.
-- **No file uploads.** Product images in the demo are static files; seller
-  uploads and proof-of-delivery photos need storage buckets and policies.
+- **Uploads are product photos only.** Proof-of-delivery photos and photos
+  from the phone apps are not built, and nothing deletes unused photo files on
+  a schedule.
 - **No rate limiting** beyond what the platforms provide by default.
 - **No English interface.** The schema and error messages carry English; the
   apps render Spanish only.

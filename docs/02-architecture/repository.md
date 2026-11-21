@@ -27,6 +27,9 @@ packages/
               prices, ratings, status badges.
   next-kit/   Plumbing shared by the Next.js apps: session client, sign-in helpers,
               security headers, fonts, form components. In progress.
+  notifications/ The notification worker as web-standard TypeScript: templates for
+              e-mail, WhatsApp, SMS and push (and the account e-mails' shared
+              words), provider adapters, webhook checks, the worker loop.
   expo-kit/   What the native apps share: the app configuration with development,
               preview and store variants, the Supabase client with the session
               encrypted at rest, roles, the typed API, tokens derived from
@@ -38,9 +41,18 @@ supabase/
   seed.sql    Demo data, created by calling the real functions as demo users.
   seed/       geo-cr.json: provinces, cantones, districts.
   scripts/    local-db.sh (build and test on plain PostgreSQL), local-shim.sql
-              (what Supabase provides, for a plain PostgreSQL), gen-geo-migration.py.
+              (what Supabase provides, for a plain PostgreSQL: roles, the Auth
+              tables, a storage schema), gen-geo-migration.py, auth-config.sh
+              (sign-in settings and e-mail templates for a hosted project) and
+              deploy-notifications.sh (the Edge Functions); neither has been run.
+  functions/  Edge Function entry points (notify-worker, bird-webhook, auth-email),
+              thin Deno wrappers around packages/notifications.
+  templates/  Auth's Spanish e-mail templates. auth/ holds the sign-in settings.
 tools/
-  dev-api/    Local stand-in for the Supabase API. Loopback only. Never deployed.
+  dev-api/    Local stand-in for the Supabase API: function calls, Auth with a local
+              mailbox, storage. Loopback only. Never deployed.
+  dev-notify/ Fake e-mail, WhatsApp, SMS and push providers, and a host that runs
+              the notification functions against them. Local only.
   e2e/        Browser journeys for the four web apps (Playwright).
   native-e2e/ Browser journeys through the web export of the native apps, and the
               small static server that serves those exports.
@@ -113,6 +125,8 @@ Run from the repository root. Requires Node 22 or later and pnpm 10.
 | `pnpm --filter @yuntera/dev-api start` | Start the local API stand-in on `127.0.0.1:54321`                                  |
 | `pnpm --filter @yuntera/web dev`       | Start the storefront on `localhost:3000`                                           |
 | `pnpm --filter @yuntera/brand tokens`  | Regenerate `tokens.css` from `tokens.ts`                                           |
+| `tools/dev/stack.sh up [lane]`         | Database, API, every web app, the notification worker and the fake providers       |
+| `tools/dev/stack.sh notify [lane]`     | Restart only the notification worker and the fake providers                        |
 | `tools/dev/stack.sh native [lane]`     | Export the native apps for the web and serve them on the lane's app ports + 10–13  |
 | `tools/dev/stack.sh native-e2e [lane]` | Run the native journeys against those exports                                      |
 
@@ -207,7 +221,7 @@ production.
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Unit tests       | `packages/core/src/**/*.test.ts`, `packages/brand`, `packages/db/src/errors.test.ts`                                        | `pnpm test`                                     | The algorithms compute what they should, including edge cases; brand colours meet WCAG AA contrast; tokens and CSS are in sync                                                                                                                                                                                                                                                                       | Anything about the database                                                                                                         |
 | Parity tests     | `packages/core/src/cr/compliance.test.ts`, `packages/db/src/errors.test.ts`                                                 | `pnpm test`                                     | The constants and rules written in SQL are the same ones written in TypeScript; every error code has a message                                                                                                                                                                                                                                                                                       | That the SQL arithmetic is right (the next layer does)                                                                              |
-| SQL suites       | `supabase/tests/010`–`070`                                                                                                  | `pnpm db:local:test`                            | Run as real API roles with real claims: who can reach what (`020_access`), pricing, idempotency, reservation, cancellation and expiry (`030_checkout`), fees to the céntimo and a balanced ledger (`040_money`), pick, pack, route, PIN, cash and failures (`050_fulfillment`), accents, synonyms, typos and ranking (`060_search`), each screen function for the right and wrong caller (`070_api`) | Behaviour on the real Supabase platform                                                                                             |
+| SQL suites       | `supabase/tests/010`–`105`                                                                                                  | `pnpm db:local:test`                            | Run as real API roles with real claims: who can reach what (`020_access`), pricing, idempotency, reservation, cancellation and expiry (`030_checkout`), fees to the céntimo and a balanced ledger (`040_money`), pick, pack, route, PIN, cash and failures (`050_fulfillment`), accents, synonyms, typos and ranking (`060_search`), each screen function for the right and wrong caller (`070_api`) | Behaviour on the real Supabase platform                                                                                             |
 | Contract tests   | `packages/db/src/contract.test.ts`                                                                                          | `DATABASE_URL=… pnpm --filter @yuntera/db test` | Real function responses match the client's schemas, per role                                                                                                                                                                                                                                                                                                                                         | UI behaviour                                                                                                                        |
 | Browser journeys | `tools/e2e` (Playwright), four scripts: shopper, seller, staff, driver and warehouse                                        | `pnpm e2e`                                      | The apps, the API and the database work together in a real browser, each from a freshly seeded database: purchase with SINPE Móvil and delivery code; seller registration, listing, stock and packing; payment confirmation, review, dispatch, refund; delivery with a wrong then right code, picking with a wrong then right scan                                                                   | Anything on a real Supabase project; real payments; real phones                                                                     |
 | Native journeys  | `tools/native-e2e` (Playwright), two scripts: the shopper app at phone size, and the seller, driver and warehouse skeletons | `tools/dev/stack.sh native-e2e [lane]`          | The native apps' screens, navigation, Spanish text, role gates and API calls work against the local API through their web export, including a full purchase; `packages/expo-kit` unit tests also check each app's resolved iOS and Android configuration                                                                                                                                             | That the binaries start, and anything that needs a phone: the secure store, embedded fonts, permissions, location, camera, gestures |

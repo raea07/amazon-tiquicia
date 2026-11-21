@@ -93,9 +93,24 @@ _usted_). Rules every message follows, enforced by tests:
   each other.
 
 Account e-mails (confirm the address, reset the password, change of e-mail,
-security notices) are not in the queue. Supabase Auth calls the `auth-email`
-function, which renders them with the same layout and sends them through
-Bird at once (research note 3.3).
+security notices) are not in the queue, and there are two ways they go out:
+
+- **Until the provider is set up**, Supabase Auth sends them itself, with the
+  templates in `supabase/templates` (applied by
+  `supabase/scripts/auth-config.sh`) and Auth's own mailer or the custom SMTP
+  configured there.
+- **Once Bird is set up and the Send Email Hook is switched on** (step 6
+  below), Auth calls the `auth-email` function instead, which renders them
+  with the same layout as every other e-mail and sends them through Bird at
+  once (research note 3.3). Auth's templates are then not used; the SMTP
+  settings stay as the standby.
+
+Both say the same thing: the words live in
+`packages/notifications/src/templates/account-texts.ts`, and a test
+(`account-texts.test.ts`) checks every template in `supabase/templates`
+against them, sentence by sentence. Both link to the app's `/auth/confirm`
+with `token_hash` and `type`, and carry the same 6-digit code. Change a text
+in both places together, or the test fails.
 
 ## How it works
 

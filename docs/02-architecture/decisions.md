@@ -86,9 +86,13 @@ is `aal2`).
   occasionally an inconvenience.
 - `require_staff_mfa` ships as `false`. It must be turned on before launch
   ([go-live checklist](../07-deployment/go-live-checklist.md)).
-- Work that genuinely needs to act without a user — a payment webhook, the
-  outbox worker — will need a secret key held by server-side code. None exists
-  yet; when it does it belongs in an Edge Function, never in an app bundle.
+- Work that genuinely needs to act without a user needs a secret key held by
+  server-side code, never by an app. The first is the notification worker
+  (decision 22): an Edge Function with its own key, which reaches only the
+  `worker_*` functions, each granted to `service_role` alone.
+- A second factor counts in the database whatever the setting: an account
+  with a verified factor gets nothing from a staff or seller function at
+  `aal1` (decision 23).
 
 ## 3. A local stand-in for the Supabase API
 
@@ -97,10 +101,15 @@ PostgREST and Auth services in Docker. In the sandbox where this was built,
 container images could not be pulled and release binaries could not be
 downloaded. Without an HTTP API the apps could not be run or tested at all.
 
-**Decision.** `tools/dev-api` is a small Node server that answers the two
-things the apps ask of Supabase: function calls (`POST /rest/v1/rpc/<name>`)
-and e-mail-and-password sessions (`/auth/v1/token`, `/signup`, `/user`,
-`/logout`, plus a JWKS endpoint). It runs each call the way PostgREST does —
+**Decision.** `tools/dev-api` is a small Node server that answers what the
+apps ask of Supabase: function calls (`POST /rest/v1/rpc/<name>`, after the
+pre-request check, as PostgREST does), Auth (sessions, sign-up with e-mail
+confirmation, password recovery, time-based second factors, a local mailbox
+at `GET /dev/mail`, plus a JWKS endpoint) and the storage calls storage-js
+makes (`/storage/v1/*`, decided by the same rules on `storage.objects`, files
+on local disk). A request is a visitor, a session token or, with the local
+secret key, the server-side caller; one function maps that to the database
+role for every route. It runs each call the way PostgREST does —
 inside a transaction, as role `anon` or `authenticated`, with the token's
 claims in `request.jwt.claims` — and signs tokens with an ES256 key so that the
 apps verify signatures the same way they will in production. It binds to
@@ -113,9 +122,10 @@ apps verify signatures the same way they will in production. It binds to
 - **The system has not been run against real Supabase.** The stand-in mirrors a
   narrow surface faithfully, but it is not PostgREST and not GoTrue. Things
   that could differ on first contact: error payload details, cookie chunking
-  for large sessions, e-mail confirmation flows (the stand-in confirms
-  instantly), rate limits (it has none), refresh-token rotation (it keeps
-  tokens in memory), and anything the platform pre-installs in the database.
+  for large sessions, how the real Auth renders the e-mail templates, rate
+  limits (it has none), whether PostgREST honours the per-database
+  pre-request setting, the storage service's own triggers and CDN, and
+  anything the platform pre-installs in the database.
 - The RPC-first design in decision 1 is what makes the stand-in small: it never
   has to emulate PostgREST's table query language.
 - When a developer has Docker, `supabase start` should replace it. The stand-in
@@ -366,8 +376,11 @@ and mark them processed, retrying on failure.
 
 **Consequences.**
 
-- The writer side is built and tested. **The worker is not built.** Until it
-  is, no notification of any kind leaves the system.
+- The writer side is built and tested. The first consumer is the
+  notification worker (decision 22): each event gets one job per consumer
+  (`private.outbox_jobs`), so other consumers (invoices, a search indexer) can
+  attach without touching it. It sends nothing for real until the owner sets
+  up the messaging provider.
 - Consumers must be idempotent: an event can be delivered more than once.
 - This is the seam where a queue or a search indexer attaches later without
   touching the business functions.
@@ -566,3 +579,99 @@ app brings its own React.
 - If the brand package ever needs React at run time, it should declare it as a
   peer with a range both versions satisfy, and the duplicate check must pass
   again.
+
+## 22. Notifications run outside the apps, with their own key
+
+**Context.** Order messages, staff alerts and account e-mails must go out
+after the change that caused them commits, be retried without being sent
+twice, and respect each person's channels and consent. No app may hold a
+privileged key (decision 2).
+
+**Decision.** A SQL planner turns each outbox event into one planned message
+per recipient and channel, exactly once. A worker in `packages/notifications`
+(web-standard TypeScript, deployed as the Edge Functions `notify-worker`,
+`bird-webhook` and `auth-email`) claims due messages with a lease, renders
+them, sends them through Bird (e-mail, WhatsApp, SMS) and Expo (push), and
+records the outcome. It calls only `worker_*` functions with a dedicated
+secret key; each is granted to `service_role` alone and checks the token's
+role. Provider reports arrive as signed webhooks and are applied once.
+Account e-mails use Auth's own templates until the provider is set up, then
+the Send Email Hook, in the same words (a test keeps them equal).
+
+**Consequences.**
+
+- The apps still hold no privileged key; staff see which messages an order
+  produced, never their text or address.
+- Nothing is sent for real until the owner sets up Bird, Meta and Expo
+  ([notifications](../06-operations/notifications.md)). Locally the worker
+  talks to fakes (`tools/dev-notify`).
+- Commercial messages need a separate, recorded consent and cannot be sent
+  yet: there is no commercial template and no one-step unsubscribe page.
+
+## 23. A per-request check, and the second factor in the database
+
+**Context.** Access tokens are valid for an hour by themselves, so signing
+out, changing a password or deleting an account did not stop a token already
+issued. And a second factor checked only by the apps' screens protects
+nothing: anyone with the password can call the Data API directly.
+
+**Decision.** `public.check_request()` runs before every Data API request
+(`pgrst.db_pre_request`). It refuses a deleted account, a session that no
+longer exists, and a password-only session of an account with a verified
+factor (except for the second step's own functions). The staff and seller
+helpers include `private.factor_ok()`. Storage, which does not run the check,
+calls the same helpers in its rules.
+
+**Consequences.**
+
+- Ending a session takes effect at once; deletion and writing requests of the
+  same account are serialised.
+- Every request pays a few indexed lookups (`auth.users`, `auth.sessions`,
+  `auth.mfa_factors`); how much that costs on the hosted project is not
+  measured.
+- Whether the hosted project accepts the setting is checked when the
+  migration is first applied
+  ([runbook step 3](../07-deployment/runbook-first-deploy.md#3-apply-the-migrations)).
+
+## 24. Deleting an account anonymises; the sign-in record stays
+
+**Context.** The right to erasure and both app stores require a way to delete
+an account, but orders, returns, complaints and ledger entries must be kept
+for the legal retention period and refer to the account.
+
+**Decision.** `delete_my_account` erases or anonymises everything that
+identifies the person in one transaction, keeps the records the law requires
+detached from them, and anonymises the `auth.users` row rather than deleting
+it. It refuses while something is pending (an order, a refund owed, an open
+shop the person alone runs). What later features add about a person (the
+notifications' preferences, consent, tokens and suppressions; a closed shop's
+photos) is erased in the same transaction; a test searches every row of every
+table for the person afterwards.
+
+**Consequences.**
+
+- A new feature that stores something about a person must extend the
+  deletion; a guard in `095_account_security.sql` fails for any new column
+  that refers to an account and is not accounted for.
+- The same e-mail can sign up again as a new account.
+
+## 25. Photos in two buckets, published by re-encoding
+
+**Context.** Sellers' photos must not reach the shop before catalogue review,
+and the three sizes a browser picks from must be the picture staff saw.
+
+**Decision.** Sellers upload into a private bucket, into paths reserved by a
+function, and cannot overwrite, move or sign a shareable link. On approval the
+console downloads the largest copy under the staff member's session, checks
+and decodes it with `sharp`, and writes the three public sizes from it into
+the public bucket.
+
+**Consequences.**
+
+- Whatever a client uploads (another picture per size, location data, hidden
+  content), only what staff saw, re-encoded, is public.
+- The console needs `sharp` at run time, a native module; it is a declared
+  dependency of `apps/ops`, and whether it runs on Vercel is checked at the
+  first deploy.
+- Files that are no longer needed are deleted only when a seller or catalogue
+  staff act; there is no scheduled clean-up.

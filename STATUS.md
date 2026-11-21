@@ -1,7 +1,8 @@
 # Status
 
-Updated 21 November 2026, after people management, seller payouts, the fixes
-to known limitations and the native apps were added. This is the honest state
+Updated 21 November 2026, after account security, notifications and product
+photos were merged with people management, seller payouts, the fixes to known
+limitations and the native apps. This is the honest state
 of the project: what exists, how far it was checked, and what only the owner
 can do.
 
@@ -9,21 +10,28 @@ can do.
 
 Yuntera is a marketplace with its own warehouse and delivery, designed for
 Costa Rica. The whole product works on a development machine: a shopper can
-search, buy and pay; a seller can register, list, edit listings, stock, pack
-and see what they will be paid; staff can verify sellers, review products and
-listing edits, add staff, drivers and warehouse workers, plan routes, settle
-cash, refund returns and pay sellers; a driver can deliver against the
-customer's code; a warehouse worker can pick, pack and receive. **A hosted
-preview exists.** The database is a Supabase project in your separate free
-organisation, with all 22 migrations applied and the demo data loaded. The
+search, buy and pay; a seller can register, list with photos, edit listings,
+stock, pack and see what they will be paid; staff can verify sellers, review
+products, photos and listing edits, add staff, drivers and warehouse workers,
+plan routes, settle cash, refund returns and pay sellers; a driver can deliver
+against the customer's code; a warehouse worker can pick, pack and receive.
+Everyone can reset a password, confirm their e-mail and delete their account;
+staff and sellers can add a second factor; messages for every step of an order
+are planned and sent, but only to local fake providers. **A hosted preview
+exists.** The database is a Supabase project in your separate free
+organisation, with the first 22 migrations applied and the demo data loaded.
+**The last three (account security, notifications, product photos, migrations
+`082500` to `082700`) have not been applied there, and nothing they add has run
+on the hosted project.** The
 four web apps are deployed as a preview on Vercel at
 `yuntera-web`, `yuntera-vende`, `yuntera-central` and `yuntera-campo` (each
 `.vercel.app`); every address is behind a Vercel login, and the projects are
 not connected to the Git repository. A shopper app for iOS and Android exists
 with every shopping flow of the website, and the seller, driver and warehouse
-apps exist as skeletons; none has been built into an installable app or run on
-a phone yet. Payments, messages and invoices are still simulated or missing
-(see "Not built").
+apps exist as skeletons. The shopper app was built in the cloud once for each
+platform, but neither build has run on a phone or simulator yet. Payments and
+invoices are still simulated or missing, and no message is sent for real (see
+"Not built").
 
 ## What needs you
 
@@ -65,39 +73,66 @@ In the order that unblocks the most.
    registration with Hacienda, a payment gateway contract (cards and SINPE
    Móvil), the electronic-invoicing provider, a bank account, and the support
    mailboxes the screens mention (`ayuda@yuntera.cr` does not exist yet).
-5. **Know what the preview costs.** The Vercel projects are on your Pro plan,
+5. **Set up messaging before any message can be sent.** Nothing reaches a
+   real person until you do; every step is in
+   [`docs/06-operations/notifications.md`](docs/06-operations/notifications.md),
+   "Before anything is sent for real". In short:
+   1. Bird: confirm the region, move the e-mail plan off Free, add and verify
+      the sending domain (DKIM, return path, DMARC), create the worker's key
+      and an SMTP key, create the webhook and keep its secret, fund the
+      wallet, connect the WhatsApp number, submit the four WhatsApp templates
+      in `packages/notifications/whatsapp/` (written, not submitted) and add
+      the BAJA, ALTO, NO MAS opt-out keywords for Costa Rica.
+   2. Meta: a business portfolio in the legal name, the notifications number,
+      business verification, and the privacy policy and terms published.
+   3. Expo: one project per app with enhanced push security, an access token
+      for the worker, and the Apple and Android push credentials.
+   4. Supabase: the Vault secrets, a secret key for the worker alone, the Edge
+      Function secrets, then `supabase/scripts/deploy-notifications.sh` (not
+      run), Auth's custom SMTP and the Send Email Hook, and the team mailboxes.
+   5. The real legal name, legal id and postal address for e-mail footers
+      (`NOTIFY_LEGAL_*`).
+6. **Know what the preview costs.** The Vercel projects are on your Pro plan,
    which bills by use. The Supabase project is in the free organisation.
-6. **Before the native apps go to a store:**
+7. **Before the native apps go to a store:**
    1. Confirm the four store identifiers before the first upload, because they
       can never change afterwards: `cr.yuntera.shop`, `cr.yuntera.vende`
       (newly chosen for the seller app), `cr.yuntera.ruta` and
       `cr.yuntera.bodega`, with `.dev` and `.preview` for test builds.
-   2. Answer Apple's export-compliance question. The apps encrypt the saved
-      session with AES (`aes-js`), so whether that is exempt needs your or an
-      adviser's answer; the setting (`usesNonExemptEncryption`) is left unset.
-   3. Publish a privacy policy at a public address, and an account-deletion
-      page plus a way to delete the account in each app. Both stores require
-      them at the first submission; neither exists yet.
-   4. Decide whether the four apps keep one shared icon, as the brand book
+   2. Answer Apple's export-compliance question, still open. The apps encrypt
+      the saved session with AES (`aes-js`), so whether that is exempt needs
+      your or an adviser's answer; the setting (`usesNonExemptEncryption`) is
+      left unset.
+   3. The first Android build asked for the fingerprint and biometric
+      permissions (`USE_BIOMETRIC`, `USE_FINGERPRINT`), which the secure-storage
+      library brings in and no app uses. They are now removed in all four
+      apps' configuration; check the permissions list of the next Android
+      build to confirm.
+   4. Publish a privacy policy at a public address. The account-deletion page
+      exists (the shop's `/ayuda/eliminar-cuenta`) and every web app can
+      delete an account; the native apps do not yet, and both stores require
+      it in the app at the first submission.
+   5. Decide whether the four apps keep one shared icon, as the brand book
       says today, or get icons that tell them apart in the store.
-   5. An Apple Developer Program membership (US$99 a year) for any iOS build on
+   6. An Apple Developer Program membership (US$99 a year) for any iOS build on
       a phone, TestFlight or the App Store, and a Google Play Console account
       (US$25). Demo accounts on the hosted project for the stores' reviewers.
 
 ## What is built
 
-| Part                 | Where                                | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| -------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shop                 | `apps/web`                           | Home, search with typo tolerance, categories, product pages with competing offers and a delivery date, cart, checkout with SINPE Móvil, card or cash on delivery, orders with tracking and delivery code, returns, reviews, account, help. An unknown product or category address answers "not found" (404)                                                                                                                                                                                                                                                          |
-| Seller centre        | `apps/seller`                        | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, and a request to change the payout account                                                                                                                                                                                                                                                               |
-| Internal console     | `apps/ops`                           | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail                                                                                                                                                                                                                                                                  |
-| Routes and warehouse | `apps/field`                         | Driver: the day's route, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with scan check, packing, receiving, stock lookup                                                                                                                                                                                                                                                                                                                                                                  |
-| Database             | `supabase/`                          | 22 migrations, 61 tables, 101 API functions, row-level security on every table, double-entry ledger, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                                                                                                                                    |
-| Domain logic         | `packages/core`                      | Money and IVA, fees, featured-offer choice, search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                                                                                                                                                                                                                                                                                   |
-| Native apps          | `apps/*-native`, `packages/expo-kit` | Expo SDK 58. The shopper app (`apps/shop-native`) has every shopper flow of the website laid out for a phone: browse, search, product, cart, sign-in, checkout, payment (simulated), delivery code, orders, cancellation, returns, reviews, addresses, account, help. The seller, driver and warehouse apps are skeletons: sign-in, a screen for an account without access, and a home screen gated by role that reads real data. `packages/expo-kit` is what all four share: configuration, the session encrypted on the phone, the typed API, theme and components |
-| Shared code          | `packages/{brand,ui,db,next-kit}`    | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session, security headers, forms)                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Documentation        | `docs/`                              | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase                                                                                                                                                                                                                                                                                                                         |
-| Brand                | `docs/brand/`, `packages/brand/`     | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files                                                                                                                                                                                                                                                                                                                                                                                   |
+| Part                 | Where                                                              | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shop                 | `apps/web`                                                         | Home, search with typo tolerance, categories, product pages with competing offers and a delivery date, cart, checkout with SINPE Móvil, card or cash on delivery, orders with tracking and delivery code, returns, reviews, account, help. An unknown product or category address answers "not found" (404). Product photos in a gallery and in every list. Password reset, e-mail confirmation, notification settings (channels, WhatsApp number, commercial consent), account deletion, and a public page on how to delete an account                              |
+| Seller centre        | `apps/seller`                                                      | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, and a request to change the payout account. A photo manager on each listing (resized in the browser, reviewed before they show), the shop's notification settings, an optional second factor                                                                                                             |
+| Internal console     | `apps/ops`                                                         | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail. Photo review and take-down, the messages each order produced and the stuck ones with a resend button, staff's second factor (enrolment, the second step at sign-in, an administrator's reset of a colleague's)                                                  |
+| Routes and warehouse | `apps/field`                                                       | Driver: the day's route, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with scan check, packing, receiving, stock lookup. Password reset and account deletion as in the other apps                                                                                                                                                                                                                                                                                                        |
+| Database             | `supabase/`                                                        | 25 migrations, 74 tables (60 public, 14 private), 146 functions (135 for the apps, 11 server-side only), two storage buckets with their rules, row-level security on every table, double-entry ledger, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                                  |
+| Domain logic         | `packages/core`                                                    | Money and IVA, fees, featured-offer choice, search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                                                                                                                                                                                                                                                                                   |
+| Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. The shopper app (`apps/shop-native`) has every shopper flow of the website laid out for a phone: browse, search, product, cart, sign-in, checkout, payment (simulated), delivery code, orders, cancellation, returns, reviews, addresses, account, help. The seller, driver and warehouse apps are skeletons: sign-in, a screen for an account without access, and a home screen gated by role that reads real data. `packages/expo-kit` is what all four share: configuration, the session encrypted on the phone, the typed API, theme and components |
+| Notifications        | `packages/notifications`, `supabase/functions`, `tools/dev-notify` | A planner in the database turns each event into one message per person and channel, exactly once; a worker sends them by e-mail, WhatsApp, SMS and push with retries and dead letters; signed delivery reports; quiet hours; suppressions; account e-mails in the same words as Auth's templates. Runs locally against fake providers only                                                                                                                                                                                                                           |
+| Shared code          | `packages/{brand,ui,db,next-kit}`                                  | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session, security headers, forms)                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Documentation        | `docs/`                                                            | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase                                                                                                                                                                                                                                                                                                                         |
+| Brand                | `docs/brand/`, `packages/brand/`                                   | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files                                                                                                                                                                                                                                                                                                                                                                                   |
 
 How the new parts work, in short:
 
@@ -116,51 +151,96 @@ How the new parts work, in short:
   proportion to what each sold.
 - **Stock in several places.** One order line can be filled from several
   locations of the same offer; each location sends its own parcel.
+- **The second factor counts in the database.** A staff member or seller with
+  an authenticator gets nothing with the password alone, whatever
+  `require_staff_mfa` says. Before every request the database checks the
+  session: signing out, a password change, a factor reset or a deletion ends
+  every token at once, not an hour later.
+- **Deleting an account** erases or anonymises everything that identifies the
+  person (including notification settings, consent history, push tokens and
+  suppressions) and keeps the orders and ledger the law requires, detached from
+  them. It waits while an order, return, refund or complaint is open, or while
+  the person alone runs an open shop.
+- **Messages.** Order and shop events become messages by e-mail, WhatsApp, SMS
+  and push, per person's choices. Order messages always go by e-mail; WhatsApp
+  and SMS need a mobile number; a number that sent STOP is switched back on
+  only from that phone. Commercial messages need a separate consent, which
+  starts unticked.
+- **Photos.** Sellers upload into a private bucket; staff review the largest
+  size; the console then writes the three public sizes from that copy, so
+  only what staff saw, without location data, reaches the shop. Staff can take
+  down any photo.
 
 ## How it was checked
 
-On a development machine, on one freshly seeded database, after the last
-change:
+On a development machine, after the last change, on the combination of
+everything above (lane 1 of `tools/dev/stack.sh`, each suite on a freshly
+seeded database):
 
-| Check                | Result                                                                                                                                                                                                                                                                                                                                                                                                |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit tests           | 430 pass (core 239, brand 21, API client 14, shared web code 22, native kit 123, shopper app 11)                                                                                                                                                                                                                                                                                                      |
-| Database tests       | 11 files pass on PostgreSQL 16: access control per role, checkout, money, fulfilment, search, delivery promise, the API, the back office, people and payouts, the fixes, and one order from three sellers paid out end to end                                                                                                                                                                         |
-| API contract tests   | 32 pass: every screen's payload, called as each role, matches the types the apps use                                                                                                                                                                                                                                                                                                                  |
-| Browser journeys     | 8 pass in Chromium on a freshly seeded database: shopper, seller, staff, driver and warehouse, people, payouts, listing edits, and the shop's 404 answers (`pnpm e2e`)                                                                                                                                                                                                                                |
-| Native journeys      | 2 pass (48 checks) through the web export of the native apps, in Chromium at phone size on a freshly seeded database: the shopper app from a product opened by link, through search, cart, sign-in, SINPE Móvil and the delivery code, to signing out; the seller, driver and warehouse apps for a visitor, an account without access and the right account, including signing out with no connection |
-| Native configuration | For each of the four apps: Expo's configuration resolves, package versions match Expo SDK 58, `expo-doctor` passes 20 of 20 checks, and the iOS and Android bundles build with only React 19.3.0 in them. The resolved iOS settings were checked in the development, preview and store variants: every permission text in Spanish, no microphone or motion permission, plain HTTP only in development |
-| Lint and types       | No lint errors (warnings only) and no type errors across the workspace                                                                                                                                                                                                                                                                                                                                |
+| Check                | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit tests           | 680 pass (core 256, notifications 196, native kit 125, shared web code 30, brand 21, API client 19, local API 16, shopper app 11, fake providers 5)                                                                                                                                                                                                                                                                                                                                                                                            |
+| Database tests       | 14 files pass on PostgreSQL 16: access control per role, checkout, money, fulfilment, search, delivery promise, the API, the back office, people and payouts, the fixes, one order from three sellers paid out end to end, account security (second factor, per-request check, deletion searched for in every row of every table after the person had messages and, as a seller, a photo), notifications, product photos                                                                                                                       |
+| API contract tests   | 74 pass in 8 files: every screen's payload, called as each role, matches the types the apps use                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Browser journeys     | 13 pass in Chromium, each on a freshly seeded database, with no console errors or server errors: shopper, seller, staff, driver and warehouse, people, payouts, listing edits, the shop's 404 answers, password reset, staff's second factor, account deletion, notifications (against the fake providers) and product photos. The first full run failed once in password reset, because the journey read a page before its answer had streamed in on this loaded machine; the journey now waits for it, and the second full run passed all 13 |
+| Native journeys      | 2 pass (48 checks) through the web export of the native apps, in Chromium at phone size: the shopper app from a product opened by link to signing out, and the seller, driver and warehouse apps for a visitor, an account without access and the right account. They do not reach the shopper app's commercial-consent checkbox or a product with approved photos (the demo data has none), whose code changed in this merge; those were checked by types only                                                                                |
+| Callers of the API   | Probed through the local API: a visitor, a shopper, staff without a factor, staff with a factor before the second step (refused everything but the second step's own calls), the notification worker's secret key (answered, about 9 ms a call on this loaded machine), and a token after sign-out (`session_ended`)                                                                                                                                                                                                                           |
+| Native configuration | For each of the four apps: Expo's configuration resolves, package versions match Expo SDK 58, and the resolved iOS and Android settings were checked in every variant, now including the removal of the biometric permissions                                                                                                                                                                                                                                                                                                                  |
+| Lint and types       | No lint errors (96 warnings and 195 notes, of kinds already there) and no type errors in the 17 typecheck tasks                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
-On the hosted preview (before today's two migrations): sign-in, sign-up and
-the 8 database test files that existed then passed on the real Supabase
-platform, with no difference in access control between local and hosted.
-E-mail confirmation is switched off on the preview, because the apps have no
-confirmation or password-reset screens yet.
+Money and the documented example still hold: every ledger transaction sums to
+zero, a seller's available + pending + in transit equals the ledger balance,
+and the fee example (₡20,000, hogar, card, shipped by the seller) still pays
+out ₡16,203.20.
+
+On the hosted preview (before migrations `082300` and `082400`): sign-in,
+sign-up and the 8 database test files that existed then passed on the real
+Supabase platform. On 21 November 2026 all 11 suites of that time passed
+there too. E-mail confirmation is switched off on the preview.
+
+**None of account security, notifications or product photos has run on the
+hosted project.** Migrations `082500` to `082700` are not applied there. Four
+things can be settled only there, and are listed with the statement for each
+in the [runbook](docs/07-deployment/runbook-first-deploy.md#migrations-20261121082500-to-20261121082700-not-applied-anywhere-yet):
+
+1. Whether the per-request check (`check_request`, registered as the Data
+   API's pre-request function) can be switched on, and what it costs in speed.
+2. Whether the functions that write to the sign-in tables (account deletion,
+   an administrator's reset of a colleague's second factor) are allowed to.
+3. Whether a migration may create the storage buckets and their rules.
+4. Whether the image library (`sharp`) works in the hosted console.
 
 What these checks do **not** cover, stated plainly:
 
-- **The hosted preview was smoke-tested, not exhaustively tested.** On
-  21 November 2026 all 11 database test suites passed on the hosted project,
-  and a browser test of the deployed apps covered shopping, paying (simulated),
-  picking, packing, routing and delivering one order, plus the screens added
-  that day. Not tried there: a staff role other than administrator (the demo
-  data has only an administrator), creating a payout run, and a real phone.
+- **The hosted preview was smoke-tested, not exhaustively tested**, and only
+  up to migration `082400`. Not tried there: a staff role other than
+  administrator, creating a payout run, and a real phone.
 - **No real money, messages or invoices.** Payments are in sandbox mode; no
-  gateway, e-mail, SMS, WhatsApp or electronic-invoicing provider is connected.
-  Payouts are bank transfers made by hand; the list the console produces is not
-  any bank's upload format.
+  gateway or electronic-invoicing provider is connected. Messages go only to
+  local fake providers; account e-mails land in the local API's own mailbox.
+  Payouts are bank transfers made by hand; the list the console produces is
+  not any bank's upload format.
+- **Sign-in screens against the real Auth service.** Password reset, e-mail
+  confirmation, the second factor and the e-mail templates were exercised
+  against the local stand-in only; how the real service renders the templates
+  and limits requests is not known yet.
+- **Photos in real browsers and phones.** Resizing in the browser was tried in
+  headless Chromium only; Safari, Firefox on phones, iPhone (HEIC) photos and
+  the camera button were not.
 - **No real phones.** The drivers' app was tested in a phone-sized desktop
   browser with a simulated location.
-- **The native apps have never been built or run on a phone.** Their web
-  export proves the screens, the navigation, the Spanish text and the API
-  calls, including a full purchase in the shopper app. It does **not** prove
-  that the iOS and Android apps start, nor the secure storage of the session,
-  the embedded fonts, the permission prompts, location, the camera, or the
-  gestures, keyboard and safe areas of a real phone. That stays unknown until
-  a cloud build is installed on a phone or a simulator. The iOS settings
-  (permission texts, no plain HTTP outside development builds) were read from
-  Expo's resolved configuration, not from a built app.
+- **The native apps have not run on a phone.** On 21 November 2026 the
+  shopper app was built in the cloud once for each platform, an Android APK
+  and an iOS Simulator build, both successful at the first try (2 of the free
+  plan's 30 builds a month). Neither has been started on a phone or a
+  simulator: cloud simulators need a paid Expo plan, so the first real look
+  will be you installing the Android file on a phone. Those two builds predate
+  the Spanish-language setting for iOS and everything merged since. While the
+  shop is behind the Vercel login, product pictures cannot load in the app; it
+  shows a placeholder instead. The web export proves the screens, navigation,
+  Spanish text and API calls; it does **not** prove the secure storage of the
+  session, the fonts, permission prompts, location, camera, gestures, keyboard
+  and safe areas of a real phone.
 - **No load testing**, no security review by a third party.
 
 ## Not built
@@ -174,12 +254,16 @@ These are missing, not hidden. The first group blocks a public launch.
   charged.
 - Electronic invoices to Hacienda. The data model and the events exist; nothing
   sends them.
-- Notifications. Events are recorded for e-mail and messaging; nothing delivers
-  them, so a shopper is not told when an order ships.
-- Password reset and e-mail confirmation screens.
-- A second factor for staff sign-in. The database can require it
-  (`require_staff_mfa`); the console has no screen to enrol or enter it.
-- Product photos. Listings use placeholder drawings; there is no upload.
+- Sending messages for real. The pipeline, the worker, the templates and the
+  screens are built, but nothing is sent until you set up the messaging
+  provider ("What needs you"). The four WhatsApp templates are written and not
+  submitted. Phone numbers for WhatsApp and SMS are not verified by a code.
+  Not built: commercial messages (no template and no one-step unsubscribe
+  page), the daily staff summary of stuck messages, a clean-up of old message
+  rows, a refund-completed message for staff-approved return refunds, and the
+  team mailboxes (staff messages are skipped until you add them).
+- A scheduled clean-up of unused photo files. Files nothing needs are deleted
+  only when a seller or catalogue staff act.
 - A bank connection for payouts. Transfers are made by hand and recorded in
   the console.
 
@@ -187,12 +271,15 @@ These are missing, not hidden. The first group blocks a public launch.
 
 - The screens of the seller, driver and warehouse apps beyond sign-in and a
   home screen. Until then sellers, drivers and the warehouse use the web apps.
-- Push notifications. The package is installed but switched off, and its
-  permission and entitlement are removed on purpose until that work starts.
-- Taking or uploading photos from the phone.
-- Password reset and account deletion in the apps. Both stores require account
-  deletion before the first submission; there is no database function for it
-  yet.
+- Push notifications. The database and the worker can send them, but no app
+  registers its phone yet, and the package's permission and entitlement are
+  removed on purpose until that work starts.
+- Taking or uploading photos from the phone (the server side the seller app
+  would call exists).
+- Password reset, the second factor and account deletion in the apps. The
+  database function for deletion exists; both stores require it in the app
+  before the first submission. An account with a second factor is told to use
+  the website.
 - An offline queue for drivers, so a delivery confirmed without signal is sent
   later.
 - Universal links (opening a yuntera.cr address in the app). No domain serves
@@ -248,8 +335,6 @@ Found while building or reviewing; none is fixed by pretending otherwise.
 - A seller can no longer change the shop's contact phone or e-mail (finance
   calls that phone to confirm a change of payout account). They need a
   reviewed way to do it.
-- The photos of a published listing can still be changed directly, without
-  review. To be closed with the photo upload work.
 - A package above the largest warehouse size (120 cm or 30 kg) gets no
   warehouse fee. It should be refused or priced.
 - Another shopper's order page shows "not found" but answers with status 200
@@ -266,6 +351,22 @@ Found while building or reviewing; none is fixed by pretending otherwise.
 - After a shopper chooses a delivery zone on a product page, the old date and
   shipping price stay on screen for a few seconds before the new ones replace
   them, with nothing showing that an update is on its way.
+- Wrong second-factor codes are limited to five in 15 minutes per account only
+  for codes sent through the apps. Codes sent to Auth directly meet only its
+  per-address limit until Auth's verification hook is enabled (Team plan).
+- A shop that traded and closed keeps its legal name and identification number
+  for the tax retention period, so the same cédula cannot open a new shop
+  during that time.
+- No screen changes an account's e-mail address yet.
+- Some provider behaviour was tried only against the fake: that Bird repeats a
+  message's generation in its delivery reports, the fields of its opt-in
+  report, and the shape of a late soft bounce. The Edge Functions' Deno check
+  was not repeated after the last fixes.
+- Catalogue staff can still sign links of any lifetime to photos waiting for
+  review through the API (the console signs them for 15 minutes). A taken-down
+  photo may stay in browsers' and the CDN's caches for up to a week.
+- Storage abuse is limited per listing (8 photos) and per shop (40 waiting,
+  100 new a day), not by total size.
 
 ## Running it
 
