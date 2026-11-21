@@ -32,16 +32,7 @@ export function YunteraMark({
   );
 }
 
-/** Raw path data, for places that cannot render React (emails, native icons). */
-export const markGeometry = {
-  viewBox: "0 0 48 48",
-  path: "M12 12C12 23 24 20 24 31M36 12C36 23 24 20 24 31M24 31V42",
-  strokeWidth: 6,
-  nodes: [
-    { cx: 12, cy: 11, r: 6 },
-    { cx: 36, cy: 11, r: 6 },
-  ],
-} as const;
+export { markGeometry } from "./mark";
 
 interface LogoProps {
   /** Which app's lockup to render. Defaults to the flagship. */
