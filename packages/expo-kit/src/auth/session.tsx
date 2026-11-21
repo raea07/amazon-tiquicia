@@ -14,6 +14,7 @@ import {
 import { AppState } from "react-native";
 import { messageOf, signInMessage, signUpMessage, validateSignIn, validateSignUp } from "../errors";
 import { POLICY_VERSION } from "./policy";
+import { signOutDevice } from "./sign-out";
 
 export interface Viewer {
   id: string;
@@ -175,12 +176,8 @@ export function SessionProvider({
   );
 
   const signOut = useCallback(async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // Offline: the local session is removed anyway.
-      await supabase.auth.signOut({ scope: "local" });
-    }
+    // Never leaves the phone signed in, even offline (see signOutDevice).
+    await signOutDevice(supabase.auth);
     queryClient.clear();
   }, [supabase, queryClient]);
 
