@@ -13,7 +13,8 @@
     "./data": "./src/data/index.ts",
     "./ui": "./src/ui/index.ts",
     "./paths": "./src/paths.ts",
-    "./offline": "./src/offline/index.ts"
+    "./offline": "./src/offline/index.ts",
+    "./scanner": "./src/scanner/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
