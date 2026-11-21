@@ -1,7 +1,7 @@
 import { SignInForm, SignUpForm, useSession } from "@yuntera/expo-kit/auth";
 import { oneParam, safeReturnPath } from "@yuntera/expo-kit/paths";
 import { colors, space } from "@yuntera/expo-kit/theme";
-import { Card, Screen, Text } from "@yuntera/expo-kit/ui";
+import { Card, Screen, Text, TextLink } from "@yuntera/expo-kit/ui";
 import { Link, Redirect, router, Stack, useLocalSearchParams } from "expo-router";
 import { View } from "react-native";
 
@@ -54,20 +54,16 @@ export default function SignInScreen() {
           <SignInForm onSignedIn={goOn} />
         )}
         <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: space[3] }}>
-          <Text variant="small">
-            {creating ? "¿Ya tiene cuenta? " : "¿Es su primera vez? "}
-            <Link
-              replace
-              href={{
-                pathname: "/ingresar",
-                params: creating ? { siguiente: returnTo } : { modo: "crear", siguiente: returnTo },
-              }}
-            >
-              <Text variant="smallStrong" tint="link">
-                {creating ? "Ingresar" : "Crear una cuenta"}
-              </Text>
-            </Link>
-          </Text>
+          <Text variant="small">{creating ? "¿Ya tiene cuenta?" : "¿Es su primera vez?"}</Text>
+          <TextLink
+            replace
+            href={{
+              pathname: "/ingresar",
+              params: creating ? { siguiente: returnTo } : { modo: "crear", siguiente: returnTo },
+            }}
+          >
+            {creating ? "Ingresar" : "Crear una cuenta"}
+          </TextLink>
         </View>
       </Card>
     </Screen>

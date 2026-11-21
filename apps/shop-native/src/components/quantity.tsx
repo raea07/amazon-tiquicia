@@ -30,7 +30,8 @@ export function QuantityStepper({
         aria-label="Una unidad menos"
         aria-disabled={atMin}
         disabled={atMin}
-        onPress={() => onChange(Math.max(min, value - 1))}
+        // Above the maximum (stock fell), one tap brings it back to the maximum.
+        onPress={() => onChange(Math.max(min, Math.min(value - 1, max)))}
         style={[styles.button, atMin ? styles.off : null]}
       >
         <Text variant="subheading" tint="link">

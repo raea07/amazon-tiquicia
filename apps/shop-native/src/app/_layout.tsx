@@ -4,6 +4,15 @@ import { Stack } from "expo-router";
 import { CartProvider } from "@/lib/cart-context";
 import { env } from "@/lib/env";
 
+/** A screen that fails to draw shows a Spanish message with a retry. */
+export { ScreenErrorBoundary as ErrorBoundary } from "@yuntera/expo-kit/ui";
+
+/**
+ * A screen opened directly (a link, a cold start on a route, a reload) gets
+ * the tabs underneath it, so it always has a way back to the shop.
+ */
+export const unstable_settings = { initialRouteName: "(tabs)" };
+
 /**
  * The shop's navigation: five tabs for browsing, the cart and the account,
  * with everything else (a product, checkout, an order) pushed on top as a

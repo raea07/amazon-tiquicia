@@ -4,7 +4,8 @@
 // adds it to the cart, is sent to sign in at checkout, gets one clear message
 // for a wrong password, signs in as the demo shopper, pays by SINPE Móvil,
 // simulates the payment, sees the delivery code, finds the order in the list
-// and signs out.
+// and signs out. It starts with a product opened by link, which must have a
+// way back to the shop.
 //
 // Fails on any browser console error, uncaught exception or 5xx response. The
 // one expected failure is the auth server's 400 for the wrong password: a
@@ -60,6 +61,17 @@ function check(condition, message) {
   const overflow = () =>
     page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   const tab = (name) => page.getByRole("tab", { name: new RegExp(`^${name}`) }).first();
+
+  // 0. A link that opens a product directly still has a way back to the shop
+  await page.goto(`${BASE}/p/camiseta-algodon-sendero`, { waitUntil: "networkidle" });
+  await visible("buy-box").waitFor();
+  check((await page.getByRole("tab").count()) === 0, "a product opened by link fills the screen");
+  await page.getByRole("link", { name: /back/i }).first().click();
+  await page.waitForURL((url) => new URL(url).pathname === "/");
+  check(
+    (await page.getByRole("tab").filter({ visible: true }).count()) === 5,
+    "its back button leads to the shop's home, with the tabs",
+  );
 
   // 1. Home, signed out
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });

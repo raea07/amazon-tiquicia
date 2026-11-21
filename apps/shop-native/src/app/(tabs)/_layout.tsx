@@ -4,6 +4,9 @@ import { Tabs } from "expo-router/js-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "@/lib/cart-context";
 
+/** A tab that fails to draw shows a Spanish message with a retry. */
+export { ScreenErrorBoundary as ErrorBoundary } from "@yuntera/expo-kit/ui";
+
 /**
  * The tab bar sits at the bottom, under the thumb: browse, categories, search,
  * the cart (with the number of units in it) and the account.

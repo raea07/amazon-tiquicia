@@ -15,6 +15,7 @@ import {
   Screen,
   Stack,
   Text,
+  TextLink,
 } from "@yuntera/expo-kit/ui";
 import { Link, router } from "expo-router";
 import { StyleSheet, View } from "react-native";
@@ -47,13 +48,19 @@ function Line({ line, quantity }: { line: CartLine; quantity: number }) {
         )}
         <View style={styles.lineActions}>
           {line.buyable ? (
+            // The stored quantity, the same number the line total and checkout
+            // use; above the stock the stepper only allows going down.
             <QuantityStepper
-              value={Math.min(quantity, max)}
+              value={quantity}
               max={max}
               onChange={(next) => cart.setQuantity(line.offer_id, next)}
             />
           ) : null}
-          <Button variant="ghost" onPress={() => cart.setQuantity(line.offer_id, 0)}>
+          <Button
+            variant="ghost"
+            aria-label={`Quitar ${line.title ?? "este producto"} del carrito`}
+            onPress={() => cart.setQuantity(line.offer_id, 0)}
+          >
             Quitar
           </Button>
           {line.buyable && line.price_minor !== null ? (
@@ -159,24 +166,16 @@ export default function CartScreen() {
         {q.issue === "zone_not_served" ? (
           <Alert tone="warning">
             <Text variant="small" style={{ color: colors.palette.maiz[900] }}>
-              Todavía no entregamos en la zona elegida.{" "}
-              <Link href="/zona">
-                <Text variant="smallStrong" tint="link">
-                  Cambiar de zona
-                </Text>
-              </Link>
+              Todavía no entregamos en la zona elegida.
             </Text>
+            <TextLink href="/zona">Cambiar de zona</TextLink>
           </Alert>
         ) : null}
         {!cart.locationChosen ? (
-          <Text variant="small">
-            <Link href="/zona">
-              <Text variant="smallStrong" tint="link">
-                Elija su zona
-              </Text>
-            </Link>{" "}
-            para ver el envío y la fecha exactos.
-          </Text>
+          <View>
+            <Text variant="small">Para ver el envío y la fecha exactos:</Text>
+            <TextLink href="/zona">Elija su zona</TextLink>
+          </View>
         ) : null}
       </Card>
     </Screen>

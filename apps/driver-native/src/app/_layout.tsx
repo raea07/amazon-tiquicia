@@ -5,6 +5,9 @@ import { Stack } from "expo-router";
 import { View } from "react-native";
 import { env } from "@/lib/env";
 
+/** A screen that fails to draw shows a Spanish message with a retry. */
+export { ScreenErrorBoundary as ErrorBoundary } from "@yuntera/expo-kit/ui";
+
 /**
  * Who sees what. Signed out: the sign-in screen. Signed in without the role
  * this app is for: a screen that says so and what to do. With the role: the

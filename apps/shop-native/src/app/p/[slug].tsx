@@ -18,6 +18,7 @@ import {
   SectionHeader,
   Stack,
   Text,
+  TextLink,
 } from "@yuntera/expo-kit/ui";
 import { Link, Stack as Nav, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -144,29 +145,23 @@ function BuyBox({
           {zone && !zone.active ? (
             <Alert tone="warning" title="Todavía no entregamos en su zona">
               <Text variant="small" style={{ color: colors.palette.maiz[900] }}>
-                Por ahora llegamos al Gran Área Metropolitana.{" "}
-                <Link href="/zona">
-                  <Text variant="smallStrong" tint="link">
-                    Cambiar de zona
-                  </Text>
-                </Link>
+                Por ahora llegamos al Gran Área Metropolitana.
               </Text>
+              <TextLink href="/zona">Cambiar de zona</TextLink>
             </Alert>
           ) : (
-            <Text variant="small" tint="muted">
-              {zone
-                ? zone.free_shipping_threshold_minor
-                  ? `Envío ${formatPrice(zone.shipping_fee_minor)}; gratis en pedidos desde ${formatPrice(zone.free_shipping_threshold_minor)}. `
-                  : `Envío ${formatPrice(zone.shipping_fee_minor)}. `
-                : ""}
+            <>
+              {zone ? (
+                <Text variant="small" tint="muted">
+                  {zone.free_shipping_threshold_minor
+                    ? `Envío ${formatPrice(zone.shipping_fee_minor)}; gratis en pedidos desde ${formatPrice(zone.free_shipping_threshold_minor)}.`
+                    : `Envío ${formatPrice(zone.shipping_fee_minor)}.`}
+                </Text>
+              ) : null}
               {chosenLocation ? null : (
-                <Link href="/zona">
-                  <Text variant="smallStrong" tint="link">
-                    Elija su zona para confirmar la fecha
-                  </Text>
-                </Link>
+                <TextLink href="/zona">Elija su zona para confirmar la fecha</TextLink>
               )}
-            </Text>
+            </>
           )}
           {featured.available > 0 ? (
             <>
@@ -372,14 +367,9 @@ export default function ProductScreen() {
           <SectionHeader title="Otras ofertas de este producto" />
           <Text variant="small" tint="muted">
             Destacamos la oferta con la mejor combinación de precio, rapidez de entrega y desempeño
-            del vendedor.{" "}
-            <Link href="/ayuda">
-              <Text variant="smallStrong" tint="link">
-                Cómo la elegimos
-              </Text>
-            </Link>
-            .
+            del vendedor.
           </Text>
+          <TextLink href="/ayuda">Cómo la elegimos</TextLink>
           {others.map((offer) => (
             <Card key={offer.offer_id} testID="other-offer">
               <Money amountMinor={offer.price_minor} listAmountMinor={offer.list_price_minor} />

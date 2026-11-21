@@ -161,6 +161,33 @@ export function LinkButton({
   );
 }
 
+/**
+ * A text link that stands on its own line, with a touch target of at least
+ * 44 pt. Use it instead of a link inside a sentence, which is only as tall as
+ * the text around it.
+ */
+export function TextLink({
+  href,
+  children,
+  replace,
+  testID,
+}: {
+  href: LinkProps["href"];
+  children: string;
+  replace?: boolean;
+  testID?: string;
+}) {
+  return (
+    <Link href={href} replace={replace} asChild>
+      <Pressable role="link" style={styles.textLink} testID={testID}>
+        <Text variant="smallStrong" tint="link">
+          {children}
+        </Text>
+      </Pressable>
+    </Link>
+  );
+}
+
 /** A round icon-only button. `label` is what a screen reader says. */
 export function IconButton({
   label,
@@ -190,6 +217,7 @@ export function IconButton({
 }
 
 const styles = StyleSheet.create({
+  textLink: { minHeight: touchTarget, justifyContent: "center", alignSelf: "flex-start" },
   base: {
     minHeight: touchTarget,
     paddingHorizontal: space[4],

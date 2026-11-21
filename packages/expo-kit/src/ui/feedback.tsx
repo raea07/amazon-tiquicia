@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { messageOf } from "../errors";
 import { colors, radius, space, type Tone, tone } from "../theme/tokens";
 import { Button } from "./button";
@@ -140,6 +141,7 @@ export function ErrorState({
 }
 
 const styles = StyleSheet.create({
+  boundary: { flex: 1, backgroundColor: colors.bg, padding: space[4] },
   alert: {
     borderWidth: 1,
     borderRadius: radius.md,
@@ -162,3 +164,27 @@ const styles = StyleSheet.create({
   },
   action: { marginTop: space[2] },
 });
+
+/**
+ * What a route shows when its screen fails to draw: a plain Spanish message
+ * and a retry, never the error's text. Each app's root layout exports it as
+ * `ErrorBoundary`, so expo-router uses it instead of crashing (or showing its
+ * own English screen). It renders outside the app's providers, so it uses
+ * nothing but static styles.
+ */
+export function ScreenErrorBoundary({ retry }: { error: Error; retry: () => Promise<void> }) {
+  return (
+    <SafeAreaView style={styles.boundary}>
+      <EmptyState
+        title="Algo salió mal en esta pantalla"
+        action={
+          <Button variant="secondary" onPress={() => void retry()} testID="error-retry">
+            Intentar de nuevo
+          </Button>
+        }
+      >
+        Intente de nuevo. Si vuelve a pasar, cierre la aplicación y ábrala otra vez.
+      </EmptyState>
+    </SafeAreaView>
+  );
+}

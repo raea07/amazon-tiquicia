@@ -3,8 +3,9 @@
 // For each app: a visitor sees the sign-in screen; an account without the
 // app's role (the demo shopper) is told plainly it has no access and can sign
 // out; an account with the role reaches the home screen, which reads its data
-// from the API. Fails on any console error, uncaught exception or 5xx, except
-// the auth server's 400 for a wrong password (not exercised here).
+// from the API, and signs out with no connection: the phone must still end up
+// signed out. Fails on any console error, uncaught exception or 5xx; the one
+// exception is the browser's "no connection" error while it is offline.
 
 const { chromium } = require("playwright");
 
@@ -51,8 +52,11 @@ function check(condition, message) {
       locale: "es-CR",
     });
     const page = await context.newPage();
+    let offline = false;
     page.on("console", (m) => {
-      if (m.type() === "error") errors.push(`${app.name} console: ${m.text().slice(0, 300)}`);
+      if (m.type() !== "error") return;
+      if (offline && /ERR_INTERNET_DISCONNECTED|Failed to fetch/.test(m.text())) return;
+      errors.push(`${app.name} console: ${m.text().slice(0, 300)}`);
     });
     page.on("pageerror", (e) => errors.push(`${app.name} pageerror: ${String(e).slice(0, 300)}`));
     page.on("response", (r) => {
@@ -88,9 +92,20 @@ function check(condition, message) {
       "no sideways scrolling at 390 px",
     );
     await page.screenshot({ path: `${SHOTS}/native-${app.name}-03-home.png` });
+    // Signing out with no connection still signs this phone out.
+    offline = true;
+    await context.setOffline(true);
     await byId("sign-out").click();
     await byId("sign-in-email").waitFor();
-    check(true, "signed out");
+    const stored = await page.evaluate(() =>
+      Object.keys(localStorage).filter((key) => key.startsWith("sb-")),
+    );
+    check(stored.length === 0, "signed out with no connection: no session is left stored");
+    await context.setOffline(false);
+    offline = false;
+    await page.reload({ waitUntil: "networkidle" });
+    await byId("sign-in-email").waitFor();
+    check(true, "and still signed out once the connection is back");
     await context.close();
   }
   log("\nERRORS:", errors.length ? errors : "none");

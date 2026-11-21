@@ -6,8 +6,17 @@ export {
   type ButtonVariant,
   IconButton,
   LinkButton,
+  TextLink,
 } from "./button";
-export { Alert, Badge, EmptyState, ErrorState, FormMessage, LoadingState } from "./feedback";
+export {
+  Alert,
+  Badge,
+  EmptyState,
+  ErrorState,
+  FormMessage,
+  LoadingState,
+  ScreenErrorBoundary,
+} from "./feedback";
 export { Checkbox, type Choice, ChoiceList, TextField, type TextFieldProps } from "./fields";
 export { useBrandFonts } from "./fonts";
 export {

@@ -89,7 +89,16 @@
             "noReactNativeRawText": {
               "level": "error",
               "options": {
-                "skip": ["Text", "Button", "LinkButton", "Alert", "Badge", "EmptyState", "Item"]
+                "skip": [
+                  "Text",
+                  "Button",
+                  "LinkButton",
+                  "TextLink",
+                  "Alert",
+                  "Badge",
+                  "EmptyState",
+                  "Item"
+                ]
               }
             }
           }

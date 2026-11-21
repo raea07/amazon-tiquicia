@@ -18,6 +18,7 @@ import {
   Screen,
   Stack,
   Text,
+  TextLink,
 } from "@yuntera/expo-kit/ui";
 import { Link, Stack as Nav, Redirect, useLocalSearchParams } from "expo-router";
 import { StyleSheet, View } from "react-native";
@@ -335,15 +336,12 @@ export default function OrderScreen() {
         </View>
       </Stack>
 
-      <Text variant="small" tint="muted">
-        ¿Algo no salió bien?{" "}
-        <Link href="/ayuda">
-          <Text variant="smallStrong" tint="link">
-            Presente un reclamo
-          </Text>
-        </Link>
-        .
-      </Text>
+      <View>
+        <Text variant="small" tint="muted">
+          ¿Algo no salió bien?
+        </Text>
+        <TextLink href="/ayuda">Presente un reclamo</TextLink>
+      </View>
     </Screen>
   );
 }

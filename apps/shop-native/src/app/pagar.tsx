@@ -161,7 +161,9 @@ export default function CheckoutScreen() {
       });
     } catch (cause) {
       setError(messageOf(cause));
-      void quote.refetch();
+      // A price or stock change: re-read the lines and the total together, so
+      // the summary never shows an old line price beside a new total.
+      void Promise.all([quote.refetch(), lines.refetch()]);
     }
   }
 
