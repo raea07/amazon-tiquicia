@@ -4,7 +4,7 @@ import { defineAppConfig } from "@yuntera/expo-kit/config";
 import type { ExpoConfig } from "expo/config";
 
 /**
- * The seller app, "Yuntera Vende" (cr.yuntera.vende). Photos of products
+ * The seller app, "Yuntera Vende" (com.yuntera.vende). Photos of products
  * (camera or library) and barcode scanning; no location.
  *
  * What all four apps share is in packages/expo-kit/src/config.ts. Permission

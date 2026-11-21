@@ -4,7 +4,7 @@ import { defineAppConfig } from "@yuntera/expo-kit/config";
 import type { ExpoConfig } from "expo/config";
 
 /**
- * The warehouse app, "Yuntera Bodega" (cr.yuntera.bodega). Camera for
+ * The warehouse app, "Yuntera Bodega" (com.yuntera.bodega). Camera for
  * barcodes; a hand scanner that types into a field works without it.
  *
  * What all four apps share is in packages/expo-kit/src/config.ts. Permission

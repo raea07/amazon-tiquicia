@@ -4,7 +4,7 @@ import { defineAppConfig } from "@yuntera/expo-kit/config";
 import type { ExpoConfig } from "expo/config";
 
 /**
- * The shopper app, "Yuntera" (cr.yuntera.shop). What all four apps share is in
+ * The shopper app, "Yuntera" (com.yuntera.shop). What all four apps share is in
  * packages/expo-kit/src/config.ts; this file adds what only the shop needs.
  *
  * `easProjectId` is the EAS project `eas init` created in the owner's Expo

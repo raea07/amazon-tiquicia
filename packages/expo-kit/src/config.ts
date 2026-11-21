@@ -11,9 +11,9 @@
  * Variants (docs/research/expo-native-apps.md §2). `APP_VARIANT` is set by the
  * build profile in each app's eas.json:
  *
- *   development  cr.yuntera.ruta.dev      "Yuntera Ruta (Dev)"     dev client, plain HTTP to a LAN API allowed
- *   preview      cr.yuntera.ruta.preview  "Yuntera Ruta (Prueba)"  installable test build
- *   (unset)      cr.yuntera.ruta          "Yuntera Ruta"           the store build
+ *   development  com.yuntera.ruta.dev      "Yuntera Ruta (Dev)"     dev client, plain HTTP to a LAN API allowed
+ *   preview      com.yuntera.ruta.preview  "Yuntera Ruta (Prueba)"  installable test build
+ *   (unset)      com.yuntera.ruta          "Yuntera Ruta"           the store build
  *
  * Each variant has its own identifier so the three install side by side.
  */
