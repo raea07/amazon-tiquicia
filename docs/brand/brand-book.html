@@ -1,0 +1,790 @@
+<title>Yuntera Brand Book</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400..800&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one long reference page. A patterned band opens it; on wide screens
+   a sticky chapter index sits left of a single reading column. Brand specimens
+   live in framed light panels that keep the product's own colours in any theme. */
+:root {
+  /* The brand palette, read from packages/brand/src/tokens.ts. These are the
+     subject of the page, so they are the same in both themes on purpose. */
+  --celeste-50: #ecfbfc; --celeste-100: #d0f4f7; --celeste-200: #a5e8ee; --celeste-300: #6dd6e0; --celeste-400: #33bccb; --celeste-500: #12a0b0; --celeste-600: #0b7f8e; --celeste-700: #0c6775; --celeste-800: #0f5360; --celeste-900: #114551; --celeste-950: #062d37;
+  --anil-50: #f3f5fa; --anil-100: #e4e8f2; --anil-200: #c9d1e3; --anil-300: #a2aecb; --anil-400: #7484ab; --anil-500: #53648f; --anil-600: #3f4e76; --anil-700: #313d5e; --anil-800: #232c47; --anil-900: #161d33; --anil-950: #0c1122;
+  --guaria-50: #fcf2fa; --guaria-100: #f8e1f3; --guaria-200: #f0c0e5; --guaria-300: #e492d0; --guaria-400: #d35fb6; --guaria-500: #bc3a9a; --guaria-600: #9e2a7f; --guaria-700: #812266; --guaria-800: #6a1f54; --guaria-900: #581d46;
+  --maiz-50: #fffaeb; --maiz-100: #fdf0c4; --maiz-200: #fbe08b; --maiz-300: #f9cf55; --maiz-400: #f7c12d; --maiz-500: #eda515; --maiz-600: #c97f0e; --maiz-700: #a05c0f; --maiz-800: #834913; --maiz-900: #6c3c14;
+  --selva-50: #eefbf3; --selva-100: #d6f5e1; --selva-200: #b0eac7; --selva-300: #7cd8a6; --selva-400: #46be80; --selva-500: #24a365; --selva-600: #17824f; --selva-700: #146842; --selva-800: #135337; --selva-900: #11442f;
+  --achiote-50: #fef3f2; --achiote-100: #fee4e2; --achiote-200: #fecdca; --achiote-300: #fca9a4; --achiote-400: #f7776f; --achiote-500: #ed4c43; --achiote-600: #d92f26; --achiote-700: #b6231c; --achiote-800: #97211b; --achiote-900: #7d221d;
+  --arena-50: #fbfaf7; --arena-100: #f5f2ec; --arena-200: #eae5da; --arena-300: #dad2c2; --arena-400: #bfb49f;
+  --white: #ffffff;
+
+  /* Page chrome: follows the viewer's theme. */
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --surface-2: #f5f2ec;
+  --line: #eae5da;
+  --line-strong: #c9d1e3;
+  --ink: #161d33;
+  --ink-2: #3f4e76;
+  --accent: #0b7f8e;
+  --accent-ink: #0c6775;
+  --accent-soft: #ecfbfc;
+  --band-bg: #ecfbfc;
+  --band-dot: #a5e8ee;
+  --band-ring: #d0f4f7;
+  --good: #146842;
+  --bad: #b6231c;
+  --shadow: 0 1px 2px rgb(22 29 51 / 0.06);
+
+  --display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --text: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1122; --surface: #161d33; --surface-2: #1d2540; --line: #2a3454; --line-strong: #3f4e76;
+    --ink: #f3f5fa; --ink-2: #a2aecb; --accent: #6dd6e0; --accent-ink: #6dd6e0; --accent-soft: #114551;
+    --band-bg: #0b1a2b; --band-dot: #0f5360; --band-ring: #122a3d;
+    --good: #7cd8a6; --bad: #fca9a4; --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1122; --surface: #161d33; --surface-2: #1d2540; --line: #2a3454; --line-strong: #3f4e76;
+  --ink: #f3f5fa; --ink-2: #a2aecb; --accent: #6dd6e0; --accent-ink: #6dd6e0; --accent-soft: #114551;
+  --band-bg: #0b1a2b; --band-dot: #0f5360; --band-ring: #122a3d;
+  --good: #7cd8a6; --bad: #fca9a4; --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--text); font-size: 1rem; line-height: 1.6; -webkit-text-size-adjust: 100%; }
+h1, h2, h3, h4 { font-family: var(--display); letter-spacing: -0.015em; text-wrap: balance; line-height: 1.15; margin: 0; }
+p, li { text-wrap: pretty; }
+p { margin: 0; }
+a { color: var(--accent-ink); text-underline-offset: 0.18em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, .hex { font-family: var(--mono); font-size: 0.86em; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.wrap { max-width: 78rem; margin-inline: auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-2); }
+.small { font-size: 0.875rem; }
+.es { font-style: normal; }
+
+/* ── Opening band ── */
+.hero {
+  margin-top: calc(-1 * env(safe-area-inset-top, 0px));
+  padding-top: calc(env(safe-area-inset-top, 0px) + 3rem);
+  padding-bottom: 3rem;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--band-bg);
+  background-image:
+    radial-gradient(circle at 1.25rem 1.25rem, var(--band-dot) 0.3rem, transparent 0.33rem),
+    radial-gradient(circle at 1.25rem 1.25rem, transparent 0.75rem, var(--band-ring) 0.78rem, var(--band-ring) 0.95rem, transparent 0.98rem);
+  background-size: 2.5rem 2.5rem;
+}
+.hero-grid { display: grid; gap: 2rem; align-items: end; }
+.eyebrow { font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+.hero h1 { display: flex; align-items: center; gap: 0.3em; font-size: clamp(3rem, 11vw, 6.5rem); font-weight: 700; letter-spacing: -0.03em; line-height: 1; margin-top: 0.75rem; }
+.hero h1 svg { width: 1.16em; height: 1.16em; flex: none; color: var(--accent); }
+.tagline { font-family: var(--display); font-weight: 800; font-size: clamp(1.5rem, 4.2vw, 2.5rem); letter-spacing: -0.015em; line-height: 1.15; margin-top: 2rem; }
+.hero .lead { max-width: 38rem; margin-top: 0.75rem; color: var(--ink-2); font-size: 1.125rem; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 0.75rem; margin: 0; padding: 0; }
+.facts div { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 0.75rem 1rem; }
+.facts dt { font-size: 0.8125rem; color: var(--ink-2); }
+.facts dd { margin: 0; font-family: var(--display); font-weight: 700; font-size: 1.125rem; }
+@media (min-width: 60rem) { .hero-grid { grid-template-columns: 1.5fr 1fr; } .facts { grid-template-columns: repeat(2, 1fr); } }
+
+/* ── Page frame ── */
+.frame { display: grid; gap: 2rem; padding-block: 2.5rem 4rem; }
+.index { font-size: 0.9375rem; }
+.index h2 { font-family: var(--text); font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+.index ol { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.125rem 1rem; }
+.index a { display: flex; gap: 0.6rem; align-items: baseline; min-height: 2.25rem; padding: 0.25rem 0; text-decoration: none; color: var(--ink); }
+.index a:hover { color: var(--accent-ink); text-decoration: underline; }
+.index a span { color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 1.25rem; }
+main { min-width: 0; display: flex; flex-direction: column; gap: 4.5rem; }
+@media (min-width: 64rem) {
+  .frame { grid-template-columns: 13.5rem minmax(0, 1fr); gap: 3.5rem; }
+  .index { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 1.5rem); align-self: start; max-height: calc(100vh - 3rem); overflow-y: auto; }
+  .index ol { grid-template-columns: 1fr; }
+}
+
+section { display: flex; flex-direction: column; gap: 1.5rem; scroll-margin-top: 1.5rem; min-width: 0; }
+.sec-head { display: flex; flex-direction: column; gap: 0.5rem; border-top: 2px solid var(--ink); padding-top: 1rem; }
+.sec-head .no { font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.08em; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.sec-head h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 700; }
+.prose { max-width: 42rem; display: flex; flex-direction: column; gap: 0.9rem; }
+.prose ul, .prose ol { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.4rem; }
+h3 { font-size: 1.25rem; font-weight: 700; }
+.sub { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.note { border-left: 3px solid var(--accent); background: var(--surface); padding: 0.75rem 1rem; border-radius: 0 10px 10px 0; font-size: 0.9375rem; max-width: 42rem; }
+.cols { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 1.25rem; min-width: 0; }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+th, td { text-align: left; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+thead th { font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-2); background: var(--surface-2); white-space: nowrap; }
+
+/* ── The idea and the mark ── */
+.readings { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }
+.readings li { display: flex; flex-direction: column; gap: 0.5rem; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 1.25rem; }
+.readings svg { width: 3.5rem; height: 3.5rem; color: var(--accent); }
+.readings strong { font-family: var(--display); font-size: 1.125rem; }
+.geo { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); align-items: center; }
+.geo svg { width: 100%; max-width: 24rem; height: auto; }
+.geo dl { margin: 0; display: grid; gap: 0.75rem; }
+.geo dt { font-size: 0.8125rem; color: var(--ink-2); }
+.geo dd { margin: 0; font-weight: 600; }
+
+/* ── Personality, voice ── */
+.isnt { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--surface); }
+.isnt > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); border-bottom: 1px solid var(--line); }
+.isnt > div:last-child { border-bottom: 0; }
+.isnt p { padding: 0.8rem 1rem; font-size: 0.9375rem; }
+.isnt p:first-child strong { color: var(--ink); }
+.isnt p + p { color: var(--ink-2); background: var(--surface-2); }
+.tag { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.tag::before { content: ""; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: currentColor; }
+.tag.do { color: var(--good); }
+.tag.dont { color: var(--bad); }
+.pairs { display: flex; flex-direction: column; gap: 1rem; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--surface); }
+.pair > div { padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }
+.pair > div + div { background: var(--surface-2); }
+.pair q { quotes: none; font-size: 1.0625rem; font-weight: 500; line-height: 1.45; }
+.pair .dont + q, .pair div + div q { color: var(--ink-2); }
+.pair .why { grid-column: 1 / -1; border-top: 1px solid var(--line); background: var(--surface); font-size: 0.875rem; color: var(--ink-2); }
+.words { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 0.5rem 1.5rem; margin: 0; padding: 0; list-style: none; font-size: 0.9375rem; }
+.words li { display: flex; flex-direction: column; border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; }
+.words s { color: var(--ink-2); font-size: 0.875rem; }
+
+/* ── Lockups ── */
+.lockup { display: inline-flex; align-items: center; gap: 0.3em; line-height: 1; font-family: var(--display); font-weight: 700; letter-spacing: -0.03em; font-size: var(--lk, 1.6rem); white-space: nowrap; }
+.lockup svg { width: 1.163em; height: 1.163em; flex: none; color: var(--mark, var(--accent)); }
+.lockup i { font-style: normal; font-weight: 500; opacity: 0.62; margin-left: 0.256em; }
+.family { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); overflow: hidden; }
+.family li { display: grid; gap: 0.5rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); align-items: center; padding: 1.1rem 1.25rem; border-bottom: 1px solid var(--line); }
+.family li:last-child { border-bottom: 0; }
+.family .lockup { --lk: clamp(1.35rem, 5.5vw, 1.9rem); }
+.family p { font-size: 0.9375rem; }
+.chip { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 50%; background: var(--c); vertical-align: -0.05em; margin-right: 0.35rem; border: 1px solid rgb(127 127 127 / 0.35); }
+.tiles { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
+.tile { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.tile .art { border-radius: 16px; border: 1px solid var(--line); min-height: 7.5rem; display: grid; place-items: center; padding: 1.25rem; overflow: hidden; background: var(--tile-bg); color: var(--tile-fg); }
+.tile .art svg.m { width: 3.5rem; height: 3.5rem; color: var(--tile-mark, currentColor); }
+.tile .art svg.icon { width: 4rem; height: 4rem; }
+.tile p { font-size: 0.875rem; color: var(--ink-2); }
+.tile p strong { color: var(--ink); }
+.clear svg { width: 100%; height: auto; max-width: 34rem; }
+.misuse .art { --tile-bg: var(--arena-50); --tile-fg: var(--anil-900); }
+.misuse .lockup { --lk: 1.3rem; --mark: var(--celeste-600); }
+
+/* ── Colour ── */
+.palette { display: flex; flex-direction: column; gap: 0.6rem; }
+.palette header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem; }
+.palette h4 { font-size: 1.125rem; font-weight: 700; }
+.ramp { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(4.4rem, 1fr)); gap: 0.5rem; }
+.ramp li { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; min-width: 0; }
+.sw { height: 3rem; border-radius: 10px; background: var(--c); border: 1px solid rgb(127 127 127 / 0.28); }
+.ramp b { font-weight: 600; }
+.ramp .hex { color: var(--ink-2); font-size: 0.72rem; }
+.ramp .role { color: var(--accent-ink); font-weight: 600; }
+.semantic { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr)); gap: 0.75rem; }
+.semantic li { display: grid; grid-template-columns: 2.75rem 1fr; gap: 0.75rem; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0.6rem 0.75rem; font-size: 0.8125rem; min-width: 0; }
+.semantic .sw { height: 2.75rem; }
+.semantic b { display: block; font-family: var(--mono); font-size: 0.8125rem; }
+.semantic span { color: var(--ink-2); display: block; }
+.aa { display: inline-grid; place-items: center; min-width: 3.25rem; height: 2rem; padding: 0 0.6rem; border-radius: 8px; background: var(--b); color: var(--f); font-weight: 600; font-size: 0.9375rem; border: 1px solid rgb(127 127 127 / 0.28); }
+.ring { display: inline-block; width: 3.25rem; height: 2rem; border-radius: 8px; background: var(--b); box-shadow: inset 0 0 0 3px var(--f); border: 1px solid rgb(127 127 127 / 0.28); }
+.pass { color: var(--good); font-weight: 600; white-space: nowrap; }
+.fail { color: var(--bad); font-weight: 600; white-space: nowrap; }
+.tight { font-weight: 700; }
+
+/* ── Specimen panels: the product's own light surface, in any theme ── */
+.spec {
+  color-scheme: light;
+  background: var(--arena-50); color: var(--anil-900);
+  border: 1px solid var(--arena-200); border-radius: 16px; padding: 1.25rem;
+  display: flex; flex-direction: column; gap: 1.25rem; min-width: 0;
+}
+.spec .muted { color: var(--anil-600); }
+.spec .cap { font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600; color: var(--anil-600); }
+.row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+.stack { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+.spec-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; border: 0; border-radius: 10px; font: 600 1rem/1.2 var(--text); min-height: 44px; padding: 0 16px; cursor: pointer; transition: background-color 0.15s; }
+.btn.sm { min-height: 36px; padding: 0 12px; font-size: 0.875rem; }
+.btn.lg { min-height: 48px; padding: 0 24px; font-size: 1.125rem; }
+.btn.primary { background: var(--celeste-600); color: var(--white); }
+.btn.primary:hover { background: var(--celeste-700); }
+.btn.secondary { background: var(--white); color: var(--anil-900); border: 1px solid var(--anil-200); }
+.btn.secondary:hover { background: var(--arena-100); }
+.btn.ghost { background: transparent; color: var(--celeste-700); }
+.btn.ghost:hover { background: var(--celeste-50); }
+.btn.danger { background: var(--achiote-600); color: var(--white); }
+.btn.danger:hover { background: var(--achiote-700); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn.focused, .spec .btn:focus-visible { outline: 2px solid var(--celeste-500); outline-offset: 2px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field label { font-size: 0.875rem; font-weight: 600; }
+.field label span { font-weight: 400; color: var(--anil-600); margin-left: 4px; }
+.field input { width: 100%; min-height: 44px; border-radius: 10px; border: 1px solid var(--anil-200); background: var(--white); color: var(--anil-900); padding: 0 12px; font: 400 1rem var(--text); }
+.field input::placeholder { color: var(--anil-500); }
+.field input:focus-visible { outline: 2px solid var(--celeste-500); outline-offset: 1px; }
+.field input[aria-invalid="true"] { border-color: var(--achiote-600); }
+.field .hint { font-size: 0.875rem; color: var(--anil-600); }
+.field .err { font-size: 0.875rem; font-weight: 500; color: var(--achiote-600); }
+
+.badge { display: inline-flex; align-items: center; border-radius: 9999px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; background: var(--b); color: var(--f); }
+.alert { border-radius: 10px; border: 1px solid var(--bd); background: var(--b); color: var(--f); padding: 12px 16px; font-size: 0.875rem; }
+.alert b { display: block; font-weight: 600; margin-bottom: 4px; }
+.card { background: var(--white); border: 1px solid var(--arena-200); border-radius: 16px; box-shadow: 0 1px 2px rgb(22 29 51 / 0.06); overflow: hidden; }
+.pcard { max-width: 15rem; }
+.pcard svg.art { display: block; width: 100%; height: auto; }
+.pcard .body { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.pcard .brandname { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--anil-600); }
+.pcard .title { font-size: 0.875rem; font-weight: 600; line-height: 1.35; }
+.pcard .by { font-size: 0.75rem; color: var(--anil-600); }
+.price { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
+.price b { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 1.25rem; }
+.price.lg b { font-size: 1.875rem; }
+.price.sm b { font-size: 1rem; }
+.price s { font-size: 0.875rem; color: var(--anil-600); font-variant-numeric: tabular-nums; }
+.stars { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: 0.875rem; }
+.stars > span:first-child { display: inline-flex; }
+.stars svg { width: 16px; height: 16px; }
+.stars b { font-weight: 600; white-space: nowrap; }
+.stars i { font-style: normal; color: var(--anil-600); white-space: nowrap; }
+.empty { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; border: 1px dashed var(--anil-200); border-radius: 16px; background: var(--white); padding: 2rem 1.25rem; }
+.empty svg { width: 48px; height: 48px; color: var(--celeste-300); }
+.empty h4 { font-size: 1.25rem; font-weight: 700; }
+.empty p { color: var(--anil-600); max-width: 26rem; }
+
+/* ── Type ── */
+.display-spec { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 7vw, 3.25rem); letter-spacing: -0.015em; line-height: 1.1; }
+.glyphs { font-family: var(--display); font-weight: 700; font-size: clamp(1.25rem, 4vw, 1.75rem); letter-spacing: -0.015em; overflow-wrap: anywhere; }
+.inter-glyphs { font-size: clamp(1rem, 3.4vw, 1.25rem); overflow-wrap: anywhere; }
+.scale td:last-child { white-space: nowrap; }
+.scale .s { font-family: var(--text); line-height: 1.2; }
+.scale .d { font-family: var(--display); font-weight: 700; letter-spacing: -0.015em; line-height: 1.1; }
+.money { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); align-items: start; }
+.bigprice { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; font-size: clamp(2.75rem, 12vw, 4.5rem); line-height: 1; letter-spacing: -0.015em; }
+.receipt { background: var(--white); border: 1px solid var(--arena-200); border-radius: 16px; padding: 1rem 1.1rem; font-size: 0.9375rem; }
+.receipt div { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 0; }
+.receipt dd { margin: 0; font-variant-numeric: tabular-nums; }
+.receipt .total { border-top: 1px solid var(--arena-200); margin-top: 0.3rem; padding-top: 0.6rem; font-weight: 700; font-size: 1.0625rem; }
+.receipt p { font-size: 0.75rem; color: var(--anil-600); margin-top: 0.35rem; }
+.rules { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.9375rem; }
+.rules li { display: grid; grid-template-columns: 5.5rem 1fr; gap: 0.75rem; align-items: baseline; }
+.rules b { font-family: var(--display); font-variant-numeric: tabular-nums; font-size: 1.0625rem; }
+
+/* ── Layout samples ── */
+.radii, .shadows, .spaces { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
+.radii div { width: 5.25rem; height: 4.25rem; background: var(--celeste-100); border: 1px solid var(--celeste-300); display: grid; place-items: center; font-size: 0.75rem; font-weight: 600; text-align: center; color: var(--celeste-900); }
+.shadows div { width: 7.5rem; height: 4.5rem; background: var(--white); border-radius: 16px; display: grid; place-items: center; font-size: 0.75rem; font-weight: 600; }
+.spaces div { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; font-size: 0.75rem; }
+.spaces i { display: block; background: var(--celeste-600); height: 1.5rem; border-radius: 2px; }
+.target { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; font-size: 0.75rem; }
+.target span { display: grid; place-items: center; border: 1px dashed var(--anil-400); border-radius: 10px; font-weight: 600; }
+.band-sample { border-radius: 16px; border: 1px solid var(--celeste-200); min-height: 9rem; padding: 1.5rem; display: flex; flex-direction: column; justify-content: center; gap: 0.25rem;
+  background-color: var(--celeste-50);
+  background-image:
+    radial-gradient(circle at 1.25rem 1.25rem, var(--celeste-200) 0.3rem, transparent 0.33rem),
+    radial-gradient(circle at 1.25rem 1.25rem, transparent 0.75rem, var(--celeste-100) 0.78rem, var(--celeste-100) 0.95rem, transparent 0.98rem);
+  background-size: 2.5rem 2.5rem; color: var(--anil-900); }
+.band-sample strong { font-family: var(--display); font-weight: 800; font-size: clamp(1.5rem, 5vw, 2.25rem); letter-spacing: -0.015em; line-height: 1.1; }
+.illos { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(min(46%, 9rem), 1fr)); }
+.illos svg { width: 100%; height: auto; border-radius: 16px; display: block; }
+.tones { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.5rem; font-size: 0.75rem; }
+.tones li { border-radius: 10px; padding: 0.6rem 0.7rem; background: var(--b); color: var(--f); font-weight: 600; border: 1px solid rgb(127 127 127 / 0.2); }
+.tones span { display: block; font-family: var(--mono); font-weight: 400; font-size: 0.7rem; }
+.glyph-row { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; }
+.glyph-row svg { color: var(--celeste-600); }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
+.checks li { border-top: 1px solid var(--line); padding-top: 0.7rem; font-size: 0.9375rem; }
+.checks b { display: block; font-family: var(--display); font-size: 1.0625rem; }
+.open { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: column; gap: 0.9rem; max-width: 46rem; }
+.open li::marker { font-family: var(--display); font-weight: 700; color: var(--accent-ink); }
+.open b { font-family: var(--display); font-size: 1.0625rem; }
+footer { border-top: 1px solid var(--line); padding-block: 1.5rem 2.5rem; font-size: 0.875rem; color: var(--ink-2); }
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+.hexbtn { all: unset; cursor: pointer; font-family: var(--mono); }
+.hexbtn:hover { text-decoration: underline; }
+.hexbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 48 48">
+    <path d="M12 12C12 23 24 20 24 31M36 12C36 23 24 20 24 31M24 31V42" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="12" cy="11" r="6" fill="currentColor"/><circle cx="36" cy="11" r="6" fill="currentColor"/>
+  </symbol>
+  <symbol id="wheel" viewBox="0 0 48 48">
+    <circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" stroke-width="4"/>
+    <circle cx="24" cy="24" r="5" fill="currentColor"/>
+    <path d="M24 4v40M4 24h40M9.9 9.9l28.2 28.2M38.1 9.9 9.9 38.1" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="star" viewBox="0 0 20 20"><path d="M10 1.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8L10 14.9l-5.2 2.7 1-5.8L1.6 7.7l5.8-.8z"/></symbol>
+</svg>
+
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow">Brand book · November 2026</p>
+      <h1><svg aria-hidden="true"><use href="#mark"/></svg><span>yuntera</span><span class="sr"> brand book</span></h1>
+      <p class="tagline" lang="es">Lo que ocupa, a su puerta.</p>
+      <p class="lead">A marketplace for Costa Rica with its own warehouse and its own delivery. This book records the identity as it is built in the code today: the name, the mark, how it speaks, its colours, type and components.</p>
+    </div>
+    <dl class="facts">
+      <div><dt>Wordmark</dt><dd>yuntera, lowercase</dd></div>
+      <div><dt>Language</dt><dd lang="es">Español, de usted</dd></div>
+      <div><dt>Currency</dt><dd class="num">₡ colones</dd></div>
+      <div><dt>Apps</dt><dd>Five, one name</dd></div>
+    </dl>
+  </div>
+</header>
+
+<div class="wrap frame">
+  <nav class="index" aria-label="Chapters">
+    <h2>Chapters</h2>
+    <ol><li><a href="#idea"><span>01</span>The idea</a></li><li><a href="#personality"><span>02</span>Personality</a></li><li><a href="#voice"><span>03</span>Voice and tone</a></li><li><a href="#family"><span>04</span>The app family</a></li><li><a href="#logo"><span>05</span>Using the logo</a></li><li><a href="#colour"><span>06</span>Colour</a></li><li><a href="#type"><span>07</span>Typography</a></li><li><a href="#layout"><span>08</span>Layout, spacing, radius, elevation</a></li><li><a href="#band"><span>09</span>The wheel band</a></li><li><a href="#illustration"><span>10</span>Icons and illustration</a></li><li><a href="#components"><span>11</span>Components</a></li><li><a href="#accessibility"><span>12</span>Accessibility commitments</a></li><li><a href="#imagery"><span>13</span>Photography and imagery</a></li><li><a href="#legal"><span>14</span>Legal notes and open items</a></li></ol>
+  </nav>
+
+  <main>
+<section id="idea" aria-labelledby="idea-h">
+<div class="sec-head"><span class="no">01</span><h2 id="idea-h">The idea</h2></div>
+<div class="prose">
+  <p>A <em lang="es">yunta</em> is a pair of oxen joined by a yoke so they pull as one. In Costa Rica it is what pulled the <em lang="es">carreta</em>, the cart that carried the country's coffee to port. To do something <em lang="es">en yunta</em> is to pull together.</p>
+  <p><strong>Yuntera</strong> is a coined word built on that root. A marketplace is the same arrangement: two parties who each need the other, joined so the load moves. Say it <em>yoon-TEH-rah</em>. In running text it takes a capital Y; in the wordmark it is always lowercase.</p>
+</div>
+<div class="sub">
+  <h3>One mark, three readings</h3>
+  <ul class="readings">
+    <li><svg aria-hidden="true"><use href="#mark"/></svg><strong>The letter Y</strong><span class="muted small">The initial of the name.</span></li>
+    <li><svg aria-hidden="true"><use href="#mark"/></svg><strong>The yoke</strong><span class="muted small">The piece that joins two so they pull as one. The two nodes are the pair.</span></li>
+    <li><svg aria-hidden="true"><use href="#mark"/></svg><strong>Two routes, one door</strong><span class="muted small">Seller and buyer, shop and driver, converging on a single destination.</span></li>
+  </ul>
+</div>
+<div class="sub">
+  <h3>Geometry</h3>
+  <div class="panel geo">
+    <svg viewBox="-9 -5 62 62" role="img" aria-label="The mark on its 48 by 48 grid">
+      <g stroke="var(--line)" stroke-width="0.25" fill="none">
+        <path d="M0 0V48M0 0H48"/><path d="M6 0V48M0 6H48"/><path d="M12 0V48M0 12H48"/><path d="M18 0V48M0 18H48"/><path d="M24 0V48M0 24H48"/><path d="M30 0V48M0 30H48"/><path d="M36 0V48M0 36H48"/><path d="M42 0V48M0 42H48"/><path d="M48 0V48M0 48H48"/>
+      </g>
+      <rect x="0" y="0" width="48" height="48" fill="none" stroke="var(--line-strong)" stroke-width="0.4"/>
+      <path d="M24 -2V50" stroke="var(--ink-2)" stroke-width="0.3" stroke-dasharray="1.2 1.2" fill="none"/>
+      <g style="color: var(--accent)"><use href="#mark" width="48" height="48"/></g>
+      <g fill="var(--ink)">
+        <circle cx="12" cy="11" r="0.9"/><circle cx="36" cy="11" r="0.9"/><circle cx="24" cy="31" r="0.9"/><circle cx="24" cy="42" r="0.9"/>
+      </g>
+      <g fill="var(--ink-2)" font-family="Inter, system-ui, sans-serif" font-size="2.9" text-anchor="middle">
+        <text x="0" y="53.5">0</text><text x="12" y="53.5">12</text><text x="24" y="53.5">24</text><text x="36" y="53.5">36</text><text x="48" y="53.5">48</text>
+        <text x="-3.5" y="1" text-anchor="end">0</text><text x="-3.5" y="13" text-anchor="end">12</text><text x="-3.5" y="25" text-anchor="end">24</text><text x="-3.5" y="37" text-anchor="end">36</text><text x="-3.5" y="49" text-anchor="end">48</text>
+      </g>
+    </svg>
+    <dl>
+      <div><dt>Grid</dt><dd class="num">48 × 48 units</dd></div>
+      <div><dt>Stroke</dt><dd class="num">6 units, round caps and joins</dd></div>
+      <div><dt>Nodes</dt><dd class="num">(12, 11) and (36, 11), radius 6</dd></div>
+      <div><dt>Branches meet, stem ends</dt><dd class="num">(24, 31) · (24, 42)</dd></div>
+      <div><dt>Symmetry</dt><dd class="num">About x = 24</dd></div>
+      <div><dt>Path</dt><dd><code style="overflow-wrap:anywhere">M12 12C12 23 24 20 24 31M36 12C36 23 24 20 24 31M24 31V42</code></dd></div>
+    </dl>
+  </div>
+  <p class="note">Stroke and node radius are the same number, so each node is exactly twice as wide as the line leaving it. The mark is never redrawn by hand: use the component in code and the exported files everywhere else.</p>
+</div>
+</section>
+<section id="personality" aria-labelledby="personality-h">
+<div class="sec-head"><span class="no">02</span><h2 id="personality-h">Personality</h2></div>
+<div class="prose"><p>Yuntera is the reliable local business that happens to run on software. The test for any new screen, message or advert: would the owner of a well-run neighbourhood shop say this to a customer's face?</p></div>
+<div class="isnt">
+  <div><p><span class="tag do">Yuntera is</span></p><p><span class="tag dont">Yuntera is not</span></p></div>
+  <div><p><strong>Hard-working.</strong> It talks about what it does: stores, delivers, pays.</p><p>Aspirational. No lifestyle, no “reimagining commerce”.</p></div><div><p><strong>Plain.</strong> Says the price, the date, the fee and the reason.</p><p>Clever. No wordplay that makes someone read twice.</p></div><div><p><strong>Respectful.</strong> Addresses every adult as <span lang='es'>usted</span>.</p><p>Chummy. No forced Tico slang.</p></div><div><p><strong>Costa Rican at the root.</strong> <span lang='es'>Señas</span>, SINPE, colones, the GAM.</p><p>Costume. No flags, sloths or tourist imagery.</p></div><div><p><strong>Honest about limits.</strong> <span lang='es'>“Todavía no entregamos en esa zona.”</span></p><p>A promiser. Never a date, a zone or a saving it cannot keep.</p></div><div><p><strong>On the customer's side.</strong> Shows rights and fees before anyone asks.</p><p>Pushy. No countdowns, no pre-ticked boxes.</p></div><div><p><strong>Calm.</strong> One exclamation mark in the whole product, for good news.</p><p>Loud. No capitals for emphasis, no emoji in the interface.</p></div>
+</div>
+</section>
+<section id="voice" aria-labelledby="voice-h">
+<div class="sec-head"><span class="no">03</span><h2 id="voice-h">Voice and tone</h2></div>
+<div class="prose">
+  <p>Everything is written in <strong lang="es">usted</strong>, the everyday respectful register in Costa Rica. It is how people speak to customers and to strangers, so it suits a first-time shopper, a seller and a driver alike, and it never reads as cold.</p>
+  <p>The left-hand lines below are real strings from the apps. The right-hand lines are written here as examples of what to avoid.</p>
+</div>
+<div class="pairs">
+  <div class="pair">
+    <div><span class="tag do">Do · from the product</span><q lang="es">No quedan suficientes unidades de uno de los productos. Ajuste la cantidad.</q><span class="small muted">Not enough units left of one of the products. Adjust the quantity.</span></div>
+    <div><span class="tag dont">Don't</span><q lang="es">Ajustá la cantidad.</q></div>
+    <div class="why">Usted, always: ajuste, revise, elija. Never vos or tú.</div>
+  </div><div class="pair">
+    <div><span class="tag do">Do · from the product</span><q lang="es">Un precio cambió mientras usted compraba. Revise el nuevo total antes de confirmar.</q><span class="small muted">A price changed while you were shopping. Check the new total before confirming.</span></div>
+    <div><span class="tag dont">Don't</span><q lang="es">Error 409: price_changed</q></div>
+    <div class="why">Say what happened, then what to do. Never show a code.</div>
+  </div><div class="pair">
+    <div><span class="tag do">Do · from the product</span><q lang="es">Algo salió mal de nuestro lado. Inténtelo de nuevo en un momento.</q><span class="small muted">Something went wrong on our side. Try again in a moment.</span></div>
+    <div><span class="tag dont">Don't</span><q lang="es">Operación inválida. Verifique sus datos.</q></div>
+    <div class="why">When it is our fault, say so. Do not blame the customer.</div>
+  </div><div class="pair">
+    <div><span class="tag do">Do · from the product</span><q lang="es">Todavía no entregamos en esa zona. Estamos trabajando para llegar pronto.</q><span class="small muted">We don&#x27;t deliver in that area yet. We are working to get there soon.</span></div>
+    <div><span class="tag dont">Don't</span><q lang="es">¡Muy pronto en todo el país!</q></div>
+    <div class="why">Honest about the limit. No promise without a date.</div>
+  </div><div class="pair">
+    <div><span class="tag do">Do · from the product</span><q lang="es">Confirmar pedido por ₡29 800</q><span class="small muted">Confirm order for ₡29,800 (a button)</span></div>
+    <div><span class="tag dont">Don't</span><q lang="es">Continuar</q></div>
+    <div class="why">A button says exactly what will happen and, if money moves, how much.</div>
+  </div><div class="pair">
+    <div><span class="tag do">Do · from the product</span><q lang="es">Tiene 8 días hábiles desde que recibe para devolver, sin dar explicaciones.</q><span class="small muted">You have 8 business days from delivery to return it, no explanation needed.</span></div>
+    <div><span class="tag dont">Don't</span><q lang="es">Consulte nuestra política de devoluciones.</q></div>
+    <div class="why">State the right. Do not send people to look for it.</div>
+  </div><div class="pair">
+    <div><span class="tag do">Do · from the product</span><q lang="es">Dígaselo al repartidor solo cuando tenga el paquete en sus manos.</q><span class="small muted">Tell the driver only when the parcel is in your hands. (About the delivery code.)</span></div>
+    <div><span class="tag dont">Don't</span><q lang="es">Por su seguridad, valide su código con el courier.</q></div>
+    <div class="why">Explain a security step by what the person does, in Spanish words.</div>
+  </div><div class="pair">
+    <div><span class="tag do">Do · from the product</span><q lang="es">El correo o la contraseña no coinciden.</q><span class="small muted">The e-mail or the password don&#x27;t match.</span></div>
+    <div><span class="tag dont">Don't</span><q lang="es">Ese correo no está registrado.</q></div>
+    <div class="why">Plain, and it does not reveal whether an account exists.</div>
+  </div>
+</div>
+<div class="sub">
+  <h3>Words</h3>
+  <ul class="words" lang="es">
+    <li><strong>repartidor</strong><s>courier, rider, delivery</s></li><li><strong>pedido · paquete</strong><s>orden, envío express</s></li><li><strong>Finalizar compra</strong><s>checkout</s></li><li><strong>bodega</strong><s>fulfillment center</s></li><li><strong>señas</strong><s>dirección línea 2</s></li><li><strong>devolución</strong><s>return policy</s></li><li><strong>factura electrónica</strong><s>invoice</s></li><li><strong>(opcional)</strong><s>* para obligatorio</s></li>
+  </ul>
+</div>
+</section>
+<section id="family" aria-labelledby="family-h">
+<div class="sec-head"><span class="no">04</span><h2 id="family-h">The app family</h2></div>
+<div class="prose"><p>One name, plus a plain Spanish word that says who the app is for. The flagship carries the bare name. A new surface follows the same pattern: Yuntera and one everyday Spanish word, never an English descriptor or an abbreviation.</p></div>
+<ul class="family">
+  <li>
+    <div><span class="lockup"><svg aria-hidden="true"><use href="#mark"/></svg><span>yuntera</span></span></div>
+    <p><strong lang="es">Compradores</strong><br><span class="muted">Shoppers</span></p>
+    <p class="small"><code>www.yuntera.cr</code><br><span class="muted"><span class="chip" style="--c: var(--celeste-600)"></span>accent: celeste, not applied yet</span></p>
+  </li><li>
+    <div><span class="lockup"><svg aria-hidden="true"><use href="#mark"/></svg><span>yuntera<i>vende</i></span></span></div>
+    <p><strong lang="es">Vendedores y PYMEs</strong><br><span class="muted">Sellers; “sells”</span></p>
+    <p class="small"><code>vende.yuntera.cr</code><br><span class="muted"><span class="chip" style="--c: var(--guaria-600)"></span>accent: guaria, not applied yet</span></p>
+  </li><li>
+    <div><span class="lockup"><svg aria-hidden="true"><use href="#mark"/></svg><span>yuntera<i>ruta</i></span></span></div>
+    <p><strong lang="es">Repartidores</strong><br><span class="muted">Drivers; “route”</span></p>
+    <p class="small"><code>ruta.yuntera.cr</code><br><span class="muted"><span class="chip" style="--c: var(--selva-600)"></span>accent: selva, not applied yet</span></p>
+  </li><li>
+    <div><span class="lockup"><svg aria-hidden="true"><use href="#mark"/></svg><span>yuntera<i>bodega</i></span></span></div>
+    <p><strong lang="es">Personal de bodega</strong><br><span class="muted">Warehouse staff; “warehouse”</span></p>
+    <p class="small"><code>bodega.yuntera.cr</code><br><span class="muted"><span class="chip" style="--c: var(--maiz-500)"></span>accent: maíz, not applied yet</span></p>
+  </li><li>
+    <div><span class="lockup"><svg aria-hidden="true"><use href="#mark"/></svg><span>yuntera<i>central</i></span></span></div>
+    <p><strong lang="es">Operaciones internas</strong><br><span class="muted">The internal team; “head office”</span></p>
+    <p class="small"><code>central.yuntera.cr</code><br><span class="muted"><span class="chip" style="--c: var(--anil-700)"></span>accent: añil, not applied yet</span></p>
+  </li>
+</ul>
+<div class="scroll"><table>
+  <thead><tr><th>Part of the lockup</th><th>Rule, as drawn by <code>YunteraLogo</code></th></tr></thead>
+  <tbody>
+    <tr><td>Mark</td><td>The height of the lockup, in the brand colour</td></tr>
+    <tr><td>Gap</td><td class="num">0.30 × mark height</td></tr>
+    <tr><td>Wordmark</td><td class="num">Lowercase, Bricolage Grotesque 700, 0.86 × mark height, tracking −0.03 em, ink</td></tr>
+    <tr><td>Descriptor</td><td class="num">Lowercase, weight 500, same ink at 62 % opacity, 0.22 × mark height after the wordmark. Never its own colour, never a second line.</td></tr>
+  </tbody>
+</table></div>
+</section>
+<section id="logo" aria-labelledby="logo-h">
+<div class="sec-head"><span class="no">05</span><h2 id="logo-h">Using the logo</h2></div>
+<div class="prose"><p>Three colourings exist and no others: brand colour, ink and white. The rules for clear space, minimum size and misuse are set by this book; nothing in the code enforces them.</p></div>
+<div class="tiles">
+  <div class="tile"><div class="art" style="--tile-bg: var(--arena-50); --tile-mark: var(--celeste-600)"><svg class="m" aria-hidden="true"><use href="#mark"/></svg></div><p><strong>Brand</strong> on white, arena or any light tint. The default.</p></div>
+  <div class="tile"><div class="art" style="--tile-bg: var(--celeste-600); --tile-mark: var(--white)"><svg class="m" aria-hidden="true"><use href="#mark"/></svg></div><p><strong>White</strong> on the brand colour.</p></div>
+  <div class="tile"><div class="art" style="--tile-bg: var(--anil-900); --tile-mark: var(--white)"><svg class="m" aria-hidden="true"><use href="#mark"/></svg></div><p><strong>White</strong> on ink or a dark photograph.</p></div>
+  <div class="tile"><div class="art" style="--tile-bg: var(--white); --tile-mark: var(--anil-900)"><svg class="m" aria-hidden="true"><use href="#mark"/></svg></div><p><strong>Ink</strong> for one-colour printing.</p></div>
+  <div class="tile"><div class="art" style="--tile-bg: var(--arena-100)"><svg class="icon" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="11" fill="var(--celeste-600)"/><g transform="translate(7.2 7.2) scale(0.7)" style="color: var(--white)"><use href="#mark" width="48" height="48"/></g></svg></div><p><strong>App icon.</strong> White mark at 70 % on a brand square, corner radius 11/48.</p></div>
+</div>
+<div class="sub">
+  <h3>Clear space and minimum size</h3>
+  <div class="panel clear">
+    <svg viewBox="-16 -16 246 80" role="img" aria-label="Clear space around the lockup equals one node of the mark">
+      <rect x="-12" y="-12" width="238" height="72" fill="none" stroke="var(--ink-2)" stroke-width="0.6" stroke-dasharray="3 2.5"/>
+      <g fill="var(--line-strong)"><circle cx="-6" cy="24" r="6"/><circle cx="220" cy="24" r="6"/><circle cx="107" cy="-6" r="6"/><circle cx="107" cy="54" r="6"/></g>
+      <g style="color: var(--accent)"><use href="#mark" width="48" height="48"/></g>
+      <text x="62.4" y="24" dominant-baseline="central" font-family="'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif" font-weight="700" font-size="41.28" textLength="149.9" lengthAdjust="spacingAndGlyphs" fill="var(--ink)">yuntera</text>
+    </svg>
+  </div>
+  <div class="prose">
+    <p>Keep a margin on every side equal to the diameter of one node, which is a quarter of the mark's height. One node should always fit between the logo and anything else.</p>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>Artwork</th><th>On screen</th><th>In print</th></tr></thead>
+    <tbody class="num">
+      <tr><td>Mark alone</td><td>16 px high</td><td>6 mm high</td></tr>
+      <tr><td>App icon</td><td>16 px as a favicon; 48 px and up for touch</td><td>8 mm</td></tr>
+      <tr><td>Lockup</td><td>Mark 20 px high (the apps use 26 and 30 px)</td><td>Mark 8 mm high</td></tr>
+    </tbody>
+  </table></div>
+</div>
+<div class="sub">
+  <h3>Do not</h3>
+  <div class="tiles misuse">
+    <div class="tile"><div class="art"><span style="display:inline-block;transform: scaleX(1.45)"><span class="lockup"><svg aria-hidden="true"><use href="#mark"/></svg><span>yuntera</span></span></span></div><p><span class="tag dont">Don't</span> Stretch or squash it</p></div><div class="tile"><div class="art"><span style="display:inline-block;transform: rotate(-12deg)"><span class="lockup"><svg aria-hidden="true"><use href="#mark"/></svg><span>yuntera</span></span></span></div><p><span class="tag dont">Don't</span> Rotate or slant it</p></div><div class="tile"><div class="art"><span style="display:inline-block;--mark: var(--guaria-600)"><span class="lockup"><svg aria-hidden="true"><use href="#mark"/></svg><span>yuntera</span></span></span></div><p><span class="tag dont">Don't</span> Recolour it</p></div><div class="tile"><div class="art"><span style="display:inline-block;"><span class="lockup"><svg aria-hidden="true"><use href="#mark"/></svg><span>YUNTERA</span></span></span></div><p><span class="tag dont">Don't</span> Set the name in capitals</p></div>
+  </div>
+  <div class="prose"><ul>
+    <li>No shadow, glow, outline or gradient.</li>
+    <li>No box, circle or speech bubble around it. The app icon is the only container.</li>
+    <li>Not on a busy photograph, and not on a colour without enough contrast.</li>
+    <li>The two nodes are never different colours, and the descriptor never takes its own colour.</li>
+  </ul></div>
+</div>
+</section>
+<section id="colour" aria-labelledby="colour-h">
+<div class="sec-head"><span class="no">06</span><h2 id="colour-h">Colour</h2></div>
+<div class="prose">
+  <p>The palettes are named for things in Costa Rica rather than for generic colour words, and each has one job. Colour is never the only signal: a status always has words, an error always has a sentence.</p>
+  <p class="small muted">Every swatch on this page shows the true value in both light and dark viewing. Select a hex value to copy it.</p>
+</div>
+<div class="sub"><h3>Palettes</h3><div class="palette"><header><h4>Celeste</h4><span class="small muted">The turquoise of Río Celeste. The brand colour: buttons, links, focus, the mark.</span></header><ul class="ramp"><li><span class="sw" style="--c: #ecfbfc"></span><b class="num">50</b><button type="button" class="hexbtn hex" data-hex="#ecfbfc" title="Copy #ecfbfc">#ecfbfc</button><span class="role">brand-soft</span></li><li><span class="sw" style="--c: #d0f4f7"></span><b class="num">100</b><button type="button" class="hexbtn hex" data-hex="#d0f4f7" title="Copy #d0f4f7">#d0f4f7</button></li><li><span class="sw" style="--c: #a5e8ee"></span><b class="num">200</b><button type="button" class="hexbtn hex" data-hex="#a5e8ee" title="Copy #a5e8ee">#a5e8ee</button></li><li><span class="sw" style="--c: #6dd6e0"></span><b class="num">300</b><button type="button" class="hexbtn hex" data-hex="#6dd6e0" title="Copy #6dd6e0">#6dd6e0</button></li><li><span class="sw" style="--c: #33bccb"></span><b class="num">400</b><button type="button" class="hexbtn hex" data-hex="#33bccb" title="Copy #33bccb">#33bccb</button></li><li><span class="sw" style="--c: #12a0b0"></span><b class="num">500</b><button type="button" class="hexbtn hex" data-hex="#12a0b0" title="Copy #12a0b0">#12a0b0</button><span class="role">focus</span></li><li><span class="sw" style="--c: #0b7f8e"></span><b class="num">600</b><button type="button" class="hexbtn hex" data-hex="#0b7f8e" title="Copy #0b7f8e">#0b7f8e</button><span class="role">brand</span></li><li><span class="sw" style="--c: #0c6775"></span><b class="num">700</b><button type="button" class="hexbtn hex" data-hex="#0c6775" title="Copy #0c6775">#0c6775</button><span class="role">brand-hover, link</span></li><li><span class="sw" style="--c: #0f5360"></span><b class="num">800</b><button type="button" class="hexbtn hex" data-hex="#0f5360" title="Copy #0f5360">#0f5360</button></li><li><span class="sw" style="--c: #114551"></span><b class="num">900</b><button type="button" class="hexbtn hex" data-hex="#114551" title="Copy #114551">#114551</button></li><li><span class="sw" style="--c: #062d37"></span><b class="num">950</b><button type="button" class="hexbtn hex" data-hex="#062d37" title="Copy #062d37">#062d37</button></li></ul></div><div class="palette"><header><h4>Añil</h4><span class="small muted">Indigo ink. Text, strong borders, neutral states, dark surfaces.</span></header><ul class="ramp"><li><span class="sw" style="--c: #f3f5fa"></span><b class="num">50</b><button type="button" class="hexbtn hex" data-hex="#f3f5fa" title="Copy #f3f5fa">#f3f5fa</button></li><li><span class="sw" style="--c: #e4e8f2"></span><b class="num">100</b><button type="button" class="hexbtn hex" data-hex="#e4e8f2" title="Copy #e4e8f2">#e4e8f2</button></li><li><span class="sw" style="--c: #c9d1e3"></span><b class="num">200</b><button type="button" class="hexbtn hex" data-hex="#c9d1e3" title="Copy #c9d1e3">#c9d1e3</button><span class="role">border-strong</span></li><li><span class="sw" style="--c: #a2aecb"></span><b class="num">300</b><button type="button" class="hexbtn hex" data-hex="#a2aecb" title="Copy #a2aecb">#a2aecb</button></li><li><span class="sw" style="--c: #7484ab"></span><b class="num">400</b><button type="button" class="hexbtn hex" data-hex="#7484ab" title="Copy #7484ab">#7484ab</button></li><li><span class="sw" style="--c: #53648f"></span><b class="num">500</b><button type="button" class="hexbtn hex" data-hex="#53648f" title="Copy #53648f">#53648f</button></li><li><span class="sw" style="--c: #3f4e76"></span><b class="num">600</b><button type="button" class="hexbtn hex" data-hex="#3f4e76" title="Copy #3f4e76">#3f4e76</button><span class="role">ink-muted</span></li><li><span class="sw" style="--c: #313d5e"></span><b class="num">700</b><button type="button" class="hexbtn hex" data-hex="#313d5e" title="Copy #313d5e">#313d5e</button></li><li><span class="sw" style="--c: #232c47"></span><b class="num">800</b><button type="button" class="hexbtn hex" data-hex="#232c47" title="Copy #232c47">#232c47</button></li><li><span class="sw" style="--c: #161d33"></span><b class="num">900</b><button type="button" class="hexbtn hex" data-hex="#161d33" title="Copy #161d33">#161d33</button><span class="role">ink</span></li><li><span class="sw" style="--c: #0c1122"></span><b class="num">950</b><button type="button" class="hexbtn hex" data-hex="#0c1122" title="Copy #0c1122">#0c1122</button></li></ul></div><div class="palette"><header><h4>Guaria</h4><span class="small muted">The guaria morada orchid. Promotions and discounts, and nothing else.</span></header><ul class="ramp"><li><span class="sw" style="--c: #fcf2fa"></span><b class="num">50</b><button type="button" class="hexbtn hex" data-hex="#fcf2fa" title="Copy #fcf2fa">#fcf2fa</button></li><li><span class="sw" style="--c: #f8e1f3"></span><b class="num">100</b><button type="button" class="hexbtn hex" data-hex="#f8e1f3" title="Copy #f8e1f3">#f8e1f3</button></li><li><span class="sw" style="--c: #f0c0e5"></span><b class="num">200</b><button type="button" class="hexbtn hex" data-hex="#f0c0e5" title="Copy #f0c0e5">#f0c0e5</button></li><li><span class="sw" style="--c: #e492d0"></span><b class="num">300</b><button type="button" class="hexbtn hex" data-hex="#e492d0" title="Copy #e492d0">#e492d0</button></li><li><span class="sw" style="--c: #d35fb6"></span><b class="num">400</b><button type="button" class="hexbtn hex" data-hex="#d35fb6" title="Copy #d35fb6">#d35fb6</button></li><li><span class="sw" style="--c: #bc3a9a"></span><b class="num">500</b><button type="button" class="hexbtn hex" data-hex="#bc3a9a" title="Copy #bc3a9a">#bc3a9a</button></li><li><span class="sw" style="--c: #9e2a7f"></span><b class="num">600</b><button type="button" class="hexbtn hex" data-hex="#9e2a7f" title="Copy #9e2a7f">#9e2a7f</button><span class="role">promo</span></li><li><span class="sw" style="--c: #812266"></span><b class="num">700</b><button type="button" class="hexbtn hex" data-hex="#812266" title="Copy #812266">#812266</button></li><li><span class="sw" style="--c: #6a1f54"></span><b class="num">800</b><button type="button" class="hexbtn hex" data-hex="#6a1f54" title="Copy #6a1f54">#6a1f54</button></li><li><span class="sw" style="--c: #581d46"></span><b class="num">900</b><button type="button" class="hexbtn hex" data-hex="#581d46" title="Copy #581d46">#581d46</button></li></ul></div><div class="palette"><header><h4>Maíz</h4><span class="small muted">Corn yellow. Ratings (500) and warnings (700).</span></header><ul class="ramp"><li><span class="sw" style="--c: #fffaeb"></span><b class="num">50</b><button type="button" class="hexbtn hex" data-hex="#fffaeb" title="Copy #fffaeb">#fffaeb</button></li><li><span class="sw" style="--c: #fdf0c4"></span><b class="num">100</b><button type="button" class="hexbtn hex" data-hex="#fdf0c4" title="Copy #fdf0c4">#fdf0c4</button></li><li><span class="sw" style="--c: #fbe08b"></span><b class="num">200</b><button type="button" class="hexbtn hex" data-hex="#fbe08b" title="Copy #fbe08b">#fbe08b</button></li><li><span class="sw" style="--c: #f9cf55"></span><b class="num">300</b><button type="button" class="hexbtn hex" data-hex="#f9cf55" title="Copy #f9cf55">#f9cf55</button></li><li><span class="sw" style="--c: #f7c12d"></span><b class="num">400</b><button type="button" class="hexbtn hex" data-hex="#f7c12d" title="Copy #f7c12d">#f7c12d</button></li><li><span class="sw" style="--c: #eda515"></span><b class="num">500</b><button type="button" class="hexbtn hex" data-hex="#eda515" title="Copy #eda515">#eda515</button><span class="role">rating</span></li><li><span class="sw" style="--c: #c97f0e"></span><b class="num">600</b><button type="button" class="hexbtn hex" data-hex="#c97f0e" title="Copy #c97f0e">#c97f0e</button></li><li><span class="sw" style="--c: #a05c0f"></span><b class="num">700</b><button type="button" class="hexbtn hex" data-hex="#a05c0f" title="Copy #a05c0f">#a05c0f</button><span class="role">warning</span></li><li><span class="sw" style="--c: #834913"></span><b class="num">800</b><button type="button" class="hexbtn hex" data-hex="#834913" title="Copy #834913">#834913</button></li><li><span class="sw" style="--c: #6c3c14"></span><b class="num">900</b><button type="button" class="hexbtn hex" data-hex="#6c3c14" title="Copy #6c3c14">#6c3c14</button></li></ul></div><div class="palette"><header><h4>Selva</h4><span class="small muted">Rainforest green. Success, delivered, in stock.</span></header><ul class="ramp"><li><span class="sw" style="--c: #eefbf3"></span><b class="num">50</b><button type="button" class="hexbtn hex" data-hex="#eefbf3" title="Copy #eefbf3">#eefbf3</button></li><li><span class="sw" style="--c: #d6f5e1"></span><b class="num">100</b><button type="button" class="hexbtn hex" data-hex="#d6f5e1" title="Copy #d6f5e1">#d6f5e1</button></li><li><span class="sw" style="--c: #b0eac7"></span><b class="num">200</b><button type="button" class="hexbtn hex" data-hex="#b0eac7" title="Copy #b0eac7">#b0eac7</button></li><li><span class="sw" style="--c: #7cd8a6"></span><b class="num">300</b><button type="button" class="hexbtn hex" data-hex="#7cd8a6" title="Copy #7cd8a6">#7cd8a6</button></li><li><span class="sw" style="--c: #46be80"></span><b class="num">400</b><button type="button" class="hexbtn hex" data-hex="#46be80" title="Copy #46be80">#46be80</button></li><li><span class="sw" style="--c: #24a365"></span><b class="num">500</b><button type="button" class="hexbtn hex" data-hex="#24a365" title="Copy #24a365">#24a365</button></li><li><span class="sw" style="--c: #17824f"></span><b class="num">600</b><button type="button" class="hexbtn hex" data-hex="#17824f" title="Copy #17824f">#17824f</button><span class="role">success</span></li><li><span class="sw" style="--c: #146842"></span><b class="num">700</b><button type="button" class="hexbtn hex" data-hex="#146842" title="Copy #146842">#146842</button></li><li><span class="sw" style="--c: #135337"></span><b class="num">800</b><button type="button" class="hexbtn hex" data-hex="#135337" title="Copy #135337">#135337</button></li><li><span class="sw" style="--c: #11442f"></span><b class="num">900</b><button type="button" class="hexbtn hex" data-hex="#11442f" title="Copy #11442f">#11442f</button></li></ul></div><div class="palette"><header><h4>Achiote</h4><span class="small muted">Annatto red. Errors and destructive actions.</span></header><ul class="ramp"><li><span class="sw" style="--c: #fef3f2"></span><b class="num">50</b><button type="button" class="hexbtn hex" data-hex="#fef3f2" title="Copy #fef3f2">#fef3f2</button></li><li><span class="sw" style="--c: #fee4e2"></span><b class="num">100</b><button type="button" class="hexbtn hex" data-hex="#fee4e2" title="Copy #fee4e2">#fee4e2</button></li><li><span class="sw" style="--c: #fecdca"></span><b class="num">200</b><button type="button" class="hexbtn hex" data-hex="#fecdca" title="Copy #fecdca">#fecdca</button></li><li><span class="sw" style="--c: #fca9a4"></span><b class="num">300</b><button type="button" class="hexbtn hex" data-hex="#fca9a4" title="Copy #fca9a4">#fca9a4</button></li><li><span class="sw" style="--c: #f7776f"></span><b class="num">400</b><button type="button" class="hexbtn hex" data-hex="#f7776f" title="Copy #f7776f">#f7776f</button></li><li><span class="sw" style="--c: #ed4c43"></span><b class="num">500</b><button type="button" class="hexbtn hex" data-hex="#ed4c43" title="Copy #ed4c43">#ed4c43</button></li><li><span class="sw" style="--c: #d92f26"></span><b class="num">600</b><button type="button" class="hexbtn hex" data-hex="#d92f26" title="Copy #d92f26">#d92f26</button><span class="role">danger</span></li><li><span class="sw" style="--c: #b6231c"></span><b class="num">700</b><button type="button" class="hexbtn hex" data-hex="#b6231c" title="Copy #b6231c">#b6231c</button></li><li><span class="sw" style="--c: #97211b"></span><b class="num">800</b><button type="button" class="hexbtn hex" data-hex="#97211b" title="Copy #97211b">#97211b</button></li><li><span class="sw" style="--c: #7d221d"></span><b class="num">900</b><button type="button" class="hexbtn hex" data-hex="#7d221d" title="Copy #7d221d">#7d221d</button></li></ul></div><div class="palette"><header><h4>Arena</h4><span class="small muted">Warm sand. Page background, muted surfaces, hairlines.</span></header><ul class="ramp"><li><span class="sw" style="--c: #fbfaf7"></span><b class="num">50</b><button type="button" class="hexbtn hex" data-hex="#fbfaf7" title="Copy #fbfaf7">#fbfaf7</button><span class="role">bg</span></li><li><span class="sw" style="--c: #f5f2ec"></span><b class="num">100</b><button type="button" class="hexbtn hex" data-hex="#f5f2ec" title="Copy #f5f2ec">#f5f2ec</button><span class="role">surface-muted</span></li><li><span class="sw" style="--c: #eae5da"></span><b class="num">200</b><button type="button" class="hexbtn hex" data-hex="#eae5da" title="Copy #eae5da">#eae5da</button><span class="role">border</span></li><li><span class="sw" style="--c: #dad2c2"></span><b class="num">300</b><button type="button" class="hexbtn hex" data-hex="#dad2c2" title="Copy #dad2c2">#dad2c2</button></li><li><span class="sw" style="--c: #bfb49f"></span><b class="num">400</b><button type="button" class="hexbtn hex" data-hex="#bfb49f" title="Copy #bfb49f">#bfb49f</button></li></ul></div></div>
+<div class="sub"><h3>Semantic tokens</h3>
+  <div class="prose"><p>Screens are written against these names, not against palette steps.</p></div>
+  <ul class="semantic"><li><span class="sw" style="--c: #fbfaf7"></span><div><b>bg</b><span>arena 50 · <button type="button" class="hexbtn hex" data-hex="#fbfaf7" title="Copy #fbfaf7">#fbfaf7</button></span><span>The page</span></div></li><li><span class="sw" style="--c: #ffffff"></span><div><b>surface</b><span>white · <button type="button" class="hexbtn hex" data-hex="#ffffff" title="Copy #ffffff">#ffffff</button></span><span>Cards, fields, the header</span></div></li><li><span class="sw" style="--c: #f5f2ec"></span><div><b>surface-muted</b><span>arena 100 · <button type="button" class="hexbtn hex" data-hex="#f5f2ec" title="Copy #f5f2ec">#f5f2ec</button></span><span>Table heads, quotes, disabled fields</span></div></li><li><span class="sw" style="--c: #eae5da"></span><div><b>border</b><span>arena 200 · <button type="button" class="hexbtn hex" data-hex="#eae5da" title="Copy #eae5da">#eae5da</button></span><span>Hairlines</span></div></li><li><span class="sw" style="--c: #c9d1e3"></span><div><b>border-strong</b><span>anil 200 · <button type="button" class="hexbtn hex" data-hex="#c9d1e3" title="Copy #c9d1e3">#c9d1e3</button></span><span>Field and secondary-button outlines</span></div></li><li><span class="sw" style="--c: #161d33"></span><div><b>ink</b><span>anil 900 · <button type="button" class="hexbtn hex" data-hex="#161d33" title="Copy #161d33">#161d33</button></span><span>Text</span></div></li><li><span class="sw" style="--c: #3f4e76"></span><div><b>ink-muted</b><span>anil 600 · <button type="button" class="hexbtn hex" data-hex="#3f4e76" title="Copy #3f4e76">#3f4e76</button></span><span>Secondary text, hints</span></div></li><li><span class="sw" style="--c: #ffffff"></span><div><b>on-brand</b><span>white · <button type="button" class="hexbtn hex" data-hex="#ffffff" title="Copy #ffffff">#ffffff</button></span><span>Text on the brand colour</span></div></li><li><span class="sw" style="--c: #0b7f8e"></span><div><b>brand</b><span>celeste 600 · <button type="button" class="hexbtn hex" data-hex="#0b7f8e" title="Copy #0b7f8e">#0b7f8e</button></span><span>Primary buttons, the mark</span></div></li><li><span class="sw" style="--c: #0c6775"></span><div><b>brand-hover</b><span>celeste 700 · <button type="button" class="hexbtn hex" data-hex="#0c6775" title="Copy #0c6775">#0c6775</button></span><span>Primary button on hover</span></div></li><li><span class="sw" style="--c: #ecfbfc"></span><div><b>brand-soft</b><span>celeste 50 · <button type="button" class="hexbtn hex" data-hex="#ecfbfc" title="Copy #ecfbfc">#ecfbfc</button></span><span>Selected rows, ghost hover</span></div></li><li><span class="sw" style="--c: #0c6775"></span><div><b>link</b><span>celeste 700 · <button type="button" class="hexbtn hex" data-hex="#0c6775" title="Copy #0c6775">#0c6775</button></span><span>Links</span></div></li><li><span class="sw" style="--c: #12a0b0"></span><div><b>focus</b><span>celeste 500 · <button type="button" class="hexbtn hex" data-hex="#12a0b0" title="Copy #12a0b0">#12a0b0</button></span><span>The focus ring</span></div></li><li><span class="sw" style="--c: #9e2a7f"></span><div><b>promo</b><span>guaria 600 · <button type="button" class="hexbtn hex" data-hex="#9e2a7f" title="Copy #9e2a7f">#9e2a7f</button></span><span>Promotions</span></div></li><li><span class="sw" style="--c: #eda515"></span><div><b>rating</b><span>maiz 500 · <button type="button" class="hexbtn hex" data-hex="#eda515" title="Copy #eda515">#eda515</button></span><span>Rating stars</span></div></li><li><span class="sw" style="--c: #17824f"></span><div><b>success</b><span>selva 600 · <button type="button" class="hexbtn hex" data-hex="#17824f" title="Copy #17824f">#17824f</button></span><span>Success</span></div></li><li><span class="sw" style="--c: #d92f26"></span><div><b>danger</b><span>achiote 600 · <button type="button" class="hexbtn hex" data-hex="#d92f26" title="Copy #d92f26">#d92f26</button></span><span>Errors, destructive buttons</span></div></li><li><span class="sw" style="--c: #a05c0f"></span><div><b>warning</b><span>maiz 700 · <button type="button" class="hexbtn hex" data-hex="#a05c0f" title="Copy #a05c0f">#a05c0f</button></span><span>Warnings, deadlines</span></div></li></ul>
+</div>
+<div class="sub"><h3>Contrast the build enforces</h3>
+  <div class="prose"><p>The test suite fails the build if any of these pairs drops below WCAG 2.2 AA. Three have almost no margin: white on the brand colour, white on danger, and the focus ring on the page. Those colours cannot be lightened without re-running the test.</p></div>
+  <div class="scroll"><table>
+    <thead><tr><th>Sample</th><th>Pair</th><th>Values</th><th>Ratio</th><th>Needs</th><th>Result</th></tr></thead>
+    <tbody><tr><td><span class="aa" style="--f: #161d33; --b: #fbfaf7">Aa</span></td><td>Body text on page</td><td class="hex">#161d33 on #fbfaf7</td><td class="num">15.99 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="aa" style="--f: #161d33; --b: #ffffff">Aa</span></td><td>Body text on surface</td><td class="hex">#161d33 on #ffffff</td><td class="num">16.69 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="aa" style="--f: #3f4e76; --b: #fbfaf7">Aa</span></td><td>Muted text on page</td><td class="hex">#3f4e76 on #fbfaf7</td><td class="num">7.85 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="aa" style="--f: #3f4e76; --b: #f5f2ec">Aa</span></td><td>Muted text on muted surface</td><td class="hex">#3f4e76 on #f5f2ec</td><td class="num">7.33 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="aa" style="--f: #ffffff; --b: #0b7f8e">Aa</span></td><td>White on brand button</td><td class="hex">#ffffff on #0b7f8e</td><td class="num tight">4.72 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes · narrow</td></tr><tr><td><span class="aa" style="--f: #ffffff; --b: #0c6775">Aa</span></td><td>White on brand hover</td><td class="hex">#ffffff on #0c6775</td><td class="num">6.53 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="aa" style="--f: #0c6775; --b: #fbfaf7">Aa</span></td><td>Link on page</td><td class="hex">#0c6775 on #fbfaf7</td><td class="num">6.26 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="aa" style="--f: #0c6775; --b: #ecfbfc">Aa</span></td><td>Link on brand-soft</td><td class="hex">#0c6775 on #ecfbfc</td><td class="num">6.15 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="aa" style="--f: #ffffff; --b: #9e2a7f">Aa</span></td><td>White on promo</td><td class="hex">#ffffff on #9e2a7f</td><td class="num">6.79 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="aa" style="--f: #ffffff; --b: #17824f">Aa</span></td><td>White on success</td><td class="hex">#ffffff on #17824f</td><td class="num tight">4.83 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes · narrow</td></tr><tr><td><span class="aa" style="--f: #ffffff; --b: #d92f26">Aa</span></td><td>White on danger</td><td class="hex">#ffffff on #d92f26</td><td class="num tight">4.78 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes · narrow</td></tr><tr><td><span class="aa" style="--f: #a05c0f; --b: #fbfaf7">Aa</span></td><td>Warning text on page</td><td class="hex">#a05c0f on #fbfaf7</td><td class="num tight">4.98 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes · narrow</td></tr><tr><td><span class="aa" style="--f: #161d33; --b: #eda515">Aa</span></td><td>Ink on rating yellow</td><td class="hex">#161d33 on #eda515</td><td class="num">7.94 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="aa" style="--f: #ffffff; --b: #161d33">Aa</span></td><td>White on dark surface</td><td class="hex">#ffffff on #161d33</td><td class="num">16.69 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="aa" style="--f: #6dd6e0; --b: #161d33">Aa</span></td><td>Celeste on dark surface</td><td class="hex">#6dd6e0 on #161d33</td><td class="num">9.81 : 1</td><td class="num">4.5 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="ring" style="--f: #12a0b0; --b: #fbfaf7"></span></td><td>Focus ring on page</td><td class="hex">#12a0b0 on #fbfaf7</td><td class="num tight">3.01 : 1</td><td class="num">3 : 1</td><td class="pass">Passes · narrow</td></tr><tr><td><span class="ring" style="--f: #12a0b0; --b: #ffffff"></span></td><td>Focus ring on surface</td><td class="hex">#12a0b0 on #ffffff</td><td class="num tight">3.14 : 1</td><td class="num">3 : 1</td><td class="pass">Passes · narrow</td></tr></tbody>
+  </table></div>
+  <h3>Used by components, not covered by the test</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Sample</th><th>Pair</th><th>Values</th><th>Ratio</th><th>Result</th></tr></thead>
+    <tbody><tr><td><span class="aa" style="--f: #53648f; --b: #ffffff">Aa</span></td><td>Placeholder text in a field<br><span class=muted>Was añil 400 at 3.73 : 1. Now añil 500, and covered by the test.</span></td><td class="hex">#53648f on #ffffff</td><td class="num">5.85 : 1</td><td class="pass">Passes</td></tr><tr><td><span class="aa" style="--f: #d92f26; --b: #ffffff">Aa</span></td><td>Error text on a white surface</td><td class="hex">#d92f26 on #ffffff</td><td class="num">4.78 : 1</td><td class="pass">Passes · narrow</td></tr><tr><td><span class="aa" style="--f: #eda515; --b: #ffffff">Aa</span></td><td>Rating star on white<br><span class=muted>Decoration only: the rating is always also written as text.</span></td><td class="hex">#eda515 on #ffffff</td><td class="num">2.10 : 1</td><td class="muted">Not text</td></tr></tbody>
+  </table></div>
+  <div class="prose"><ul>
+    <li><strong>Rating yellow is never a text colour.</strong> It may carry ink text on top of it.</li>
+    <li><strong>Guaria is only for promotions.</strong> A purple button or link would dilute its one meaning.</li>
+    <li><strong>Red is only for errors and destruction.</strong> Not for discounts, not for “new”.</li>
+  </ul></div>
+</div>
+</section>
+<section id="type" aria-labelledby="type-h">
+<div class="sec-head"><span class="no">07</span><h2 id="type-h">Typography</h2></div>
+<div class="prose"><p>Two families, both open source and self-hosted by the apps, so no request leaves the site to load them. <strong>Bricolage Grotesque</strong> carries headings, prices and the wordmark. <strong>Inter</strong> carries everything else.</p></div>
+<div class="spec-grid">
+  <div class="spec" lang="es">
+    <span class="cap">Display · Bricolage Grotesque 800 and 700</span>
+    <p class="display-spec">Lo que ocupa, a su puerta.</p>
+    <p class="glyphs">Aa Bb Ññ Gg Rr Yy · ¿Qué ocupa? · ₡0123456789</p>
+  </div>
+  <div class="spec" lang="es">
+    <span class="cap">Text · Inter 400, 500, 600</span>
+    <p style="font-size: 1.125rem">Compre a vendedores costarricenses y reciba al día siguiente en el Gran Área Metropolitana. Nosotros mismos se lo llevamos.</p>
+    <p class="inter-glyphs"><span style="font-weight:400">Aa Ññ Gg 0123</span> · <span style="font-weight:500">Aa Ññ Gg 0123</span> · <span style="font-weight:600">Aa Ññ Gg 0123</span></p>
+  </div>
+</div>
+<div class="sub"><h3>Scale</h3>
+  <div class="spec" style="padding: 0; overflow: hidden"><div style="overflow-x: auto"><table class="scale">
+    <thead><tr><th style="background: var(--arena-100); color: var(--anil-600)">Token</th><th style="background: var(--arena-100); color: var(--anil-600)">Size</th><th style="background: var(--arena-100); color: var(--anil-600)">Used for</th><th style="background: var(--arena-100); color: var(--anil-600)">Sample</th></tr></thead>
+    <tbody style="--line: var(--arena-200)"><tr><td><code>xs</code></td><td class="num">12 px</td><td>Badges, column heads, fine print</td><td><span class="s" style="font-size: 0.75rem" lang="es">Entregado por Yuntera</span></td></tr><tr><td><code>sm</code></td><td class="num">14 px</td><td>Labels, hints, table cells. The most used size.</td><td><span class="s" style="font-size: 0.875rem" lang="es">Precio final, IVA incluido.</span></td></tr><tr><td><code>base</code></td><td class="num">16 px</td><td>Body text, fields, buttons</td><td><span class="s" style="font-size: 1rem" lang="es">Pague como prefiera</span></td></tr><tr><td><code>lg</code></td><td class="num">18 px</td><td>Lead paragraphs, large buttons</td><td><span class="s" style="font-size: 1.125rem" lang="es">Nosotros mismos se lo llevamos.</span></td></tr><tr><td><code>xl</code></td><td class="num">20 px</td><td>Section headings, the medium price</td><td><span class="d" style="font-size: 1.25rem" lang="es">Otras ofertas de este producto</span></td></tr><tr><td><code>2xl</code></td><td class="num">24 px</td><td>Section headings on the shop</td><td><span class="d" style="font-size: 1.5rem" lang="es">Hecho en Costa Rica</span></td></tr><tr><td><code>3xl</code></td><td class="num">30 px</td><td>Page titles, the large price</td><td><span class="d" style="font-size: 1.875rem" lang="es">Finalizar compra</span></td></tr><tr><td><code>4xl</code></td><td class="num">40 px</td><td>The hero on a phone</td><td><span class="d" style="font-size: 2.5rem" lang="es">Lo que ocupa</span></td></tr><tr><td><code>5xl</code></td><td class="num">52 px</td><td>The hero on a wide screen</td><td><span class="d" style="font-size: 3.25rem" lang="es">a su puerta.</span></td></tr></tbody>
+  </table></div></div>
+  <div class="prose"><p>Body text is never smaller than 16 px on a phone. Headings are sentence case, tracked at −0.015 em and balanced across lines. Capitals appear only in 12 px column heads.</p></div>
+</div>
+<div class="sub"><h3>Numbers and money</h3>
+  <div class="prose"><p>Money is where a marketplace earns or loses trust, so its typography is fixed, and all of it comes from one function. A price is never formatted by hand.</p></div>
+  <div class="spec"><div class="money">
+    <div class="stack">
+      <span class="bigprice">₡289 000</span>
+      <dl class="receipt" lang="es">
+        <div><dt>Productos</dt><dd>₡29 800</dd></div>
+        <div><dt>Envío</dt><dd>₡1 500</dd></div>
+        <div class="total"><dt>Total a pagar</dt><dd>₡31 300</dd></div>
+        <p>Precio final en colones. Incluye ₡2 387,40 de IVA.</p>
+      </dl>
+    </div>
+    <ul class="rules">
+      <li><b>₡12 500</b><span>The colón sign comes first, with no space after it.</span></li>
+      <li><b>289 000</b><span>Thousands are separated by a narrow no-break space (U+202F), never a dot or a comma. A price cannot wrap in the middle.</span></li>
+      <li><b>2 387,40</b><span>The decimal mark is a comma. Céntimos appear only when they exist.</span></li>
+      <li><b>−20%</b><span>A real minus sign (U+2212) for discounts and deductions.</span></li>
+      <li><b>0123456</b><span>Tabular figures, so columns line up and a total does not jiggle when it changes.</span></li>
+    </ul>
+  </div></div>
+</div>
+</section>
+<section id="layout" aria-labelledby="layout-h">
+<div class="sec-head"><span class="no">08</span><h2 id="layout-h">Layout, spacing, radius, elevation</h2></div>
+<div class="prose"><ul>
+  <li><strong>Width.</strong> Content sits in a column of at most 76 rem (1216 px), with a 16 px gutter that becomes 24 px from 768 px up.</li>
+  <li><strong>Phone first.</strong> Every screen works at 390 px with no sideways scrolling. Wide tables scroll inside their own frame.</li>
+  <li><strong>Spacing.</strong> There are no custom spacing tokens: the apps use the 4 px scale of the CSS framework, and space between siblings comes from gaps, not margins.</li>
+</ul></div>
+<div class="spec-grid">
+  <div class="spec"><span class="cap">Spacing · 4 px scale</span>
+    <div class="spaces num"><div><i style="width: 4px"></i>4</div><div><i style="width: 8px"></i>8</div><div><i style="width: 12px"></i>12</div><div><i style="width: 16px"></i>16</div><div><i style="width: 24px"></i>24</div><div><i style="width: 32px"></i>32</div><div><i style="width: 48px"></i>48</div></div>
+    <span class="cap">Touch targets</span>
+    <div class="target num"><span style="width: 44px; height: 44px">44</span> fields and buttons <span style="width: 48px; height: 48px">48</span> large buttons</div>
+  </div>
+  <div class="spec"><span class="cap">Radius</span>
+    <div class="radii num">
+      <div style="border-radius: 6px">sm<br>6px</div>
+      <div style="border-radius: 10px">md<br>10px</div>
+      <div style="border-radius: 16px">lg<br>16px</div>
+      <div style="border-radius: 24px">xl<br>24px</div>
+      <div style="border-radius: 9999px">full</div>
+    </div>
+    <p class="small muted">md for buttons, fields and alerts. lg for cards and product images. full for badges.</p>
+  </div>
+  <div class="spec"><span class="cap">Elevation · tinted with ink, never black</span>
+    <div class="shadows"><div style="box-shadow: 0 1px 2px rgb(22 29 51 / 0.06)">sm</div><div style="box-shadow: 0 4px 14px rgb(22 29 51 / 0.08)">md</div><div style="box-shadow: 0 12px 32px rgb(22 29 51 / 0.12)">lg</div></div>
+    <p class="small muted">sm for cards, md for things that float, lg reserved for overlays. Most separation comes from the hairline border.</p>
+  </div>
+</div>
+</section>
+<section id="band" aria-labelledby="band-h">
+<div class="sec-head"><span class="no">09</span><h2 id="band-h">The wheel band</h2></div>
+<div class="prose"><p>The brand has one decorative element: a quiet, repeating pattern of a dot inside a ring on a 40 px grid. It is an original geometric pattern. It nods to the country's tradition of painted oxcart wheels in general, a wheel seen from the side and repeated, without copying any real wheel's painted design.</p></div>
+<div class="band-sample" lang="es"><strong>Lo que ocupa, a su puerta.</strong><span>The shop's home-page headline is the one place it appears today.</span></div>
+<div class="prose"><ul>
+  <li><strong>Sparingly.</strong> One band per product is about right.</li>
+  <li>Only behind a large heading and a short lead line, with plenty of empty space. Never behind running text, forms, tables or prices.</li>
+  <li>Only in the two lightest celeste tints on celeste 50. It is not recoloured and not made bolder.</li>
+  <li>It is never replaced with photographs or reproductions of actual painted wheels.</li>
+</ul></div>
+</section>
+<section id="illustration" aria-labelledby="illustration-h">
+<div class="sec-head"><span class="no">10</span><h2 id="illustration-h">Icons and illustration</h2></div>
+<div class="cols">
+  <div class="sub">
+    <h3>The wheel glyph</h3>
+    <div class="spec"><div class="glyph-row"><svg width="48" height="48" style="color: var(--celeste-300)" aria-hidden="true"><use href="#wheel"/></svg><svg width="28" height="28" aria-hidden="true"><use href="#wheel"/></svg><svg width="20" height="20" aria-hidden="true"><use href="#wheel"/></svg></div></div>
+    <p class="small">The secondary glyph, for empty states and loading: a rim, a hub and eight spokes on the same 48 grid as the mark. As a spinner it turns once every 1.4 s, and stays still for people who ask their device for less motion.</p>
+  </div>
+  <div class="sub">
+    <h3>Icons</h3>
+    <p class="small">The interface uses almost none. Words do the work: a button says <span lang="es">Agregar al carrito</span> rather than showing a cart. When an icon is added, it is drawn like the mark: square grid, one stroke weight, round caps and joins, one colour. No emoji as icons.</p>
+  </div>
+</div>
+<div class="sub">
+  <h3>Product illustration</h3>
+  <div class="prose"><p>The demo catalogue has no photographs. Each product has a simple original drawing: an 800 × 800 square, a flat tint, one ink colour, 18-unit round strokes and a few solid shapes, with the object reduced to its most recognisable outline. Real listings carry the seller's own photographs.</p></div>
+  <div class="illos"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" fill="#d0f4f7"/><g color="#0c6775"><path d="M250 440v-40a150 150 0 0 1 300 0v40" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" /><rect x="210" y="430" width="90" height="170" rx="40" fill="currentColor"/><rect x="500" y="430" width="90" height="170" rx="40" fill="currentColor"/></g></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" fill="#f5f2ec"/><g color="#6c3c14"><rect x="270" y="220" width="260" height="400" rx="28" fill="none" stroke="currentColor" stroke-width="18"/><path d="M270 300h260" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" /><ellipse cx="400" cy="440" rx="44" ry="62" transform="rotate(30 400 440)" fill="none" stroke="currentColor" stroke-width="16"/><path d="M427 394c-38 28 16 64-54 92" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round"/></g></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" fill="#e4e8f2"/><g color="#313d5e"><rect x="230" y="220" width="340" height="250" rx="20" fill="none" stroke="currentColor" stroke-width="18"/><path d="M180 540h440" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" /><path d="M210 540l20-70M590 540l-20-70" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" /></g></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" fill="#d0f4f7"/><g color="#0c6775"><rect x="330" y="270" width="140" height="360" rx="36" fill="none" stroke="currentColor" stroke-width="18"/><rect x="350" y="190" width="100" height="80" rx="20" fill="none" stroke="currentColor" stroke-width="18"/><path d="M330 380h140" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" /></g></svg></div>
+  <ul class="tones"><li style="--b: #d0f4f7; --f: #0c6775">Celeste<span>#d0f4f7<br>#0c6775</span></li><li style="--b: #f8e1f3; --f: #812266">Guaria<span>#f8e1f3<br>#812266</span></li><li style="--b: #fdf0c4; --f: #a05c0f">Maíz<span>#fdf0c4<br>#a05c0f</span></li><li style="--b: #d6f5e1; --f: #146842">Selva<span>#d6f5e1<br>#146842</span></li><li style="--b: #fee4e2; --f: #b6231c">Achiote<span>#fee4e2<br>#b6231c</span></li><li style="--b: #e4e8f2; --f: #313d5e">Añil<span>#e4e8f2<br>#313d5e</span></li><li style="--b: #f5f2ec; --f: #6c3c14">Arena<span>#f5f2ec<br>#6c3c14</span></li></ul>
+</div>
+</section>
+<section id="components" aria-labelledby="components-h">
+<div class="sec-head"><span class="no">11</span><h2 id="components-h">Components</h2></div>
+<div class="prose"><p>Shared components live in one package, and screens use them rather than restyling buttons and fields one by one. These samples are drawn with the real token values on the product's own light surface. The apps have no dark theme today.</p></div>
+<div class="spec" lang="es">
+  <span class="cap">Buttons · four variants</span>
+  <div class="row"><button type="button" class="btn primary">Agregar al carrito</button><button type="button" class="btn secondary">Comprar ahora</button><button type="button" class="btn ghost">Editar carrito</button><button type="button" class="btn danger">Cancelar pedido</button></div>
+  <span class="cap">Sizes · 36 (44 on touch screens), 44 and 48 px</span>
+  <div class="row"><button type="button" class="btn secondary sm">Guardar</button><button type="button" class="btn primary">Buscar</button><button type="button" class="btn primary lg">Confirmar pedido por ₡29 800</button></div>
+  <span class="cap">States · sending, and keyboard focus</span>
+  <div class="row"><button type="button" class="btn primary" disabled>Confirmando su pedido…</button><button type="button" class="btn secondary focused">Ver sus pedidos</button></div>
+  <p class="small muted" lang="en">One primary button per screen or card. Its label is a verb and says what happens. While a form is being sent the button disables itself and says so, so a double tap cannot submit twice.</p>
+</div>
+<div class="spec-grid">
+  <div class="spec" lang="es">
+    <span class="cap">Fields</span>
+    <div class="field"><label for="bb-name">Nombre de quien recibe</label><input id="bb-name" type="text" value="María Fernández Solís"></div>
+    <div class="field"><label for="bb-phone">Teléfono</label><input id="bb-phone" type="tel" placeholder="8888-1234"><span class="hint">El repartidor llama o escribe a este número si no encuentra la casa.</span></div>
+    <div class="field"><label for="bb-plus">Código Plus <span>(opcional)</span></label><input id="bb-plus" type="text" value="66XQ" aria-invalid="true"><span class="err">Ese código Plus no es válido. Tiene esta forma: 66XQWWMX+GG.</span></div>
+    <p class="small muted" lang="en">A label above, always. Required is the default and unmarked; optional fields say so. An error replaces the hint and says how to fix it.</p>
+  </div>
+  <div class="stack">
+    <div class="spec" lang="es">
+      <span class="cap">Badges · always a word</span>
+      <div class="row"><span class="badge" style="--b: var(--anil-100); --f: var(--anil-800)">Cancelado</span><span class="badge" style="--b: var(--celeste-100); --f: var(--celeste-900)">En camino</span><span class="badge" style="--b: var(--selva-100); --f: var(--selva-900)">Entregado</span><span class="badge" style="--b: var(--maiz-100); --f: var(--maiz-900)">Esperando el pago</span><span class="badge" style="--b: var(--achiote-100); --f: var(--achiote-900)">Entrega fallida</span><span class="badge" style="--b: var(--guaria-100); --f: var(--guaria-900)">−20%</span></div>
+      <span class="cap">Alerts</span>
+      <div class="alert" style="--b: var(--celeste-50); --bd: var(--celeste-300); --f: var(--celeste-950)"><b>Sitio en modo de prueba</b>Los pagos son simulados: no se cobra dinero real ni se entrega ningún producto.</div><div class="alert" style="--b: var(--selva-50); --bd: var(--selva-300); --f: var(--selva-900)"><b>¡Recibimos su pedido!</b>Ya lo estamos preparando. Aquí puede seguirlo en todo momento.</div><div class="alert" style="--b: var(--maiz-50); --bd: var(--maiz-300); --f: var(--maiz-900)"><b>Revise su carrito antes de continuar</b>Algún producto cambió o ya no está disponible.</div><div class="alert" style="--b: var(--achiote-50); --bd: var(--achiote-300); --f: var(--achiote-900)">El correo o la contraseña no coinciden.</div>
+    </div>
+  </div>
+</div>
+<div class="spec-grid">
+  <div class="spec" lang="es">
+    <span class="cap">Product card · price · rating</span>
+    <div class="card pcard">
+      <svg class="art" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" fill="#d0f4f7"/><g color="#0c6775"><path d="M250 440v-40a150 150 0 0 1 300 0v40" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" /><rect x="210" y="430" width="90" height="170" rx="40" fill="currentColor"/><rect x="500" y="430" width="90" height="170" rx="40" fill="currentColor"/></g></svg>
+      <div class="body">
+        <span class="brandname">Nimbo</span>
+        <span class="title">Audífonos inalámbricos Nimbo Aire con estuche de carga</span>
+        <span class="stars"><span><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#star" fill="var(--arena-300)"/><use href="#star" fill="var(--maiz-500)"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#star" fill="var(--arena-300)"/><use href="#star" fill="var(--maiz-500)"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#star" fill="var(--arena-300)"/><use href="#star" fill="var(--maiz-500)"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#star" fill="var(--arena-300)"/><use href="#star" fill="var(--maiz-500)"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#star" fill="var(--arena-300)"/><use href="#star" fill="var(--maiz-500)" style="clip-path: inset(0 50% 0 0)"/></svg></span><b>4,5 de 5</b><i>(2 reseñas)</i></span>
+        <span class="price"><b>₡19 900</b><s>₡24 900</s><span class="badge" style="--b: var(--guaria-100); --f: var(--guaria-900)">−20%</span></span>
+        <span class="by">Entregado por Yuntera</span>
+      </div>
+    </div>
+    <div class="row"><span class="price sm"><b>₡4 950</b></span><span class="price"><b>₡12 900</b></span><span class="price lg"><b>₡289 000</b></span></div>
+  </div>
+  <div class="spec" lang="es">
+    <span class="cap">Empty state</span>
+    <div class="empty"><svg aria-hidden="true"><use href="#wheel"/></svg><h4>Todavía no tiene productos</h4><p>Publicar toma unos cinco minutos. Antes de enviarlo ve exactamente cuánto recibe por cada venta.</p><button type="button" class="btn primary">Publicar el primero</button></div>
+    <span class="stars"><span><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#star" fill="var(--arena-300)"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#star" fill="var(--arena-300)"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#star" fill="var(--arena-300)"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#star" fill="var(--arena-300)"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><use href="#star" fill="var(--arena-300)"/></svg></span></span>
+    <p class="small muted" lang="en">With no reviews the product says <span lang="es">“Sin reseñas todavía”</span>, never five empty stars like these, which read as a bad rating.</p>
+  </div>
+</div>
+</section>
+<section id="accessibility" aria-labelledby="accessibility-h">
+<div class="sec-head"><span class="no">12</span><h2 id="accessibility-h">Accessibility commitments</h2></div>
+<div class="prose"><p>These are built into the tokens and shared components, so a screen gets them by using the system.</p></div>
+<ul class="checks"><li><b>Contrast</b>Text meets WCAG 2.2 AA. The build fails if a token pair regresses.</li><li><b>Focus</b>Every interactive element shows the same 2 px ring from the keyboard. It is never removed.</li><li><b>Targets</b>Controls are 44 px tall by default.</li><li><b>Motion</b>People who ask their device for reduced motion get none.</li><li><b>Not colour alone</b>Statuses have words. Errors have sentences.</li><li><b>Labels</b>Every field has a visible label, and errors are announced.</li><li><b>Structure</b>One h1 per page, real headings, tables with captions, a skip link.</li><li><b>Language</b>Pages declare es-CR. Sentences are short and every error says what to do next.</li><li><b>Zoom</b>Text can be enlarged. Body text is never under 16 px on a phone.</li><li><b>No dark patterns</b>Nothing is pre-selected at checkout except the shopper's own address. Consent boxes start unticked.</li></ul>
+</section>
+<section id="imagery" aria-labelledby="imagery-h">
+<div class="sec-head"><span class="no">13</span><h2 id="imagery-h">Photography and imagery</h2></div>
+<div class="prose"><p>Sellers supply the photographs of their products. This is the guidance for their help pages and for anything Yuntera photographs itself. Photo upload is not built yet, so the demo uses the drawings above.</p></div>
+<div class="cols">
+  <div class="panel"><h3>Product photographs</h3><div class="prose" style="margin-top: 0.75rem"><ul>
+    <li>The whole product, in focus, filling most of a square frame.</li>
+    <li>A plain, light background. Daylight from a window beats a flash.</li>
+    <li>The real item the buyer will receive: real colour, real size. A hand or a common object for scale helps.</li>
+    <li>More than one angle, and a close-up of the label, the plug or the material.</li>
+    <li>No text, prices, phone numbers, borders or watermarks on the image.</li>
+    <li>No pictures taken from a manufacturer's or another shop's site without permission.</li>
+  </ul></div></div>
+  <div class="panel"><h3>Yuntera's own imagery</h3><div class="prose" style="margin-top: 0.75rem"><ul>
+    <li>Real places and people: a driver at a gate, a shop counter, a warehouse shelf. Ask permission first.</li>
+    <li>Never a customer's address, face or licence plate without consent.</li>
+    <li>Ordinary Costa Rica as it is. No flags, toucans, sloths or beaches standing in for “local”.</li>
+    <li>Natural light, and colours left as they are.</li>
+    <li>No stock photographs of smiling models holding boxes.</li>
+    <li>Never the wheel band or a colour wash over a photograph.</li>
+  </ul></div></div>
+</div>
+</section>
+<section id="legal" aria-labelledby="legal-h">
+<div class="sec-head"><span class="no">14</span><h2 id="legal-h">Legal notes and open items</h2></div>
+<div class="cols">
+  <div class="panel"><h3>Checked, not registered</h3><div class="prose" style="margin-top: 0.75rem"><ul>
+    <li>On 21 November 2026 the domains <code>yuntera.com</code>, <code>yuntera.cr</code> and <code>yuntera.app</code> appeared free, and no app or business using the name was found. Method and limits are in <code>docs/brand/naming.md</code>.</li>
+    <li>Those checks are <strong>not a trademark search</strong>. Nothing should be printed, advertised or signed under the name until one is done.</li>
+  </ul></div></div>
+  <div class="panel"><h3>Still for the owner to do</h3><div class="prose" style="margin-top: 0.75rem"><ul>
+    <li>Register the domains. It is the only step that can be lost to someone else.</li>
+    <li>Trademark search and filing at the Registro Nacional for the name and the mark.</li>
+    <li>Reserve the social handles and the app-store names.</li>
+    <li>Create the support mailbox: the address shown in the apps is on a domain that is not registered yet.</li>
+  </ul></div></div>
+</div>
+<div class="sub">
+  <h3>Open items</h3>
+  <div class="prose"><p>Where the code and the brand do not yet agree, or a decision is still needed. The text source has the full list with detail.</p></div>
+  <ol class="open"><li><b>App accent colours are defined but not used.</b> Each app is assigned a palette, yet every app is built in celeste and differs only by its descriptor. Either apply a restrained accent per app or delete the field. Guaria and maíz already mean promotion and rating, so using them as app accents would give them a second meaning.</li><li><b>Small buttons: fixed.</b> They were 36 px on every device. They are now 36 px with a mouse and 44 px wherever the pointer is a finger.</li><li><b>Placeholder text: fixed.</b> It was 3.73 : 1. It is now añil 500 (5.85 : 1) and the pair is in the contrast test.</li><li><b>Three secondary taglines are defined and unused.</b> They were reworded after the first review and now read <i>Juntos llegamos más lejos</i>, <i>Usted vende. Nosotros lo llevamos.</i> and <i>Cada entrega cuenta.</i> A native copy editor should still read them before any is used in public.</li><li><b>Logo files for the outside world are incomplete.</b> The lockups use live text. Outlined versions, white and ink lockups, PNG exports, app-store icons, a maskable icon and a sharing image do not exist yet.</li><li><b>All apps share one favicon and one hard-coded theme colour.</b> The theme colour is typed into each layout instead of being read from the tokens.</li><li><b>There is no dark theme.</b> Two dark-surface pairs are tested, but no app has a dark mode.</li><li><b>English is declared but not built.</b> Error messages have English text; the screens do not. An English voice has not been defined.</li><li><b>Clear space, minimum sizes and misuse rules exist only in this book.</b> Nothing checks them.</li></ol>
+</div>
+</section>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <p>Text source: <code>docs/brand/brand-book.md</code>. Colour, type, radius and shadow values on this page are read from <code>packages/brand/src/tokens.ts</code>; the mark is drawn from the geometry in <code>logo.tsx</code>; contrast ratios use the same formula as <code>tokens.test.ts</code>. Checked 21 November 2026.</p>
+  </div>
+</footer>
+
+<script>
+// Click a swatch's hex value to copy it. If the clipboard is unavailable, the
+// value is selected so it can be copied by hand.
+document.addEventListener("click", (event) => {
+  var el = event.target.closest("[data-hex]");
+  if (!el) return;
+  var value = el.getAttribute("data-hex");
+  var done = () => { var old = el.textContent; el.textContent = "copied"; setTimeout(() => { el.textContent = old; }, 900); };
+  var select = () => { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+  try { navigator.clipboard.writeText(value).then(done, select); } catch { select(); }
+});
+</script>

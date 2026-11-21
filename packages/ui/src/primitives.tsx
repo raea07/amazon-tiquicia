@@ -41,7 +41,8 @@ const BUTTON_VARIANT: Record<ButtonVariant, string> = {
 };
 
 const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "min-h-9 px-3 text-sm",
+  // 36 px with a mouse; a full 44 px wherever the pointer is a finger.
+  sm: "min-h-9 px-3 text-sm pointer-coarse:min-h-11",
   md: "min-h-11 px-4 text-base",
   lg: "min-h-12 px-6 text-lg",
 };
@@ -77,7 +78,7 @@ export function Button({
 
 const CONTROL =
   "block w-full min-h-11 rounded-md border border-border-strong bg-surface px-3 text-base text-ink " +
-  "placeholder:text-anil-400 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus " +
+  "placeholder:text-anil-500 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus " +
   "aria-invalid:border-danger disabled:bg-surface-muted disabled:text-ink-muted";
 
 interface FieldShellProps {

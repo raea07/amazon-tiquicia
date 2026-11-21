@@ -27,15 +27,15 @@ export const brand = {
   taglines: {
     "es-CR": {
       primary: "Lo que ocupa, a su puerta.",
-      secondary: "Juntos llega más lejos.",
-      seller: "Venda a todo el país. Nosotros jalamos con usted.",
-      driver: "Su ruta, su tiempo, su plata.",
+      secondary: "Juntos llegamos más lejos.",
+      seller: "Usted vende. Nosotros lo llevamos.",
+      driver: "Cada entrega cuenta.",
     },
     en: {
       primary: "What you need, at your door.",
-      secondary: "Together goes further.",
-      seller: "Sell to the whole country. We pull alongside you.",
-      driver: "Your route, your time, your earnings.",
+      secondary: "Together we go further.",
+      seller: "You sell. We deliver.",
+      driver: "Every delivery counts.",
     },
   },
   /**

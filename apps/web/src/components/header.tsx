@@ -36,7 +36,7 @@ export function Header() {
             placeholder="¿Qué ocupa?"
             autoComplete="off"
             enterKeyHint="search"
-            className="min-h-11 w-full rounded-md border border-border-strong bg-surface px-4 text-base placeholder:text-anil-400"
+            className="min-h-11 w-full rounded-md border border-border-strong bg-surface px-4 text-base placeholder:text-anil-500"
           />
           <button
             type="submit"

@@ -19,6 +19,7 @@ describe("contrast (WCAG 2.2 AA)", () => {
     ["body text on page", semantic.ink, semantic.bg],
     ["body text on surface", semantic.ink, semantic.surface],
     ["muted text on page", semantic.inkMuted, semantic.bg],
+    ["placeholder text in a field", color.anil[500], semantic.surface],
     ["muted text on muted surface", semantic.inkMuted, semantic.surfaceMuted],
     ["white on brand button", semantic.onBrand, semantic.brand],
     ["white on brand hover", semantic.onBrand, semantic.brandHover],
