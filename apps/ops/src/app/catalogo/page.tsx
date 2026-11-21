@@ -149,7 +149,6 @@ async function Review() {
                       no="Rechazar cambio"
                     >
                       <input type="hidden" name="requestId" value={edit.request_id} />
-                      <input type="hidden" name="slug" value={edit.slug} />
                     </DecisionForm>
                   </div>
                 </article>

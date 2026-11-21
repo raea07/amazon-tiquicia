@@ -13,7 +13,7 @@ import {
   attempt,
   GENERIC_ERROR,
   redirectTo,
-  refreshShopProduct,
+  refreshShopCatalog,
   sessionApi,
   signInPath,
   typed,
@@ -31,14 +31,13 @@ export async function reviewListingEdit(
   if (!requestId.success) return { error: GENERIC_ERROR };
   const approve = formData.get("decision") === "yes";
   const note = String(formData.get("note") ?? "").trim();
-  const slug = String(formData.get("slug") ?? "");
 
   const state = await attempt(
     async () => {
       await (await sessionApi()).opsReviewListingEdit(requestId.data, approve, note || null);
       if (!approve) return "Cambio rechazado; el vendedor ve el motivo.";
-      // The shop keeps catalogue pages for about a minute; tell it this one changed.
-      await refreshShopProduct(slug);
+      // The shop keeps catalogue pages for about a minute; tell it they changed.
+      await refreshShopCatalog();
       return "Cambio aprobado: la publicación ya muestra el texto nuevo.";
     },
     typed(formData, "note"),

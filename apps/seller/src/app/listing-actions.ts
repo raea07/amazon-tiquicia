@@ -15,7 +15,7 @@ import {
   GENERIC_ERROR,
   getViewer,
   redirectTo,
-  refreshShopProduct,
+  refreshShopCatalog,
   sessionApi,
   signInPath,
   typed,
@@ -131,11 +131,9 @@ export async function archiveListing(
   }
 
   const state = await attempt(async () => {
-    const api = await sessionApi();
-    const listing = await api.sellerListing(productId.data);
-    await api.sellerArchiveListing(productId.data);
+    await (await sessionApi()).sellerArchiveListing(productId.data);
     // Shoppers should stop seeing it now, not when the shop's cache next expires.
-    await refreshShopProduct(listing.slug);
+    await refreshShopCatalog();
     return "Producto archivado. Ya no aparece en la tienda.";
   });
   if (state.ok) refresh();

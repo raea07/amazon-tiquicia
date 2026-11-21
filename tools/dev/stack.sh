@@ -32,6 +32,9 @@ ADMIN_URL="${PG_ADMIN_URL:-postgres://postgres:postgres@127.0.0.1:5432/postgres}
 DB_URL="${ADMIN_URL%/*}/${DB_NAME}"
 API_URL="http://127.0.0.1:${API_PORT}"
 API_KEY="sb_publishable_local_development_only"
+# Lets the seller centre, the console and the journeys ask the shop to drop its cached
+# catalogue (apps/web/src/app/api/catalogo/refrescar). A local value, not a secret.
+REFRESH_KEY="local-refresh-key-lane-${LANE}"
 STATE="$ROOT/.lane/$LANE"
 APPS=(web seller ops field)
 
@@ -50,6 +53,7 @@ export DATABASE_URL=$DB_URL
 export DEV_API_PORT=$API_PORT
 export API_URL=$API_URL
 export API_KEY=$API_KEY
+export SHOP_REFRESH_KEY=$REFRESH_KEY
 export NEXT_PUBLIC_SUPABASE_URL=$API_URL
 export NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$API_KEY
 export EXPO_PUBLIC_SUPABASE_URL=$API_URL
@@ -121,6 +125,7 @@ case "$COMMAND" in
         echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$API_KEY"
         echo "NEXT_PUBLIC_SITE_URL=http://localhost:$(app_port "$app")"
         echo "NEXT_PUBLIC_SHOP_URL=http://localhost:$(app_port web)"
+        echo "SHOP_REFRESH_KEY=$REFRESH_KEY"
       } > "$ROOT/apps/$app/.env.local"
     done
     echo "lane $LANE: building the apps (log: $STATE/build.log)"

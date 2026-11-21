@@ -17,6 +17,7 @@ const FIELD = process.env.FIELD_URL || "http://127.0.0.1:3003";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
+const REFRESH_KEY = process.env.SHOP_REFRESH_KEY || "";
 const log = (...a) => console.log(...a);
 
 const errors = [];
@@ -87,7 +88,10 @@ async function rpcAs(email) {
       expect(page.text.includes(NOT_FOUND_SCREEN), `${what}: the 404 has no not-found screen`);
       expect(page.text.includes("noindex"), `${what}: the 404 does not ask to stay out of indexes`);
     } else {
-      expect(!page.text.includes(NOT_FOUND_SCREEN), `${what}: a 200 page shows the not-found screen`);
+      expect(
+        !page.text.includes(NOT_FOUND_SCREEN),
+        `${what}: a 200 page shows the not-found screen`,
+      );
     }
   }
   const product = await get("/p/cafe-molido-tarrazu-340g");
@@ -108,11 +112,9 @@ async function rpcAs(email) {
   // the database without telling the shop; the page must still show the old price.
   const SLUG = "cafe-grano-tarrazu-1kg";
   const priceOn = (html) => /"price":"([0-9.]+)"/.exec(html)?.[1] ?? null;
-  await fetch(`${WEB}/api/catalogo/refrescar`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ slug: SLUG }),
-  });
+  const refreshShop = (key) =>
+    fetch(`${WEB}/api/catalogo/refrescar`, { method: "POST", headers: { "x-refresh-key": key } });
+  await refreshShop(REFRESH_KEY);
   const first = await get(`/p/${SLUG}`);
   const before = priceOn(first.text);
 
@@ -138,21 +140,16 @@ async function rpcAs(email) {
   expect(repeat === before, "a repeat visit read the database again: the page is not cached");
 
   // (c) Telling the shop makes the next visit read the database.
-  const told = await fetch(`${WEB}/api/catalogo/refrescar`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ slug: SLUG }),
-  });
+  const told = await refreshShop(REFRESH_KEY);
   const after = priceOn((await get(`/p/${SLUG}`)).text);
   log("after telling the shop (HTTP", told.status + "):", after);
   expect(told.status === 204, `the shop's refresh address answered ${told.status}`);
   expect(after === inDatabase, "the shop did not show the new price after being told");
-  const refused = await fetch(`${WEB}/api/catalogo/refrescar`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ slug: "../otra-cosa" }),
-  });
-  expect(refused.status === 400, `a malformed refresh was answered ${refused.status}`);
+  // Only the apps that hold the key may make the shop drop its cache.
+  const refused = await refreshShop("no-es-la-clave");
+  expect(refused.status === 401, `a refresh with the wrong key was answered ${refused.status}`);
+  const noKey = await fetch(`${WEB}/api/catalogo/refrescar`, { method: "POST" });
+  expect(noKey.status === 401, `a refresh without a key was answered ${noKey.status}`);
 
   // ── 3. Nonsense ids never show an error page ──────────────────────────────
   const browser = await chromium.launch();

@@ -19,5 +19,5 @@ export {
   requireViewer,
   type Viewer,
 } from "./session";
-export { refreshShopProduct } from "./shop";
+export { refreshShopCatalog } from "./shop";
 export { apiEnv, publicApi, sessionApi, sessionClient } from "./supabase";

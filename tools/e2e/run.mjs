@@ -37,11 +37,10 @@ for (const journey of journeys) {
   // The shop keeps catalogue pages for about a minute, and what it kept
   // describes the database that was just replaced (its offers no longer
   // exist). Ask it to forget them, so the journey really starts from the seed.
-  // Any well-formed product name does; nothing happens if the shop is not up.
+  // Nothing happens if the shop is not up or has no refresh key.
   await fetch(`${process.env.WEB_URL ?? "http://127.0.0.1:3000"}/api/catalogo/refrescar`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ slug: "base-de-datos-nueva" }),
+    headers: { "x-refresh-key": process.env.SHOP_REFRESH_KEY ?? "" },
   }).catch(() => undefined);
 
   console.log(`\n── ${journey} ${"─".repeat(60 - journey.length)}`);
