@@ -12,7 +12,6 @@ import {
   Text,
   TextField,
 } from "@yuntera/expo-kit/ui";
-import { randomUUID } from "expo-crypto";
 import { useState } from "react";
 import { checkShop, ID_TYPE_LABEL, ID_TYPES, type ShopForm } from "@/lib/rules";
 import { useShops } from "@/lib/shops";
@@ -56,9 +55,11 @@ export function RegisterShopForm({ onRegistered }: { onRegistered?: (shopId: str
       try {
         shopId = await create(checked.input.slug);
       } catch (cause) {
-        // Two shops can share a name; their addresses cannot. Try once with a suffix.
+        // Two shops can share a name; their addresses cannot. Try once with a
+        // suffix. It only tells two public addresses apart, so it needs no
+        // secure random source (and the app ships no crypto module).
         if (!(cause instanceof ApiError && cause.code === "slug_taken")) throw cause;
-        shopId = await create(`${checked.input.slug}-${randomUUID().slice(0, 4)}`);
+        shopId = await create(`${checked.input.slug}-${Math.random().toString(36).slice(2, 6).padEnd(4, "0")}`);
       }
       await choose(shopId);
       setJustRegistered(shopId);
