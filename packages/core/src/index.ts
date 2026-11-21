@@ -1,6 +1,7 @@
 export * from "./allocation";
 export * from "./cr/compliance";
 export * from "./cr/geo";
+export * from "./cr/iban";
 export * from "./cr/identity";
 export * from "./fees";
 export * from "./lifecycle";
