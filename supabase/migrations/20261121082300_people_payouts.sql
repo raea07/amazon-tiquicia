@@ -1036,7 +1036,12 @@ begin
         'status', p.status, 'amount_minor', p.amount_minor, 'reference', p.reference,
         'iban', p.payout_iban, 'holder_name', p.payout_holder_name,
         'bank_reference', p.bank_reference, 'paid_at', p.paid_at,
-        'failed_at', p.failed_at, 'failure_reason', p.failure_reason
+        'failed_at', p.failed_at, 'failure_reason', p.failure_reason,
+        -- The shop's approved account is no longer the one frozen on this
+        -- payout: the transfer on the list would go to the old account.
+        'account_changed', p.status = 'scheduled'
+          and (sp.payout_iban is distinct from p.payout_iban
+               or sp.payout_holder_name is distinct from p.payout_holder_name)
       ) order by p.reference)
       from public.payouts p
       join public.sellers s on s.id = p.seller_id

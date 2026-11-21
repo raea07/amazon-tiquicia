@@ -1158,6 +1158,31 @@ reset role;
 
 select pg_temp.check_balances('after creating a run');
 
+-- If the shop's approved account changes after a payout was scheduled, the run
+-- says so: the transfer on the list would still go to the account frozen on it.
+select pg_temp.login('central@yuntera.example');
+do $$
+begin
+  assert not (public.ops_payout_run(current_setting('t.run')::uuid) #>> '{payouts,0,account_changed}')::boolean,
+    'the frozen account is still the approved one';
+end
+$$;
+reset role;
+update public.seller_private set payout_iban = 'CR82010200009000000001'
+where seller_id = current_setting('t.tecnocasa')::uuid;
+select pg_temp.login('central@yuntera.example');
+do $$
+declare
+  d jsonb := public.ops_payout_run(current_setting('t.run')::uuid);
+begin
+  assert (d #>> '{payouts,0,account_changed}')::boolean, 'a changed account is pointed out';
+  assert d #>> '{payouts,0,iban}' = 'CR23015108410026012345', 'and the list still shows the frozen one';
+end
+$$;
+reset role;
+update public.seller_private set payout_iban = 'CR23015108410026012345'
+where seller_id = current_setting('t.tecnocasa')::uuid;
+
 -- The amount is frozen: a refund after scheduling does not change the payout,
 -- it leaves the shop with less (here: a negative amount) available.
 select pg_temp.login('comprador@yuntera.example');

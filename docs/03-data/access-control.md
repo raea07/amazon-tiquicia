@@ -135,7 +135,7 @@ A summary; the migration is authoritative.
 | See the order lines they sold and each line's progress, with the shopper's first name, district and cantón          | See the shopper's full name, phone, e-mail, address or map pin — Yuntera delivers, so the seller never needs them |
 | Set stock at their own location; announce stock sent to a warehouse; mark their own parcels packed                  | Change stock held in a Yuntera warehouse                                                                          |
 | Reply to a review of their product                                                                                  | Remove or edit a review                                                                                           |
-| Admins and owners: edit shop-front and payout details, manage members                                               | Create, alter or remove an owner                                                                                  |
+| Admins and owners: edit the shop front, manage members, request a change of payout account (finance approves it)    | Change the payout account themselves, or read any account number in full; create, alter or remove an owner        |
 
 ### Warehouse associate
 
@@ -160,13 +160,24 @@ Admin implies every role below.
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, zones and calendar, dispatch board, routes, settlements, returns; approve or suspend sellers |
 | `support` | Orders and timelines, profiles, addresses, consents, sellers' private details, stock levels, returns, complaints, content reports; cancel an order for a shopper          |
-| `finance` | Orders, fee schedule, seller statements, the ledger, payouts, settlements, invoices                                                                                       |
+| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs              |
 | `catalog` | Categories, brands, synonyms, all listings; approve or reject a listing; moderate reviews and content reports                                                             |
 | `admin`   | All of the above, plus staff membership, settings, and the audit log                                                                                                      |
 
 Sensitive changes by staff — to staff membership, seller status and private
 details, drivers, warehouse assignments, settings, fees, payouts — are written
 to `private.audit_log` with the acting user, and that log cannot be altered.
+A bank account number is never copied into it: only its last four digits.
+
+Two rules about people and money are enforced below the functions, on the
+tables themselves. The platform always keeps one active administrator: a
+trigger on `staff_members` refuses the change that would remove the last one.
+And nobody writes a seller's payout account or a payout directly: sellers ask
+with `seller_request_payout_details`, finance decides with
+`ops_decide_payout_details`, and `payouts`, `payout_runs` and
+`payout_detail_requests` have no grant to any API role at all. The full account
+number is readable only through two finance functions (a request awaiting a
+decision, and a run's transfer list).
 
 ## Rules for `security definer` functions
 

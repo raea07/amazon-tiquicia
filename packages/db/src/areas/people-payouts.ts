@@ -250,6 +250,8 @@ export const payoutRun = z.object({
       paid_at: timestamp.nullable(),
       failed_at: timestamp.nullable(),
       failure_reason: z.string().nullable(),
+      /** The shop's approved account changed after this payout was scheduled. */
+      account_changed: z.boolean(),
     }),
   ),
 });
@@ -341,7 +343,7 @@ export const errors = {
     en: "Check the documents: the licence class and the expiry dates of the licence, the technical inspection and the insurance.",
   },
   invalid_warehouse_role: {
-    "es-CR": "Elija el puesto: bodeguero o encargado.",
+    "es-CR": "Elija el puesto: auxiliar o líder de bodega.",
     en: "Choose the position: associate or lead.",
   },
   warehouse_staff_not_found: {

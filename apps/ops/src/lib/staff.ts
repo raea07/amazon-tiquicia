@@ -19,6 +19,9 @@ export const SECTIONS = [
   { href: "/catalogo", label: "Catálogo", roles: ["catalog"] },
   { href: "/vendedores", label: "Vendedores", roles: ["ops", "support", "finance"] },
   { href: "/repartidores", label: "Repartidores", roles: ["ops"] },
+  { href: "/bodegas", label: "Bodegas", roles: ["ops"] },
+  { href: "/pagos-vendedores", label: "Pagos a vendedores", roles: ["finance"] },
+  { href: "/personal", label: "Personal", roles: [] },
   { href: "/auditoria", label: "Auditoría", roles: [] },
 ] as const satisfies ReadonlyArray<{ href: string; label: string; roles: readonly StaffRole[] }>;
 

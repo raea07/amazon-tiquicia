@@ -16,6 +16,8 @@ const TABLES: Record<string, string> = {
   app_settings: "Ajustes de la plataforma",
   warehouse_staff: "Personal de bodega",
   drivers: "Repartidores",
+  payouts: "Pagos a vendedores",
+  fee_payment_methods: "Tarifas de cobro",
 };
 const ACTIONS: Record<string, string> = { INSERT: "Creó", UPDATE: "Cambió", DELETE: "Eliminó" };
 
@@ -26,8 +28,8 @@ export default function AuditPage() {
   return (
     <div className="shell py-8">
       <PageHeader title="Auditoría">
-        Quién cambió qué en lo que no debe cambiar en silencio: permisos, estado y datos bancarios
-        de vendedores, tarifas y ajustes. Este registro no se puede editar.
+        Quién cambió qué en lo que no debe cambiar en silencio: permisos, repartidores, estado y
+        datos bancarios de vendedores, pagos, tarifas y ajustes. Este registro no se puede editar.
       </PageHeader>
       <div className="mt-6">
         <Suspense fallback={<Skeleton className="h-96" />}>
@@ -38,11 +40,19 @@ export default function AuditPage() {
   );
 }
 
+// What a new or removed row was, in the few fields that say it.
+const SUMMARY = ["role", "status", "active", "reference", "amount_minor", "value"];
+
 function changes(
   before: Record<string, unknown> | null,
   after: Record<string, unknown> | null,
 ): string {
-  if (!before || !after) return "";
+  if (!before || !after) {
+    const row = after ?? before ?? {};
+    return SUMMARY.filter((key) => row[key] !== undefined && row[key] !== null)
+      .map((key) => `${key}: ${String(row[key])}`)
+      .join(" · ");
+  }
   return Object.keys(after)
     .filter(
       (key) => key !== "updated_at" && JSON.stringify(before[key]) !== JSON.stringify(after[key]),
@@ -69,12 +79,15 @@ async function Trail() {
         <tr key={entry.id}>
           <td className="whitespace-nowrap">{formatDateTime(entry.at)}</td>
           <td>{ACTIONS[entry.action] ?? entry.action}</td>
-          <td>{TABLES[entry.table_name] ?? entry.table_name}</td>
+          <td>
+            {TABLES[entry.table_name] ?? entry.table_name}
+            {entry.subject ? <p className="text-xs text-ink-muted">{entry.subject}</p> : null}
+          </td>
           <td className="max-w-md break-words text-xs text-ink-muted">
             {changes(entry.old_row, entry.new_row) || (entry.row_key ?? "")}
           </td>
-          <td className="text-xs text-ink-muted">
-            {entry.actor_id ? entry.actor_id.slice(0, 8) : "sistema"}
+          <td className="text-xs">
+            {entry.actor_name ?? (entry.actor_id ? "Cuenta sin nombre" : "Sistema")}
           </td>
         </tr>
       ))}

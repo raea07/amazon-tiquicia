@@ -7,6 +7,7 @@ export * from "./fees";
 export * from "./lifecycle";
 export * from "./money";
 export * from "./offers";
+export * from "./payouts";
 export * from "./promise";
 export * from "./recommendations";
 export * from "./risk";
