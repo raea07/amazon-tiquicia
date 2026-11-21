@@ -158,6 +158,32 @@ write down the time.
 A one-page version of this runbook, with phone numbers, is kept outside the
 systems it describes.
 
+### The last administrator lost their authenticator
+
+`ops_reset_staff_factor` never acts on oneself, so with a single administrator
+who has lost the phone (and `require_staff_mfa` on) no screen can help. Prevent
+it: keep two administrators with a factor before the setting goes on; the
+console's _Seguridad_ screen warns while there are fewer.
+
+If it happens anyway, the break-glass is a statement run by the database owner
+(SQL editor of the hosted project, or `supabase/scripts/remote-db.sh psql`),
+by someone other than the administrator concerned, after confirming who they
+are by a channel other than e-mail:
+
+```sql
+begin;
+-- Who: the administrator's id, checked against the staff list first.
+delete from auth.mfa_factors where user_id = '<id>';
+delete from auth.sessions where user_id = '<id>';
+insert into private.audit_log (actor_id, action, table_name, row_key, old_row, new_row)
+values (null, 'RESET_MFA_BREAK_GLASS', 'auth.mfa_factors', '<id>',
+        jsonb_build_object('by', '<who ran this>', 'why', '<ticket or note>'), null);
+commit;
+```
+
+The person then signs in with the password and enrols again at once. Record
+the incident as above; the audit row is the trace.
+
 ## Mapping to OWASP ASVS Level 2
 
 ASVS is used as the checklist of record. The table maps its areas to where this
@@ -194,13 +220,26 @@ evidence are in [access control](../03-data/access-control.md),
   and prove both what they can and cannot reach
   (`supabase/tests/020_access.sql`, `070_api.sql`).
 - No privileged key in any app. Staff are ordinary accounts whose reach comes
-  from a revocable row; a setting can require a second factor for staff
-  sessions (it ships switched off).
+  from a revocable row. A second factor for staff and sellers (TOTP), enforced
+  in the database: an account with a factor counts only after its code, and a
+  setting can require one for every staff session (it ships switched off).
+- A check before every Data API request (`check_request`): a deleted account
+  or an ended session is refused at once, not when its token expires. Storage
+  rules make the same checks themselves.
+- Password reset, e-mail confirmation and account deletion in every app, with
+  a per-account limit on wrong second-factor codes.
+- The notification worker holds its own secret key and reaches only
+  `worker_*` functions; provider webhooks are verified (Standard Webhooks)
+  and applied once.
+- Product photos: uploads only into reserved paths of a private bucket, no
+  overwrite or shareable link for sellers, and every published photo
+  re-encoded on the server (no location data, no hidden content).
 - Orders, stock, delivery confirmation and cash settlement happen only inside
   database functions: idempotent order placement, atomic stock reservation,
   enforced status transitions, a ledger that must balance.
 - An immutable audit log of changes to staff, sellers, drivers, settings, fees
-  and payouts.
+  and payouts, holding no bank account number (last four digits only) and no
+  personal column of a driver or a shop (only the names of those that changed).
 - The delivery PIN is never sent to the driver and locks after five wrong
   attempts.
 - Security headers on the storefront, including a Content-Security-Policy —
@@ -216,8 +255,10 @@ evidence are in [access control](../03-data/access-control.md),
 **Known gaps in what is built**
 
 - No rate limiting beyond platform defaults.
-- No e-mail confirmation handling or password reset in the apps.
-- Nothing has been verified against a real Supabase project.
+- Nothing from 21 November 2026 on (second factor, per-request check,
+  deletion, notifications, photos) has been verified against a real Supabase
+  project; the earlier database was.
+- Phone numbers for WhatsApp and SMS are not verified by a code.
 - Continuous integration, dependency scanning and secret scanning are not set
   up.
 
@@ -225,11 +266,13 @@ evidence are in [access control](../03-data/access-control.md),
 
 - Gateway integration with hosted fields and signed notifications; PCI scope
   confirmed in writing.
-- Multi-factor authentication enrolled and enforced for staff.
+- Multi-factor authentication enrolled by at least two administrators, then
+  `require_staff_mfa` turned on.
 - Edge firewall, rate limits and bot rules configured.
 - Error monitoring, alerting, the incident runbook with real contacts, and the
   first restore drill.
-- Storage buckets and policies before any upload feature.
+- Storage buckets and rules confirmed on the hosted project, and a scheduled
+  clean-up of photo files nothing needs.
 - Retention jobs, once the periods are confirmed.
 - Independent penetration test.
 - Lawyer-reviewed privacy notice and terms.

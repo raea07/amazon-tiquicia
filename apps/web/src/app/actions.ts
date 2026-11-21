@@ -12,6 +12,7 @@
 import { parsePhone } from "@yuntera/core";
 import {
   type ActionState,
+  endSession,
   GENERIC_ERROR,
   isRedirect,
   messageOf,
@@ -32,7 +33,7 @@ import {
   writeLocation,
 } from "@/lib/cart";
 import { getViewer, safeReturnPath, signInUrl } from "@/lib/session";
-import { sessionApi, sessionClient } from "@/lib/supabase";
+import { sessionApi } from "@/lib/supabase";
 
 const GENERIC = GENERIC_ERROR;
 
@@ -103,9 +104,7 @@ export async function signUp(_previous: ActionState, formData: FormData): Promis
 }
 
 export async function signOut(): Promise<void> {
-  const supabase = await sessionClient();
-  await supabase.auth.signOut();
-  redirect("/");
+  await endSession("/");
 }
 
 // ── Addresses ───────────────────────────────────────────────────────────────
@@ -325,7 +324,7 @@ export async function updateProfile(
   formData: FormData,
 ): Promise<ActionState> {
   if (!(await getViewer())) redirect(signInUrl("/cuenta"));
-  const values = typed(formData, "fullName", "phone", "marketing");
+  const values = typed(formData, "fullName", "phone");
   const fullName = String(formData.get("fullName") ?? "").trim();
   if (fullName.length < 3) return { error: "Escriba su nombre completo.", values };
 
@@ -338,7 +337,6 @@ export async function updateProfile(
     await (await sessionApi()).updateProfile({
       fullName,
       phone: phone?.e164 ?? null,
-      marketingOptIn: formData.get("marketing") === "on",
     });
     refresh(); // the header greets the person by name
     return { ok: "Datos guardados.", values };

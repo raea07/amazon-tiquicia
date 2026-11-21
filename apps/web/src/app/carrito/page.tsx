@@ -1,3 +1,4 @@
+import { ProductImage } from "@yuntera/next-kit/product-image";
 import { Alert, buttonClass, EmptyState, formatDate, formatPrice, Skeleton } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
@@ -60,13 +61,11 @@ async function Cart() {
             >
               <div className="size-20 shrink-0 overflow-hidden rounded-md bg-arena-100 sm:size-24">
                 {line.image_path ? (
-                  // biome-ignore lint/performance/noImgElement: SVG placeholders gain nothing from next/image
-                  <img
-                    src={line.image_path}
+                  <ProductImage
+                    path={line.image_path}
                     alt=""
-                    width={96}
-                    height={96}
-                    className="size-full object-cover"
+                    sizes="96px"
+                    className="size-full object-contain"
                   />
                 ) : null}
               </div>

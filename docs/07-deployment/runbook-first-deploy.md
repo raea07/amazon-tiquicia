@@ -115,6 +115,64 @@ privileges of `postgres` (nothing is granted to `anon`, `authenticated` or
 `public` and `graphql_public`, `pg_graphql` is not enabled, and `anon` has a
 3-second and `authenticated` an 8-second statement timeout.
 
+### Migrations 20261121082500 to 20261121082700 (not applied anywhere yet)
+
+Account security, notifications and product photos were merged on
+21 November 2026 and have run only on local PostgreSQL. Four things can be
+settled only on the hosted project. Apply the three files, then check, in
+this order:
+
+1. **The per-request check is registered and honoured.** `082500` runs
+   `alter role authenticator in database <db> set pgrst.db_pre_request =
+   'public.check_request'`. Confirm it took:
+
+   ```sql
+   select s.setdatabase, s.setconfig from pg_db_role_setting s
+   join pg_roles r on r.oid = s.setrole where r.rolname = 'authenticator';
+   ```
+
+   If it is missing (the statement was refused), run Supabase's documented
+   form as `postgres`: `alter role authenticator set pgrst.db_pre_request =
+   'public.check_request'; notify pgrst, 'reload config';`. Then sign a
+   throwaway account in, keep its access token, sign it out and call
+   `/rest/v1/rpc/my_orders` with that token: expect 400 `session_ended`.
+   Measure the time of a few calls before and after (it adds indexed lookups
+   of `auth.users`, `auth.sessions` and `auth.mfa_factors` to every request).
+   Call `worker_notify_plan` with the worker's secret key: it must answer
+   (the check returns at once for it).
+2. **The functions that write the sign-in tables may do so.**
+   `delete_my_account` and `close_abandoned_shop` update `auth.users` and
+   delete from `auth.sessions`, `auth.identities`, `auth.mfa_factors`,
+   `auth.one_time_tokens` and `auth.audit_log_entries`; `ops_reset_staff_factor`
+   deletes factors and sessions. Check the owner's rights, then run the test
+   file, which exercises exactly these writes and rolls back:
+
+   ```sql
+   select t, has_table_privilege(p.proowner, t, 'update,delete')
+   from pg_proc p, unnest(array['auth.users','auth.sessions','auth.identities',
+     'auth.mfa_factors','auth.one_time_tokens']) t
+   where p.proname = 'delete_my_account';
+   ```
+
+   ```bash
+   supabase/scripts/remote-db.sh test <project-reference>
+   ```
+
+   After one real test deletion, open Authentication → Users: the deleted
+   user (banned for 100 years) must still load.
+3. **A migration may create the storage buckets and rules.** `082700` inserts
+   into `storage.buckets` and creates three policies on `storage.objects`.
+   Confirm with `select id, public from storage.buckets` (pending private,
+   public public) and `select policyname from pg_policies where tablename =
+   'objects'`. Then, as a test seller, `createSignedUrl` on
+   `product-photos-pending` must be refused and `createSignedUploadUrl` with
+   `upsert: true` must give AccessDenied: that proves the service sets
+   `storage.operation` and `request.headers`, which the rules read.
+4. **The image library works in the hosted console.** Approve one test photo
+   in `/catalogo` on the deployed console: the public 400, 800 and 1600 files
+   must appear and the shop must show them. `apps/ops` needs `sharp` at
+   runtime.
+
 ## 4. Confirm the database is what the migrations say
 
 Write these to a file and run it with `remote-db.sh sql <project-reference>
@@ -268,20 +326,31 @@ Through the Management API (`PATCH /v1/projects/<ref>/config/auth`) or
 Authentication → settings in the dashboard. Read the current values first;
 the full object contains secrets, so print only the fields you change.
 
-| Setting                            | Management API field                                  | Preview (set 21 Nov 2026)       | Production                    |
-| ---------------------------------- | ----------------------------------------------------- | ------------------------------- | ----------------------------- |
-| Site URL                           | `site_url`                                            | Not set yet (`localhost:3000`)  | `https://www.yuntera.cr`      |
-| Additional redirect URLs           | `uri_allow_list`                                      | Not set yet                     | Each app's production address |
-| Sign-ups allowed                   | `disable_signup` = false                              | Yes                             | Yes                           |
-| E-mail provider                    | `external_email_enabled`                              | Enabled                         | Enabled                       |
-| Confirm e-mail                     | `mailer_autoconfirm` (true means **no** confirmation) | **Off** — see the warning below | On                            |
-| Minimum password length            | `password_min_length`                                 | 8, to match the apps' forms     | 8 or more                     |
-| Leaked-password protection         | `password_hibp_enabled`                               | Off: needs the Pro plan         | On                            |
-| Multi-factor authentication (TOTP) | `mfa_totp_enroll_enabled`, `mfa_totp_verify_enabled`  | Enabled                         | Enabled                       |
-| Custom SMTP                        | `smtp_*`                                              | Not needed                      | **Required**                  |
+| Setting                            | Management API field                                  | Preview (set 21 Nov 2026)      | Production                    |
+| ---------------------------------- | ----------------------------------------------------- | ------------------------------ | ----------------------------- |
+| Site URL                           | `site_url`                                            | Not set yet (`localhost:3000`) | `https://www.yuntera.cr`      |
+| Additional redirect URLs           | `uri_allow_list`                                      | Not set yet                    | Each app's production address |
+| Sign-ups allowed                   | `disable_signup` = false                              | Yes                            | Yes                           |
+| E-mail provider                    | `external_email_enabled`                              | Enabled                        | Enabled                       |
+| Confirm e-mail                     | `mailer_autoconfirm` (true means **no** confirmation) | **Off**: turn on with SMTP     | On                            |
+| Minimum password length            | `password_min_length`                                 | 8, to match the apps' forms    | 8 or more                     |
+| Leaked-password protection         | `password_hibp_enabled`                               | Off: needs the Pro plan        | On                            |
+| Multi-factor authentication (TOTP) | `mfa_totp_enroll_enabled`, `mfa_totp_verify_enabled`  | Enabled                        | Enabled                       |
+| Custom SMTP                        | `smtp_*`                                              | Not needed                     | **Required**                  |
 
 The Site URL and redirect URLs are set once the apps' Vercel addresses exist
-(step 7).
+(step 7). The redirect list must hold each app's `/auth/confirm` address: every
+e-mail link goes there. `supabase/scripts/auth-config.sh plan <ref> preview`
+shows, and `apply` sets, these settings and the Spanish e-mail templates
+from `supabase/auth/*.json` and `supabase/templates` (it reads the result back
+and lists any field that did not take). It has not been run.
+
+**Which e-mails Auth sends.** Until the messaging provider is set up, Auth
+sends the account e-mails itself with the templates in `supabase/templates`,
+through the custom SMTP below. Once Bird is set up, the Send Email Hook
+(`auth-email`, [notifications](../06-operations/notifications.md)) sends them
+instead, in the same words (a test keeps the two equal); SMTP stays as the
+standby.
 
 Then check sign-up end to end: sign up a throwaway address under `.example`
 through `<API address>/auth/v1/signup`. On the preview it returned a session
@@ -293,17 +362,16 @@ identity, sessions and profile go with it) and check that nothing of it is left
 in `auth.users`, `auth.identities`, `auth.sessions`, `auth.refresh_tokens` or
 `public.profiles`.
 
-⚠ A session token stays valid until it expires (an hour) even after its
-account is deleted: the Data API checks the token's signature, not the
-account. Functions then see a user that no longer exists (`my_profile` returns
-null). This is how Supabase works; keep it in mind when disabling an account.
+Accounts are deleted with `delete_my_account` (each app's "Eliminar mi
+cuenta"), which anonymises the sign-in record instead of deleting it, so use
+it rather than `delete from auth.users` once orders exist. Once migration
+`082500` is applied, a token whose session ended (sign-out, password change,
+factor reset, deletion) stops working at once, through `check_request`
+(step 3); before that it stayed valid until it expired.
 
-⚠ **E-mail confirmation and password reset are not finished in the apps.**
-With confirmation on, sign-up correctly tells the person to check their e-mail,
-but there is no page in the storefront that receives the confirmation link, and
-there is no "forgot my password" flow at all. For the preview, confirmation is
-off. Before production, those two flows must be built
-([go-live checklist](go-live-checklist.md)).
+E-mail confirmation and password reset exist in all four apps since
+21 November 2026, verified against the local stand-in only. Keep confirmation
+off on the preview until custom SMTP (or the provider) is set up.
 
 **Custom SMTP.** Supabase's built-in e-mail sender is for testing: it is
 heavily rate-limited and not meant for real users. Production needs an SMTP
@@ -317,10 +385,14 @@ staff (`require_staff_mfa`). Turning it on is one statement by an admin:
 update public.app_settings set value = 'true' where key = 'require_staff_mfa';
 ```
 
-Do this only once the ops console has a screen to enrol an authenticator and
-to complete the second step at sign-in — otherwise staff lock themselves out
-of their own permissions. Whether that screen exists depends on how far
-`apps/ops` has got; check before flipping it.
+The console has the screens (Cuenta → Verificación en dos pasos, and the
+second step at sign-in). Turn it on only once at least two administrators have
+enrolled an authenticator, so either can reset the other's from `/seguridad`
+(the screen warns otherwise); the break-glass procedure for a lost last
+authenticator is in
+[security-program.md](../05-security-compliance/security-program.md). Whatever
+the setting, a staff member or seller who has a factor counts only after the
+code.
 
 **The first admin.** Staff are ordinary accounts with a row in
 `staff_members`, and only an admin can add one — so the first has to be
@@ -347,8 +419,11 @@ projects would each build for every commit. Deploys are uploads, on demand.
 | `yuntera-campo`   | `apps/field`   | https://yuntera-campo.vercel.app   |
 
 What lives in the repository, so a second environment builds the same way:
-each app's `vercel.json` (framework and the `iad1` region, next to the
-database), `engines.node` in each app's `package.json`, and the
+each app's `vercel.json` (framework, the `iad1` region next to the database,
+and an `installCommand` that installs only that app and what it depends on,
+`pnpm install --frozen-lockfile --filter @yuntera/<app>... --filter yuntera`;
+the console's includes `sharp`, a declared dependency of `apps/ops`),
+`engines.node` in each app's `package.json`, and the
 `ENABLE_EXPERIMENTAL_COREPACK` pass-through in `turbo.json`, which makes the
 hosted build use the pnpm version named in `packageManager`.
 

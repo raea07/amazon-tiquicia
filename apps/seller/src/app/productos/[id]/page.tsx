@@ -1,6 +1,6 @@
 import { ApiError, type SellerListingDetail } from "@yuntera/db";
 import { ListingChanges } from "@yuntera/next-kit/listing-changes";
-import { sessionApi } from "@yuntera/next-kit/server";
+import { photoPreviews, sessionApi } from "@yuntera/next-kit/server";
 import { Alert, Badge, formatDateTime, Skeleton } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
@@ -12,6 +12,7 @@ import {
   ListingEditForm,
   WithdrawEditForm,
 } from "@/components/listing-edit-form";
+import { type ManagedPhoto, PhotoManager } from "@/components/photo-manager";
 import { listingCategoryOptions } from "@/lib/categories";
 import { PRODUCT_STATUS } from "@/lib/labels";
 import { requireShop } from "@/lib/shop";
@@ -61,6 +62,14 @@ async function EditListing({ params, searchParams }: PageProps<"/productos/[id]"
   const starting = listing.pending?.proposed ?? listing.last_rejection?.proposed ?? listing.content;
   const categories = archived ? [] : await listingCategoryOptions(starting.category_slug);
   const variantName = listing.variants.find((v) => v.sku_id === listing.content.sku_id);
+  const photos = archived ? null : await (await sessionApi()).sellerPhotos(listing.product_id);
+  const previews = photos
+    ? await photoPreviews([...photos.photos, ...photos.leaving], { waiting: { route: "/fotos" } })
+    : new Map<string, string>();
+  const managed = (list: NonNullable<typeof photos>["photos"]): ManagedPhoto[] =>
+    list.map((photo) => ({ ...photo, preview: previews.get(photo.photo_id) ?? null }));
+  const photosMissing =
+    (Array.isArray(query.fotos) ? query.fotos[0] : query.fotos) === "incompletas";
 
   return (
     <div className="flex max-w-3xl flex-col gap-8">
@@ -74,8 +83,26 @@ async function EditListing({ params, searchParams }: PageProps<"/productos/[id]"
 
       <ListingState listing={listing} />
 
+      {photosMissing ? (
+        <Alert tone="warning" title="Guardamos el producto como borrador">
+          Algunas fotos no se pudieron subir, así que todavía no lo enviamos a revisión. Agréguelas
+          aquí y envíelo cuando esté listo.
+        </Alert>
+      ) : null}
+
       {archived ? null : (
         <>
+          {photos ? (
+            <PhotoManager
+              productId={listing.product_id}
+              status={listing.status}
+              photos={managed(photos.photos)}
+              leaving={managed(photos.leaving)}
+              rejected={managed(photos.rejected)}
+              changeWaiting={photos.change_waiting}
+            />
+          ) : null}
+
           {listing.variants.length > 1 ? (
             <nav aria-label="Variante" className="text-sm">
               <p className="font-semibold">

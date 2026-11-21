@@ -169,10 +169,10 @@ same version" check [N3], but the combination is untested by Expo.
 
 ```
 apps/
-  shop-native/        Yuntera          cr.yuntera.shop
+  shop-native/        Yuntera          com.yuntera.shop
   seller-native/      Yuntera Vende    (identifier not decided; brand.ts has null)
-  driver-native/      Yuntera Ruta     cr.yuntera.ruta
-  warehouse-native/   Yuntera Bodega   cr.yuntera.bodega
+  driver-native/      Yuntera Ruta     com.yuntera.ruta
+  warehouse-native/   Yuntera Bodega   com.yuntera.bodega
 packages/
   expo-kit/           everything the four apps share (see below)
 ```
@@ -330,9 +330,9 @@ Each variant needs its own identifier [E12].
 
 | Variant     | `APP_VARIANT` | Identifier (driver example) | Display name          |
 | ----------- | ------------- | --------------------------- | --------------------- |
-| development | `development` | `cr.yuntera.ruta.dev`       | Yuntera Ruta (Dev)    |
-| preview     | `preview`     | `cr.yuntera.ruta.preview`   | Yuntera Ruta (Prueba) |
-| production  | unset         | `cr.yuntera.ruta`           | Yuntera Ruta          |
+| development | `development` | `com.yuntera.ruta.dev`      | Yuntera Ruta (Dev)    |
+| preview     | `preview`     | `com.yuntera.ruta.preview`  | Yuntera Ruta (Prueba) |
+| production  | unset         | `com.yuntera.ruta`          | Yuntera Ruta          |
 
 Consequences: push credentials and `google-services.json` are per identifier
 (register all three Android packages in the one Firebase project) [E12]; use
@@ -870,7 +870,7 @@ iOS [E29] — serve at `https://<host>/.well-known/apple-app-site-association`
   "applinks": {
     "details": [
       {
-        "appIDs": ["<TEAM_ID>.cr.yuntera.shop"],
+        "appIDs": ["<TEAM_ID>.com.yuntera.shop"],
         "components": [{ "/": "/p/*" }, { "/": "/pedidos/*" }, { "/": "/auth/confirm" }]
       }
     ]
@@ -907,7 +907,7 @@ and `https://<host>/.well-known/assetlinks.json`, served as `application/json`:
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "cr.yuntera.shop",
+      "package_name": "com.yuntera.shop",
       "sha256_cert_fingerprints": ["<SHA256 from `eas credentials -p android`>"]
     }
   }
@@ -1439,10 +1439,10 @@ Google Maps as the web app does).
 4. **Order of work.** The drivers' app is where native features pay off most
    (tracking, offline, push). The shop app has the largest review surface
    (browsing without sign-in, account deletion, payments). Which first?
-5. **Identifiers.** Confirm `cr.yuntera.shop`, `cr.yuntera.ruta`,
-   `cr.yuntera.bodega` and choose one for the seller app (`brand.ts` has
-   `null`). Identifiers cannot be changed after publishing, and they assume the
-   `.cr` domain and the name survive the trademark search.
+5. **Identifiers.** Decided by the owner on 21 November 2026:
+   `com.yuntera.shop`, `com.yuntera.vende`, `com.yuntera.ruta` and
+   `com.yuntera.bodega`. Identifiers cannot be changed after the first upload,
+   and they assume the name survives the trademark search.
 6. **Domains.** Universal links need the real hosts serving the association
    files. Until a domain is bought, links into the apps use custom schemes only.
 7. **Driver tracking model.** Recommended: "while using" permission with

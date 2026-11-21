@@ -1,6 +1,6 @@
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
-import { type Api, createApi, type Roles } from "@yuntera/db";
+import { type Api, ApiError, createApi, type Roles } from "@yuntera/db";
 import {
   createContext,
   type ReactNode,
@@ -12,7 +12,14 @@ import {
   useState,
 } from "react";
 import { AppState } from "react-native";
-import { messageOf, signInMessage, signUpMessage, validateSignIn, validateSignUp } from "../errors";
+import {
+  messageOf,
+  SECOND_FACTOR_NOT_IN_APP,
+  signInMessage,
+  signUpMessage,
+  validateSignIn,
+  validateSignUp,
+} from "../errors";
 import { POLICY_VERSION } from "./policy";
 import { signOutDevice } from "./sign-out";
 
@@ -108,11 +115,18 @@ export function SessionProvider({
       setRoles(next);
       setRolesError(null);
     } catch (error) {
+      // The session was ended elsewhere (signed out, password changed, account
+      // deleted): the database refuses its token, so the phone signs out too.
+      if (error instanceof ApiError && error.code === "session_ended") {
+        await signOutDevice(supabase.auth);
+        queryClient.clear();
+        return;
+      }
       setRolesError(messageOf(error));
     } finally {
       setRolesLoading(false);
     }
-  }, [api]);
+  }, [api, supabase, queryClient]);
 
   useEffect(() => {
     currentUser.current = userId;
@@ -137,7 +151,16 @@ export function SessionProvider({
           email: email.trim(),
           password,
         });
-        return error ? signInMessage(error) : null;
+        if (error) return signInMessage(error);
+        // An account with a second factor counts only after its code, and the
+        // database refuses everything until then (check_request). The apps do
+        // not ask for the code yet, so such a session is not kept.
+        const { data: level } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (level?.nextLevel === "aal2" && level.currentLevel !== "aal2") {
+          await signOutDevice(supabase.auth);
+          return SECOND_FACTOR_NOT_IN_APP;
+        }
+        return null;
       } catch (error) {
         return signInMessage(error);
       }
@@ -153,7 +176,10 @@ export function SessionProvider({
         const { data, error } = await supabase.auth.signUp({
           email: input.email.trim(),
           password: input.password,
-          options: { data: { full_name: input.fullName.trim() } },
+          // The consent given on the form travels with the account, so it is
+          // recorded when the e-mail is confirmed (the confirmation link opens
+          // the website's /auth/confirm) if there is no session yet.
+          options: { data: { full_name: input.fullName.trim(), consent_version: POLICY_VERSION } },
         });
         if (error) return { error: signUpMessage(error) };
         if (!data.session) {

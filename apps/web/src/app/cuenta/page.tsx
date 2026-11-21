@@ -1,3 +1,4 @@
+import { AccountSecuritySection } from "@yuntera/next-kit/account";
 import { buttonClass, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -44,7 +45,6 @@ async function Account() {
           <ProfileForm
             fullName={profile?.full_name ?? ""}
             phone={profile?.phone?.replace("+506", "") ?? ""}
-            marketingOptIn={profile?.marketing_opt_in ?? false}
           />
         </section>
 
@@ -52,12 +52,17 @@ async function Account() {
           <Link href="/pedidos" className={buttonClass({ variant: "secondary" })}>
             Ver sus pedidos
           </Link>
+          <Link href="/cuenta/notificaciones" className={buttonClass({ variant: "secondary" })}>
+            Notificaciones
+          </Link>
           <form action={signOut}>
             <button type="submit" className={buttonClass({ variant: "ghost" })}>
               Cerrar sesión
             </button>
           </form>
         </section>
+
+        <AccountSecuritySection />
       </div>
 
       <section id="direcciones" aria-labelledby="dir-titulo" className="scroll-mt-28">

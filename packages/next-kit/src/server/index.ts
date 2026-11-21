@@ -1,6 +1,14 @@
 export { safeReturnPath, signInPath } from "../paths";
 export type { ActionState } from "../types";
 export {
+  confirmUrl,
+  endedSession,
+  getSecurity,
+  passwordIsCorrect,
+  type Security,
+  secondStepPath,
+} from "./account";
+export {
   attempt,
   endSession,
   GENERIC_ERROR,
@@ -11,6 +19,7 @@ export {
   passwordSignUp,
   typed,
 } from "./actions";
+export { deleteUnneededPhotoFiles, photoPreviews } from "./photos";
 export {
   getRoles,
   getViewer,

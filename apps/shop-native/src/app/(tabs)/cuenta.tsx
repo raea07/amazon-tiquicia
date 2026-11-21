@@ -1,4 +1,4 @@
-import type { Address } from "@yuntera/db";
+import { type Address, COMMERCIAL_CONSENT_VERSION } from "@yuntera/db";
 import { messageOf } from "@yuntera/expo-kit/api";
 import { useSession } from "@yuntera/expo-kit/auth";
 import { useApiMutation, useApiQuery } from "@yuntera/expo-kit/data";
@@ -38,8 +38,16 @@ function ProfileForm({
   // The stored choice, whatever it is; for a new account that is "no".
   const [marketing, setMarketing] = useState(marketingOptIn);
   const [result, setResult] = useState<{ ok?: string; error?: string }>({});
+  // The profile no longer carries the commercial consent (update_profile
+  // ignores it): a change is recorded on its own, with the wording's version
+  // and where it was given, the way the website's Notificaciones page does.
   const save = useApiMutation(
-    (api, input: Parameters<typeof api.updateProfile>[0]) => api.updateProfile(input),
+    async (api, input: { fullName: string; phone: string | null; marketing: boolean | null }) => {
+      await api.updateProfile({ fullName: input.fullName, phone: input.phone });
+      if (input.marketing !== null) {
+        await api.setMyCommercialConsent(input.marketing, COMMERCIAL_CONSENT_VERSION, "shop_app");
+      }
+    },
     { invalidates: [["profile"]] },
   );
 
@@ -62,7 +70,8 @@ function ProfileForm({
       />
       <Checkbox checked={marketing} onChange={setMarketing}>
         <Text variant="small">
-          Quiero recibir ofertas y novedades por correo. Puede cambiarlo cuando quiera.
+          Acepto recibir ofertas y novedades de Yuntera por correo. Es opcional, y puede retirarlo
+          cuando quiera.
         </Text>
       </Checkbox>
       <FormMessage {...result} />
@@ -80,7 +89,7 @@ function ProfileForm({
             await save.mutateAsync({
               fullName: checked.fullName,
               phone: checked.phone,
-              marketingOptIn: marketing,
+              marketing: marketing === marketingOptIn ? null : marketing,
             });
             setResult({ ok: "Datos guardados." });
           } catch (error) {

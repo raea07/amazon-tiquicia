@@ -12,14 +12,49 @@
  * rest, and `createApi()` returns its methods alongside the core ones.
  */
 
+import * as account from "./account";
 import { listingsApi, listingsErrors } from "./listings";
+import * as notifications from "./notifications";
 import * as peoplePayouts from "./people-payouts";
+import { photosApi, photosErrors } from "./photos";
 import type { Caller, Messages } from "./types";
 
 // The listings area names its exports uniquely, so it is star-exported. The
-// people-payouts area exports `errors` and `api`, which would clash with any
-// other area that does the same, so its types are re-exported by name.
+// other areas export `errors` and `api`, which would clash with each other,
+// so their schemas and types are re-exported by name.
+export {
+  type AccountSecurity,
+  type AuthErrorCode,
+  accountSecurity,
+  authErrorMessage,
+  authErrors,
+  type DeletionBlocker,
+  type DeletionCheck,
+  type DeletionResult,
+  deletionBlocker,
+  deletionCheck,
+  deletionResult,
+  type FactorReset,
+  factorReset,
+  type MfaAttempts,
+  type MfaReservation,
+  mfaAttempts,
+  mfaReservation,
+  retryAfterSeconds,
+  type StaffSecurityRow,
+  staffSecurityRow,
+  waitText,
+} from "./account";
 export * from "./listings";
+export {
+  type ChannelChoicesInput,
+  COMMERCIAL_CONSENT_VERSION,
+  type DeadLetters,
+  type NotificationRow,
+  type NotificationSettings,
+  type SellerNotificationSettings,
+  type ShopChannelChoicesInput,
+} from "./notifications";
 export type {
   AuditTrailEntry,
   CreatedPayoutRun,
@@ -37,14 +72,21 @@ export type {
   SellerPayouts,
   WarehouseRole,
 } from "./people-payouts";
+export * from "./photos";
 export type { Caller, Messages } from "./types";
 
 export const areaErrors = {
   ...peoplePayouts.errors,
   ...listingsErrors,
+  ...account.errors,
+  ...notifications.errors,
+  ...photosErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
   ...peoplePayouts.api(caller),
   ...listingsApi(caller),
+  ...account.api(caller),
+  ...notifications.api(caller),
+  ...photosApi(caller),
 });

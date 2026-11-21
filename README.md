@@ -88,6 +88,13 @@ pnpm dev
 
 The demo accounts and their password exist only in the local seed data.
 
+E-mails the local API sends (confirmation, password reset) land in its own
+mailbox, never in a real inbox: `GET http://127.0.0.1:54321/dev/mail?to=<address>`
+returns the latest one with its link and code, and `POST /dev/settings` switches
+e-mail confirmation on or off for that database. Notifications go to local
+fake providers, started by `tools/dev/stack.sh up` (or `notify`) next to the
+worker; nothing can reach a real provider.
+
 | Command                     | What it does                                                    |
 | --------------------------- | --------------------------------------------------------------- |
 | `pnpm ci`                   | Lint, typecheck, unit tests and production builds               |

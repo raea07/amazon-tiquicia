@@ -6,6 +6,7 @@ import {
   SignUpForm as KitSignUpForm,
 } from "@yuntera/next-kit/client";
 import { TextField } from "@yuntera/ui";
+import Link from "next/link";
 import { useActionState } from "react";
 import { signIn, signUp, updateProfile } from "@/app/actions";
 import { FormMessage, SubmitButton } from "./forms";
@@ -20,15 +21,7 @@ export function SignUpForm({ returnTo }: { returnTo: string }) {
   return <KitSignUpForm action={signUp} returnTo={returnTo} />;
 }
 
-export function ProfileForm({
-  fullName,
-  phone,
-  marketingOptIn,
-}: {
-  fullName: string;
-  phone: string;
-  marketingOptIn: boolean;
-}) {
+export function ProfileForm({ fullName, phone }: { fullName: string; phone: string }) {
   const [state, action] = useActionState(updateProfile, initial);
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -47,15 +40,13 @@ export function ProfileForm({
         defaultValue={state.values?.phone ?? phone}
         placeholder="8888-1234"
       />
-      <label className="flex items-start gap-3 text-sm">
-        <input
-          type="checkbox"
-          name="marketing"
-          defaultChecked={state.values ? state.values.marketing === "on" : marketingOptIn}
-          className="mt-0.5 size-5 accent-(--color-brand)"
-        />
-        <span>Quiero recibir ofertas y novedades por correo. Puede cambiarlo cuando quiera.</span>
-      </label>
+      <p className="text-sm text-ink-muted">
+        La publicidad y los avisos por WhatsApp se eligen en{" "}
+        <Link href="/cuenta/notificaciones" className="text-link underline">
+          Notificaciones
+        </Link>
+        .
+      </p>
       <FormMessage state={state} />
       <div>
         <SubmitButton pendingLabel="Guardando…">Guardar cambios</SubmitButton>

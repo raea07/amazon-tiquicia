@@ -17,6 +17,12 @@ export const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://postgres:postgres@127.0.0.1:5432/yuntera_local";
 export const PUBLISHABLE_KEY =
   process.env.DEV_PUBLISHABLE_KEY ?? "sb_publishable_local_development_only";
+/**
+ * Stands in for a Supabase secret key, which server-side code (the
+ * notification worker) uses to call its functions as the `service_role`. Local
+ * only: nothing in the apps holds it, and on Supabase the real key is a secret.
+ */
+export const SECRET_KEY = process.env.DEV_SECRET_KEY ?? "sb_secret_local_development_only";
 export const ORIGIN = `http://${HOST}:${PORT}`;
 export const ISSUER = `${ORIGIN}/auth/v1`;
 export const KEY_ID = "local-dev";
@@ -61,6 +67,7 @@ export class HttpError extends Error {
   constructor(
     public readonly status: number,
     public readonly body: Record<string, unknown>,
+    public readonly headers: Record<string, string> = {},
   ) {
     super(String(body.message ?? body.msg ?? status));
   }
@@ -74,9 +81,14 @@ const CORS = {
   "access-control-max-age": "600",
 };
 
-export function send(res: ServerResponse, status: number, body?: unknown) {
+export function send(
+  res: ServerResponse,
+  status: number,
+  body?: unknown,
+  headers: Record<string, string> = {},
+) {
   const payload = body === undefined ? "" : JSON.stringify(body);
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8", ...CORS });
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8", ...CORS, ...headers });
   res.end(payload);
 }
 
@@ -117,6 +129,21 @@ export async function readJson(req: IncomingMessage): Promise<Record<string, unk
 }
 
 /**
+ * Checks a session token this stand-in issued (its signature, issuer and
+ * audience) and returns its claims; throws for anything else. The one check
+ * every route uses: `authenticate` below for the Data API and storage, and the
+ * Auth routes, which also require the token's session to exist.
+ */
+export async function verifySessionToken(token: string): Promise<Claims> {
+  const { payload } = await jwtVerify(token, keys.publicKey, {
+    issuer: ISSUER,
+    audience: "authenticated",
+    algorithms: ["ES256"],
+  });
+  return payload as unknown as Claims;
+}
+
+/**
  * Resolves who is calling. No token, or the publishable key, is a visitor. A
  * token that fails verification is rejected outright rather than downgraded to
  * a visitor: an expired session must surface as 401 so the client refreshes it.
@@ -124,14 +151,13 @@ export async function readJson(req: IncomingMessage): Promise<Record<string, unk
 export async function authenticate(req: IncomingMessage): Promise<Claims | null> {
   const header = req.headers.authorization;
   const token = header?.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : null;
+  // The secret key, sent as `apikey` (and usually as the bearer too), is the worker.
+  if (req.headers.apikey === SECRET_KEY && (!token || token === SECRET_KEY)) {
+    return { sub: "", role: "service_role" };
+  }
   if (!token || token === PUBLISHABLE_KEY) return null;
   try {
-    const { payload } = await jwtVerify(token, keys.publicKey, {
-      issuer: ISSUER,
-      audience: "authenticated",
-      algorithms: ["ES256"],
-    });
-    return payload as unknown as Claims;
+    return await verifySessionToken(token);
   } catch {
     throw new HttpError(401, { code: "PGRST301", message: "JWT expired or invalid" });
   }

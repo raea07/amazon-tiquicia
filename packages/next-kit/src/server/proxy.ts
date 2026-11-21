@@ -18,6 +18,19 @@ import { type NextRequest, NextResponse } from "next/server";
  * `config.matcher`, which the framework requires to be written there.
  */
 export async function refreshSession(request: NextRequest) {
+  // An e-mail link whose address Auth did not accept falls back to the site
+  // URL itself (https://…/?token_hash=…&type=…). Send it on to the page that
+  // verifies links, so it still works. Nothing is verified here.
+  const { searchParams, pathname } = request.nextUrl;
+  if (pathname !== "/auth/confirm" && searchParams.has("token_hash") && searchParams.has("type")) {
+    const target = request.nextUrl.clone();
+    target.pathname = "/auth/confirm";
+    target.search = "";
+    target.searchParams.set("token_hash", searchParams.get("token_hash") ?? "");
+    target.searchParams.set("type", searchParams.get("type") ?? "");
+    return NextResponse.redirect(target);
+  }
+
   const hasSession = request.cookies.getAll().some((cookie) => cookie.name.startsWith("sb-"));
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;

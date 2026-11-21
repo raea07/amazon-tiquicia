@@ -1,0 +1,22 @@
+{
+  "name": "@yuntera/notifications",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "The notification worker: templates, provider adapters, webhook checks. Web-standard TypeScript that runs under Node (tests, local stack) and as Supabase Edge Functions.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@yuntera/brand": "workspace:*",
+    "@yuntera/core": "workspace:*",
+    "typescript": "5.9.3",
+    "vitest": "5.1.1"
+  }
+}

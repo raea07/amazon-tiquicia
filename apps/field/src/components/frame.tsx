@@ -33,6 +33,9 @@ async function Account() {
           Cambiar
         </Link>
       ) : null}
+      <Link href="/cuenta" className={buttonClass({ variant: "ghost", size: "sm" })}>
+        Cuenta
+      </Link>
       <form action={signOut}>
         <button type="submit" className={buttonClass({ variant: "ghost", size: "sm" })}>
           Salir

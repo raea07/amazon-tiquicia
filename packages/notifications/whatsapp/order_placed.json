@@ -1,0 +1,19 @@
+{
+  "slug": "order_placed",
+  "category": "utility",
+  "language": "es",
+  "header": { "type": "text", "text": "Pedido recibido" },
+  "body": "Hola, {{first_name}}. Recibimos su pedido {{order_number}} en Yuntera. En la página del pedido puede ver el detalle, cómo pagarlo si falta el pago y la fecha de entrega. Le avisaremos por aquí cuando vaya en camino.",
+  "footer": "Yuntera. Responda BAJA para no recibir más avisos.",
+  "button": {
+    "type": "url",
+    "text": "Ver el pedido",
+    "url": "https://www.yuntera.cr/pedidos/{{button_url}}"
+  },
+  "variables": {
+    "first_name": "Ana",
+    "order_number": "YT-100123",
+    "button_url": "YT-100123"
+  },
+  "ttl_seconds": null
+}

@@ -1,8 +1,10 @@
 import { parsePhone } from "@yuntera/core";
+import { AccountSecuritySection } from "@yuntera/next-kit/account";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Alert, Badge, formatDate, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { PayoutDetailsForm } from "@/components/payout-forms";
 import { getOverview, requireShop } from "@/lib/shop";
@@ -38,6 +40,10 @@ export default function AccountPage() {
           <Account />
         </Suspense>
       </div>
+      <div className="mt-10 max-w-4xl">
+        <h2 className="mb-4 text-2xl font-bold">Su acceso</h2>
+        <AccountSecuritySection secondFactor />
+      </div>
     </div>
   );
 }
@@ -67,6 +73,11 @@ async function Account() {
           <Item label="Correo de contacto">{account.contact_email}</Item>
           <Item label="Teléfono">{account.contact_phone}</Item>
         </dl>
+        <p className="mt-4 text-sm">
+          <Link href="/cuenta/notificaciones" className="text-link underline">
+            Notificaciones: correo, WhatsApp y publicidad
+          </Link>
+        </p>
       </section>
 
       <section className="rounded-lg border border-border bg-surface p-5">

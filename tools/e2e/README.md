@@ -10,6 +10,16 @@ browser, against a freshly seeded database:
 | `ops`    | `apps/ops`    | Visitors and non-staff kept out, confirming a bank transfer, order search, product review, seller verification, route planning, a return approved and refunded, a complaint answered, drivers, audit trail, phone width |
 | `field`  | `apps/field`  | Driver: route, wrong delivery code, short cash, delivery, failed delivery, cash settlement and position reaching the console. Warehouse: wrong scan refused, picking, packing, receiving, stock lookup                  |
 
+Three more cover account security, reading e-mails from the stand-in's local
+mailbox (`GET /dev/mail`) and switching Auth settings for their own database
+(`POST /dev/settings`):
+
+| Journey               | App        | What it walks through                                                                                                                                                                                                                                                                                                                         |
+| --------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `password-reset`      | `apps/web` | Same answer for an unknown address, the e-mail link, new password, old one refused, other session ended (its next page goes to sign-in); an ordinary session cannot use the reset page; then by 6-digit code; a reused and an expired link; a wrong code; a disallowed redirect falls back to the shop and still works                        |
+| `staff-second-factor` | `apps/ops` | Enrolment with computed codes; with the setting off, a password-only token is refused by the API; the second step after a wrong code; `require_staff_mfa` on (database refuses aal1 staff, colleague sent to enrolment); admin resets colleague, whose open session ends at once; a shopper with a factor is held at `/verificar` in the shop |
+| `account-deletion`    | `apps/web` | Sign-up with confirmation on, resend limit, sign-in before confirming, code, deletion (wrong password first); another device's token and page stop working at once; same address signs up again, a shopper with an order refused                                                                                                              |
+
 A journey fails if a step does not arrive where it should, if the browser logs
 an error, or if any response is a 5xx. They are deliberately few and long: they
 exist to prove the apps, the API and the database work together, not to cover

@@ -12,11 +12,11 @@ which run as real API roles with real claims.
 
 ## The roles a request can have
 
-| Postgres role   | Who it is                                                                   | How a request gets it                                                     |
-| --------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `anon`          | A visitor who is not signed in                                              | The publishable key alone                                                 |
-| `authenticated` | Any signed-in person: shopper, seller, driver, warehouse associate or staff | The publishable key plus the user's session token                         |
-| `service_role`  | Bypasses row-level security                                                 | A secret key. **No app has one.** Reserved for future server-side workers |
+| Postgres role   | Who it is                                                                   | How a request gets it                                                                                                                                                                                |
+| --------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `anon`          | A visitor who is not signed in                                              | The publishable key alone                                                                                                                                                                            |
+| `authenticated` | Any signed-in person: shopper, seller, driver, warehouse associate or staff | The publishable key plus the user's session token                                                                                                                                                    |
+| `service_role`  | Bypasses row-level security                                                 | A secret key. **No app has one.** Only the notification worker uses one, its own, and calls only the `worker_*` functions, which are granted to `service_role` alone and also check the token's role |
 
 Everything a signed-in person is beyond "a shopper" comes from rows, not from
 the token:
@@ -38,6 +38,31 @@ session token's `aal` claim to be `aal2` — that is, the person completed
 multi-factor sign-in for this session. With the setting on, a staff member who
 signed in with a password alone has exactly a shopper's access. The setting
 ships as `false` and must be turned on before launch.
+
+**Any account with a second factor.** Whatever the setting, `private.factor_ok()`
+is true only when the session is `aal2` or the account has no verified factor.
+It is part of `staff_session_ok`, of the seller helpers (`is_seller_member`,
+`is_seller_admin`, `my_seller_ids`) and of the deletion functions, so a
+password alone opens nothing that the factor protects.
+
+**Before every Data API request** PostgREST runs `public.check_request()`
+(`pgrst.db_pre_request` on the `authenticator` role). It refuses a token whose
+account has been deleted or whose session no longer exists (`session_ended`:
+signing out, a password change, a factor reset and a deletion take effect at
+once, not when the token expires), and a password-only session of an account
+with a factor for everything except the second-step screen's own functions
+(`second_factor_required`). For writing requests it holds the account's
+sign-in row `FOR KEY SHARE`, which `delete_my_account` locks `FOR UPDATE`, so
+requests and the deletion of the same account are serialised. Realtime and
+Storage do not run it: their policies must use the helpers above, which
+include `factor_ok`. The visitor and the server-side caller have no user id,
+so for them it returns at once: grants and policies decide.
+
+**Storage** does not run `check_request`. The product-photo rules on
+`storage.objects` therefore start with `private.session_alive()` (account not
+deleted, session not ended) and `private.factor_ok()`, and then use the same
+seller and staff helpers. They never read a public table directly; what they
+need about a photo comes from definer helpers.
 
 ## Three layers
 
@@ -71,8 +96,9 @@ What is then granted:
   caller is catalogue staff. Edits to a published listing go through
   `seller_update_listing` and wait for review (`product_change_requests`
   is readable by the listing's seller and catalogue staff, and written only by
-  those functions). Not yet locked: the photos of a published listing
-  (`product_images`), which a seller can still change directly. Orders,
+  those functions). `product_images` has no write grant any more: photos are
+  written only by the photo functions, which mirror the published ones into
+  it. Orders,
   payments, shipments, stock, ledger, routes and stops have **no** write grant
   at all: they change only inside functions.
 
@@ -135,14 +161,16 @@ A summary; the migration is authoritative.
 
 ### Seller member
 
-| Can                                                                                                                 | Cannot                                                                                                                  |
-| ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Read their seller's private details, members, listings, offers, stock, statements and payouts                       | Read another seller's                                                                                                   |
-| Create listings as draft or pending review; edit their content; set price, handling time and status of their offers | Publish a listing; change a published listing except through a reviewed edit; write ranking, rating or summary columns  |
-| See the order lines they sold and each line's progress, with the shopper's first name, district and cantón          | See the shopper's full name, phone, e-mail, address or map pin — Yuntera delivers, so the seller never needs them       |
-| Set stock at their own location; announce stock sent to a warehouse; mark their own parcels packed                  | Change stock held in a Yuntera warehouse                                                                                |
-| Reply to a review of their product                                                                                  | Remove or edit a review                                                                                                 |
-| Admins and owners: edit the shop front, manage members, request a change of payout account (finance approves it)    | Change the payout account or contact phone and e-mail; read an account number in full; create, alter or remove an owner |
+| Can                                                                                                                            | Cannot                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Read their seller's private details, members, listings, offers, stock, statements and payouts                                  | Read another seller's                                                                                                   |
+| Create listings as draft or pending review; edit their content; set price, handling time and status of their offers            | Publish a listing; change a published listing except through a reviewed edit; write ranking, rating or summary columns  |
+| See the order lines they sold and each line's progress, with the shopper's first name, district and cantón                     | See the shopper's full name, phone, e-mail, address or map pin — Yuntera delivers, so the seller never needs them       |
+| Set stock at their own location; announce stock sent to a warehouse; mark their own parcels packed                             | Change stock held in a Yuntera warehouse                                                                                |
+| Reply to a review of their product                                                                                             | Remove or edit a review                                                                                                 |
+| Admins and owners: edit the shop front, manage members, request a change of payout account (finance approves it)               | Change the payout account or contact phone and e-mail; read an account number in full; create, alter or remove an owner |
+| Add photos to their listings through the photo functions and upload the reserved files; download their own photos under review | Sign a link to a photo that is not approved, overwrite or move a file, publish a photo, read another shop's files       |
+| Admins and owners: choose the shop's WhatsApp and push channels and its commercial consent                                     | Switch off the shop's e-mail, or switch on a number that opted out                                                      |
 
 ### Warehouse associate
 
@@ -163,18 +191,21 @@ A summary; the migration is authoritative.
 
 Admin implies every role below.
 
-| Role      | Reach                                                                                                                                                                     |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, zones and calendar, dispatch board, routes, settlements, returns; approve or suspend sellers |
-| `support` | Orders and timelines, profiles, addresses, consents, sellers' private details, stock levels, returns, complaints, content reports; cancel an order for a shopper          |
-| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs              |
-| `catalog` | Categories, brands, synonyms, all listings; approve or reject a listing; moderate reviews and content reports                                                             |
-| `admin`   | All of the above, plus staff membership, settings, and the audit log                                                                                                      |
+| Role      | Reach                                                                                                                                                                                                                                                       |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, zones and calendar, dispatch board, routes, settlements, returns; approve or suspend sellers                                                                                   |
+| `support` | Orders and timelines, profiles, addresses, consents, sellers' private details, stock levels, returns, complaints, content reports; cancel an order for a shopper; see which messages an order produced (never their text or address) and resend a stuck one |
+| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs                                                                                                |
+| `catalog` | Categories, brands, synonyms, all listings; approve or reject a listing and its photos; take down any photo; moderate reviews and content reports                                                                                                           |
+| `admin`   | All of the above, plus staff membership, settings, the audit log, and resetting a colleague's second factor (never their own)                                                                                                                               |
 
 Sensitive changes by staff — to staff membership, seller status and private
 details, drivers, warehouse assignments, settings, fees, payouts — are written
 to `private.audit_log` with the acting user, and that log cannot be altered.
 A bank account number is never copied into it: only its last four digits.
+Nor are a driver's name, phone, identification number, plate or licence
+dates, or a shop's legal name, identification, contact details, address and
+SINPE number: the log records which of those columns changed, by name only.
 
 Two rules about people and money are enforced below the functions, on the
 tables themselves. The platform always keeps one active administrator: a
@@ -301,11 +332,18 @@ visible and what must not.
   in the database are not subject to it. API roles are, which is what matters
   for requests; it means SQL run by an administrator in the dashboard sees
   everything.
-- **Storage policies.** No buckets are defined, so no upload path exists.
-- **Secret-key workers.** The first server-side worker (payment webhook, outbox)
-  will hold a secret key. It should call narrowly scoped functions rather than
-  write tables freely, and its key should be one created for it alone so it can
-  be revoked independently.
+- **Direct table privileges.** Apps still hold some direct table grants under
+  row-level security (the column grants listed above and read grants such as
+  `product_change_requests` and `product_photos`). Removing all of them is
+  planned separately; nothing added in November 2026 writes a table directly.
+- **The per-request check and the storage rules are verified locally only.**
+  Whether the hosted project accepts `pgrst.db_pre_request` for the
+  `authenticator` role, and creates the buckets and storage rules from a
+  migration, is checked when migrations 20261121082500 to 20261121082700 are
+  first applied there.
+- **Secret-key workers.** The notification worker is the first. Payment
+  webhooks will be the next; each should get its own key and narrowly scoped
+  functions, as the worker has.
 - **Multi-factor enforcement is off** until `require_staff_mfa` is set to true.
 - **Verified on local PostgreSQL only**, with a shim that copies Supabase's
   roles and permissive defaults. Re-run the access tests against the real

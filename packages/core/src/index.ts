@@ -8,6 +8,7 @@ export * from "./lifecycle";
 export * from "./money";
 export * from "./offers";
 export * from "./payouts";
+export * from "./photos";
 export * from "./promise";
 export * from "./recommendations";
 export * from "./risk";

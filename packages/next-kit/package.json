@@ -14,7 +14,10 @@
     "./config": "./config.mjs",
     "./base.css": "./styles/base.css",
     "./shell": "./src/shell.tsx",
-    "./listing-changes": "./src/listing-changes.tsx"
+    "./listing-changes": "./src/listing-changes.tsx",
+    "./account": "./src/account/pages.tsx",
+    "./auth-rules": "./src/auth-rules.ts",
+    "./product-image": "./src/product-image.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -25,6 +28,7 @@
     "@yuntera/core": "workspace:*",
     "@yuntera/db": "workspace:*",
     "@yuntera/ui": "workspace:*",
+    "qrcode-generator": "1.5.2",
     "server-only": "0.0.1"
   },
   "peerDependencies": {

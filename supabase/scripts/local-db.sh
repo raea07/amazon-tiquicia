@@ -49,15 +49,18 @@ case "${1:-}" in
 
   test)
     failed=0
+    # One log per run, so lanes testing at the same time never read each other's output.
+    log="$(mktemp "${TMPDIR:-/tmp}/yuntera-db-test.XXXXXX")"
     for file in "$ROOT"/tests/[0-9]*.sql; do
-      if run -f "$file" >/tmp/yuntera-db-test.log 2>&1; then
+      if run -f "$file" >"$log" 2>&1; then
         echo "pass  $(basename "$file")"
       else
         echo "FAIL  $(basename "$file")"
-        sed 's/^/      /' /tmp/yuntera-db-test.log
+        sed 's/^/      /' "$log"
         failed=1
       fi
     done
+    rm -f "$log"
     exit "$failed"
     ;;
 

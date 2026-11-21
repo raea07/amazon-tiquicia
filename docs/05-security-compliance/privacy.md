@@ -137,9 +137,8 @@ nothing is deleted automatically.
 | Marketing consent                                                | Until withdrawn                           |                                                                                                                                                                                          |
 | Seller identity documents                                        | Duration of the relationship plus 5 years | Platform reporting duty to Hacienda                                                                                                                                                      |
 
-Deleting an account removes or anonymises profile, addresses and reviews'
-authorship. Records that the law requires Yuntera to keep stay, restricted to
-finance and administrator roles, and the person is told which and why.
+Deleting an account is self-service and immediate; what it erases and keeps
+is described in [Deleting an account](#deleting-an-account) below.
 
 ## Data-subject rights
 
@@ -153,12 +152,174 @@ consent.
 | Response                        | Proposed target: 5 business days to acknowledge and 10 business days to complete; the lawyer to confirm the legal deadline |
 | Access                          | A readable copy of profile, addresses, orders, reviews, consents                                                           |
 | Rectification                   | Self-service for profile and addresses; by request for the rest                                                            |
-| Deletion                        | As described under retention                                                                                               |
+| Deletion                        | Self-service in every app (_Su cuenta → Eliminar mi cuenta_), immediate; see [Deleting an account](#deleting-an-account)   |
 | Withdrawal of marketing consent | Immediate, from any message and from the account                                                                           |
 | Record                          | Every request and its outcome is logged                                                                                    |
 
-Until self-service exists (Launch), requests are handled by hand from the
-privacy email. A named person is responsible; in the Pilot that is the founder.
+Deletion and withdrawal of marketing consent are self-service. Access and
+rectification beyond the profile and addresses are handled by hand from the
+privacy email, as is deletion for someone who can no longer sign in. A named
+person is responsible; in the Pilot that is the founder.
+
+## Deleting an account
+
+What the system does today (`public.delete_my_account`, in
+`supabase/migrations/20261121082500_account_security.sql`, extended by
+`20261121082600_notifications.sql` for what notifications hold and by
+`20261121082700_product_photos.sql` for a closed shop's photos; tested table by table
+in `supabase/tests/095_account_security.sql` and in the browser journey
+`tools/e2e/journeys/account-deletion.cjs`).
+
+**How a person asks.** In any app, _Su cuenta → Eliminar mi cuenta_ explains
+what is erased and what is kept, asks for the password again and an explicit,
+unticked-by-default confirmation, and then deletes at once. The shop's public
+page `/ayuda/eliminar-cuenta` explains the same without signing in; it is the
+address both app stores require. Someone who cannot sign in writes to the
+privacy contact.
+
+**When it waits.** Deletion is refused, with the reason and what to do, while
+the account has an order in progress, an open return, a refund still owed for a
+paid order that was cancelled (the refund goes back through the gateway, to the
+card or phone that paid, so the details are still needed), an open complaint,
+is the only person in charge of a shop that is open or awaiting approval
+(Yuntera closes the shop first), belongs to a shop with stock, undelivered
+orders or money pending in either direction, or holds a staff, driver or
+warehouse role (an administrator removes those first). An account with a second
+factor can be deleted only from a session that has passed it.
+
+**What is erased**, in one transaction:
+
+| Where                                   | What happens                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Profile                                 | Name and phone erased, phone verification and marketing choice cleared                                                                                                                                                                                                                                                                                                                                    |
+| Addresses                               | Deleted                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Consents                                | Deleted                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Notification settings                   | Channel choices and the WhatsApp/SMS number deleted; the commercial-consent history deleted; push tokens deleted                                                                                                                                                                                                                                                                                          |
+| Messages                                | Anything not yet sent to the person is skipped and never sent; the frozen text of messages to the person or about their orders (which holds the address and name) erased. The delivery rows (template, channel, status, times) stay, as order history does                                                                                                                                                |
+| Suppressions                            | Entries for the person's e-mail and phone numbers deleted, unless another account or shop still uses that address                                                                                                                                                                                                                                                                                         |
+| Past orders and their route stops       | Recipient name, phone, _señas_ and Plus Code erased; the map pin rounded to about 1 km                                                                                                                                                                                                                                                                                                                    |
+| Returns and complaints (closed)         | The person's own text erased                                                                                                                                                                                                                                                                                                                                                                              |
+| Content reports they filed              | The e-mail given erased                                                                                                                                                                                                                                                                                                                                                                                   |
+| Reviews                                 | Stay published, shown as «Cliente»: the name they came from is gone                                                                                                                                                                                                                                                                                                                                       |
+| Shop memberships, inactive staff row    | Deleted; a former driver's record keeps no name, phone, ID number or plate                                                                                                                                                                                                                                                                                                                                |
+| A shop left with nobody in charge       | Closed. Never traded: its private details (legal name, cédula, contact, bank) deleted. Traded: contact, address and bank details erased; legal name and identification number kept with its invoices. Either way its requests to change the payout account are deleted, and its photos leave the review queue and the shop (unless another shop still sells that listing), with their descriptions erased |
+| Second factors, sessions, sign-in links | Deleted: every session ends, and every access token issued for them stops working at once                                                                                                                                                                                                                                                                                                                 |
+| Sign-in record (`auth.users`)           | E-mail replaced by `<id>@cuenta-eliminada.invalid`, password and metadata erased, sign-in banned for 100 years                                                                                                                                                                                                                                                                                            |
+| Auth's own sign-in log, where kept      | Entries for the account deleted                                                                                                                                                                                                                                                                                                                                                                           |
+
+**What is kept, and why.** Orders, their lines, payments, shipments,
+electronic invoices and ledger entries, for the legal retention period (five
+years for electronic-invoicing records): Yuntera and the sellers must be able
+to show every sale to Hacienda. They keep pointing at the account's id, which
+no longer leads to a name, e-mail, phone or address. A register
+(`private.account_deletions`) records that a deletion happened, on which day
+and how many orders were kept, with no id. The record of who did what at work
+(order events, stock movements, audit trail) keeps the bare id.
+
+**The audit trail holds no personal columns.** It is immutable, so it never
+receives them: for drivers it leaves out name, phone, ID number, plate and
+licence dates; for a shop's private details, the legal name, identification
+number, contact details, fiscal address and bank account. It keeps that a
+change happened, who made it, and the names of the columns that changed
+(`changed_private`). Rows written before this rule were stripped of those
+columns once, by the migration that introduced it.
+
+**Photo files.** Files are not rows: no database function can delete them.
+A closed shop's photos become disposable, and the console deletes them
+through the storage API at the next catalogue decision. There is no scheduled
+clean-up yet, so until then the files stay in the private bucket, readable
+only by catalogue staff, or (for photos that were public) at their public
+address. The public copy of a photo shown on a past order is kept while the
+order is.
+
+**The e-mail address is free again.** A new sign-up with the same address is a
+new, unrelated account.
+
+**Why the sign-in record is anonymised rather than deleted.** Orders, returns,
+complaints and ledger transactions refer to `auth.users` without a cascade, as
+records the law requires must: deleting the row would fail for anyone who ever
+bought something, and pointing all of them at one shared "deleted account"
+would merge strangers' records. Supabase Auth's own "soft delete" works the
+same way (it obfuscates the e-mail and phone and keeps the row). Deleting
+through Auth's admin API would also need a secret key, which no app holds.
+
+**To verify on the hosted project before relying on it** (not done; it has
+only run on a local imitation of the Auth tables):
+
+1. The function's owner may write the Auth tables:
+   `select has_table_privilege(p.proowner, 'auth.users', 'UPDATE') from pg_proc p where p.proname = 'delete_my_account'`,
+   and the same for `DELETE` on `auth.sessions`, `auth.identities`,
+   `auth.mfa_factors`, `auth.one_time_tokens` and `auth.audit_log_entries`.
+   Running `supabase/tests/095_account_security.sql` there
+   (`remote-db.sh test`) exercises exactly these writes and rolls back.
+2. After a real deletion, Auth refuses the old password (`invalid_credentials`)
+   and the old refresh token, and a sign-up with the same address creates a new
+   account.
+3. **Access tokens issued before the deletion.** Auth's access tokens are
+   valid by themselves for up to an hour. The Data API runs
+   `public.check_request` before every request (`pgrst.db_pre_request`, set by
+   the migration on the `authenticator` role for the project's database), and
+   it refuses a token whose account is deleted or whose session no longer
+   exists. It also locks the account's sign-in row for the length of a writing
+   request, so a request and a deletion of the same account never overlap.
+   Verify on the hosted project: `select setconfig from pg_db_role_setting s
+   join pg_roles r on r.oid = s.setrole where r.rolname = 'authenticator'`
+   shows the setting, and a token kept from before a test deletion gets
+   `session_ended` from `/rest/v1/rpc/my_orders`. If the migration's
+   `alter role authenticator in database …` was refused there, run Supabase's
+   documented form, `alter role authenticator set pgrst.db_pre_request =
+   'public.check_request'; notify pgrst, 'reload config';`, as `postgres`.
+4. **The ban Auth can read.** The sign-in row is banned until now + 100 years
+   (Auth's own bans are finite; it reads the column into a Go time value). After
+   a test deletion, open the dashboard's user list and fetch that user with the
+   admin API to see that both still load.
+
+## Messages and photos: what they hold and for how long
+
+- **Planned and sent messages** (`private.notification_deliveries`) hold the
+  template, channel, status, times and ids, never the address: the address
+  is looked up when the message is claimed. The exact text sent is kept only
+  while a retry may need it and cleared at the first final state. These rows
+  are kept without an end date today; a retention clean-up is not built.
+- **Preferences, consent and push tokens** live as long as the account.
+- **Suppressions** (addresses that bounced, complained or sent STOP) are kept
+  so they are not written to again; they go with an account deletion when no
+  one else uses the address.
+- **Photo files** waiting for review are readable only by the shop's members
+  (by download, never by a shareable link) and catalogue staff. Approved
+  photos are public. Publishing re-encodes every photo on the console's
+  server, which drops location and camera data.
+
+## Second factor for staff
+
+Staff enrol an authenticator app (time-based codes) from the console's
+account page; the QR code is drawn on Yuntera's own server and the key is also
+shown as text. Once enrolled, sign-in asks for a code after the password, in
+every app. When the setting `require_staff_mfa` is on, a member of staff with
+no factor is taken to enrolment before anything else, and the database refuses
+staff functions to any session that has not passed the second step. Whatever
+the setting, an account that has a factor counts in the database only once its
+session has passed it (`private.factor_ok`, in the staff and seller helpers and
+the deletion functions, and `public.check_request` before every Data API
+request): a password alone, used against the API directly, opens nothing but
+the second step. Removing
+or replacing a factor needs a fresh code. An administrator who lost the phone
+is recovered by another administrator from _Seguridad_
+(`public.ops_reset_staff_factor`: never on oneself, recorded in the audit
+trail); the colleague's sessions end, and their access tokens stop working,
+at once. Five wrong codes in fifteen minutes pause the second step for that
+account (`private.mfa_failures`): the apps reserve each attempt before the code
+goes to Auth, under a per-account lock, so parallel requests are counted too.
+Auth's own per-account hook needs the Team plan and is written, not enabled;
+when it is, it turns the apps' reservation into the failure instead of counting
+twice. Codes sent to Auth directly, bypassing the apps, meet only Auth's per-IP
+limit until the hook is enabled. Sellers may turn the same protection on for
+their account.
+
+An administrator cannot reset their own factor. Keep at least two
+administrators with a factor before turning `require_staff_mfa` on (the
+_Seguridad_ screen warns while there are fewer); the break-glass procedure for
+the last administrator is in `security-program.md`.
 
 ## Processors and processing abroad
 
@@ -208,8 +369,16 @@ says so.
 
 ### Comunicaciones comerciales (opcional, sin marcar)
 
-> ☐ Quiero recibir ofertas y novedades de Yuntera por correo y WhatsApp. Puedo
-> darme de baja en cualquier momento.
+> ☐ Acepto recibir ofertas y novedades de Yuntera por correo
+
+Wording version `comercial-2026-11`, on the shop's and the seller centre's
+_Notificaciones_ page (with the explanation above it: optional, not needed to
+buy or sell, withdrawn there or with the link in every message, and every such
+message says it is advertising) and in the shopper app's account screen. Saved
+only by `set_my_commercial_consent` (or with the channel choices), with the
+wording version and where it was given; `update_profile` no longer changes it.
+No commercial message can be sent yet: there is no commercial template and no
+one-step unsubscribe page.
 
 ### Ubicación al registrar una dirección
 
