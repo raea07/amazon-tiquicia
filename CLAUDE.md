@@ -35,7 +35,7 @@ DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/yuntera_local pnpm --fi
 tools/dev/stack.sh up 1 && tools/dev/stack.sh e2e 1 && tools/dev/stack.sh down 1
 ```
 
-`stack.sh` takes a lane number (0–9). Each lane has its own database, API port
+`stack.sh` takes a lane number (0–19). Each lane has its own database, API port
 and app ports, so parallel checkouts never share state. Use a lane other than 0
 when anything else may be running. Never run two installs or two stacks in the
 same lane at once.

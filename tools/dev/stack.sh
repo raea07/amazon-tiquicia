@@ -12,7 +12,8 @@
 #
 # Lane 0 (the default) is the usual setup: database yuntera_local, API on
 # :54321, apps on :3000–:3003. Lane N (1–9) uses database yuntera_lane<N>, API
-# on :544<N>0 and apps on :3<N>00–:3<N>03.
+# on :544<N>0 and apps on :3<N>00–:3<N>03. Lanes 10–19 use database
+# yuntera_lane<N>, API on :546<N-10>0 and apps on :4<N-10>00–:4<N-10>03.
 #
 # The apps read the API address when they are BUILT, so each lane builds its own
 # copy; `up` writes apps/*/.env.local for the lane before building.
@@ -21,12 +22,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMMAND="${1:-}"
 LANE="${2:-0}"
-[[ "$LANE" =~ ^[0-9]$ ]] || { echo "Lane must be a single digit 0–9." >&2; exit 2; }
+[[ "$LANE" =~ ^1?[0-9]$ ]] || { echo "Lane must be a number from 0 to 19." >&2; exit 2; }
 
 if [ "$LANE" = "0" ]; then
   DB_NAME="yuntera_local"; API_PORT=54321; APP_BASE=3000
-else
+elif [ "$LANE" -le 9 ]; then
   DB_NAME="yuntera_lane${LANE}"; API_PORT="544${LANE}0"; APP_BASE="3${LANE}00"
+else
+  DB_NAME="yuntera_lane${LANE}"; API_PORT="546${LANE#1}0"; APP_BASE="4${LANE#1}00"
 fi
 ADMIN_URL="${PG_ADMIN_URL:-postgres://postgres:postgres@127.0.0.1:5432/postgres}"
 DB_URL="${ADMIN_URL%/*}/${DB_NAME}"
