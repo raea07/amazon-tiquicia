@@ -138,23 +138,24 @@ insert into seed_ids (name, id) select 's_' || slug, id from new_sellers;
 
 insert into public.seller_private
   (seller_id, legal_name, id_type, id_number, contact_email, contact_phone, fiscal_address,
-   postal_code, payout_iban, payout_holder_name, sinpe_movil_number, kyc_status, hacienda_verified_at)
+   postal_code, payout_iban, payout_holder_name, sinpe_movil_number, kyc_status, hacienda_verified_at,
+   payout_approved_at)
 values
   (pg_temp.id('s_cafetal-los-santos'), 'Cafetal Los Santos S.R.L.', 'juridica', '3102700101',
    'cafetal@yuntera.example', '+50625460101', 'San Marcos de Tarrazú, 200 m norte del parque',
-   '10501', 'CR05015202001026284066', 'Cafetal Los Santos S.R.L.', '+50683330101', 'verified', now()),
+   '10501', 'CR05015202001026284066', 'Cafetal Los Santos S.R.L.', '+50683330101', 'verified', now(), now()),
   (pg_temp.id('s_tecnocasa'), 'TecnoCasa de Costa Rica S.A.', 'juridica', '3101700202',
    'vendedor@yuntera.example', '+50622340202', 'Curridabat, frente al antiguo Registro',
-   '11801', 'CR26010200009123456789', 'TecnoCasa de Costa Rica S.A.', '+50684440202', 'verified', now()),
+   '11801', 'CR26010200009123456789', 'TecnoCasa de Costa Rica S.A.', '+50684440202', 'verified', now(), now()),
   (pg_temp.id('s_ferreteria-el-higueron'), 'Roberto Jiménez Arce', 'fisica', '401230456',
    'vendedor@yuntera.example', '+50622610303', 'Heredia centro, 100 m este del Mercado',
-   '40101', 'CR86015100020019688637', 'Roberto Jiménez Arce', '+50685550303', 'verified', now()),
+   '40101', 'CR86015100020019688637', 'Roberto Jiménez Arce', '+50685550303', 'verified', now(), now()),
   (pg_temp.id('s_tienda-sendero'), 'Sendero Outdoor S.R.L.', 'juridica', '3102700404',
    'sendero@yuntera.example', '+50622890404', 'Escazú, San Rafael, Plaza Colonial local 4',
-   '10203', 'CR31010200009555666777', 'Sendero Outdoor S.R.L.', '+50686660404', 'verified', now()),
+   '10203', 'CR31010200009555666777', 'Sendero Outdoor S.R.L.', '+50686660404', 'verified', now(), now()),
   (pg_temp.id('s_bazar-nuevo'), 'Laura Quesada Brenes', 'fisica', '109870654',
    'bazar@yuntera.example', '+50687770505', 'Tibás, San Juan, 50 m sur de la iglesia',
-   '11301', null, null, null, 'pending', null);
+   '11301', null, null, null, 'pending', null, null);
 
 insert into public.seller_members (seller_id, user_id, role) values
   (pg_temp.id('s_cafetal-los-santos'), pg_temp.id('u_cafetal'), 'owner'),

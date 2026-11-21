@@ -13,6 +13,24 @@ select pg_temp.remember('depot', (select id::text from public.warehouses where c
 select pg_temp.remember('seller_site', (select id::text from public.warehouses where code = 'HIG-HER'));
 select pg_temp.remember('today', private.cr_local(now())::date::text);
 select pg_temp.remember('users_before', (select count(*)::text from auth.users));
+-- What a database that has been used already holds (staff added, payout runs
+-- made, requests waiting): the assertions below count from here, not from an
+-- empty database.
+select pg_temp.remember('staff_before', (select count(*)::text from public.staff_members));
+select pg_temp.remember('staff_audit_before', (
+  select count(*)::text from private.audit_log l
+  where l.table_name = 'staff_members'
+    and l.actor_id = (select id from auth.users where email = 'central@yuntera.example')));
+select pg_temp.remember('depot_staff_before', (
+  select count(*)::text from public.warehouse_staff
+  where warehouse_id = (select id from public.warehouses where code = 'SJO1')));
+select pg_temp.remember('requests_waiting_before', (
+  select count(*)::text from public.payout_detail_requests where status = 'pending'));
+select pg_temp.remember('audit_id_before', (select coalesce(max(id), 0)::text from private.audit_log));
+select pg_temp.remember('runs_before', (select count(*)::text from public.payout_runs));
+select pg_temp.remember('payouts_before', (select count(*)::text from public.payouts));
+select pg_temp.remember('payout_tx_before', (
+  select count(*)::text from public.ledger_transactions where kind = 'payout'));
 
 -- The three parts of every seller's balance add up to what the ledger says the
 -- platform owes them, which is also what the seller centre's summary shows.
@@ -112,10 +130,12 @@ do $$
 declare
   s jsonb := public.ops_staff();
 begin
-  assert jsonb_array_length(s) = 1, 'the seed has one staff member';
-  assert s #>> '{0,email}' = 'central@yuntera.example' and s #>> '{0,role}' = 'admin'
-     and (s #>> '{0,active}')::boolean and (s #>> '{0,is_you}')::boolean
-     and s #>> '{0,full_name}' = 'Gabriela Soto Marín' and s #>> '{0,since}' is not null,
+  assert jsonb_array_length(s) = current_setting('t.staff_before')::integer, 'every staff member is listed';
+  assert exists (
+    select 1 from jsonb_array_elements(s) x
+    where x ->> 'email' = 'central@yuntera.example' and x ->> 'role' = 'admin'
+      and (x ->> 'active')::boolean and (x ->> 'is_you')::boolean
+      and x ->> 'full_name' = 'Gabriela Soto Marín' and x ->> 'since' is not null),
     format('name, e-mail, role, active, since: %s', s);
 
   -- An e-mail with no account is refused, and no account is made for it.
@@ -137,7 +157,7 @@ begin
   -- The e-mail is matched whatever its case or the spaces around it.
   perform public.ops_set_staff('  Comprador2@Yuntera.Example ', 'support', true);
   s := public.ops_staff();
-  assert jsonb_array_length(s) = 2, 'the new staff member is listed';
+  assert jsonb_array_length(s) = current_setting('t.staff_before')::integer + 1, 'the new staff member is listed';
   assert exists (
     select 1 from jsonb_array_elements(s) x
     where x ->> 'email' = 'comprador2@yuntera.example' and x ->> 'role' = 'support'
@@ -273,9 +293,11 @@ begin
   -- support, finance, deactivated, admin (reactivated) for Andrés; ops for Gabriela.
   select count(*) into n from public.audit_entries('staff_members', 100)
   where actor_name = 'Gabriela Soto Marín';
-  assert n = 5, format('five changes by the administrator, found %s', n);
+  assert n - current_setting('t.staff_audit_before')::integer = 5,
+    format('five changes by the administrator, found %s', n - current_setting('t.staff_audit_before')::integer);
 
-  select * into r from public.audit_entries('staff_members', 100) order by id limit 1 offset 1;
+  select * into r from public.audit_entries('staff_members', 100)
+  where id > current_setting('t.audit_id_before')::bigint order by id limit 1;
   assert r.action = 'INSERT' and r.actor_name = 'Gabriela Soto Marín'
      and r.subject = 'Andrés Mora Chaves' and r.new_row ->> 'role' = 'support',
     format('who gave whom which role: %s', to_jsonb(r));
@@ -508,7 +530,8 @@ begin
   assert (select x ->> 'role' from jsonb_array_elements(public.ops_warehouse_staff() #> '{0,staff}') x
           where x ->> 'email' = 'comprador3@yuntera.example') = 'lead', 'role changed';
   perform public.ops_set_warehouse_staff(v_depot, 'comprador3@yuntera.example', null);
-  assert jsonb_array_length(public.ops_warehouse_staff() #> '{0,staff}') = 1, 'removed';
+  assert jsonb_array_length(public.ops_warehouse_staff() #> '{0,staff}')
+         = current_setting('t.depot_staff_before')::integer, 'removed';
   assert (select count(*) from public.audit_entries('warehouse_staff', 50)
           where subject = 'Sofía Vargas Rojas') = 3, 'added, changed and removed are all recorded';
 end
@@ -601,13 +624,17 @@ begin
       raise exception '%: % (expected permission denied)', t.stmt, sqlerrm;
     end;
   end loop;
-  -- The rest of their own record is still theirs to read and to keep current.
+  -- The rest of their own record is still theirs to read. Its fiscal details
+  -- change through a request staff approve (seller_request_shop_change, in
+  -- the limits migration), so they are no longer writable directly either.
   assert (select count(*) from public.seller_private where legal_name is not null) = 2,
     'the other columns are still readable';
-  update public.seller_private set postal_code = '11802'
-  where seller_id = current_setting('t.tecnocasa')::uuid;
-  assert (select postal_code from public.seller_private
-          where seller_id = current_setting('t.tecnocasa')::uuid) = '11802', 'and writable';
+  begin
+    update public.seller_private set postal_code = '11802'
+    where seller_id = current_setting('t.tecnocasa')::uuid;
+    raise exception 'the fiscal details were written directly';
+  exception when insufficient_privilege then null;
+  end;
 end
 $$;
 reset role;
@@ -810,7 +837,8 @@ declare
   v_request uuid := current_setting('t.request')::uuid;
   q jsonb := public.ops_payout_detail_requests();
 begin
-  assert jsonb_array_length(q) = 1, 'one request waits; the replaced one is not shown';
+  assert jsonb_array_length(q) = current_setting('t.requests_waiting_before')::integer + 1,
+    'one request waits; the replaced one is not shown';
   assert q #>> '{0,seller,trade_name}' = 'TecnoCasa'
      and q #>> '{0,seller,contact_phone}' = '+50622340202'
      and q #>> '{0,current,iban_masked}' = 'CR•• •••• •••• •••• 6789'
@@ -841,7 +869,8 @@ begin
     v_request, false, 'No pudimos confirmar el cambio por teléfono. Llámenos al 4000-0000.');
   assert probe.value(format('select payout_iban from public.seller_private where seller_id = %L', v_seller))
          = 'CR26010200009123456789', 'a rejection changes nothing';
-  assert jsonb_array_length(public.ops_payout_detail_requests()) = 0, 'the queue is empty again';
+  assert jsonb_array_length(public.ops_payout_detail_requests())
+         = current_setting('t.requests_waiting_before')::integer, 'the queue is as it was again';
   q := public.ops_payout_detail_requests('rejected');
   assert jsonb_array_length(q) = 1 and q #>> '{0,requested,iban}' is null
      and q #>> '{0,requested,iban_masked}' = 'CR•• •••• •••• •••• 0001'
@@ -938,7 +967,8 @@ select set_config('t.own_request', public.seller_request_payout_details(
   current_setting('t.ferreteria')::uuid, 'CR86015100020019688637', 'Roberto Jiménez Arce', null)::text, true);
 do $$
 begin
-  assert jsonb_array_length(public.ops_payout_detail_requests()) = 1, 'as finance they do see the queue';
+  assert jsonb_array_length(public.ops_payout_detail_requests())
+         = current_setting('t.requests_waiting_before')::integer + 1, 'as finance they do see the queue';
   perform public.ops_decide_payout_details(current_setting('t.own_request')::uuid, true);
   raise exception 'approved their own request';
 exception when others then
@@ -1209,7 +1239,8 @@ begin
   exception when others then
     if sqlerrm <> 'nothing_to_pay' then raise; end if;
   end;
-  assert jsonb_array_length(public.ops_payout_runs()) = 0, 'and it left no empty run behind';
+  assert jsonb_array_length(public.ops_payout_runs()) = current_setting('t.runs_before')::integer,
+    'and it left no empty run behind';
 end
 $$;
 reset role;
@@ -1291,8 +1322,9 @@ begin
   again := public.ops_create_payout_run(v_today);
   assert again ->> 'run_id' = r ->> 'run_id' and (again ->> 'created')::integer = 0
      and (again ->> 'total_minor')::bigint = 0, format('the same run, nothing added: %s', again);
-  assert probe.value('select count(*) from public.payout_runs') = '1'
-     and probe.value('select count(*) from public.payouts') = '1', 'one run, one payout';
+  assert probe.value('select count(*) from public.payout_runs')::integer = current_setting('t.runs_before')::integer + 1
+     and probe.value('select count(*) from public.payouts')::integer = current_setting('t.payouts_before')::integer + 1,
+    'one run, one payout';
 
   d := public.ops_payout_run((r ->> 'run_id')::uuid);
   assert d #>> '{run,code}' = r ->> 'code' and d #>> '{run,cutoff_on}' = v_today::text
@@ -1320,11 +1352,11 @@ begin
   assert public.ops_payout_preview() #>> '{run,code}' = r ->> 'code', 'the preview points to the run';
 
   -- A run keeps the rules it was created with, whatever the setting says later.
-  assert jsonb_array_length(public.ops_payout_runs()) = 1
-     and public.ops_payout_runs() #>> '{0,code}' = r ->> 'code'
-     and (public.ops_payout_runs() #>> '{0,scheduled}')::integer = 1
-     and (public.ops_payout_runs() #>> '{0,scheduled_minor}')::bigint = v_expected
-     and (public.ops_payout_runs() #>> '{0,paid}')::integer = 0, 'the list of runs';
+  assert jsonb_array_length(public.ops_payout_runs()) = current_setting('t.runs_before')::integer + 1
+     and exists (select 1 from jsonb_array_elements(public.ops_payout_runs()) x
+                 where x ->> 'code' = r ->> 'code' and (x ->> 'scheduled')::integer = 1
+                   and (x ->> 'scheduled_minor')::bigint = v_expected and (x ->> 'paid')::integer = 0),
+    'the list of runs';
 
   begin
     perform public.ops_payout_run(gen_random_uuid());
@@ -1454,7 +1486,8 @@ begin
   exception when others then
     if sqlerrm <> 'payout_not_scheduled' then raise; end if;
   end;
-  assert (select count(*) from public.ledger_transactions where kind = 'payout') = 1,
+  assert (select count(*) from public.ledger_transactions where kind = 'payout')
+         = current_setting('t.payout_tx_before')::bigint + 1,
     'and the ledger has it once';
 end
 $$;
@@ -1648,9 +1681,10 @@ begin
          = -current_setting('t.expected_tecnocasa')::bigint,
     'the bank account shows only the one transfer that stayed sent';
 
-  assert (public.ops_payout_runs() #>> '{0,paid}')::integer = 1
-     and (public.ops_payout_runs() #>> '{0,failed}')::integer = 2
-     and (public.ops_payout_runs() #>> '{0,scheduled}')::integer = 0, 'the run''s tally';
+  assert exists (select 1 from jsonb_array_elements(public.ops_payout_runs()) x
+                 where x ->> 'id' = current_setting('t.run') and (x ->> 'paid')::integer = 1
+                   and (x ->> 'failed')::integer = 2 and (x ->> 'scheduled')::integer = 0),
+    'the run''s tally';
 end
 $$;
 reset role;
@@ -1665,7 +1699,8 @@ do $$
 declare
   t record;
 begin
-  assert jsonb_array_length(public.ops_payout_runs()) = 1, 'finance (not only an administrator) reads the runs';
+  assert jsonb_array_length(public.ops_payout_runs()) = current_setting('t.runs_before')::integer + 1,
+    'finance (not only an administrator) reads the runs';
   for t in select * from (values
     ('update public.payouts set status = ''paid'''),
     ('insert into public.payouts (seller_id, amount_minor) select id, 100 from public.sellers limit 1'),
