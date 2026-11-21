@@ -4,10 +4,10 @@ import { Linking, type StyleProp, StyleSheet, View, type ViewStyle } from "react
 import { colors, radius, space, tone } from "../theme/tokens";
 import { Button } from "../ui/button";
 import { Alert } from "../ui/feedback";
-import { CheckIcon } from "../ui/icons";
+import { CheckIcon, CloseIcon, HelpIcon } from "../ui/icons";
 import { Card } from "../ui/layout";
 import { Text } from "../ui/text";
-import { createScanGate, SYMBOLOGIES, type Symbology } from "./logic";
+import { createScanGate, type ReadState, readCaption, SYMBOLOGIES, type Symbology } from "./logic";
 
 /** The part of expo-camera's permission answer this component reads. */
 export interface CameraPermission {
@@ -45,6 +45,13 @@ export interface ScannerCamera {
   ];
 }
 
+/**
+ * Whether the camera is the way in right now: "live" (the preview runs),
+ * "asking" (the explanation is on screen, or the permission is loading) or
+ * "off" (refused, put off, failed, switched off: the field is the way in).
+ */
+export type CameraState = "live" | "asking" | "off";
+
 // "Ahora no" holds for the rest of the time the app is open, so the
 // explanation does not come back on every scan screen.
 let explanationDismissed = false;
@@ -55,16 +62,23 @@ let explanationDismissed = false;
  * pressed the button; refusing leaves typing and a hand scanner, which work
  * the same. The preview runs only while the screen is in front (one camera
  * preview at a time), with torch control and a frame to aim at; every read
- * shows at once in the frame, in words.
+ * shows in the frame, in words: "Revisando…" while it is checked, then
+ * whether it was accepted, never a tick before that.
  */
 export function CameraPanel({
   camera,
+  read,
   onRead,
+  onStateChange,
   testID,
 }: {
   camera: ScannerCamera;
+  /** Where the last read is (checking, or its result), to show in the frame. */
+  read?: ReadState | null;
   /** A new read (already one per scan); resolves when it has been handled. */
   onRead: (code: string) => Promise<void>;
+  /** Told whenever the camera starts or stops being the way in. */
+  onStateChange?: (state: CameraState) => void;
   testID?: string;
 }) {
   const [permission, requestPermission] = camera.useCameraPermissions();
@@ -73,15 +87,32 @@ export function CameraPanel({
   const [torch, setTorch] = useState(false);
   const [failed, setFailed] = useState(false);
   const [dismissed, setDismissed] = useState(explanationDismissed);
-  const [lastRead, setLastRead] = useState<string | null>(null);
+  const [shown, setShown] = useState<ReadState | null>(null);
   const [handling, setHandling] = useState(false);
   const gate = useRef(createScanGate()).current;
 
+  // A result stays in the frame for a moment, then the frame asks for the next code.
   useEffect(() => {
-    if (!lastRead) return;
-    const timer = setTimeout(() => setLastRead(null), 2500);
+    setShown(read ?? null);
+    if (read?.phase !== "done") return;
+    const timer = setTimeout(() => setShown(null), 2500);
     return () => clearTimeout(timer);
-  }, [lastRead]);
+  }, [read]);
+
+  const state: CameraState = failed
+    ? "off"
+    : !permission
+      ? "asking"
+      : permission.granted
+        ? on
+          ? "live"
+          : "off"
+        : permission.status === "undetermined" && !dismissed
+          ? "asking"
+          : "off";
+  useEffect(() => {
+    onStateChange?.(state);
+  }, [state, onStateChange]);
 
   if (!permission || failed) {
     return failed ? (
@@ -139,6 +170,7 @@ export function CameraPanel({
 
   const { CameraView } = camera;
   const live = on && focused;
+  const caption = readCaption(shown);
   return (
     <View style={styles.wrap} testID={testID ? `${testID}-camera` : undefined}>
       {live ? (
@@ -158,7 +190,6 @@ export function CameraPanel({
                 : ({ data }) => {
                     const code = gate.offer(data);
                     if (!code) return;
-                    setLastRead(code);
                     setHandling(true);
                     void onRead(code).finally(() => {
                       gate.release();
@@ -169,18 +200,22 @@ export function CameraPanel({
           />
           <View style={styles.frame} pointerEvents="none" aria-hidden />
           <View style={styles.caption} pointerEvents="none">
-            {lastRead ? (
-              <View style={styles.read}>
+            <View style={styles.read}>
+              {caption.icon === "check" ? (
                 <CheckIcon size={18} color={colors.palette.white} />
-                <Text variant="smallStrong" style={styles.captionText} numberOfLines={1}>
-                  Código leído: {lastRead}
-                </Text>
-              </View>
-            ) : (
-              <Text variant="small" style={styles.captionText}>
-                Ponga el código dentro del marco
+              ) : caption.icon === "cross" ? (
+                <CloseIcon size={18} color={colors.palette.white} />
+              ) : caption.icon === "attention" ? (
+                <HelpIcon size={18} color={colors.palette.white} />
+              ) : null}
+              <Text
+                variant={caption.icon ? "smallStrong" : "small"}
+                style={styles.captionText}
+                numberOfLines={1}
+              >
+                {caption.text}
               </Text>
-            )}
+            </View>
           </View>
         </View>
       ) : null}

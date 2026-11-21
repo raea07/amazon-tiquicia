@@ -1,12 +1,21 @@
-import { type ReactNode, useCallback, useId, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type Ref,
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { Platform, StyleSheet, TextInput, type TextInputInstance, View } from "react-native";
 import { messageOf } from "../errors";
 import { colors, fontFamily, fontSize, radius, space, tone, touchTarget } from "../theme/tokens";
 import { Button } from "../ui/button";
 import { Alert } from "../ui/feedback";
 import { Text } from "../ui/text";
-import { CameraPanel, type ScannerCamera } from "./camera";
-import { cleanScan, readScan } from "./logic";
+import { CameraPanel, type CameraState, type ScannerCamera } from "./camera";
+import { cleanScan, createScanQueue, type ReadState, readScan, shortCode } from "./logic";
 import { type ScanTone, vibrateFor } from "./signal";
 
 export type ScanSource = "camera" | "keyboard";
@@ -16,6 +25,20 @@ export interface ScanFeedback {
   tone: ScanTone;
   title?: string;
   message: string;
+  /**
+   * Put the code back in the field: the read was fine but something else
+   * was not (how many were taken), so the worker fixes that and sends again.
+   */
+  keepCode?: boolean;
+}
+
+/** What a screen can do with its scanner: give the field back its focus, or hand it a code. */
+export interface BarcodeScannerHandle {
+  focus(): void;
+  /** Puts text in the field and focuses it (the start of a scan typed elsewhere). */
+  fill(text: string): void;
+  /** Handles a code as if it had been scanned into the field. */
+  submit(text: string): void;
 }
 
 export interface BarcodeScannerProps {
@@ -38,15 +61,28 @@ export interface BarcodeScannerProps {
   children?: ReactNode;
   /** Prefix of the test ids: `<id>-input`, `<id>-submit`, `<id>-feedback`. */
   testID?: string;
+  ref?: Ref<BarcodeScannerHandle>;
 }
+
+/**
+ * react-native-web blurs a single-line field on Enter unless `blurOnSubmit`
+ * is false (it does not read `submitBehavior`); the next scan would then land
+ * nowhere while the last one is checked. Native reads `submitBehavior`.
+ */
+const KEEP_FOCUS_ON_WEB = (Platform.OS === "web" ? { blurOnSubmit: false } : {}) as object;
+
+type Shown = { tone: ScanTone | "info"; title?: string; message: string; read?: string };
+type Read = { code: string; source: ScanSource };
 
 /**
  * One way to get a code into a screen, three ways in: the phone's camera,
  * typing, and a hand scanner, which types the code into the focused field and
  * sends Enter. The field stays focused between scans when the worker uses it
- * (a hand scanner needs that), and is cleared after each, so the next scan
- * never lands on the last one. Every read gets an answer at once: in words
- * on screen, and by vibration on a phone.
+ * (a hand scanner needs that), and is emptied as soon as a read is taken, so
+ * the next scan never lands on the last one. A read that comes in while the
+ * last is still being checked waits its turn. Every read gets an answer at
+ * once, where the worker is looking: in the camera frame and right above the
+ * field, in words, and by vibration on a phone.
  */
 export function BarcodeScanner({
   camera,
@@ -58,61 +94,135 @@ export function BarcodeScanner({
   requireCode = true,
   children,
   testID,
+  ref,
 }: BarcodeScannerProps) {
   const id = useId().replace(/:/g, "");
   const input = useRef<TextInputInstance>(null);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<{
-    tone: ScanTone | "info";
-    title?: string;
-    message: string;
-    read?: string;
-  } | null>(null);
-  const busyRef = useRef(false);
+  const [feedback, setFeedback] = useState<Shown | null>(null);
+  const [read, setRead] = useState<ReadState | null>(null);
   const withCamera = Boolean(camera?.available) && Platform.OS !== "web";
+  const [cameraState, setCameraState] = useState<CameraState>(withCamera ? "asking" : "off");
+
+  // The queue calls the latest handler, so a read that waited sees the screen as it is now.
+  const handle = async ({ code, source }: Read) => {
+    setBusy(true);
+    if (code) {
+      setFeedback({ tone: "info", message: "Revisando el código…", read: code });
+      setRead({ phase: "checking", code });
+    } else {
+      setFeedback(null);
+    }
+    let result: ScanFeedback | null;
+    try {
+      result = await onScan(code, source);
+    } catch (error) {
+      result = { tone: "danger", message: messageOf(error) };
+    }
+    setBusy(false);
+    setFeedback(result ? { ...result, read: code || undefined } : null);
+    setRead(result ? { phase: "done", tone: result.tone, title: result.title, code } : null);
+    if (result) vibrateFor(result.tone);
+    // Only if nothing new was typed meanwhile: a scan that came in later is never overwritten.
+    if (result?.keepCode && code) setValue((now) => (now === "" ? code : now));
+    // A hand scanner types into whatever has focus: keep it here.
+    if (source === "keyboard") input.current?.focus();
+  };
+  const latest = useRef(handle);
+  latest.current = handle;
+  const queue = useRef(createScanQueue<Read>((item) => latest.current(item))).current;
 
   const submit = useCallback(
-    async (raw: string, source: ScanSource) => {
-      if (busyRef.current) return;
+    (raw: string, source: ScanSource) => {
       const cleaned = cleanScan(raw);
+      // Taken: the field is free at once for the next scan.
+      if (source === "keyboard") setValue("");
       let code = "";
       if (cleaned || requireCode) {
         const check = readScan(raw);
         if (!check.ok) {
-          setFeedback({ tone: "danger", message: check.error, read: cleaned || undefined });
+          setFeedback({
+            tone: "danger",
+            message: check.error,
+            read: cleaned ? shortCode(cleaned) : undefined,
+          });
+          setRead({ phase: "done", tone: "danger", code: cleaned || undefined });
           vibrateFor("danger");
-          setValue("");
           if (source === "keyboard") input.current?.focus();
-          return;
+          return Promise.resolve();
         }
         code = check.code;
       }
-      busyRef.current = true;
-      setBusy(true);
-      setFeedback(code ? { tone: "info", message: "Revisando el código…", read: code } : null);
-      let result: ScanFeedback | null;
-      try {
-        result = await onScan(code, source);
-      } catch (error) {
-        result = { tone: "danger", message: messageOf(error) };
-      } finally {
-        busyRef.current = false;
-        setBusy(false);
-      }
-      setFeedback(result ? { ...result, read: code || undefined } : null);
-      if (result) vibrateFor(result.tone);
-      setValue("");
-      // A hand scanner types into whatever has focus: keep it here.
-      if (source === "keyboard") input.current?.focus();
+      return queue.push({ code, source }).then((outcome) => {
+        if (outcome === "queued") {
+          setFeedback({
+            tone: "info",
+            message: "Espere: estamos revisando el código anterior. Este va después.",
+            read: code || undefined,
+          });
+        } else if (outcome === "dropped") {
+          setFeedback({
+            tone: "danger",
+            message:
+              "Espere a que terminemos de revisar los códigos anteriores y vuelva a escanear.",
+            read: code || undefined,
+          });
+          vibrateFor("danger");
+        }
+      });
     },
-    [onScan, requireCode],
+    [queue, requireCode],
   );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => input.current?.focus(),
+      fill: (text: string) => {
+        setValue(text);
+        input.current?.focus();
+      },
+      submit: (text: string) => {
+        input.current?.focus();
+        void submit(text, "keyboard");
+      },
+    }),
+    [submit],
+  );
+
+  // On a phone, when the camera is not in use (refused, put off for now,
+  // failed or switched off), the field is the way in: be ready for a scanner.
+  useEffect(() => {
+    if (withCamera && cameraState === "off") input.current?.focus();
+  }, [withCamera, cameraState]);
 
   return (
     <View style={styles.wrap}>
       {withCamera && camera ? (
-        <CameraPanel camera={camera} onRead={(code) => submit(code, "camera")} testID={testID} />
+        <CameraPanel
+          camera={camera}
+          read={read}
+          onStateChange={setCameraState}
+          onRead={(code) => submit(code, "camera")}
+          testID={testID}
+        />
+      ) : null}
+      {feedback ? (
+        <Alert
+          tone={feedback.tone}
+          title={feedback.title}
+          testID={testID ? `${testID}-feedback` : undefined}
+        >
+          <Text variant="small" style={{ color: tone[feedback.tone].fg }}>
+            {feedback.message}
+          </Text>
+          {feedback.read ? (
+            <Text variant="caption" style={{ color: tone[feedback.tone].fg }} numberOfLines={2}>
+              Código leído: {shortCode(feedback.read)}
+            </Text>
+          ) : null}
+        </Alert>
       ) : null}
       <View style={styles.field}>
         <Text variant="smallStrong" nativeID={`${id}-label`}>
@@ -123,8 +233,10 @@ export function BarcodeScanner({
           value={value}
           onChangeText={setValue}
           onSubmitEditing={() => void submit(value, "keyboard")}
-          // Enter submits and the field keeps focus for the next scan.
+          // Enter submits and the field keeps focus for the next scan, even
+          // while that scan is checked (react-native-web reads the older prop).
           submitBehavior="submit"
+          {...KEEP_FOCUS_ON_WEB}
           returnKeyType="done"
           autoCapitalize="characters"
           autoCorrect={false}
@@ -156,22 +268,6 @@ export function BarcodeScanner({
       >
         {submitLabel}
       </Button>
-      {feedback ? (
-        <Alert
-          tone={feedback.tone}
-          title={feedback.title}
-          testID={testID ? `${testID}-feedback` : undefined}
-        >
-          <Text variant="small" style={{ color: tone[feedback.tone].fg }}>
-            {feedback.message}
-          </Text>
-          {feedback.read ? (
-            <Text variant="caption" style={{ color: tone[feedback.tone].fg }}>
-              Código leído: {feedback.read}
-            </Text>
-          ) : null}
-        </Alert>
-      ) : null}
     </View>
   );
 }

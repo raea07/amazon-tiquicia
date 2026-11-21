@@ -36,6 +36,7 @@ export const MAX_CODE_LENGTH = 40;
  */
 const GS1_AIM = /^\](?:C1|d2|Q3|e0)/;
 const AIM = /^\][A-Za-z][0-9A-Za-z]/;
+const GS = "\u001d";
 
 /**
  * Turns whatever arrived (camera text, a hand scanner's keystrokes, typing)
@@ -46,7 +47,9 @@ const AIM = /^\][A-Za-z][0-9A-Za-z]/;
  */
 export function cleanScan(raw: string): string {
   let text = raw.trim();
-  const gs1 = GS1_AIM.test(text);
+  // An AIM prefix for GS1, or the GS separator (FNC1) some scanners send
+  // between variable-length elements: either way it is an element string.
+  const gs1 = GS1_AIM.test(text) || text.includes(GS);
   text = text.replace(AIM, "");
   // biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the point
   text = text.replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, "");
@@ -247,3 +250,161 @@ export function createScanGate({
   };
 }
 export type ScanGate = ReturnType<typeof createScanGate>;
+
+/**
+ * The code as the screen repeats it back ("Código leído: …"): a junk read or
+ * a QR full of text must not fill the screen and push the field out of view.
+ */
+export function shortCode(code: string, max = MAX_CODE_LENGTH): string {
+  const chars = [...code];
+  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : code;
+}
+
+/**
+ * Asks the database for a code in each of its spellings (`lookupForms`),
+ * one at a time, and returns the first answer found. Every screen that looks
+ * a scanned barcode up goes through this, so none of them misses a UPC-A that
+ * iOS reported as a 13-digit EAN.
+ */
+export async function findByForms<T>(
+  code: string,
+  lookup: (form: string) => Promise<T | null | undefined>,
+): Promise<T | null> {
+  for (const form of lookupForms(code)) {
+    const found = await lookup(form);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * Reads, one after the other, in the order they came. A hand scanner can send
+ * the next code while the last one is still being checked (slow Wi-Fi on the
+ * floor); that read waits its turn instead of being lost. `limit` bounds the
+ * wait so a scanner stuck on repeat cannot pile up work.
+ */
+export function createScanQueue<T>(run: (item: T) => Promise<void>, { limit = 5 } = {}) {
+  const waiting: T[] = [];
+  let busy = false;
+  return {
+    /** "ran" once this read and any that came in meanwhile were handled; "queued" or "dropped" otherwise. */
+    async push(item: T): Promise<"ran" | "queued" | "dropped"> {
+      if (busy) {
+        if (waiting.length >= limit) return "dropped";
+        waiting.push(item);
+        return "queued";
+      }
+      busy = true;
+      try {
+        let next: T | undefined = item;
+        while (next !== undefined) {
+          try {
+            await run(next);
+          } catch {
+            // `run` reports its own failures; the queue goes on to the next read.
+          }
+          next = waiting.shift();
+        }
+      } finally {
+        busy = false;
+      }
+      return "ran";
+    },
+    get busy() {
+      return busy;
+    },
+    get waiting() {
+      return waiting.length;
+    },
+  };
+}
+
+/** Where a read is, as the camera frame shows it. */
+export type ReadState =
+  | { phase: "checking"; code: string }
+  | { phase: "done"; tone: "success" | "warning" | "danger"; title?: string; code?: string };
+
+/**
+ * The camera frame's caption for a read: the result in words, with an icon
+ * that matches it. Nothing says "correct" before the screen has checked the
+ * code, and a refused read reads differently from an accepted one, so a
+ * worker glancing at the frame can tell them apart without the colours.
+ */
+export function readCaption(state: ReadState | null): {
+  icon: "check" | "cross" | "attention" | null;
+  text: string;
+} {
+  if (!state) return { icon: null, text: "Ponga el código dentro del marco" };
+  if (state.phase === "checking") {
+    return { icon: null, text: `Revisando ${shortCode(state.code, 24)}…` };
+  }
+  const code = state.code ? ` · ${shortCode(state.code, 24)}` : "";
+  if (state.tone === "success") return { icon: "check", text: `Correcto${code}` };
+  if (state.tone === "warning")
+    return { icon: "attention", text: `${state.title ?? "Revise"}${code}` };
+  return { icon: "cross", text: `${state.title ?? "No se aceptó"}${code}` };
+}
+
+/**
+ * Keeps a hand scanner's code out of a number field next to the scan field
+ * (how many units were taken). A scanner types into whatever has focus, so
+ * after the worker edits the number, the next scan arrives there. Two signs
+ * tell a scan from a number: a character that is not a digit (stock codes
+ * start with letters), or a fast burst of keys ended by Enter (a barcode of
+ * digits). What belongs to the scan is handed back, and the number is left
+ * as the worker typed it.
+ */
+export function createNumberFieldGuard({
+  burstMs = 40,
+  minBurst = 4,
+  now = () => Date.now(),
+}: {
+  burstMs?: number;
+  minBurst?: number;
+  now?: () => number;
+} = {}) {
+  let text = "";
+  let stable = "";
+  let burst = 0;
+  let lastAt = Number.NEGATIVE_INFINITY;
+  return {
+    /** The field's value as set by the screen (a new line, a reset). */
+    reset(value: string) {
+      text = value;
+      stable = value;
+      burst = 0;
+      lastAt = Number.NEGATIVE_INFINITY;
+    },
+    /** A change typed into the number field: what it keeps, and a scan if one started. */
+    change(next: string): { value: string; scan?: string } {
+      const at = now();
+      if (at - lastAt > burstMs) {
+        stable = text;
+        burst = 0;
+      }
+      burst += 1;
+      lastAt = at;
+      const letter = next.search(/[^0-9]/);
+      if (letter >= 0) {
+        const value = next.slice(0, letter);
+        text = value;
+        stable = value;
+        burst = 0;
+        return { value, scan: next.slice(letter) };
+      }
+      text = next;
+      return { value: next };
+    },
+    /** Enter in the number field: a scan if a fast burst just came before it. */
+    enter(): { value: string; scan?: string } {
+      const at = now();
+      if (burst >= minBurst && at - lastAt <= burstMs * 4 && text.startsWith(stable)) {
+        const scan = text.slice(stable.length);
+        text = stable;
+        burst = 0;
+        return { value: stable, scan };
+      }
+      return { value: text };
+    },
+  };
+}
