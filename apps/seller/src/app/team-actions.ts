@@ -53,7 +53,7 @@ export async function inviteMember(
     });
     // The same words whether or not the address has an account: the screen
     // must not tell who is registered.
-    return `Invitación enviada a ${email}. La persona la ve al ingresar a Yuntera Vende con ese correo, y entra al equipo cuando la acepte. Vence en 14 días.`;
+    return `Invitación enviada a ${email}. La persona la ve en Yuntera Vende, en Invitaciones, al ingresar con ese correo ya confirmado, y entra al equipo cuando la acepte. Vence en 14 días.`;
   }, values);
   if (state.ok) refresh();
   return state;
@@ -98,11 +98,16 @@ export async function removeMember(
   const userId = uuid.safeParse(formData.get("userId"));
   if (!userId.success) return { error: "No encontramos a esa persona. Recargue la página." };
   const leaving = formData.get("leaving") === "1";
+  if (leaving && formData.get("confirma") !== "1") {
+    return { error: "Marque la casilla para confirmar que quiere salir del equipo." };
+  }
   const state = await attempt(async () => {
     await (await sessionApi()).sellerRemoveMember(shop.id, userId.data);
     return leaving ? "Salió del equipo de la tienda." : "La persona ya no es parte del equipo.";
   });
-  if (state.ok && leaving) redirect("/");
+  // The invitations page says they left; the summary would send someone with
+  // no shop left to registration as if they had never had one.
+  if (state.ok && leaving) redirect("/invitaciones?salio=1");
   if (state.ok) refresh();
   return state;
 }

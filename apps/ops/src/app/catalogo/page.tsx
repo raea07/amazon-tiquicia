@@ -1,3 +1,4 @@
+import { STAFF_QUEUE_PAGE } from "@yuntera/db";
 import { DecisionForm } from "@yuntera/next-kit/client";
 import { ListingChanges } from "@yuntera/next-kit/listing-changes";
 import { sessionApi } from "@yuntera/next-kit/server";
@@ -45,6 +46,9 @@ async function Review() {
         </h2>
         <p className="mt-1 text-sm text-ink-muted">
           No se muestran en la tienda hasta que usted los publique.
+          {listings.length >= STAFF_QUEUE_PAGE
+            ? ` Se muestran los ${STAFF_QUEUE_PAGE} más antiguos; hay más esperando, que aparecen a medida que decida estos.`
+            : ""}
         </p>
         <div className="mt-4">
           {listings.length === 0 ? (
@@ -81,8 +85,13 @@ async function Review() {
                     ) : null}
                     {listing.seller_status === "pending" ? (
                       <p className="mt-3 text-warning">
-                        El vendedor aún no está verificado: aunque apruebe el producto, no se
-                        muestra hasta que lo esté.
+                        La tienda aún no está verificada: verifíquela en Vendedores antes de
+                        publicar este producto, o rechácelo si no cumple.
+                      </p>
+                    ) : listing.seller_status && listing.seller_status !== "active" ? (
+                      <p className="mt-3 text-warning">
+                        La tienda no está activa, así que este producto no se puede publicar por
+                        ahora. Puede rechazarlo o dejarlo hasta que la tienda vuelva a estar activa.
                       </p>
                     ) : null}
                     <div className="mt-4 border-t border-border pt-4">

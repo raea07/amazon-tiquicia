@@ -176,12 +176,17 @@ function RequestCard({ request }: { request: ShopChangeRequest }) {
           </Alert>
         ) : null}
         {request.kind === "contact" ? (
-          <Alert tone="info">
-            Confirme el cambio llamando al teléfono registrado, no al nuevo.
-            {signals.payout_request_open
-              ? " Esta tienda también tiene un cambio de cuenta bancaria en revisión."
-              : ""}
-          </Alert>
+          signals.payout_request_open ? (
+            <Alert tone="warning" title="Primero, el cambio de cuenta bancaria">
+              Esta tienda también tiene un cambio de cuenta bancaria en revisión, que se confirma
+              llamando al teléfono actual. Resuélvalo primero en Pagos a vendedores; mientras tanto
+              este cambio solo se puede rechazar.
+            </Alert>
+          ) : (
+            <Alert tone="info">
+              Confirme el cambio llamando al teléfono registrado, no al nuevo.
+            </Alert>
+          )
         ) : null}
         {request.kind === "fiscal" ? (
           <Alert tone="info">

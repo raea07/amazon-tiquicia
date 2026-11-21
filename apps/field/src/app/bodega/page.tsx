@@ -29,7 +29,7 @@ async function Board() {
   const warehouse = await requireWarehouse("/bodega");
   const api = await sessionApi();
   const [board, locations] = await Promise.all([
-    api.wmsBoard(warehouse.id),
+    api.wmsBoardPaged(warehouse.id),
     api.wmsLocations(warehouse.id),
   ]);
   const shipments = [...board.shipments].sort(
@@ -99,7 +99,11 @@ async function Board() {
 
       <section aria-labelledby="recepciones">
         <h2 id="recepciones" className="text-xl font-bold">
-          Mercadería por recibir ({board.inbound.length})
+          Mercadería por recibir (
+          {board.inbound_total > board.inbound.length
+            ? `${board.inbound.length} de ${board.inbound_total.toLocaleString("es-CR")}, los que llegan antes primero`
+            : board.inbound_total}
+          )
         </h2>
         {board.inbound.length === 0 ? (
           <p className="mt-2 text-sm text-ink-muted">Ningún vendedor ha anunciado envíos.</p>

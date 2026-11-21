@@ -24,7 +24,7 @@ export function InviteForm({ canInviteAdmins }: { canInviteAdmins: boolean }) {
             autoComplete="off"
             maxLength={254}
             defaultValue={state.values?.email}
-            hint="El correo con que ingresa a Yuntera. Si todavía no tiene cuenta, que la cree primero."
+            hint="El correo con que ingresa a Yuntera. Si todavía no tiene cuenta, puede crearla con ese correo y confirmarlo: la invitación le estará esperando."
           />
           <SelectField
             label="Qué podrá hacer"
@@ -98,7 +98,21 @@ export function RemoveMemberForm({ userId, leaving }: { userId: string; leaving:
       hideOnSuccess
     >
       <input type="hidden" name="userId" value={userId} />
-      {leaving ? <input type="hidden" name="leaving" value="1" /> : null}
+      {leaving ? (
+        <>
+          <input type="hidden" name="leaving" value="1" />
+          <label className="flex min-h-11 items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              name="confirma"
+              value="1"
+              required
+              className="size-5 accent-(--color-brand)"
+            />
+            <span>Entiendo que dejo de ver y trabajar en esta tienda.</span>
+          </label>
+        </>
+      ) : null}
     </ActionForm>
   );
 }

@@ -40,6 +40,12 @@ async function Invitations({ searchParams }: Pick<PageProps<"/invitaciones">, "s
   const joined = query.unido === "1" ? (await getRoles())?.sellers : null;
   return (
     <div className="flex flex-col gap-4">
+      {query.salio === "1" ? (
+        <Alert tone="success" title="Salió del equipo">
+          Ya no ve ni trabaja en esa tienda. Si fue un error, pida a la persona dueña que le invite
+          de nuevo.
+        </Alert>
+      ) : null}
       {joined && joined.length > 0 ? (
         <Alert tone="success" title="Ya es parte del equipo">
           Ya puede trabajar en la tienda.{" "}

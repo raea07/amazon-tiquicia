@@ -67,9 +67,13 @@ export function ContactForm({ email, phone }: { email: string; phone: string }) 
 export function FiscalForm({
   taxRegime,
   fiscalAddress,
+  postalCode,
+  economicActivityCode,
 }: {
   taxRegime: "general" | "simplificado";
   fiscalAddress: string;
+  postalCode: string | null;
+  economicActivityCode: string | null;
 }) {
   return (
     <ActionForm
@@ -100,7 +104,8 @@ export function FiscalForm({
             inputMode="numeric"
             maxLength={5}
             optional
-            defaultValue={state.values?.postalCode}
+            defaultValue={state.values?.postalCode ?? postalCode ?? undefined}
+            hint="Si lo deja en blanco, se mantiene el que tenemos registrado."
           />
           <TextField
             label="Código de actividad económica"
@@ -108,8 +113,8 @@ export function FiscalForm({
             inputMode="numeric"
             maxLength={6}
             optional
-            defaultValue={state.values?.economicActivityCode}
-            hint="El que le asignó Hacienda, de 4 a 6 dígitos."
+            defaultValue={state.values?.economicActivityCode ?? economicActivityCode ?? undefined}
+            hint="El que le asignó Hacienda, de 4 a 6 dígitos. Si lo deja en blanco, se mantiene el registrado."
           />
         </>
       )}

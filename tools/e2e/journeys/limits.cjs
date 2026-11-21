@@ -123,6 +123,17 @@ async function rpcAs(email, fn, args = {}) {
     after.sellers.some((s) => s.slug === "tienda-sendero" && s.role === "staff"),
     "accepting makes them staff of the shop",
   );
+  // Leaving asks for a confirmation, and says afterwards what happened.
+  await member.goto(SELLER + "/equipo", { waitUntil: "networkidle" });
+  const leave = member.locator('main:visible form:has(button:has-text("Salir del equipo"))');
+  await leave.locator('input[name="confirma"]').check();
+  await leave.locator('button:has-text("Salir del equipo")').click();
+  await member.waitForURL((u) => new URL(u).search.includes("salio=1"));
+  const left = member.locator('main:visible [role="status"]:has-text("Salió del equipo")');
+  await left.waitFor();
+  log("after leaving:", await text(left));
+  const gone = await rpcAs("comprador2@yuntera.example", "my_roles");
+  expect(gone.sellers.length === 0, "leaving ends the membership");
   await memberContext.close();
 
   // 2. The seller asks for a new contact phone and a new shop name
@@ -145,6 +156,30 @@ async function rpcAs(email, fn, args = {}) {
   await contactForm.locator('input[name="contactPhone"]').fill("2289-0999");
   await contactForm.locator('button[type="submit"]').click();
   await shopCard.locator("text=Cambio de correo y teléfono en revisión").waitFor();
+  // While the contact change waits, the payout account cannot be changed.
+  const payoutCard = owner.locator('main:visible section:has(h2:has-text("Dónde le pagamos"))');
+  await owner.reload({ waitUntil: "networkidle" });
+  expect(
+    (await text(payoutCard)).includes(
+      "Hay un cambio del teléfono o el correo de la tienda en revisión",
+    ),
+    "the payout form waits for the contact change",
+  );
+  expect(
+    (await payoutCard.locator('input[name="iban"]').count()) === 0,
+    "and is not offered meanwhile",
+  );
+  // A fiscal change that only touches the address keeps the postal code on file.
+  const fiscalCard = owner.locator('main:visible section:has(h2:has-text("Identidad fiscal"))');
+  const fiscalForm = fiscalCard.locator('form:has(textarea[name="fiscalAddress"])');
+  const postal = await fiscalForm.locator('input[name="postalCode"]').inputValue();
+  log("postal code the fiscal form starts from:", postal);
+  expect(postal === "10203", "the fiscal form starts from the postal code on file");
+  await fiscalForm
+    .locator('textarea[name="fiscalAddress"]')
+    .fill("Escazú, San Rafael, Plaza Colonial local 5, segundo piso");
+  await fiscalForm.locator('button[type="submit"]').click();
+  await fiscalCard.locator("text=Cambio de datos fiscales en revisión").waitFor();
   log("waiting for staff:", (await text(shopCard)).slice(0, 300));
   expect(
     (await text(shopCard.locator("dl"))).includes("Tienda Sendero"),
@@ -166,13 +201,29 @@ async function rpcAs(email, fn, args = {}) {
   await staff.goto(OPS + "/cambios-tienda", { waitUntil: "networkidle" });
   const cards = staff.locator('main:visible section[aria-labelledby="por-resolver"] ul > li');
   log("staff queue:", await cards.count());
-  expect((await cards.count()) === 2, "both requests wait");
+  expect((await cards.count()) === 3, "the three requests wait");
   await staff.screenshot({ path: SHOTS + "/l4a-staff-queue-waiting.png", fullPage: true });
   const contactCard = cards.filter({ hasText: "Correo y teléfono" });
   log("contact card:", (await text(contactCard)).slice(0, 260));
   expect((await text(contactCard)).includes("2289-0404"), "the number to call is the one on file");
   await contactCard.locator('button:has-text("Aprobar el cambio")').click();
   await staff.waitForURL((u) => new URL(u).search.includes("resuelta=aprobada"));
+  const fiscalCardStaff = staff
+    .locator('main:visible section[aria-labelledby="por-resolver"] ul > li')
+    .filter({ hasText: "Datos fiscales" });
+  const waitingBefore = await cards.count();
+  await fiscalCardStaff.locator('button:has-text("Aprobar el cambio")').click();
+  await staff
+    .waitForFunction(
+      (n) =>
+        document.querySelectorAll('main section[aria-labelledby="por-resolver"] > ul > li').length <
+        n,
+      waitingBefore,
+      { timeout: 15000 },
+    )
+    .catch(async () => {
+      throw new Error(`the fiscal change was not approved: ${await text(fiscalCardStaff)}`);
+    });
   const nameCard = staff
     .locator('main:visible section[aria-labelledby="por-resolver"] ul > li')
     .filter({ hasText: "Nombre de la tienda" });
@@ -196,6 +247,15 @@ async function rpcAs(email, fn, args = {}) {
   expect(outcome.includes("No aprobamos el cambio de nombre"), "the rejection is shown");
   expect(outcome.includes("inscrito en Hacienda"), "with the reason staff wrote");
   expect(outcome.includes("2289-0999"), "and the approved phone is the shop's now");
+  const onFile = await rpcAs("sendero@yuntera.example", "seller_shop_changes", {
+    p_seller_id: (await rpcAs("sendero@yuntera.example", "my_roles")).sellers[0].id,
+  });
+  log("fiscal details on file now:", JSON.stringify(onFile.current.fiscal));
+  expect(
+    onFile.current.fiscal.postal_code === "10203" &&
+      onFile.current.fiscal.fiscal_address.includes("segundo piso"),
+    "the approved address is applied and the postal code survived",
+  );
   await owner.screenshot({ path: SHOTS + "/l5-account-outcome.png", fullPage: true });
   await ownerContext.close();
 

@@ -58,6 +58,10 @@ async function Account() {
     api.sellerShopChanges(shop.id),
   ]);
   const request = payout.request;
+  const contactPending = changes.requests.some(
+    (item) => item.kind === "contact" && item.status === "pending",
+  );
+  const unapproved = payout.current.iban_masked !== null && payout.current.approved === false;
   const day = (value: string) =>
     formatDate(value, { day: "numeric", month: "long", year: "numeric" });
   const kyc = KYC[account.kyc_status];
@@ -139,7 +143,12 @@ async function Account() {
               Los verificamos con Hacienda antes de cambiarlos. El nombre o la razón social y la
               identificación no se cambian: si cambiaron, escríbanos desde su correo de contacto.
             </p>
-            <FiscalForm taxRegime={account.tax_regime} fiscalAddress={account.fiscal_address} />
+            <FiscalForm
+              taxRegime={account.tax_regime}
+              fiscalAddress={account.fiscal_address}
+              postalCode={changes.current?.fiscal.postal_code ?? null}
+              economicActivityCode={changes.current?.fiscal.economic_activity_code ?? null}
+            />
           </div>
         ) : (
           <p className="mt-4 text-sm text-ink-muted">
@@ -160,6 +169,13 @@ async function Account() {
           </Item>
         </dl>
 
+        {unapproved && request?.status !== "pending" ? (
+          <Alert tone="warning" className="mt-4" title="Su cuenta todavía no está aprobada">
+            Esta cuenta se registró antes de que revisáramos cada cuenta, así que no le podemos
+            transferir a ella hasta aprobarla. Envíela abajo, tal como está, para que la confirmemos
+            con usted por teléfono.
+          </Alert>
+        ) : null}
         {request?.status === "pending" ? (
           <Alert tone="info" className="mt-4" title="Cambio de cuenta en revisión">
             El {day(request.requested_at)} se pidió cambiar a la cuenta {request.iban_masked}{" "}
@@ -193,7 +209,13 @@ async function Account() {
               ? " Si envía otra solicitud, reemplaza a la que está en revisión."
               : ""}
           </p>
-          {payout.can_request ? (
+          {payout.can_request && contactPending ? (
+            <p className="text-sm">
+              Hay un cambio del teléfono o el correo de la tienda en revisión, y confirmamos los
+              cambios de cuenta llamando al teléfono registrado. Cuando lo resolvamos, o si retira
+              esa solicitud, podrá pedir este cambio.
+            </p>
+          ) : payout.can_request ? (
             <PayoutDetailsForm
               hasAccount={payout.current.iban_masked !== null}
               currentSinpe={payout.current.sinpe_number}
