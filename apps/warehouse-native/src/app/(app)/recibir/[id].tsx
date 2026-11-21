@@ -2,8 +2,13 @@ import type { WmsBoard } from "@yuntera/db";
 import { messageOf, useApi } from "@yuntera/expo-kit/api";
 import { useApiMutation, useApiQuery } from "@yuntera/expo-kit/data";
 import { oneParam } from "@yuntera/expo-kit/paths";
-import { BarcodeScanner, matchScan, type ScanFeedback } from "@yuntera/expo-kit/scanner";
-import { colors, radius, space } from "@yuntera/expo-kit/theme";
+import {
+  BarcodeScanner,
+  findByForms,
+  matchScan,
+  type ScanFeedback,
+} from "@yuntera/expo-kit/scanner";
+import { colors, radius, space, tone } from "@yuntera/expo-kit/theme";
 import {
   Alert,
   Badge,
@@ -50,6 +55,8 @@ function ReceiveForm({
   const [damaged, setDamaged] = useState("0");
   const [locationId, setLocationId] = useState<string | null>(bins[0]?.id ?? null);
   const [error, setError] = useState<string | null>(null);
+  // More than is still to receive: shown, and recorded only once the worker confirms it.
+  const [surplus, setSurplus] = useState<number | null>(null);
   const receive = useApiMutation(
     (
       client,
@@ -62,6 +69,26 @@ function ReceiveForm({
     ) => client.wmsReceive(input),
     { invalidates: [["wms-board"]] },
   );
+  const save = async (surplusConfirmed: boolean) => {
+    const input = parseReceive({ good, damaged, locationId, pending, surplusConfirmed });
+    if ("error" in input) return setError(input.error);
+    setError(null);
+    if ("surplus" in input) return setSurplus(input.surplus);
+    try {
+      await receive.mutateAsync({ inboundLineId: line.line_id, ...input });
+      const bin = bins.find((candidate) => candidate.id === input.locationId)?.code ?? "";
+      onReceived(
+        `Recepción registrada: ${plural(input.goodQuantity, "buena", "buenas")}${
+          input.damagedQuantity > 0
+            ? ` y ${plural(input.damagedQuantity, "dañada", "dañadas")}`
+            : ""
+        } de ${product(line)}${input.goodQuantity > 0 && bin ? `, guardadas en ${bin}` : ""}.`,
+      );
+    } catch (failure) {
+      setSurplus(null);
+      setError(messageOf(failure));
+    }
+  };
   return (
     <Stack gap={3}>
       <View style={styles.pair}>
@@ -69,7 +96,10 @@ function ReceiveForm({
           label="Buenas"
           aria-label={`Unidades buenas de ${line.title}`}
           value={good}
-          onChangeText={setGood}
+          onChangeText={(text) => {
+            setGood(text);
+            setSurplus(null);
+          }}
           keyboardType="number-pad"
           inputMode="numeric"
           style={styles.half}
@@ -79,7 +109,10 @@ function ReceiveForm({
           label="Dañadas"
           aria-label={`Unidades dañadas de ${line.title}`}
           value={damaged}
-          onChangeText={setDamaged}
+          onChangeText={(text) => {
+            setDamaged(text);
+            setSurplus(null);
+          }}
           keyboardType="number-pad"
           inputMode="numeric"
           style={styles.half}
@@ -97,30 +130,31 @@ function ReceiveForm({
         />
       </Stack>
       <FormMessage error={error} />
+      {surplus !== null ? (
+        <Alert tone="warning" title="Son más de las que faltan" testID="receive-surplus">
+          <Text variant="small" style={{ color: tone.warning.fg }}>
+            {`Escribió ${plural(surplus, "unidad", "unidades")} más de las que faltan por recibir (${
+              pending === 0 ? "no falta ninguna" : `faltan ${pending}`
+            }). Cuente de nuevo. Si de verdad llegaron de más, confírmelo y avise al encargado.`}
+          </Text>
+          <Button
+            variant="secondary"
+            onPress={() => void save(true)}
+            loading={receive.isPending}
+            loadingLabel="Guardando…"
+            testID="receive-surplus-confirm"
+          >
+            {`Sí, llegaron ${surplus} de más`}
+          </Button>
+        </Alert>
+      ) : null}
       <Button
         size="lg"
         block
         loading={receive.isPending}
         loadingLabel="Guardando…"
         testID="receive-submit"
-        onPress={async () => {
-          const input = parseReceive({ good, damaged, locationId });
-          if ("error" in input) return setError(input.error);
-          try {
-            setError(null);
-            await receive.mutateAsync({ inboundLineId: line.line_id, ...input });
-            const bin = bins.find((candidate) => candidate.id === input.locationId)?.code ?? "";
-            onReceived(
-              `Recepción registrada: ${plural(input.goodQuantity, "buena", "buenas")}${
-                input.damagedQuantity > 0
-                  ? ` y ${plural(input.damagedQuantity, "dañada", "dañadas")}`
-                  : ""
-              } de ${product(line)}${input.goodQuantity > 0 && bin ? `, guardadas en ${bin}` : ""}.`,
-            );
-          } catch (failure) {
-            setError(messageOf(failure));
-          }
-        }}
+        onPress={() => void save(false)}
       >
         Registrar recepción
       </Button>
@@ -195,13 +229,18 @@ export default function ReceiveScreen() {
 
   const onScan = async (code: string): Promise<ScanFeedback> => {
     let match = matchScan(code, null, open);
+    let skuCode: string | null = null;
     if (match.kind === "none") {
-      // A product barcode: ask which stock code it is, then look for that.
-      const sku = await api.wmsFindSku(warehouse.id, code);
-      if (sku) match = matchScan(sku.sku_code, null, open);
+      // A product barcode: ask which stock code it is (in each of its
+      // spellings, as the lookup does), then look for that.
+      const sku = await findByForms(code, (form) => api.wmsFindSku(warehouse.id, form));
+      skuCode = sku?.sku_code ?? null;
+      if (skuCode) match = matchScan(skuCode, null, open);
     }
     if (match.kind === "none") {
-      const done = lines.find((line) => matchScan(code, line).kind === "expected");
+      const done = lines.find(
+        (line) => matchScan(code, line).kind === "expected" || line.sku_code === skuCode,
+      );
       return {
         tone: "danger",
         message: done

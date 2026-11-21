@@ -95,12 +95,25 @@ export function parsePack(
   return { weightGrams, packageCount };
 }
 
-/** What receiving one inbound line asks for, with the web's words. */
+/** The most of one kind a single count can record, as the web's form allows. */
+export const MAX_RECEIVE = 100_000;
+
+/**
+ * What receiving one inbound line asks for, with the web's words. A count
+ * above what is still to receive is not recorded on the first try: stock
+ * received becomes sellable, so a slip at the dock ("120" for "12") would
+ * be sold. The screen asks the worker to confirm it (`surplus`) first.
+ */
 export function parseReceive(input: {
   good: string;
   damaged: string;
   locationId: string | null;
-}): { goodQuantity: number; damagedQuantity: number; locationId: string } | { error: string } {
+  pending: number;
+  surplusConfirmed?: boolean;
+}):
+  | { goodQuantity: number; damagedQuantity: number; locationId: string }
+  | { error: string }
+  | { surplus: number } {
   if (!input.locationId) return { error: "Elija dónde lo guarda." };
   const good = input.good.trim() || "0";
   const damaged = input.damaged.trim() || "0";
@@ -109,7 +122,12 @@ export function parseReceive(input: {
   }
   const goodQuantity = Number(good);
   const damagedQuantity = Number(damaged);
+  if (goodQuantity > MAX_RECEIVE || damagedQuantity > MAX_RECEIVE) {
+    return { error: "Indique cuántas unidades recibió." };
+  }
   if (goodQuantity + damagedQuantity === 0) return { error: "Indique cuántas unidades recibió." };
+  const surplus = goodQuantity + damagedQuantity - input.pending;
+  if (surplus > 0 && !input.surplusConfirmed) return { surplus };
   return { goodQuantity, damagedQuantity, locationId: input.locationId };
 }
 

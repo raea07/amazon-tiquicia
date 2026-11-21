@@ -2,7 +2,13 @@ import { ApiError, type WmsShipment } from "@yuntera/db";
 import { messageOf, useApi } from "@yuntera/expo-kit/api";
 import { useApiMutation, useApiQuery } from "@yuntera/expo-kit/data";
 import { oneParam } from "@yuntera/expo-kit/paths";
-import { BarcodeScanner, matchScan, type ScanFeedback } from "@yuntera/expo-kit/scanner";
+import {
+  BarcodeScanner,
+  type BarcodeScannerHandle,
+  createNumberFieldGuard,
+  matchScan,
+  type ScanFeedback,
+} from "@yuntera/expo-kit/scanner";
 import { colors, fontFamily, radius, space } from "@yuntera/expo-kit/theme";
 import {
   Alert,
@@ -21,7 +27,7 @@ import {
   TextField,
 } from "@yuntera/expo-kit/ui";
 import { Stack as Nav, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { KeepAwake } from "@/components/keep-awake";
 import { camera } from "@/lib/camera";
@@ -68,6 +74,18 @@ function CurrentLine({
   // The quantity belongs to the line it was typed for: a new line starts at what it asks.
   const [typed, setTyped] = useState({ taskId: task.task_id, text: String(task.quantity) });
   const quantityText = typed.taskId === task.task_id ? typed.text : String(task.quantity);
+  // Read when a scan is handled, which can be in the same moment it was typed.
+  const quantityRef = useRef(typed);
+  const setQuantity = (text: string) => {
+    quantityRef.current = { taskId: task.task_id, text };
+    setTyped(quantityRef.current);
+  };
+  const scanner = useRef<BarcodeScannerHandle>(null);
+  // A hand scanner types into whatever has focus, "Tomó" included: its code goes back to the scan field.
+  const guard = useRef(createNumberFieldGuard()).current;
+  useEffect(() => {
+    guard.reset(String(task.quantity));
+  }, [guard, task.quantity]);
   const confirm = useApiMutation(
     (client, input: { taskId: string; quantity: number; locationId: string | null }) =>
       client.wmsConfirmPick(input.taskId, input.quantity, input.locationId),
@@ -76,8 +94,11 @@ function CurrentLine({
   const remaining = task.quantity - task.picked_quantity;
 
   const onScan = async (code: string): Promise<ScanFeedback> => {
-    const picked = parsePicked(quantityText, task.quantity);
-    if ("error" in picked) return { tone: "danger", message: picked.error };
+    const typedNow = quantityRef.current;
+    const text = typedNow.taskId === task.task_id ? typedNow.text : String(task.quantity);
+    const picked = parsePicked(text, task.quantity);
+    // The product was not checked yet: the code stays in the field while the number is fixed.
+    if ("error" in picked) return { tone: "danger", message: picked.error, keepCode: true };
     // The line is read again first: someone in Central may have changed the parcel.
     const latest = await api.wmsShipment(shipment.shipment_id);
     const line = latest.tasks.find((candidate) => candidate.task_id === task.task_id);
@@ -133,6 +154,7 @@ function CurrentLine({
         {codes(task)}
       </Text>
       <BarcodeScanner
+        ref={scanner}
         camera={camera}
         label="Escanee el producto"
         submitLabel={remaining === task.quantity ? "Confirmar línea" : "Corregir cantidad"}
@@ -144,7 +166,20 @@ function CurrentLine({
         <TextField
           label="Tomó"
           value={quantityText}
-          onChangeText={(text) => setTyped({ taskId: task.task_id, text })}
+          onChangeText={(text) => {
+            const result = guard.change(text);
+            setQuantity(result.value);
+            if (result.scan) scanner.current?.fill(result.scan);
+          }}
+          onSubmitEditing={() => {
+            // Enter after the number: back to the scan field, or the scan that was typed here.
+            const result = guard.enter();
+            setQuantity(result.value);
+            if (result.scan) scanner.current?.submit(result.scan);
+            else scanner.current?.focus();
+          }}
+          submitBehavior="submit"
+          returnKeyType="next"
           keyboardType="number-pad"
           inputMode="numeric"
           testID="pick-quantity"

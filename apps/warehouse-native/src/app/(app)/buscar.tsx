@@ -1,6 +1,6 @@
 import type { Api } from "@yuntera/db";
 import { useApi } from "@yuntera/expo-kit/api";
-import { BarcodeScanner, lookupForms, type ScanFeedback } from "@yuntera/expo-kit/scanner";
+import { BarcodeScanner, findByForms, type ScanFeedback } from "@yuntera/expo-kit/scanner";
 import { colors, fontFamily, space } from "@yuntera/expo-kit/theme";
 import { Card, Divider, Screen, Stack, Text } from "@yuntera/expo-kit/ui";
 import { useState } from "react";
@@ -23,12 +23,10 @@ export default function LookupScreen() {
   const [sku, setSku] = useState<Sku | null>(null);
 
   const onScan = async (code: string): Promise<ScanFeedback> => {
-    for (const form of lookupForms(code)) {
-      const found = await api.wmsFindSku(warehouse.id, form);
-      if (found) {
-        setSku(found);
-        return { tone: "success", message: `Encontrado: ${found.title}.` };
-      }
+    const found = await findByForms(code, (form) => api.wmsFindSku(warehouse.id, form));
+    if (found) {
+      setSku(found);
+      return { tone: "success", message: `Encontrado: ${found.title}.` };
     }
     setSku(null);
     return {

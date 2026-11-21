@@ -119,22 +119,46 @@ describe("form checks, with the web's words", () => {
   });
 
   it("receives good and damaged units into a chosen bin", () => {
-    assert.deepEqual(parseReceive({ good: "10", damaged: "1", locationId: "bin" }), {
+    assert.deepEqual(parseReceive({ good: "10", damaged: "1", locationId: "bin", pending: 12 }), {
       goodQuantity: 10,
       damagedQuantity: 1,
       locationId: "bin",
     });
-    assert.deepEqual(parseReceive({ good: "", damaged: "2", locationId: "bin" }), {
+    assert.deepEqual(parseReceive({ good: "", damaged: "2", locationId: "bin", pending: 12 }), {
       goodQuantity: 0,
       damagedQuantity: 2,
       locationId: "bin",
     });
-    assert.deepEqual(parseReceive({ good: "1", damaged: "0", locationId: null }), {
+    assert.deepEqual(parseReceive({ good: "1", damaged: "0", locationId: null, pending: 12 }), {
       error: "Elija dónde lo guarda.",
     });
-    assert.deepEqual(parseReceive({ good: "0", damaged: "", locationId: "bin" }), {
+    assert.deepEqual(parseReceive({ good: "0", damaged: "", locationId: "bin", pending: 12 }), {
       error: "Indique cuántas unidades recibió.",
     });
+  });
+
+  it("does not record more than is still to receive until the worker confirms it", () => {
+    const count = { good: "120", damaged: "0", locationId: "bin", pending: 12 };
+    assert.deepEqual(parseReceive(count), { surplus: 108 });
+    assert.deepEqual(parseReceive({ ...count, good: "11", damaged: "2" }), { surplus: 1 });
+    assert.deepEqual(parseReceive({ ...count, surplusConfirmed: true }), {
+      goodQuantity: 120,
+      damagedQuantity: 0,
+      locationId: "bin",
+    });
+    assert.deepEqual(parseReceive({ ...count, good: "12" }), {
+      goodQuantity: 12,
+      damagedQuantity: 0,
+      locationId: "bin",
+    });
+  });
+
+  it("caps each count as the web does", () => {
+    const count = { damaged: "0", locationId: "bin", pending: 200_000, surplusConfirmed: true };
+    assert.deepEqual(parseReceive({ ...count, good: "100001" }), {
+      error: "Indique cuántas unidades recibió.",
+    });
+    assert.equal("goodQuantity" in parseReceive({ ...count, good: "100000" }), true);
   });
 
   it("knows what is left of an inbound line and where it can go", () => {

@@ -10,6 +10,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { readChoice, STORAGE_KEY, writeChoice } from "./choice";
 
 export type Warehouse = Roles["warehouses"][number];
 
@@ -23,12 +24,16 @@ interface WarehouseValue {
 
 const WarehouseContext = createContext<WarehouseValue | null>(null);
 
-const storageKey = (userId: string) => `yuntera-bodega:warehouse:${userId}`;
+/** Removes the saved choice: called when the worker signs out. */
+export function forgetWarehouse() {
+  AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+}
 
 /**
  * Which warehouse the worker is in. Someone assigned to several chooses on
- * the board; the choice is kept on the phone for that account (an id, not
- * personal data) and falls back to the first assignment if it is removed.
+ * the board; the choice is kept on the phone (one entry, for the account
+ * signed in, removed at sign-out) and falls back to the first assignment if
+ * that assignment is removed.
  * The database still checks the assignment on every call.
  */
 export function WarehouseProvider({ children }: { children: ReactNode }) {
@@ -40,8 +45,9 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!userId) return;
     let live = true;
-    AsyncStorage.getItem(storageKey(userId))
-      .then((id) => {
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((saved) => {
+        const id = readChoice(saved, userId);
         if (live && id) setChosen(id);
       })
       .catch(() => {});
@@ -53,7 +59,9 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
   const choose = useCallback(
     (id: string) => {
       setChosen(id);
-      if (userId) AsyncStorage.setItem(storageKey(userId), id).catch(() => {});
+      if (userId) {
+        AsyncStorage.setItem(STORAGE_KEY, writeChoice(userId, id)).catch(() => {});
+      }
     },
     [userId],
   );
