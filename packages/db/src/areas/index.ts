@@ -12,10 +12,19 @@
  * rest, and `createApi()` returns its methods alongside the core ones.
  */
 
+import * as notifications from "./notifications";
 import type { Caller, Messages } from "./types";
 
+export {
+  type ChannelChoicesInput,
+  COMMERCIAL_CONSENT_VERSION,
+  type DeadLetters,
+  type NotificationRow,
+  type NotificationSettings,
+  type SellerNotificationSettings,
+} from "./notifications";
 export type { Caller, Messages } from "./types";
 
-export const areaErrors = {} as const satisfies Messages;
+export const areaErrors = { ...notifications.errors } as const satisfies Messages;
 
-export const areaApi = (_caller: Caller) => ({});
+export const areaApi = (caller: Caller) => ({ ...notifications.api(caller) });
