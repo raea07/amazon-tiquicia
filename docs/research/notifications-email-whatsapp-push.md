@@ -76,25 +76,25 @@ Nothing reads it (`docs/02-architecture/decisions.md:344-360`, decision 12). The
 
 17 call sites, 16 distinct topics. Payloads carry ids only, never personal data.
 
-| Topic | Payload fields | Emitted by | File:line |
-| --- | --- | --- | --- |
-| `order.placed` | `order_id` | `public.place_order` | `…081000_checkout.sql:431` |
-| `order.released` | `order_id` | `private.release_order_to_fulfillment` (after payment, or at once for cash on delivery) | `…081000_checkout.sql:41` |
-| `payment.captured` | `order_id` | `private.capture_payment` | `…081000_checkout.sql:88` |
-| `invoice.requested` | `order_id` | `private.capture_payment` | `…081000_checkout.sql:90` |
-| `order.cancelled` | `order_id`, `reason` | `private.cancel_order_internal` | `…081000_checkout.sql:153` |
-| `refund.requested` | `order_id` | `private.cancel_order_internal` (only outside sandbox mode, lines 136-146) | `…081000_checkout.sql:145` |
-| `refund.requested` | `order_id`, `return_request_id`, `amount_minor` | `public.ops_complete_return` | `…081700_api_backoffice.sql:248` |
-| `shipment.delivered` | `shipment_id` | `public.driver_complete_stop` | `…081100_fulfillment.sql:497` |
-| `shipment.delivery_failed` | `shipment_id`, `reason` | `public.driver_fail_stop` | `…081100_fulfillment.sql:542` |
-| `return.requested` | `return_request_id` | `public.request_return` | `…080900_trust.sql:180` |
-| `return.decided` | `return_request_id`, `approved` | `public.ops_decide_return` | `…081700_api_backoffice.sql:167` |
-| `complaint.filed` | `complaint_id` | `public.file_complaint` | `…081500_api_shopper.sql:609` |
-| `complaint.answered` | `complaint_id`, `closed` | `public.ops_resolve_complaint` | `…081700_api_backoffice.sql:284` |
-| `content.reported` | `report_id` | `public.report_content` | `…081500_api_shopper.sql:639` |
-| `report.resolved` | `report_id`, `actioned` | `public.ops_resolve_report` | `…081700_api_backoffice.sql:329` |
-| `product.reviewed` | `product_id`, `approved` | `public.ops_review_product` | `…081300_moderation.sql:72` |
-| `seller.status_changed` | `seller_id`, `status`, `note` | `public.ops_set_seller_status` | `…081300_moderation.sql:114` |
+| Topic                      | Payload fields                                  | Emitted by                                                                              | File:line                        |
+| -------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------- |
+| `order.placed`             | `order_id`                                      | `public.place_order`                                                                    | `…081000_checkout.sql:431`       |
+| `order.released`           | `order_id`                                      | `private.release_order_to_fulfillment` (after payment, or at once for cash on delivery) | `…081000_checkout.sql:41`        |
+| `payment.captured`         | `order_id`                                      | `private.capture_payment`                                                               | `…081000_checkout.sql:88`        |
+| `invoice.requested`        | `order_id`                                      | `private.capture_payment`                                                               | `…081000_checkout.sql:90`        |
+| `order.cancelled`          | `order_id`, `reason`                            | `private.cancel_order_internal`                                                         | `…081000_checkout.sql:153`       |
+| `refund.requested`         | `order_id`                                      | `private.cancel_order_internal` (only outside sandbox mode, lines 136-146)              | `…081000_checkout.sql:145`       |
+| `refund.requested`         | `order_id`, `return_request_id`, `amount_minor` | `public.ops_complete_return`                                                            | `…081700_api_backoffice.sql:248` |
+| `shipment.delivered`       | `shipment_id`                                   | `public.driver_complete_stop`                                                           | `…081100_fulfillment.sql:497`    |
+| `shipment.delivery_failed` | `shipment_id`, `reason`                         | `public.driver_fail_stop`                                                               | `…081100_fulfillment.sql:542`    |
+| `return.requested`         | `return_request_id`                             | `public.request_return`                                                                 | `…080900_trust.sql:180`          |
+| `return.decided`           | `return_request_id`, `approved`                 | `public.ops_decide_return`                                                              | `…081700_api_backoffice.sql:167` |
+| `complaint.filed`          | `complaint_id`                                  | `public.file_complaint`                                                                 | `…081500_api_shopper.sql:609`    |
+| `complaint.answered`       | `complaint_id`, `closed`                        | `public.ops_resolve_complaint`                                                          | `…081700_api_backoffice.sql:284` |
+| `content.reported`         | `report_id`                                     | `public.report_content`                                                                 | `…081500_api_shopper.sql:639`    |
+| `report.resolved`          | `report_id`, `actioned`                         | `public.ops_resolve_report`                                                             | `…081700_api_backoffice.sql:329` |
+| `product.reviewed`         | `product_id`, `approved`                        | `public.ops_review_product`                                                             | `…081300_moderation.sql:72`      |
+| `seller.status_changed`    | `seller_id`, `status`, `note`                   | `public.ops_set_seller_status`                                                          | `…081300_moderation.sql:114`     |
 
 Gotchas for the consumer:
 
@@ -105,13 +105,13 @@ Gotchas for the consumer:
 
 ### 0.3 Events the requested notifications need and nothing emits
 
-| Needed for | Missing event (proposed name and payload) | Where to emit |
-| --- | --- | --- |
-| "Shipped" (parcel planned on a route; the playbook says shoppers are told the evening before, `docs/06-operations/logistics-playbook.md:106`) | `shipment.scheduled` `{shipment_id, route_id}` | `public.ops_create_route`, where the shipment becomes `ready_for_dispatch` (`…081100_fulfillment.sql:322-323`) |
-| "Out for delivery" | `shipment.out_for_delivery` `{shipment_id, route_id}` | `public.driver_start_route`, inside the loop that sets `out_for_delivery` (`…081100_fulfillment.sql:406`) |
-| "Refund paid" | `refund.completed` `{order_id, amount_minor, return_request_id?}` | wherever the gateway refund is confirmed (payment-gateway task); in sandbox mode next to `private.post_order_refund` (`…081000_checkout.sql:141`) |
-| Driver "route assigned" push | `route.assigned` `{route_id, driver_id}` | `public.ops_assign_route` (`…081100_fulfillment.sql:331`) |
-| Password reset, e-mail confirmation, e-mail change | none: these come from Supabase Auth, not from the outbox | section 3 |
+| Needed for                                                                                                                                    | Missing event (proposed name and payload)                         | Where to emit                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Shipped" (parcel planned on a route; the playbook says shoppers are told the evening before, `docs/06-operations/logistics-playbook.md:106`) | `shipment.scheduled` `{shipment_id, route_id}`                    | `public.ops_create_route`, where the shipment becomes `ready_for_dispatch` (`…081100_fulfillment.sql:322-323`)                                    |
+| "Out for delivery"                                                                                                                            | `shipment.out_for_delivery` `{shipment_id, route_id}`             | `public.driver_start_route`, inside the loop that sets `out_for_delivery` (`…081100_fulfillment.sql:406`)                                         |
+| "Refund paid"                                                                                                                                 | `refund.completed` `{order_id, amount_minor, return_request_id?}` | wherever the gateway refund is confirmed (payment-gateway task); in sandbox mode next to `private.post_order_refund` (`…081000_checkout.sql:141`) |
+| Driver "route assigned" push                                                                                                                  | `route.assigned` `{route_id, driver_id}`                          | `public.ops_assign_route` (`…081100_fulfillment.sql:331`)                                                                                         |
+| Password reset, e-mail confirmation, e-mail change                                                                                            | none: these come from Supabase Auth, not from the outbox          | section 3                                                                                                                                         |
 
 "Seller: new order" needs no new event: derive it from `order.released` (one
 delivery per seller that has lines in the order). "Listing approved/rejected" is
@@ -126,17 +126,17 @@ All of this is Bird's current platform API. It is **not** the older
 
 ### 1.1 Basics
 
-| Item | Value | Source |
-| --- | --- | --- |
-| Base URL | `https://us1.platform.bird.com` or `https://eu1.platform.bird.com`; must match the key's region. Wrong host: `421` (`misdirected_error`) | [B2] [B14] |
-| Auth header | `Authorization: Bearer bk_{region}_…` (workspace key). Missing/invalid `401`; missing scope `403` | [B2] [B14] |
-| Key scopes | `{scope, level}` pairs, `write` includes `read`. Worker key: `emails:write`, `whatsapp:write`, `sms:write`. Add `webhooks:write`, `domains:write`, `email_management:write`, `whatsapp_management:read` only on a separate setup key. A key cannot create keys | [B14] |
-| Key handling | shown once at creation; rotate with a 24-hour grace period; a rotated key cannot be rotated again | [B14] |
-| Send one e-mail | `POST /v1/email/messages` → `202 Accepted`, body has `id` (`em_…`) and `status: "accepted"` | [B1] [B2] |
-| Send up to 100 | `POST /v1/email/batches`, validated all-or-nothing | [B1] |
-| Read state | `GET /v1/email/messages/{id}`, `…/{id}/recipients`, `…/{id}/events`; list filter `?reference=` (exact) | [B1] [B6] |
-| Error envelope | `{"error":{"type":"rate_limit_error","code":"E01003","name":"RateLimited","message":"…","doc_url":"…","request_id":"req_…"}}`; branch on `type`/`code`, not on `message` | [B9] |
-| TypeScript SDK | `@messagebird/sdk` (`new BirdClient({ apiKey })`); not installed in this repo. Plain `fetch` is enough and keeps the adapter runnable under Deno and Node | [B14]; version **UNVERIFIED** |
+| Item            | Value                                                                                                                                                                                                                                                          | Source                        |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Base URL        | `https://us1.platform.bird.com` or `https://eu1.platform.bird.com`; must match the key's region. Wrong host: `421` (`misdirected_error`)                                                                                                                       | [B2] [B14]                    |
+| Auth header     | `Authorization: Bearer bk_{region}_…` (workspace key). Missing/invalid `401`; missing scope `403`                                                                                                                                                              | [B2] [B14]                    |
+| Key scopes      | `{scope, level}` pairs, `write` includes `read`. Worker key: `emails:write`, `whatsapp:write`, `sms:write`. Add `webhooks:write`, `domains:write`, `email_management:write`, `whatsapp_management:read` only on a separate setup key. A key cannot create keys | [B14]                         |
+| Key handling    | shown once at creation; rotate with a 24-hour grace period; a rotated key cannot be rotated again                                                                                                                                                              | [B14]                         |
+| Send one e-mail | `POST /v1/email/messages` → `202 Accepted`, body has `id` (`em_…`) and `status: "accepted"`                                                                                                                                                                    | [B1] [B2]                     |
+| Send up to 100  | `POST /v1/email/batches`, validated all-or-nothing                                                                                                                                                                                                             | [B1]                          |
+| Read state      | `GET /v1/email/messages/{id}`, `…/{id}/recipients`, `…/{id}/events`; list filter `?reference=` (exact)                                                                                                                                                         | [B1] [B6]                     |
+| Error envelope  | `{"error":{"type":"rate_limit_error","code":"E01003","name":"RateLimited","message":"…","doc_url":"…","request_id":"req_…"}}`; branch on `type`/`code`, not on `message`                                                                                       | [B9]                          |
+| TypeScript SDK  | `@messagebird/sdk` (`new BirdClient({ apiKey })`); not installed in this repo. Plain `fetch` is enough and keeps the adapter runnable under Deno and Node                                                                                                      | [B14]; version **UNVERIFIED** |
 
 ### 1.2 Request
 
@@ -165,22 +165,22 @@ Idempotency-Key: yt/prod/7b0c…-delivery-uuid/0
 }
 ```
 
-| Field | Rules that bite | Source |
-| --- | --- | --- |
-| `from` | string, RFC 5322 mailbox string, or `{email, name}`; must be on a domain verified in this workspace (else `422`) | [B1] [B2] |
-| `to`, `cc`, `bcc` | 1–50 `to`; up to 50 each for the others. **Billing is per recipient** | [B1] |
-| `subject` | required for inline sends, ≤ 998 chars | [B1] |
-| `html`, `text` | at least one, each ≤ 524,288 chars; send both | [B1] |
-| `category` | `transactional` or `marketing`. **Default is `marketing`** when there is no template: an order e-mail sent without it gets an unsubscribe link and is blocked by a newsletter opt-out | [B1] [B11] |
-| `parameters` | **omit it.** If present (even `{}`), subject and body are processed as Liquid and `{{ … }}` in our content is interpreted | [B1] [B2] |
-| `track_opens`, `track_clicks` | default `true`; click tracking rewrites links. Turn both off for transactional and auth mail (links carry one-time token hashes) | [B1] |
-| `tags` | ≤ 20, name ≤ 32, value ≤ 64, only `[A-Za-z0-9_-]`. A dotted topic such as `order.placed` is **not** a legal value; use `order_placed`. Names starting `__bird` rejected | [B1] |
-| `metadata` | JSON ≤ 2 KB, echoed on webhooks. Put `delivery_id` here. No personal data | [B1] [B6] |
-| `reference` | 1–255 chars, exact-match filter on the message list; use the delivery id for reconciliation | [B1] |
-| `headers` | ≤ 25 custom headers; transactional sends may set `List-Unsubscribe`; `From`, `Return-Path`, `DKIM-Signature` etc. are refused | [B1] |
-| `attachments` | ≤ 20, base64, whole message ≤ 20 MB (keep raw files ≤ 15 MB) | [B1] [B2] |
-| `scheduled_at` | 30 s to 30 days ahead; counts against a plan allowance | [B2] |
-| Recipient domains | `example.com/.net/.org/.edu`, `test.com` and the TLDs `.test`, `.example`, `.invalid`, `.localhost` are rejected with `422`. **The seed accounts are `…@yuntera.example`**, so a worker pointed at Bird with seed data fails every send permanently | [B1]; `supabase/seed*` |
+| Field                         | Rules that bite                                                                                                                                                                                                                                     | Source                 |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `from`                        | string, RFC 5322 mailbox string, or `{email, name}`; must be on a domain verified in this workspace (else `422`)                                                                                                                                    | [B1] [B2]              |
+| `to`, `cc`, `bcc`             | 1–50 `to`; up to 50 each for the others. **Billing is per recipient**                                                                                                                                                                               | [B1]                   |
+| `subject`                     | required for inline sends, ≤ 998 chars                                                                                                                                                                                                              | [B1]                   |
+| `html`, `text`                | at least one, each ≤ 524,288 chars; send both                                                                                                                                                                                                       | [B1]                   |
+| `category`                    | `transactional` or `marketing`. **Default is `marketing`** when there is no template: an order e-mail sent without it gets an unsubscribe link and is blocked by a newsletter opt-out                                                               | [B1] [B11]             |
+| `parameters`                  | **omit it.** If present (even `{}`), subject and body are processed as Liquid and `{{ … }}` in our content is interpreted                                                                                                                           | [B1] [B2]              |
+| `track_opens`, `track_clicks` | default `true`; click tracking rewrites links. Turn both off for transactional and auth mail (links carry one-time token hashes)                                                                                                                    | [B1]                   |
+| `tags`                        | ≤ 20, name ≤ 32, value ≤ 64, only `[A-Za-z0-9_-]`. A dotted topic such as `order.placed` is **not** a legal value; use `order_placed`. Names starting `__bird` rejected                                                                             | [B1]                   |
+| `metadata`                    | JSON ≤ 2 KB, echoed on webhooks. Put `delivery_id` here. No personal data                                                                                                                                                                           | [B1] [B6]              |
+| `reference`                   | 1–255 chars, exact-match filter on the message list; use the delivery id for reconciliation                                                                                                                                                         | [B1]                   |
+| `headers`                     | ≤ 25 custom headers; transactional sends may set `List-Unsubscribe`; `From`, `Return-Path`, `DKIM-Signature` etc. are refused                                                                                                                       | [B1]                   |
+| `attachments`                 | ≤ 20, base64, whole message ≤ 20 MB (keep raw files ≤ 15 MB)                                                                                                                                                                                        | [B1] [B2]              |
+| `scheduled_at`                | 30 s to 30 days ahead; counts against a plan allowance                                                                                                                                                                                              | [B2]                   |
+| Recipient domains             | `example.com/.net/.org/.edu`, `test.com` and the TLDs `.test`, `.example`, `.invalid`, `.localhost` are rejected with `422`. **The seed accounts are `…@yuntera.example`**, so a worker pointed at Bird with seed data fails every send permanently | [B1]; `supabase/seed*` |
 
 What `202` means: durably accepted, delivery is asynchronous. Fixable problems
 come back at once as `422`. A suppressed recipient still returns `202` and
@@ -189,16 +189,16 @@ can briefly return `404` [B1] [B2].
 
 ### 1.3 Idempotency
 
-| Rule | Value | Source |
-| --- | --- | --- |
-| Header | `Idempotency-Key`, any non-empty string ≤ 255 chars; recommended `<event-type>/<entity-id>` | [B3] |
-| Scope and retention | per workspace; completed response kept **3 hours** | [B3] |
-| Replay | same key and identical request → original status and body, plus `Idempotency-Replay: true` | [B3] |
-| Different body, same key | `409 E01005 IdempotencyKeyReuse`. The comparison covers method, path, query and the **raw body including JSON whitespace** | [B3] |
-| Still in flight | `409 E01004 RequestInProgress`; lock expires within 30 s; retry same key | [B2] [B3] |
-| Protection unavailable | `503 E01033 IdempotencyUnavailable`, attempt not executed; retry same key | [B3] |
-| `5xx` | not retained; retry with the same key and body | [B3] |
-| Retained `4xx` | a retained rejection is replayed for the same key, so **after fixing a `422` use a new key**. The guide does not limit this to `422`: a `402 WalletInsufficientBalance` retried with the same key after the wallet is topped up can come back as the replayed `402`. Whether a `429` is retained is not stated (**UNVERIFIED**; it is refused before execution, so probably not) | [B3] |
+| Rule                     | Value                                                                                                                                                                                                                                                                                                                                                                            | Source    |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| Header                   | `Idempotency-Key`, any non-empty string ≤ 255 chars; recommended `<event-type>/<entity-id>`                                                                                                                                                                                                                                                                                      | [B3]      |
+| Scope and retention      | per workspace; completed response kept **3 hours**                                                                                                                                                                                                                                                                                                                               | [B3]      |
+| Replay                   | same key and identical request → original status and body, plus `Idempotency-Replay: true`                                                                                                                                                                                                                                                                                       | [B3]      |
+| Different body, same key | `409 E01005 IdempotencyKeyReuse`. The comparison covers method, path, query and the **raw body including JSON whitespace**                                                                                                                                                                                                                                                       | [B3]      |
+| Still in flight          | `409 E01004 RequestInProgress`; lock expires within 30 s; retry same key                                                                                                                                                                                                                                                                                                         | [B2] [B3] |
+| Protection unavailable   | `503 E01033 IdempotencyUnavailable`, attempt not executed; retry same key                                                                                                                                                                                                                                                                                                        | [B3]      |
+| `5xx`                    | not retained; retry with the same key and body                                                                                                                                                                                                                                                                                                                                   | [B3]      |
+| Retained `4xx`           | a retained rejection is replayed for the same key, so **after fixing a `422` use a new key**. The guide does not limit this to `422`: a `402 WalletInsufficientBalance` retried with the same key after the wallet is topped up can come back as the replayed `402`. Whether a `429` is retained is not stated (**UNVERIFIED**; it is refused before execution, so probably not) | [B3]      |
 
 Consequences for our worker: freeze the exact request body text before the
 first attempt and resend those bytes; keep the whole retry horizon under 3
@@ -213,14 +213,14 @@ Register with `POST /v1/email/domains` `{ "domain": "<SENDING_DOMAIN>",
 **Email > Domains**. The response carries the DKIM selector and a `dns_records`
 array with exact `name`, `host`, `value` to copy [B4].
 
-| Record | Type | Host | Value | Needed to send | Source |
-| --- | --- | --- | --- | --- | --- |
-| DKIM | TXT | `<selector>._domainkey.<SENDING_DOMAIN>` | `v=DKIM1; k=rsa; p=<public-key>` (per organisation; copy, never construct) | yes | [B4] [B5] |
-| Return-path | CNAME | `send.<SENDING_DOMAIN>` | `<region>.bounce.bird.com` (copy from dashboard) | yes | [B4] [B5] |
-| DMARC | TXT | `_dmarc.<SENDING_DOMAIN>` (a record on the parent domain also counts) | any valid `v=DMARC1` policy; Bird suggests `v=DMARC1; p=none; rua=mailto:dmarc-agg@dmarc.bird.com;` | yes | [B4] [B5] |
-| Tracking | CNAME | `links.<SENDING_DOMAIN>` | `<region>.links.bird.com` | no (only for branded open/click tracking) | [B5] |
-| Inbound MX | MX | sending domain | Bird's MX | **no; do not publish** unless receiving through Bird: on a domain that already has mailboxes it reroutes their mail | [B4] |
-| SPF | — | — | **No SPF record is needed at the apex.** SPF is checked against the return-path host, which the CNAME covers. An `include:` at the apex does nothing for Bird | no | [B5] |
+| Record      | Type  | Host                                                                  | Value                                                                                                                                                         | Needed to send                                                                                                      | Source    |
+| ----------- | ----- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------- |
+| DKIM        | TXT   | `<selector>._domainkey.<SENDING_DOMAIN>`                              | `v=DKIM1; k=rsa; p=<public-key>` (per organisation; copy, never construct)                                                                                    | yes                                                                                                                 | [B4] [B5] |
+| Return-path | CNAME | `send.<SENDING_DOMAIN>`                                               | `<region>.bounce.bird.com` (copy from dashboard)                                                                                                              | yes                                                                                                                 | [B4] [B5] |
+| DMARC       | TXT   | `_dmarc.<SENDING_DOMAIN>` (a record on the parent domain also counts) | any valid `v=DMARC1` policy; Bird suggests `v=DMARC1; p=none; rua=mailto:dmarc-agg@dmarc.bird.com;`                                                           | yes                                                                                                                 | [B4] [B5] |
+| Tracking    | CNAME | `links.<SENDING_DOMAIN>`                                              | `<region>.links.bird.com`                                                                                                                                     | no (only for branded open/click tracking)                                                                           | [B5]      |
+| Inbound MX  | MX    | sending domain                                                        | Bird's MX                                                                                                                                                     | **no; do not publish** unless receiving through Bird: on a domain that already has mailboxes it reroutes their mail | [B4]      |
+| SPF         | —     | —                                                                     | **No SPF record is needed at the apex.** SPF is checked against the return-path host, which the CNAME covers. An `include:` at the apex does nothing for Bird | no                                                                                                                  | [B5]      |
 
 Other facts: use a dedicated subdomain, not the apex [B4]. The send gate is
 `capabilities.sending`, verified only when DKIM, return-path CNAME and DMARC are
@@ -237,15 +237,15 @@ Bird has stored templates (`/v1/email/templates`, slug, draft/published
 versions, up to 25 languages, Liquid, `template: {slug, parameters, language}`
 on the send) [B12]. **Recommendation: do not use them for transactional mail.**
 
-| Concern | Bird stored template | Our own renderer (recommended) |
-| --- | --- | --- |
-| Versioning | draft → `submit` → numbered version, by API or dashboard [B12] | in git with the code; reviewed and tested like code |
-| Formatting money and dates | `money`, `format_date`, `format_time` filters are rejected at publish [B12] | `packages/core` already formats colones and dates |
-| Variables | flat single-word names only; a missing one is a `422` at send time [B12] | typed function arguments; a missing one fails `tsc` |
-| Local development | needs the provider | renders to a string; a dev adapter can store it |
-| Same template for Auth mail | not reachable from Supabase SMTP | the Send Email Hook calls the same function |
-| Provider lock-in | high | none |
-| Idempotent retries | fine | fine, provided the rendered body is frozen (1.3) |
+| Concern                     | Bird stored template                                                        | Our own renderer (recommended)                      |
+| --------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------- |
+| Versioning                  | draft → `submit` → numbered version, by API or dashboard [B12]              | in git with the code; reviewed and tested like code |
+| Formatting money and dates  | `money`, `format_date`, `format_time` filters are rejected at publish [B12] | `packages/core` already formats colones and dates   |
+| Variables                   | flat single-word names only; a missing one is a `422` at send time [B12]    | typed function arguments; a missing one fails `tsc` |
+| Local development           | needs the provider                                                          | renders to a string; a dev adapter can store it     |
+| Same template for Auth mail | not reachable from Supabase SMTP                                            | the Send Email Hook calls the same function         |
+| Provider lock-in            | high                                                                        | none                                                |
+| Idempotent retries          | fine                                                                        | fine, provided the rendered body is frozen (1.3)    |
 
 Provider-side templates are unavoidable only for WhatsApp (section 2).
 
@@ -254,21 +254,21 @@ Provider-side templates are unavoidable only for WhatsApp (section 2).
 Bird follows the **Standard Webhooks** specification [B6]. This is the same
 scheme Supabase Auth uses for HTTP hooks [S2], so one verifier serves both.
 
-| Item | Value | Source |
-| --- | --- | --- |
-| Create | dashboard **Platform tools > Webhooks**, or `POST /v1/webhooks` `{url, events[], description}` (scope `webhooks:write`) | [B6] |
-| URL | HTTPS, ≤ 2048 chars, publicly reachable | [B6] |
-| Events | explicit list, ≤ 100 types, **no wildcards**, new types are not auto-subscribed | [B6] |
-| Secret | `whsec_<base64>`, returned **once** in the create response | [B6] |
-| Headers | `webhook-id` (same on retries and replays), `webhook-timestamp` (Unix seconds of this attempt), `webhook-signature` (`v1,<base64>`; several, space-separated, during rotation) | [B6] |
-| **Signature** | `base64( HMAC-SHA256( key, "{webhook-id}.{webhook-timestamp}.{raw body}" ) )`, where `key` = base64-decode of the secret **after removing `whsec_`** | [B6] |
-| Checks we must do | constant-time compare against every `v1,` entry; reject if timestamp is more than 5 minutes off; dedupe on `webhook-id` (delivery is at-least-once) | [B6] |
-| Body | one event per POST, JSON `{type, timestamp, data}`; verify over the raw bytes, never re-serialised JSON | [B6] |
-| Our response | any `2xx` within **15 s** = success. A non-2xx is retried; there is no status that stops retries | [B6] |
-| Retry schedule | 5 s, 5 min, 30 min, 2 h, 5 h, 10 h, 10 h (±20 %): 8 attempts over about 27.5 h; honours `Retry-After` up to twice the scheduled delay | [B6] |
-| Ordering | **not ordered**; sort by the payload `timestamp` | [B6] |
-| Operations | `POST /v1/webhooks/{id}/test`; `…/replay` (failed deliveries only, 3-day log, 20 per day); `…/rotate-secret` (both secrets sign for 24 h, max 5); auto-pause after about 5 days of continuous failure | [B6] |
-| Endpoint allowance | 3 on Free and Startup plans (allowances of several product plans add up) | [B13] [P1] |
+| Item               | Value                                                                                                                                                                                                 | Source     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| Create             | dashboard **Platform tools > Webhooks**, or `POST /v1/webhooks` `{url, events[], description}` (scope `webhooks:write`)                                                                               | [B6]       |
+| URL                | HTTPS, ≤ 2048 chars, publicly reachable                                                                                                                                                               | [B6]       |
+| Events             | explicit list, ≤ 100 types, **no wildcards**, new types are not auto-subscribed                                                                                                                       | [B6]       |
+| Secret             | `whsec_<base64>`, returned **once** in the create response                                                                                                                                            | [B6]       |
+| Headers            | `webhook-id` (same on retries and replays), `webhook-timestamp` (Unix seconds of this attempt), `webhook-signature` (`v1,<base64>`; several, space-separated, during rotation)                        | [B6]       |
+| **Signature**      | `base64( HMAC-SHA256( key, "{webhook-id}.{webhook-timestamp}.{raw body}" ) )`, where `key` = base64-decode of the secret **after removing `whsec_`**                                                  | [B6]       |
+| Checks we must do  | constant-time compare against every `v1,` entry; reject if timestamp is more than 5 minutes off; dedupe on `webhook-id` (delivery is at-least-once)                                                   | [B6]       |
+| Body               | one event per POST, JSON `{type, timestamp, data}`; verify over the raw bytes, never re-serialised JSON                                                                                               | [B6]       |
+| Our response       | any `2xx` within **15 s** = success. A non-2xx is retried; there is no status that stops retries                                                                                                      | [B6]       |
+| Retry schedule     | 5 s, 5 min, 30 min, 2 h, 5 h, 10 h, 10 h (±20 %): 8 attempts over about 27.5 h; honours `Retry-After` up to twice the scheduled delay                                                                 | [B6]       |
+| Ordering           | **not ordered**; sort by the payload `timestamp`                                                                                                                                                      | [B6]       |
+| Operations         | `POST /v1/webhooks/{id}/test`; `…/replay` (failed deliveries only, 3-day log, 20 per day); `…/rotate-secret` (both secrets sign for 24 h, max 5); auto-pause after about 5 days of continuous failure | [B6]       |
+| Endpoint allowance | 3 on Free and Startup plans (allowances of several product plans add up)                                                                                                                              | [B13] [P1] |
 
 E-mail event types [B7]: `email.accepted`, `email.processed`, `email.delivered`,
 `email.deferred`, `email.bounced`, `email.out_of_band_bounce`, `email.rejected`,
@@ -282,37 +282,44 @@ plus `email_suppression.created` [B10] and the cross-channel `preference.granted
   "type": "email.bounced",
   "timestamp": "2026-07-23T14:51:47.107Z",
   "data": {
-    "email_id": "em_01…", "recipient_id": "er_01…", "workspace_id": "ws_01…",
-    "recipient": "<address>", "recipient_role": "to",
+    "email_id": "em_01…",
+    "recipient_id": "er_01…",
+    "workspace_id": "ws_01…",
+    "recipient": "<address>",
+    "recipient_role": "to",
     "tags": [{ "name": "template", "value": "order_placed" }],
     "metadata": { "delivery_id": "7b0c…" },
-    "broadcast_id": null, "brand_id": null,
-    "bounce_type": "hard", "bounce_class": 10, "bounce_code": "550",
-    "bounce_description": "…", "sending_ip": "…"
+    "broadcast_id": null,
+    "brand_id": null,
+    "bounce_type": "hard",
+    "bounce_class": 10,
+    "bounce_code": "550",
+    "bounce_description": "…",
+    "sending_ip": "…"
   }
 }
 ```
 
-| Event | Extra `data` fields | What we do |
-| --- | --- | --- |
-| `email.delivered` | none | delivery → `delivered` (accepted by the receiving server, not "in inbox") |
-| `email.deferred` | `bounce_type`, `bounce_class`, `defer_reason`, `sending_ip` | nothing; Bird retries |
-| `email.bounced`, `email.out_of_band_bounce` | `bounce_type` (`hard`, `soft`, `block`, `admin`, `undetermined`), `bounce_class`, `bounce_code`, `bounce_description` | delivery → `bounced`; on `hard` flag the account's address as undeliverable and fall back to WhatsApp/push. An out-of-band bounce can arrive **after** `delivered` |
-| `email.rejected` | `rejection_reason`: `recipient_suppressed`, `transmission_failed`, `generation_failure`, `policy_rejection`, `domain_unverified`, `quota_exceeded`, `recipient_not_allowed`, `workspace_suspended` (list grows) | delivery → `failed`; `quota_exceeded`, `domain_unverified`, `workspace_suspended` raise a staff alert |
-| `email.complained` | `feedback_type` | record; never send marketing to this address again |
-| `email.unsubscribed`, `email.list_unsubscribed` | none; `tags`/`metadata` may be null | set `marketing_opt_in = false`, stamp the consent row revoked |
-| `email_suppression.created` | `email`, `reason`, `suppression_id` | mirror |
+| Event                                           | Extra `data` fields                                                                                                                                                                                             | What we do                                                                                                                                                         |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `email.delivered`                               | none                                                                                                                                                                                                            | delivery → `delivered` (accepted by the receiving server, not "in inbox")                                                                                          |
+| `email.deferred`                                | `bounce_type`, `bounce_class`, `defer_reason`, `sending_ip`                                                                                                                                                     | nothing; Bird retries                                                                                                                                              |
+| `email.bounced`, `email.out_of_band_bounce`     | `bounce_type` (`hard`, `soft`, `block`, `admin`, `undetermined`), `bounce_class`, `bounce_code`, `bounce_description`                                                                                           | delivery → `bounced`; on `hard` flag the account's address as undeliverable and fall back to WhatsApp/push. An out-of-band bounce can arrive **after** `delivered` |
+| `email.rejected`                                | `rejection_reason`: `recipient_suppressed`, `transmission_failed`, `generation_failure`, `policy_rejection`, `domain_unverified`, `quota_exceeded`, `recipient_not_allowed`, `workspace_suspended` (list grows) | delivery → `failed`; `quota_exceeded`, `domain_unverified`, `workspace_suspended` raise a staff alert                                                              |
+| `email.complained`                              | `feedback_type`                                                                                                                                                                                                 | record; never send marketing to this address again                                                                                                                 |
+| `email.unsubscribed`, `email.list_unsubscribed` | none; `tags`/`metadata` may be null                                                                                                                                                                             | set `marketing_opt_in = false`, stamp the consent row revoked                                                                                                      |
+| `email_suppression.created`                     | `email`, `reason`, `suppression_id`                                                                                                                                                                             | mirror                                                                                                                                                             |
 
 Bounce classes: `10`, `30` hard; `20–24`, `40`, `70`, `100` soft; `25` admin;
 `50–54` block; `1` and anything else undetermined [B7].
 
 ### 1.7 Suppression
 
-| Reason | Added by | Blocks marketing | Blocks transactional | Removable by API key |
-| --- | --- | --- | --- | --- |
-| `hard_bounce` | automatically on a hard bounce | yes | **yes** | yes |
-| `complaint` | automatically on a spam complaint | yes | no | **no** (dashboard only; `422 SuppressionNotRemovableByAPIKey`) |
-| `manual` | us (`POST /v1/email/suppressions {email}`; idempotent, `201` or `200`) | yes | **yes** | yes |
+| Reason        | Added by                                                               | Blocks marketing | Blocks transactional | Removable by API key                                           |
+| ------------- | ---------------------------------------------------------------------- | ---------------- | -------------------- | -------------------------------------------------------------- |
+| `hard_bounce` | automatically on a hard bounce                                         | yes              | **yes**              | yes                                                            |
+| `complaint`   | automatically on a spam complaint                                      | yes              | no                   | **no** (dashboard only; `422 SuppressionNotRemovableByAPIKey`) |
+| `manual`      | us (`POST /v1/email/suppressions {email}`; idempotent, `201` or `200`) | yes              | **yes**              | yes                                                            |
 
 Source [B10]. A complaint that Bird can attribute to a Brand does **not** create
 a `complaint` suppression: it records a revoked preference (`origin: complaint`)
@@ -341,19 +348,19 @@ RateLimit: "email_send";r=842;t=35             # remaining, seconds to reset
 On exhaustion: `429` with `Retry-After` (seconds) and `error.type =
 "rate_limit_error"`. The limiter fails open [B9]. Published values [P1] [P2]:
 
-| Plan | Monthly deposit | `email_send` | `email_batch` | Notes |
-| --- | --- | --- | --- | --- |
-| E-mail Free | none | 10 / min | 5 / min | 1,000 e-mails/month, **50/day**, no overage |
-| E-mail Startup | US$15 | 30 / min | 10 / min | US$0.40 per 1,000 |
-| E-mail Growth | US$250 | 100 / min | 30 / min | US$0.45 per 1,000; dedicated IPs possible |
+| Plan           | Monthly deposit | `email_send` | `email_batch` | Notes                                       |
+| -------------- | --------------- | ------------ | ------------- | ------------------------------------------- |
+| E-mail Free    | none            | 10 / min     | 5 / min       | 1,000 e-mails/month, **50/day**, no overage |
+| E-mail Startup | US$15           | 30 / min     | 10 / min      | US$0.40 per 1,000                           |
+| E-mail Growth  | US$250          | 100 / min    | 30 / min      | US$0.45 per 1,000; dedicated IPs possible   |
 
-| Product plan | Monthly deposit | Send API | Source |
-| --- | --- | --- | --- |
-| WhatsApp pay-as-you-go | none | `whatsapp_send` 10 / min | [P4] |
-| WhatsApp Startup | US$15 | 60 / min | [P4] |
-| WhatsApp Growth | US$100 | 2,400 / min | [P4] |
-| SMS pay-as-you-go | none | `sms_send` 60 / min | [P2] |
-| SMS Startup | US$15 | 120 / min | [P2] |
+| Product plan           | Monthly deposit | Send API                 | Source |
+| ---------------------- | --------------- | ------------------------ | ------ |
+| WhatsApp pay-as-you-go | none            | `whatsapp_send` 10 / min | [P4]   |
+| WhatsApp Startup       | US$15           | 60 / min                 | [P4]   |
+| WhatsApp Growth        | US$100          | 2,400 / min              | [P4]   |
+| SMS pay-as-you-go      | none            | `sms_send` 60 / min      | [P2]   |
+| SMS Startup            | US$15           | 120 / min                | [P2]   |
 
 At 10 WhatsApp sends per minute on pay-as-you-go, a 60-stop route start takes
 six minutes to notify; the worker must pace itself per channel from the
@@ -379,16 +386,16 @@ headers are authoritative; read them rather than hard-coding.
 
 ### 1.10 SMTP relay (used by Supabase Auth, section 3)
 
-| Item | Value |
-| --- | --- |
-| Host | `us1.smtp.bird.com` or `eu1.smtp.bird.com` (must match the key's region; wrong region → `535`) |
-| Ports | `465` implicit TLS, `587` STARTTLS, `2525` STARTTLS. Port 25 not offered. TLS 1.2+ |
-| Auth | `AUTH PLAIN` or `LOGIN`; username is the literal `bird`; password is an API key with the `emails` scope |
-| From | `MAIL FROM` and the `From` header must be on a verified domain |
+| Item                              | Value                                                                                                                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Host                              | `us1.smtp.bird.com` or `eu1.smtp.bird.com` (must match the key's region; wrong region → `535`)                                                                            |
+| Ports                             | `465` implicit TLS, `587` STARTTLS, `2525` STARTTLS. Port 25 not offered. TLS 1.2+                                                                                        |
+| Auth                              | `AUTH PLAIN` or `LOGIN`; username is the literal `bird`; password is an API key with the `emails` scope                                                                   |
+| From                              | `MAIL FROM` and the `From` header must be on a verified domain                                                                                                            |
 | Category, tags, tracking, IP pool | come from the **key's SMTP configuration** (**Email > SMTP**). An unconfigured key sends as `transactional` with **tracking enabled**: turn tracking off for the Auth key |
-| Limits | ≤ 50 recipients, 20 MB; 10 concurrent connections per organisation by default (Free), 20 on Startup |
-| Idempotency | header `X-Bird-Idempotency-Key` in the message |
-| Replies | `250 2.0.0 Ok: queued as em_…`; `550` permanent (unverified domain, reserved recipient domain); `452` transient (quota, wallet, rate limit) |
+| Limits                            | ≤ 50 recipients, 20 MB; 10 concurrent connections per organisation by default (Free), 20 on Startup                                                                       |
+| Idempotency                       | header `X-Bird-Idempotency-Key` in the message                                                                                                                            |
+| Replies                           | `250 2.0.0 Ok: queued as em_…`; `550` permanent (unverified domain, reserved recipient domain); `452` transient (quota, wallet, rate limit)                               |
 
 Source [B8] [P1].
 
@@ -398,15 +405,15 @@ Source [B8] [P1].
 
 ### 2.1 WhatsApp prerequisites
 
-| Step | Who | Detail | Source |
-| --- | --- | --- | --- |
-| Meta business portfolio | owner | created or selected inside Meta's Embedded Signup, opened from Bird's **WhatsApp > Numbers** page | [B16] [B17] |
-| A phone number | owner | three paths: a dedicated number bought from Bird and allocated to the workspace (Bird receives Meta's code); **a number from another provider ("I have my own number", Meta sends the code by SMS or voice)**; or an existing WhatsApp Business app number through **coexistence**. A number on personal WhatsApp either moves to the WhatsApp Business app and then connects by coexistence, or has its WhatsApp account deleted (wait up to three minutes) before connecting; coexistence cannot take a personal-app number directly. Connecting a number to WhatsApp carries no extra Bird charge; a number bought from Bird is still a paid number subscription | [B17] [B19] |
-| WhatsApp Business Account (WABA) | created in the same flow | templates live on the WABA; `from` must be a number on the same WABA as the template (`422 E15023 WhatsAppSenderWABAMismatch` otherwise; a number the workspace cannot send from is `422 WhatsAppSenderNotFound`) | [B15] [B23] |
-| Business verification (Meta) | owner | **not** required to author utility or marketing templates; required to author authentication templates. It raises the limits: an unverified portfolio is limited to 2 numbers and 250 unique customers per 24 h for business-initiated messages, scaling to 2,000; Meta's decision can come within minutes or take up to 14 business days | [B20] [B21] [B24] |
-| Templates approved by Meta | us | every business-initiated message outside the 24-hour window must be an approved template | [B15] [B22] |
-| Opt-in | us | section 2.5 | [B19] [M1] |
-| Wallet balance | owner | a send the wallet cannot cover returns `402 WalletInsufficientBalance` | [B15] |
+| Step                             | Who                      | Detail                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Source            |
+| -------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| Meta business portfolio          | owner                    | created or selected inside Meta's Embedded Signup, opened from Bird's **WhatsApp > Numbers** page                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [B16] [B17]       |
+| A phone number                   | owner                    | three paths: a dedicated number bought from Bird and allocated to the workspace (Bird receives Meta's code); **a number from another provider ("I have my own number", Meta sends the code by SMS or voice)**; or an existing WhatsApp Business app number through **coexistence**. A number on personal WhatsApp either moves to the WhatsApp Business app and then connects by coexistence, or has its WhatsApp account deleted (wait up to three minutes) before connecting; coexistence cannot take a personal-app number directly. Connecting a number to WhatsApp carries no extra Bird charge; a number bought from Bird is still a paid number subscription | [B17] [B19]       |
+| WhatsApp Business Account (WABA) | created in the same flow | templates live on the WABA; `from` must be a number on the same WABA as the template (`422 E15023 WhatsAppSenderWABAMismatch` otherwise; a number the workspace cannot send from is `422 WhatsAppSenderNotFound`)                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [B15] [B23]       |
+| Business verification (Meta)     | owner                    | **not** required to author utility or marketing templates; required to author authentication templates. It raises the limits: an unverified portfolio is limited to 2 numbers and 250 unique customers per 24 h for business-initiated messages, scaling to 2,000; Meta's decision can come within minutes or take up to 14 business days                                                                                                                                                                                                                                                                                                                           | [B20] [B21] [B24] |
+| Templates approved by Meta       | us                       | every business-initiated message outside the 24-hour window must be an approved template                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | [B15] [B22]       |
+| Opt-in                           | us                       | section 2.5                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | [B19] [M1]        |
+| Wallet balance                   | owner                    | a send the wallet cannot cover returns `402 WalletInsufficientBalance`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | [B15]             |
 
 Whether Bird can allocate a Costa Rican (+506) number, and which +506 number
 types Meta accepts, is **UNVERIFIED**; the documented fallback is the owner's own
@@ -428,11 +435,11 @@ the API, and its profile is editable only in the app [B26]. A separate
 
 ### 2.2 Template categories and review
 
-| Category | Use | Our messages | Notes |
-| --- | --- | --- | --- |
-| `utility` | follows up something the recipient did: order, payment, delivery, account notice | all order, delivery, refund, return, seller-order messages | must be non-promotional and specific; "an order confirmation with an added discount or upsell is marketing"; a survey tied to a completed order can be utility [B20] |
-| `authentication` | one-time codes, Meta's preset wording, copy-code button | phone verification, if ever done over WhatsApp | authoring needs a verified business; Bird's `bird_otp` works without [B22] |
-| `marketing` | offers, announcements, general feedback requests | none at launch | sent from our own WABA only [B22] |
+| Category         | Use                                                                              | Our messages                                               | Notes                                                                                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `utility`        | follows up something the recipient did: order, payment, delivery, account notice | all order, delivery, refund, return, seller-order messages | must be non-promotional and specific; "an order confirmation with an added discount or upsell is marketing"; a survey tied to a completed order can be utility [B20] |
+| `authentication` | one-time codes, Meta's preset wording, copy-code button                          | phone verification, if ever done over WhatsApp             | authoring needs a verified business; Bird's `bird_otp` works without [B22]                                                                                           |
+| `marketing`      | offers, announcements, general feedback requests                                 | none at launch                                             | sent from our own WABA only [B22]                                                                                                                                    |
 
 Rules that cause rejections or surprises [B20] [B21] [B23] [B27]:
 
@@ -490,16 +497,16 @@ Idempotency-Key: yt/prod/<delivery-uuid>/0
 }
 ```
 
-| Field | Rule | Source |
-| --- | --- | --- |
-| `to` | E.164; an impossible number is `422 WhatsAppInvalidRecipient` before any charge | [B15] |
-| `from` | required for our own templates and for free-form messages (`422 WhatsAppSenderRequired`); must be **omitted** for `bird_` templates (`422 WhatsAppSenderNotAllowed`) | [B15] |
-| `template.parameters` | one object keyed by variable name; `button_url` fills a URL button's numbered suffix (send the bare value, not the full URL); `header_url` for a media header; ≤ 16 KB; a missing required key is refused before any charge | [B15] [B23] |
-| `template.components` | Meta's shape; **not** checked for parameter count on our own templates before charging. Prefer `parameters` | [B23] |
-| `tags`, `metadata`, `reference` | same limits as e-mail; echoed on every webhook event | [B15] |
-| Free-form (`text`, `image`, …) | only inside the 24-hour window and only from our own number | [B15] |
-| Errors | `422` unknown slug/language, `WhatsAppTemplateParameterMismatch`, `E15044 WhatsAppServiceWindowClosed`; `402 WalletInsufficientBalance`; after acceptance `rejected` with `insufficient_balance`, `price_not_found` or `recipient_suppressed` | [B15] [B28] |
-| Idempotency | same header and rules as e-mail | [B15] [B3] |
+| Field                           | Rule                                                                                                                                                                                                                                          | Source      |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `to`                            | E.164; an impossible number is `422 WhatsAppInvalidRecipient` before any charge                                                                                                                                                               | [B15]       |
+| `from`                          | required for our own templates and for free-form messages (`422 WhatsAppSenderRequired`); must be **omitted** for `bird_` templates (`422 WhatsAppSenderNotAllowed`)                                                                          | [B15]       |
+| `template.parameters`           | one object keyed by variable name; `button_url` fills a URL button's numbered suffix (send the bare value, not the full URL); `header_url` for a media header; ≤ 16 KB; a missing required key is refused before any charge                   | [B15] [B23] |
+| `template.components`           | Meta's shape; **not** checked for parameter count on our own templates before charging. Prefer `parameters`                                                                                                                                   | [B23]       |
+| `tags`, `metadata`, `reference` | same limits as e-mail; echoed on every webhook event                                                                                                                                                                                          | [B15]       |
+| Free-form (`text`, `image`, …)  | only inside the 24-hour window and only from our own number                                                                                                                                                                                   | [B15]       |
+| Errors                          | `422` unknown slug/language, `WhatsAppTemplateParameterMismatch`, `E15044 WhatsAppServiceWindowClosed`; `402 WalletInsufficientBalance`; after acceptance `rejected` with `insufficient_balance`, `price_not_found` or `recipient_suppressed` | [B15] [B28] |
+| Idempotency                     | same header and rules as e-mail                                                                                                                                                                                                               | [B15] [B3]  |
 
 Status flow: `accepted` → `sent` (handed to WhatsApp) → `delivered` or `failed`;
 `rejected` means it never reached WhatsApp; a read is a separate `read_at` and
@@ -545,13 +552,13 @@ Status flow: `accepted` → `sent` (handed to WhatsApp) → `delivered` or `fail
 Per outbound message, USD, read from Bird's public page for Costa Rica on
 21 Nov 2026 [P3]:
 
-| Category | Bird fee | Meta fee | Total |
-| --- | --- | --- | --- |
-| Utility | 0.0050 | 0.0113 | **0.0163** |
-| Authentication | 0.0050 | 0.0113 | 0.0163 |
-| Service (free-form inside the window) | 0.0050 | 0.0113 | 0.0163 |
-| Marketing | 0.0050 | 0.074 | **0.079** |
-| Authentication (international) | Contact sales | | |
+| Category                              | Bird fee      | Meta fee | Total      |
+| ------------------------------------- | ------------- | -------- | ---------- |
+| Utility                               | 0.0050        | 0.0113   | **0.0163** |
+| Authentication                        | 0.0050        | 0.0113   | 0.0163     |
+| Service (free-form inside the window) | 0.0050        | 0.0113   | 0.0163     |
+| Marketing                             | 0.0050        | 0.074    | **0.079**  |
+| Authentication (international)        | Contact sales |          |            |
 
 Model [B15] [B32]: priced **per message**, by template category and recipient
 country. Bird's fee is charged when the send is processed and is kept even if
@@ -578,31 +585,38 @@ Event types: `whatsapp.accepted`, `whatsapp.sent`, `whatsapp.delivered`,
   "timestamp": "2026-07-23T14:51:40.201Z",
   "data": {
     "direction": "outbound",
-    "whatsapp_id": "wam_01…", "workspace_id": "ws_01…",
-    "from": { "phone_number": "+506YYYYYYYY" }, "to": { "phone_number": "+506XXXXXXXX" },
-    "tags": null, "metadata": { "delivery_id": "7b0c…" },
-    "error": { "code": "service_window_expired", "description": "…",
-               "meta_error_code": "131047", "occurred_at": "2026-07-23T14:51:40.201Z" }
+    "whatsapp_id": "wam_01…",
+    "workspace_id": "ws_01…",
+    "from": { "phone_number": "+506YYYYYYYY" },
+    "to": { "phone_number": "+506XXXXXXXX" },
+    "tags": null,
+    "metadata": { "delivery_id": "7b0c…" },
+    "error": {
+      "code": "service_window_expired",
+      "description": "…",
+      "meta_error_code": "131047",
+      "occurred_at": "2026-07-23T14:51:40.201Z"
+    }
   }
 }
 ```
 
 ### 2.8 SMS to Costa Rica (+506)
 
-| Item | Finding | Source |
-| --- | --- | --- |
-| Endpoint | `POST /v1/sms/messages` `{to, from, text, category}`; `category` is required: `transactional`, `marketing`, `authentication`, `service`. Batch: `POST /v1/sms/batches` (≤ 100) | [B33] |
-| Destination allowlist | the workspace starts with an **empty** country allowlist (the organisation's home country is added automatically); a send elsewhere is `422 SMSDestinationNotEnabled`. Enable Costa Rica under **SMS > Destinations** and set a daily spend limit there. A sending key cannot change either | [B33] |
-| **Alphanumeric sender ID** (`Yuntera`, 3–11 chars) | accepted by the API, but for Costa Rica "registration is unavailable and the sender ID is overwritten with another sender ID" (a short or long code). **One-way only.** The shopper will not see our name | [P5] [P6] |
-| Short code | sender ID preserved, two-way, no registration; short codes are allocated by Bird, not self-service | [P5] [P6] [B34] |
-| Long code | not listed for Costa Rica | [P5] [P6] |
-| Registration | none required; no template pre-approval | [P5] [P6] |
-| Content rules | "Political, adult, gambling traffic is prohibited"; "Mobile operators do not allow promotional messages from other operators to be delivered to their subscribers"; quiet hours "apply" but the window is not stated | [P6] |
-| Price | **US$0.10 per segment** outbound (alphanumeric or short code); US$0.0010 inbound on a short code; no carrier fee listed | [P5] |
-| Segments | 160 chars (GSM-7) or 70 (UCS-2) per single segment; capped at 12 segments; `options.smart_encoding` swaps typographic characters only | [B33] |
-| Spanish accents | Bird's character-limits page confirms `á`, `í`, `ú` force UCS-2 (70 chars per single segment, 67 per part) and `é` does not [B38]. `ó` outside and `ñ`, `¿`, `¡` inside GSM-7 come from the GSM 03.38 alphabet, not opened today (**UNVERIFIED**). Write SMS copy without `á í ó ú` or budget two segments; the response's `segments.encoding` (`GSM_7BIT` or `UCS2`) shows what was billed | [B38] |
-| Events | `sms.accepted`, `sms.sent`, `sms.delivered`, `sms.undelivered`, `sms.failed`, `sms.rejected`, `sms.expired`; failures carry `error {code, description, carrier_error_code, occurred_at}`. Also `sms.received` (inbound) and `sms_suppression.created`: a `STOP` reply suppresses only that sender-and-subscriber pair | [B35] |
-| Not supported | `scheduled_at` and several other fields return `422 SMSUnsupportedFeature` | [B33] |
+| Item                                               | Finding                                                                                                                                                                                                                                                                                                                                                                                     | Source          |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| Endpoint                                           | `POST /v1/sms/messages` `{to, from, text, category}`; `category` is required: `transactional`, `marketing`, `authentication`, `service`. Batch: `POST /v1/sms/batches` (≤ 100)                                                                                                                                                                                                              | [B33]           |
+| Destination allowlist                              | the workspace starts with an **empty** country allowlist (the organisation's home country is added automatically); a send elsewhere is `422 SMSDestinationNotEnabled`. Enable Costa Rica under **SMS > Destinations** and set a daily spend limit there. A sending key cannot change either                                                                                                 | [B33]           |
+| **Alphanumeric sender ID** (`Yuntera`, 3–11 chars) | accepted by the API, but for Costa Rica "registration is unavailable and the sender ID is overwritten with another sender ID" (a short or long code). **One-way only.** The shopper will not see our name                                                                                                                                                                                   | [P5] [P6]       |
+| Short code                                         | sender ID preserved, two-way, no registration; short codes are allocated by Bird, not self-service                                                                                                                                                                                                                                                                                          | [P5] [P6] [B34] |
+| Long code                                          | not listed for Costa Rica                                                                                                                                                                                                                                                                                                                                                                   | [P5] [P6]       |
+| Registration                                       | none required; no template pre-approval                                                                                                                                                                                                                                                                                                                                                     | [P5] [P6]       |
+| Content rules                                      | "Political, adult, gambling traffic is prohibited"; "Mobile operators do not allow promotional messages from other operators to be delivered to their subscribers"; quiet hours "apply" but the window is not stated                                                                                                                                                                        | [P6]            |
+| Price                                              | **US$0.10 per segment** outbound (alphanumeric or short code); US$0.0010 inbound on a short code; no carrier fee listed                                                                                                                                                                                                                                                                     | [P5]            |
+| Segments                                           | 160 chars (GSM-7) or 70 (UCS-2) per single segment; capped at 12 segments; `options.smart_encoding` swaps typographic characters only                                                                                                                                                                                                                                                       | [B33]           |
+| Spanish accents                                    | Bird's character-limits page confirms `á`, `í`, `ú` force UCS-2 (70 chars per single segment, 67 per part) and `é` does not [B38]. `ó` outside and `ñ`, `¿`, `¡` inside GSM-7 come from the GSM 03.38 alphabet, not opened today (**UNVERIFIED**). Write SMS copy without `á í ó ú` or budget two segments; the response's `segments.encoding` (`GSM_7BIT` or `UCS2`) shows what was billed | [B38]           |
+| Events                                             | `sms.accepted`, `sms.sent`, `sms.delivered`, `sms.undelivered`, `sms.failed`, `sms.rejected`, `sms.expired`; failures carry `error {code, description, carrier_error_code, occurred_at}`. Also `sms.received` (inbound) and `sms_suppression.created`: a `STOP` reply suppresses only that sender-and-subscriber pair                                                                       | [B35]           |
+| Not supported                                      | `scheduled_at` and several other fields return `422 SMSUnsupportedFeature`                                                                                                                                                                                                                                                                                                                  | [B33]           |
 
 Conclusion: SMS to Costa Rica is six times the price of a WhatsApp utility
 message and unbranded. Keep it for phone verification codes and as a fallback
@@ -621,22 +635,22 @@ redirect URL because the four apps live on different hosts.
 
 ### 3.1 The two mechanisms
 
-| | Custom SMTP | Send Email Hook |
-| --- | --- | --- |
-| What it is | Auth sends its own Go-template e-mails through an SMTP server | Auth calls **our** endpoint with the token; we send the e-mail |
-| Bird side | SMTP relay, section 1.10 | `POST /v1/email/messages`, section 1.2 |
-| Templates | Supabase's (dashboard, `config.toml`, Management API); a second template system | **our renderer**, same as order e-mails |
-| Code to write | none | one Edge Function |
-| Failure mode | Auth reports `over_email_send_rate_limit` or an SMTP error | our status code decides (below) |
-| Plans | all | Free and Pro [S2] |
+|               | Custom SMTP                                                                     | Send Email Hook                                                |
+| ------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| What it is    | Auth sends its own Go-template e-mails through an SMTP server                   | Auth calls **our** endpoint with the token; we send the e-mail |
+| Bird side     | SMTP relay, section 1.10                                                        | `POST /v1/email/messages`, section 1.2                         |
+| Templates     | Supabase's (dashboard, `config.toml`, Management API); a second template system | **our renderer**, same as order e-mails                        |
+| Code to write | none                                                                            | one Edge Function                                              |
+| Failure mode  | Auth reports `over_email_send_rate_limit` or an SMTP error                      | our status code decides (below)                                |
+| Plans         | all                                                                             | Free and Pro [S2]                                              |
 
 They are mutually exclusive at run time [S1]:
 
-| E-mail provider | Send Email Hook | Result |
-| --- | --- | --- |
-| Enabled | Enabled | hook sends; **SMTP not used** |
-| Enabled | Disabled | SMTP sends (custom if configured) |
-| Disabled | any | e-mail sign-ups disabled |
+| E-mail provider | Send Email Hook | Result                            |
+| --------------- | --------------- | --------------------------------- |
+| Enabled         | Enabled         | hook sends; **SMTP not used**     |
+| Enabled         | Disabled        | SMTP sends (custom if configured) |
+| Disabled        | any             | e-mail sign-ups disabled          |
 
 **Recommendation.** Configure both. Day one: Bird SMTP, so password reset and
 confirmation work with no code. Then enable the hook so Auth mail uses our
@@ -668,31 +682,40 @@ curl -X PATCH "https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth" \
 
 ### 3.3 Send Email Hook contract
 
-| Item | Value | Source |
-| --- | --- | --- |
-| Configure | dashboard **Authentication > Hooks**; locally `[auth.hook.send_email] enabled = true`, `uri = "https://<ref>.supabase.co/functions/v1/auth-email"`, `secrets = "env(SEND_EMAIL_HOOK_SECRETS)"` | [S1] [S2] |
-| Kinds | HTTP endpoint, or a Postgres function `pg-functions://postgres/<schema>/<fn>` taking and returning `jsonb` | [S2] |
-| Signature | Standard Webhooks: headers `webhook-id`, `webhook-timestamp`, `webhook-signature`; secret format `v1,whsec_<base64>` (strip `v1,whsec_` before use) | [S2] |
-| Edge Function | deploy with `--no-verify-jwt` / `verify_jwt = false`: the hook runs before any JWT exists; the signature is the authentication | [S1] [S2] |
-| Payload limit | 20 KB, sent uncompressed | [S2] |
-| Success | `200` (also `202`, `204`) with `Content-Type: application/json`; an empty `{}` body is enough | [S1] [S2] |
-| Errors | body `{"error":{"http_code":<n>,"message":"…"}}`. `429` or `503` **with a non-empty `retry-after` header** are retried up to 3 times with a 2 s back-off; `400`/`403` become a 500 to the user. **Total time budget 5 s including retries** | [S2] |
-| Postgres-function hooks | errors are not retryable; run inside a short transaction | [S2] |
+| Item                    | Value                                                                                                                                                                                                                                       | Source    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| Configure               | dashboard **Authentication > Hooks**; locally `[auth.hook.send_email] enabled = true`, `uri = "https://<ref>.supabase.co/functions/v1/auth-email"`, `secrets = "env(SEND_EMAIL_HOOK_SECRETS)"`                                              | [S1] [S2] |
+| Kinds                   | HTTP endpoint, or a Postgres function `pg-functions://postgres/<schema>/<fn>` taking and returning `jsonb`                                                                                                                                  | [S2]      |
+| Signature               | Standard Webhooks: headers `webhook-id`, `webhook-timestamp`, `webhook-signature`; secret format `v1,whsec_<base64>` (strip `v1,whsec_` before use)                                                                                         | [S2]      |
+| Edge Function           | deploy with `--no-verify-jwt` / `verify_jwt = false`: the hook runs before any JWT exists; the signature is the authentication                                                                                                              | [S1] [S2] |
+| Payload limit           | 20 KB, sent uncompressed                                                                                                                                                                                                                    | [S2]      |
+| Success                 | `200` (also `202`, `204`) with `Content-Type: application/json`; an empty `{}` body is enough                                                                                                                                               | [S1] [S2] |
+| Errors                  | body `{"error":{"http_code":<n>,"message":"…"}}`. `429` or `503` **with a non-empty `retry-after` header** are retried up to 3 times with a 2 s back-off; `400`/`403` become a 500 to the user. **Total time budget 5 s including retries** | [S2]      |
+| Postgres-function hooks | errors are not retryable; run inside a short transaction                                                                                                                                                                                    | [S2]      |
 
 Payload [S1]:
 
 ```json
 {
-  "user": { "id": "…", "email": "<current address>", "new_email": "<only on change>",
-            "user_metadata": { }, "app_metadata": { } },
+  "user": {
+    "id": "…",
+    "email": "<current address>",
+    "new_email": "<only on change>",
+    "user_metadata": {},
+    "app_metadata": {}
+  },
   "email_data": {
     "token": "305805",
     "token_hash": "7d5b7b19…",
     "redirect_to": "https://<app host>/auth/confirm",
     "email_action_type": "signup",
     "site_url": "https://<site>",
-    "token_new": "", "token_hash_new": "",
-    "old_email": "", "old_phone": "", "provider": "", "factor_type": ""
+    "token_new": "",
+    "token_hash_new": "",
+    "old_email": "",
+    "old_phone": "",
+    "provider": "",
+    "factor_type": ""
   }
 }
 ```
@@ -708,10 +731,10 @@ notice and a `200`, never an error, or a new Auth release can break sign-in.
 **E-mail change, the trap** [S1]. With Secure Email Change on, two e-mails must
 be sent and the field names are reversed:
 
-| Send to | Code | Hash for the link |
-| --- | --- | --- |
-| current address (`user.email`) | `token` | `token_hash_new` |
-| new address (`user.new_email`) | `token_new` | `token_hash` |
+| Send to                        | Code        | Hash for the link |
+| ------------------------------ | ----------- | ----------------- |
+| current address (`user.email`) | `token`     | `token_hash_new`  |
+| new address (`user.new_email`) | `token_new` | `token_hash`      |
 
 With it off, one e-mail goes to the new address using `token_hash`.
 
@@ -745,14 +768,14 @@ Client-side setup (permissions, channels, config plugin) is in
 
 ### 4.1 Token lifecycle
 
-| Fact | Source |
-| --- | --- |
-| The app gets the token with `getExpoPushTokenAsync({ projectId })`; it can reject on network failure, so wrap in `try/catch` and retry later | [E3] |
-| On Android 13+ a notification channel must exist before asking for the token | [E3] |
-| The token is stable across app upgrades. On Android a reinstall may change it; on iOS it survives uninstall and reinstall. It changes if the `applicationId` or the Expo project changes. **It never expires** | [E2] |
-| `addPushTokenListener` fires in the rare case the token changes while the app runs; re-register | [E3] |
-| When the app is uninstalled or permission is revoked, Expo eventually reports `DeviceNotRegistered`; this "takes an undefined amount of time" | [E1] [E2] |
-| Remote push does not work in Expo Go on Android from SDK 53 (the FAQ says Expo Go in SDK 53 and later does not support push at all); use a development build on both platforms | [E2] [E3] |
+| Fact                                                                                                                                                                                                           | Source    |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| The app gets the token with `getExpoPushTokenAsync({ projectId })`; it can reject on network failure, so wrap in `try/catch` and retry later                                                                   | [E3]      |
+| On Android 13+ a notification channel must exist before asking for the token                                                                                                                                   | [E3]      |
+| The token is stable across app upgrades. On Android a reinstall may change it; on iOS it survives uninstall and reinstall. It changes if the `applicationId` or the Expo project changes. **It never expires** | [E2]      |
+| `addPushTokenListener` fires in the rare case the token changes while the app runs; re-register                                                                                                                | [E3]      |
+| When the app is uninstalled or permission is revoked, Expo eventually reports `DeviceNotRegistered`; this "takes an undefined amount of time"                                                                  | [E1] [E2] |
+| Remote push does not work in Expo Go on Android from SDK 53 (the FAQ says Expo Go in SDK 53 and later does not support push at all); use a development build on both platforms                                 | [E2] [E3] |
 
 Rules for our server:
 
@@ -790,16 +813,16 @@ be fetched later. Tokens are bearer credentials unless push security is on
 
 ### 4.3 Push API
 
-| Item | Value | Source |
-| --- | --- | --- |
-| Send | `POST https://exp.host/--/api/v2/push/send` | [E1] |
-| Headers | `host: exp.host`, `accept: application/json`, `accept-encoding: gzip, deflate`, `content-type: application/json`; gzip request bodies optional | [E1] |
-| Body | one message object or an array of **up to 100**, all for the same project; `to` may itself be an array of tokens | [E1] |
-| Payload | total at most **4096 bytes** per notification | [E1] |
-| Rate limit | **600 notifications per second per project**; limit concurrent connections (the Node SDK uses 6) | [E1] [E2] |
-| Cost | free; no SLA | [E1] [E2] |
-| Delivery guarantee | at-least-once to FCM/APNs; duplicates are possible but rare | [E1] |
-| Receipts | `POST https://exp.host/--/api/v2/push/getReceipts` `{ "ids": [...] }`, up to **1000** ids | [E1] |
+| Item               | Value                                                                                                                                          | Source    |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| Send               | `POST https://exp.host/--/api/v2/push/send`                                                                                                    | [E1]      |
+| Headers            | `host: exp.host`, `accept: application/json`, `accept-encoding: gzip, deflate`, `content-type: application/json`; gzip request bodies optional | [E1]      |
+| Body               | one message object or an array of **up to 100**, all for the same project; `to` may itself be an array of tokens                               | [E1]      |
+| Payload            | total at most **4096 bytes** per notification                                                                                                  | [E1]      |
+| Rate limit         | **600 notifications per second per project**; limit concurrent connections (the Node SDK uses 6)                                               | [E1] [E2] |
+| Cost               | free; no SLA                                                                                                                                   | [E1] [E2] |
+| Delivery guarantee | at-least-once to FCM/APNs; duplicates are possible but rare                                                                                    | [E1]      |
+| Receipts           | `POST https://exp.host/--/api/v2/push/getReceipts` `{ "ids": [...] }`, up to **1000** ids                                                      | [E1]      |
 
 Message fields we use [E1]: `to`, `title`, `body`, `data` (for example
 `{ "url": "/pedidos/YT-000123" }`), `sound: "default"` (iOS), `channelId`
@@ -813,10 +836,19 @@ already displayed with the same tag, so send it too, with the same value),
 `badge`.
 
 ```json
-[{ "to": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]", "title": "Su pedido va en camino",
-   "body": "YT-000123 llega hoy entre 1 p. m. y 5 p. m.", "data": { "url": "/pedidos/YT-000123" },
-   "channelId": "pedidos", "priority": "high", "ttl": 14400,
-   "collapseId": "order-YT-000123", "tag": "order-YT-000123" }]
+[
+  {
+    "to": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+    "title": "Su pedido va en camino",
+    "body": "YT-000123 llega hoy entre 1 p. m. y 5 p. m.",
+    "data": { "url": "/pedidos/YT-000123" },
+    "channelId": "pedidos",
+    "priority": "high",
+    "ttl": 14400,
+    "collapseId": "order-YT-000123",
+    "tag": "order-YT-000123"
+  }
+]
 ```
 
 ### 4.4 Tickets, receipts and errors
@@ -833,17 +865,17 @@ Two stages [E1]:
    sending; receipts are **deleted after 24 hours**. Receipt `ok` still does not
    prove the device showed it.
 
-| Where | Error | Action |
-| --- | --- | --- |
-| ticket, receipt | `DeviceNotRegistered` | disable the token; do not retry |
-| receipt | `MessageTooBig` (> 4096 bytes) | dead-letter; it is a bug |
-| receipt | `MessageRateExceeded` (too many to one device) | retry with back-off |
-| receipt | `MismatchSenderId`, `InvalidCredentials` | credentials problem: staff alert, pause the push channel |
-| request | `TOO_MANY_REQUESTS` (HTTP 429) | back off and retry |
-| request | `PUSH_TOO_MANY_EXPERIENCE_IDS` | bug: tokens of two apps in one request |
-| request | `PUSH_TOO_MANY_NOTIFICATIONS` (> 100), `PUSH_TOO_MANY_RECEIPTS` (> 1000) | bug: chunking |
-| request | `UNAUTHORIZED` | push security is on and the access token is missing or wrong |
-| network, HTTP 5xx | — | exponential back-off |
+| Where             | Error                                                                    | Action                                                       |
+| ----------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| ticket, receipt   | `DeviceNotRegistered`                                                    | disable the token; do not retry                              |
+| receipt           | `MessageTooBig` (> 4096 bytes)                                           | dead-letter; it is a bug                                     |
+| receipt           | `MessageRateExceeded` (too many to one device)                           | retry with back-off                                          |
+| receipt           | `MismatchSenderId`, `InvalidCredentials`                                 | credentials problem: staff alert, pause the push channel     |
+| request           | `TOO_MANY_REQUESTS` (HTTP 429)                                           | back off and retry                                           |
+| request           | `PUSH_TOO_MANY_EXPERIENCE_IDS`                                           | bug: tokens of two apps in one request                       |
+| request           | `PUSH_TOO_MANY_NOTIFICATIONS` (> 100), `PUSH_TOO_MANY_RECEIPTS` (> 1000) | bug: chunking                                                |
+| request           | `UNAUTHORIZED`                                                           | push security is on and the access token is missing or wrong |
+| network, HTTP 5xx | —                                                                        | exponential back-off                                         |
 
 There is no idempotency key on the Expo API. A retry after a lost response can
 show the notification twice; `collapseId` (iOS) and `tag` (Android) limit the
@@ -877,16 +909,16 @@ damage on the device.
 
 ### 5.1 The texts
 
-| Text | What it says | Source |
-| --- | --- | --- |
-| **Ley 8642 (General de Telecomunicaciones), art. 44 "Comunicaciones no solicitadas"** | "Se prohíbe la utilización de sistemas de llamada automática por voz, fax, correo electrónico o cualquier otro dispositivo **con fines de venta directa**, salvo la de los abonados que hayan dado su consentimiento previamente." Exception: an address obtained from a customer "en el contexto de la venta de un producto o servicio" may be used by the same person for direct sale of its own similar products. "En cualquier momento, el cliente podrá pedirle al remitente que suspenda los envíos de información y no podrá cobrársele ningún cargo". Always forbidden: messages for direct sale "en los que se disimule o se oculte la identidad del remitente, o que no contengan una dirección válida a la que el destinatario pueda enviar una petición de que se ponga fin a tales comunicaciones" | [L1] |
-| Ley 8642 arts. 67 b) 7) and 68 b) | using automatic call, fax or e-mail systems or other devices against the law is a **serious** infraction; serious infractions are fined 0.025 % to 0.5 % of the previous year's gross income of the "operador o proveedor" | [L1] |
-| **Decreto 35205-MINAET (Reglamento sobre medidas de protección de la privacidad de las comunicaciones), arts. 31–33** | Art. 31 repeats the prohibition with two exceptions: (a) prior consent to receive such communications; (b) the existing-customer case, where "en el momento de recabarse la información, debe informarle al cliente sobre su uso ulterior". Art. 32: messages must let the recipient "identificar con facilidad al remitente y el propósito de su contenido" and "contener una dirección válida a la que el destinatario pueda enviar una petición de suspender, sin costo alguno, el envío". Art. 33: non-automated sales calls only to people who asked for them | [L2] |
-| **Decreto 37899-MEIC (Reglamento a la Ley 7472), art. 200** (e-commerce chapter, consolidated text printed 11 Feb 2026) | "El comerciante debe abstenerse de enviar comunicaciones por cualquier medio electrónico; cuando las mismas no han sido previamente solicitadas por los consumidores". The merchant must implement "procedimientos efectivos y fáciles de usar" so consumers "elijan si desean recibir o no **mensajes comerciales** y, cuando elijan no recibirlos, su decisión debe ser acatada de forma **inmediata**". A communication made with automatic systems without prior consent, or hiding its origin, without a way to stop it, is unsolicited. SUTEL may refer merchants to the Comisión Nacional del Consumidor | [L3] |
-| **Ley 8968, arts. 5 and 6** | before collecting data, inform of the database, purposes, recipients, rights and the controller's identity and address; consent must be **express and in writing, physical or electronic**, and "podrá ser revocado de la misma forma, sin efecto retroactivo"; art. 6.4: data must not be used for purposes incompatible with those stated | [L4] |
-| **Decreto 37554-JP (Reglamento a la Ley 8968), arts. 4–8** | consent must be free, **specific** ("referido a una o varias finalidades determinadas"), informed, express and individual; given in a document "de forma independiente de cualquier otro documento"; **the burden of proof is on the controller** (art. 6); revocation by "mecanismos expeditos, sencillos y gratuitos" (art. 7), acted on within five business days (art. 8) | [L5] |
+| Text                                                                                                                                                                                                         | What it says                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Source                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ley 8642 (General de Telecomunicaciones), art. 44 "Comunicaciones no solicitadas"**                                                                                                                        | "Se prohíbe la utilización de sistemas de llamada automática por voz, fax, correo electrónico o cualquier otro dispositivo **con fines de venta directa**, salvo la de los abonados que hayan dado su consentimiento previamente." Exception: an address obtained from a customer "en el contexto de la venta de un producto o servicio" may be used by the same person for direct sale of its own similar products. "En cualquier momento, el cliente podrá pedirle al remitente que suspenda los envíos de información y no podrá cobrársele ningún cargo". Always forbidden: messages for direct sale "en los que se disimule o se oculte la identidad del remitente, o que no contengan una dirección válida a la que el destinatario pueda enviar una petición de que se ponga fin a tales comunicaciones"                                                | [L1]                                                                                                                                        |
+| Ley 8642 arts. 67 b) 7) and 68 b)                                                                                                                                                                            | using automatic call, fax or e-mail systems or other devices against the law is a **serious** infraction; serious infractions are fined 0.025 % to 0.5 % of the previous year's gross income of the "operador o proveedor"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | [L1]                                                                                                                                        |
+| **Decreto 35205-MINAET (Reglamento sobre medidas de protección de la privacidad de las comunicaciones), arts. 31–33**                                                                                        | Art. 31 repeats the prohibition with two exceptions: (a) prior consent to receive such communications; (b) the existing-customer case, where "en el momento de recabarse la información, debe informarle al cliente sobre su uso ulterior". Art. 32: messages must let the recipient "identificar con facilidad al remitente y el propósito de su contenido" and "contener una dirección válida a la que el destinatario pueda enviar una petición de suspender, sin costo alguno, el envío". Art. 33: non-automated sales calls only to people who asked for them                                                                                                                                                                                                                                                                                             | [L2]                                                                                                                                        |
+| **Decreto 37899-MEIC (Reglamento a la Ley 7472), art. 200** (e-commerce chapter, consolidated text printed 11 Feb 2026)                                                                                      | "El comerciante debe abstenerse de enviar comunicaciones por cualquier medio electrónico; cuando las mismas no han sido previamente solicitadas por los consumidores". The merchant must implement "procedimientos efectivos y fáciles de usar" so consumers "elijan si desean recibir o no **mensajes comerciales** y, cuando elijan no recibirlos, su decisión debe ser acatada de forma **inmediata**". A communication made with automatic systems without prior consent, or hiding its origin, without a way to stop it, is unsolicited. SUTEL may refer merchants to the Comisión Nacional del Consumidor                                                                                                                                                                                                                                                | [L3]                                                                                                                                        |
+| **Ley 8968, arts. 5 and 6**                                                                                                                                                                                  | before collecting data, inform of the database, purposes, recipients, rights and the controller's identity and address; consent must be **express and in writing, physical or electronic**, and "podrá ser revocado de la misma forma, sin efecto retroactivo"; art. 6.4: data must not be used for purposes incompatible with those stated                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | [L4]                                                                                                                                        |
+| **Decreto 37554-JP (Reglamento a la Ley 8968), arts. 4–8**                                                                                                                                                   | consent must be free, **specific** ("referido a una o varias finalidades determinadas"), informed, express and individual; given in a document "de forma independiente de cualquier otro documento"; **the burden of proof is on the controller** (art. 6); revocation by "mecanismos expeditos, sencillos y gratuitos" (art. 7), acted on within five business days (art. 8)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | [L5]                                                                                                                                        |
 | **Ley 10946 (Gobernanza de los Servicios Digitales y el Comercio Electrónico)**, published 24 Jun 2026 (per secondary sources), "entrará en vigencia 12 meses después de su publicación" (Transitorio único) | **Art. 9**: commercial communications, invitations and offers "deberán ser claramente identificables como tales", with the sender's name identifiable; by e-mail they "incluirán al comienzo del mensaje la palabra publicidad, invitación u oferta, según corresponda"; promotions (discounts, prizes) must be labelled with their conditions accessible. **Art. 29**: the merchant must not send commercial communications "por cualquier medio" that were not previously requested or consented to, "o cuando no se deriven de una relación contractual o precontractual existente"; easy opt-out, honoured "de forma inmediata"; and "**No se podrá supeditar la transacción comercial o la prestación del servicio a la aceptación del consumidor de recibir comunicaciones comerciales**". SUTEL may refer cases to the Comisión Nacional del Consumidor | [L7] (full text as reproduced by a law firm); [L6] (summary). The La Gaceta print was not opened, so the publication date is **UNVERIFIED** |
-| Meta WhatsApp policy | opt-in naming the business, for any business-initiated message; the business must also comply with local law | [M1] |
+| Meta WhatsApp policy                                                                                                                                                                                         | opt-in naming the business, for any business-initiated message; the business must also comply with local law                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [M1]                                                                                                                                        |
 
 The copy of Decreto 37554-JP consulted is the TSE print; whether it includes
 every later reform was not confirmed (**UNVERIFIED**).
@@ -905,15 +937,15 @@ That is this note's reading. The first sentence of art. 200 is broader
 so make the order messages **solicited in fact**: say at checkout which channels
 will be used for updates.
 
-| Message | Class | Consent needed | Opt-out |
-| --- | --- | --- | --- |
-| Order placed, payment received, payment instructions, scheduled, out for delivery, delivered, delivery failed, cancelled, refund, return and complaint answers | transactional | privacy-notice consent for order processing; channel notice at checkout | not for e-mail (it is the durable receipt). WhatsApp, SMS and push can each be switched off |
-| Password reset, e-mail confirmation, e-mail change, security notices | transactional (account) | none beyond the account | none |
-| Seller: new order, cancellation, listing approved or rejected, account status, payout notice | transactional (contract with the seller) | seller agreement | channel switches except e-mail |
-| Staff and driver alerts | internal | employment or contractor relationship | — |
-| **Review request after delivery** | grey: tied to one completed order (Meta accepts this as utility [B20]) but its purpose serves the business | treat as transactional only if it contains nothing promotional; otherwise marketing | include a "no more review requests" switch |
-| **Abandoned cart, back in stock, price drop, recommendations, newsletter, coupons, "buy again", seller-recruitment mail** | **marketing** | prior, express, specific, unticked opt-in per art. 31 a) and Ley 8968; record text version and time | in every message, free, effective immediately |
-| A promotional line or banner inside an order e-mail | turns the whole message into marketing (also for Meta's categories and for Bird's `category`) | do not do it | — |
+| Message                                                                                                                                                        | Class                                                                                                      | Consent needed                                                                                      | Opt-out                                                                                     |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Order placed, payment received, payment instructions, scheduled, out for delivery, delivered, delivery failed, cancelled, refund, return and complaint answers | transactional                                                                                              | privacy-notice consent for order processing; channel notice at checkout                             | not for e-mail (it is the durable receipt). WhatsApp, SMS and push can each be switched off |
+| Password reset, e-mail confirmation, e-mail change, security notices                                                                                           | transactional (account)                                                                                    | none beyond the account                                                                             | none                                                                                        |
+| Seller: new order, cancellation, listing approved or rejected, account status, payout notice                                                                   | transactional (contract with the seller)                                                                   | seller agreement                                                                                    | channel switches except e-mail                                                              |
+| Staff and driver alerts                                                                                                                                        | internal                                                                                                   | employment or contractor relationship                                                               | —                                                                                           |
+| **Review request after delivery**                                                                                                                              | grey: tied to one completed order (Meta accepts this as utility [B20]) but its purpose serves the business | treat as transactional only if it contains nothing promotional; otherwise marketing                 | include a "no more review requests" switch                                                  |
+| **Abandoned cart, back in stock, price drop, recommendations, newsletter, coupons, "buy again", seller-recruitment mail**                                      | **marketing**                                                                                              | prior, express, specific, unticked opt-in per art. 31 a) and Ley 8968; record text version and time | in every message, free, effective immediately                                               |
+| A promotional line or banner inside an order e-mail                                                                                                            | turns the whole message into marketing (also for Meta's categories and for Bird's `category`)              | do not do it                                                                                        | —                                                                                           |
 
 The existing-customer exception (art. 44 second paragraph) covers only e-mail,
 only our own similar products, and only if the customer was told at collection.
@@ -983,15 +1015,15 @@ lawyer's view.
 
 ### 6.1 Why the current table is not enough
 
-| Need | Today | Change |
-| --- | --- | --- |
-| Several consumers (notifications, e-invoices, gateway refunds, search) | one `processed_at` for all | one **job row per consumer**, written by a trigger in the same transaction |
-| One event, many messages (shopper e-mail + push, one WhatsApp per seller) | one row | one **delivery row per recipient and channel** |
-| Retry timing | `attempts` only | `available_at`, back-off, `max_attempts` |
-| A worker that dies mid-send | nothing | lease: `locked_by`, `locked_until` |
-| No duplicates | nothing | unique `dedupe_key`; provider idempotency key; frozen request body |
-| Ordering per order | none | `ordering_key`, `sequence`, head-of-line rule |
-| Give up | nothing | `dead` status, visible to staff, requeue |
+| Need                                                                      | Today                      | Change                                                                     |
+| ------------------------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------- |
+| Several consumers (notifications, e-invoices, gateway refunds, search)    | one `processed_at` for all | one **job row per consumer**, written by a trigger in the same transaction |
+| One event, many messages (shopper e-mail + push, one WhatsApp per seller) | one row                    | one **delivery row per recipient and channel**                             |
+| Retry timing                                                              | `attempts` only            | `available_at`, back-off, `max_attempts`                                   |
+| A worker that dies mid-send                                               | nothing                    | lease: `locked_by`, `locked_until`                                         |
+| No duplicates                                                             | nothing                    | unique `dedupe_key`; provider idempotency key; frozen request body         |
+| Ordering per order                                                        | none                       | `ordering_key`, `sequence`, head-of-line rule                              |
+| Give up                                                                   | nothing                    | `dead` status, visible to staff, requeue                                   |
 
 Do not read the outbox with a "last id seen" cursor: identity values are
 assigned before commit, so a transaction with a lower id can commit after a
@@ -1153,18 +1185,18 @@ Waits: 15 s, 30 s, 1, 2, 4, 8, 16, 32, 60 min. Ten attempts span about 2 h 04 mi
 retention** [B3], so a retry of a send whose response was lost cannot produce a
 second message.
 
-| Provider answer | Class | Action |
-| --- | --- | --- |
-| `202` (Bird), ticket `ok` (Expo) | success | `sent`, store `provider_message_id` or ticket id |
-| network error, timeout, `5xx` | retry | same key, same bytes |
-| `429` | retry | wait `Retry-After` [B9] |
-| `409 E01004`, `503 E01033` | retry | wait at least 30 s, same key [B3] |
-| `409 E01005` | permanent | bug: key reused with a different body |
-| `400`, `404`, `422` (validation, unknown template or language, parameter mismatch, reserved recipient domain, closed service window) | permanent | `dead` at once; needs a code or template fix, then requeue with a new `generation` |
-| `401`, `403`, `421` | configuration | `dead` and staff alert; stop claiming that channel |
-| `402`, e-mail `quota_exceeded`, SMS `SMSDestinationDailySpendExceeded` | account | do not burn attempts: push `available_at` out 15 min, alert staff, and **bump `generation` and re-freeze the body before the next attempt**: a retained `402`/`422` is replayed for the same key for 3 hours [B3] |
-| Expo `DeviceNotRegistered` | recipient | disable token, `skipped` |
-| recipient opted out or has no address at claim time | recipient | `skipped` |
+| Provider answer                                                                                                                      | Class         | Action                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `202` (Bird), ticket `ok` (Expo)                                                                                                     | success       | `sent`, store `provider_message_id` or ticket id                                                                                                                                                                  |
+| network error, timeout, `5xx`                                                                                                        | retry         | same key, same bytes                                                                                                                                                                                              |
+| `429`                                                                                                                                | retry         | wait `Retry-After` [B9]                                                                                                                                                                                           |
+| `409 E01004`, `503 E01033`                                                                                                           | retry         | wait at least 30 s, same key [B3]                                                                                                                                                                                 |
+| `409 E01005`                                                                                                                         | permanent     | bug: key reused with a different body                                                                                                                                                                             |
+| `400`, `404`, `422` (validation, unknown template or language, parameter mismatch, reserved recipient domain, closed service window) | permanent     | `dead` at once; needs a code or template fix, then requeue with a new `generation`                                                                                                                                |
+| `401`, `403`, `421`                                                                                                                  | configuration | `dead` and staff alert; stop claiming that channel                                                                                                                                                                |
+| `402`, e-mail `quota_exceeded`, SMS `SMSDestinationDailySpendExceeded`                                                               | account       | do not burn attempts: push `available_at` out 15 min, alert staff, and **bump `generation` and re-freeze the body before the next attempt**: a retained `402`/`422` is replayed for the same key for 3 hours [B3] |
+| Expo `DeviceNotRegistered`                                                                                                           | recipient     | disable token, `skipped`                                                                                                                                                                                          |
+| recipient opted out or has no address at claim time                                                                                  | recipient     | `skipped`                                                                                                                                                                                                         |
 
 Reconciliation after an unknown outcome older than 3 hours:
 `GET /v1/email/messages?reference=<delivery id>` before sending again [B1].
@@ -1174,13 +1206,13 @@ possible; say so on the button).
 
 ### 6.6 Idempotency towards providers
 
-| Channel | Key | Body |
-| --- | --- | --- |
-| Bird e-mail, WhatsApp, SMS | header `Idempotency-Key: yt/<env>/<delivery id>/<generation>` (≤ 255 chars) | `request_body`, stored before attempt 1 and resent byte for byte |
-| Bird SMTP (Auth standby) | header `X-Bird-Idempotency-Key` [B8] | — |
-| Auth hook | `Idempotency-Key: auth/<webhook-id>` | deterministic render of the hook payload |
-| Expo | none available | `collapseId` (iOS) and `tag` (Android) per order |
-| Inbound webhooks (Bird) | unique index on `webhook-id`; status changes are monotonic and compare the event `timestamp`, because deliveries are unordered [B6] | — |
+| Channel                    | Key                                                                                                                                 | Body                                                             |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Bird e-mail, WhatsApp, SMS | header `Idempotency-Key: yt/<env>/<delivery id>/<generation>` (≤ 255 chars)                                                         | `request_body`, stored before attempt 1 and resent byte for byte |
+| Bird SMTP (Auth standby)   | header `X-Bird-Idempotency-Key` [B8]                                                                                                | —                                                                |
+| Auth hook                  | `Idempotency-Key: auth/<webhook-id>`                                                                                                | deterministic render of the hook payload                         |
+| Expo                       | none available                                                                                                                      | `collapseId` (iOS) and `tag` (Android) per order                 |
+| Inbound webhooks (Bird)    | unique index on `webhook-id`; status changes are monotonic and compare the event `timestamp`, because deliveries are unordered [B6] | —                                                                |
 
 ### 6.7 Ordering per order
 
@@ -1198,11 +1230,11 @@ possible; say so on the button).
 
 ### 6.8 Triggering the worker
 
-| Mechanism | What it is | Use |
-| --- | --- | --- |
-| `pg_cron` → `pg_net` → Edge Function | scheduled SQL that queues an HTTP POST | **the sweep**: retries, expired leases, anything missed |
-| `pg_net` call from the planner or fan-out trigger | async HTTP POST "not started until the transaction is committed" [S6] | **the kick**: sub-second latency for new events |
-| Database Webhooks | "just a convenience wrapper around triggers using the `pg_net` extension"; payload is the whole row [S8] | not needed: same thing as the kick, with a payload we do not want |
+| Mechanism                                         | What it is                                                                                               | Use                                                               |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `pg_cron` → `pg_net` → Edge Function              | scheduled SQL that queues an HTTP POST                                                                   | **the sweep**: retries, expired leases, anything missed           |
+| `pg_net` call from the planner or fan-out trigger | async HTTP POST "not started until the transaction is committed" [S6]                                    | **the kick**: sub-second latency for new events                   |
+| Database Webhooks                                 | "just a convenience wrapper around triggers using the `pg_net` extension"; payload is the whole row [S8] | not needed: same thing as the kick, with a payload we do not want |
 
 ```sql
 select vault.create_secret('https://<ref>.supabase.co', 'project_url');
@@ -1271,32 +1303,45 @@ supabase/functions/bird-webhook/index.ts    verify → queue.applyUpdate
 supabase/functions/auth-email/index.ts      verify → render → bird-email
 ```
 
-| Layer | Test | Runs in |
-| --- | --- | --- |
-| Templates | snapshot of subject/text; HTML contains order number, legal footer, no `{{` | Vitest, Node |
-| Adapters | fake `fetch`; assert URL, headers (`Authorization`, `Idempotency-Key`), exact body; table-driven mapping of status codes to `SendResult` | Vitest, Node |
-| Signature | fixed secret/body/timestamp vectors; tampered body, old timestamp, rotated secret pair | Vitest, Node |
-| Worker loop | in-memory `DeliveryQueue` fake and a scripted adapter: success, retry then success, permanent failure, lease loss | Vitest, Node |
-| SQL | planner fan-out per topic; two sessions claiming concurrently get disjoint rows; back-off arithmetic; FIFO rule; dead-letter | `supabase/tests/*.sql` on local Postgres |
-| End to end | local Postgres + dev-api + a local HTTP server standing in for Bird and Expo | Node |
-| Provider contract | staging key, Bird sandbox addresses `delivered@`, `bounce@`, `complaint@`, `suppressed@messagebird.dev`, which emit real webhooks [B18] | manual or nightly |
+| Layer             | Test                                                                                                                                     | Runs in                                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Templates         | snapshot of subject/text; HTML contains order number, legal footer, no `{{`                                                              | Vitest, Node                             |
+| Adapters          | fake `fetch`; assert URL, headers (`Authorization`, `Idempotency-Key`), exact body; table-driven mapping of status codes to `SendResult` | Vitest, Node                             |
+| Signature         | fixed secret/body/timestamp vectors; tampered body, old timestamp, rotated secret pair                                                   | Vitest, Node                             |
+| Worker loop       | in-memory `DeliveryQueue` fake and a scripted adapter: success, retry then success, permanent failure, lease loss                        | Vitest, Node                             |
+| SQL               | planner fan-out per topic; two sessions claiming concurrently get disjoint rows; back-off arithmetic; FIFO rule; dead-letter             | `supabase/tests/*.sql` on local Postgres |
+| End to end        | local Postgres + dev-api + a local HTTP server standing in for Bird and Expo                                                             | Node                                     |
+| Provider contract | staging key, Bird sandbox addresses `delivered@`, `bounce@`, `complaint@`, `suppressed@messagebird.dev`, which emit real webhooks [B18]  | manual or nightly                        |
 
 Signature check that runs unchanged under Deno and Node 22:
 
 ```ts
 export async function verifyStandardWebhook(
-  rawBody: string, headers: Headers, secrets: string[], nowMs = Date.now(),
+  rawBody: string,
+  headers: Headers,
+  secrets: string[],
+  nowMs = Date.now(),
 ): Promise<boolean> {
   const id = headers.get("webhook-id");
   const ts = headers.get("webhook-timestamp");
   const sig = headers.get("webhook-signature");
   if (!id || !ts || !sig || !/^\d+$/.test(ts)) return false;
-  if (Math.abs(nowMs / 1000 - Number(ts)) > 300) return false;            // 5-minute tolerance
+  if (Math.abs(nowMs / 1000 - Number(ts)) > 300) return false; // 5-minute tolerance
   const data = new TextEncoder().encode(`${id}.${ts}.${rawBody}`);
-  const offered = sig.split(" ").filter((s) => s.startsWith("v1,")).map((s) => fromBase64(s.slice(3)));
-  for (const secret of secrets) {                                          // several during rotation
+  const offered = sig
+    .split(" ")
+    .filter((s) => s.startsWith("v1,"))
+    .map((s) => fromBase64(s.slice(3)));
+  for (const secret of secrets) {
+    // several during rotation
     const keyBytes = fromBase64(secret.replace(/^v1,/, "").replace(/^whsec_/, ""));
-    const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const key = await crypto.subtle.importKey(
+      "raw",
+      keyBytes,
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
     const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, data));
     if (offered.some((o) => constantTimeEqual(o, mac))) return true;
   }
@@ -1317,22 +1362,35 @@ export type AppId = "shop" | "seller" | "driver" | "warehouse";
 
 export type Recipient =
   | { channel: "email"; email: string; name?: string }
-  | { channel: "whatsapp" | "sms"; phoneE164: string }                 // "+506XXXXXXXX"
+  | { channel: "whatsapp" | "sms"; phoneE164: string } // "+506XXXXXXXX"
   | { channel: "push"; app: AppId; tokens: string[] };
 
 /** What a template function returns; one variant per channel. */
 export type Rendered =
   | { channel: "email"; subject: string; html: string; text: string; replyTo?: string }
-  | { channel: "whatsapp"; templateSlug: string; language: string; parameters: Record<string, string> }
+  | {
+      channel: "whatsapp";
+      templateSlug: string;
+      language: string;
+      parameters: Record<string, string>;
+    }
   | { channel: "sms"; text: string }
-  | { channel: "push"; title: string; body: string; data: Record<string, string>;
-      channelId?: string; collapseId?: string; tag?: string; ttlSeconds?: number };
+  | {
+      channel: "push";
+      title: string;
+      body: string;
+      data: Record<string, string>;
+      channelId?: string;
+      collapseId?: string;
+      tag?: string;
+      ttlSeconds?: number;
+    };
 
 export interface OutboundMessage {
-  deliveryId: string;          // our uuid: reference, metadata.delivery_id
-  idempotencyKey: string;      // "yt/<env>/<deliveryId>/<generation>"
+  deliveryId: string; // our uuid: reference, metadata.delivery_id
+  idempotencyKey: string; // "yt/<env>/<deliveryId>/<generation>"
   category: Category;
-  template: string;            // "order_placed"
+  template: string; // "order_placed"
   to: Recipient;
   content: Rendered;
   /** Exact request bytes from an earlier attempt; when present the adapter must resend them. */
@@ -1340,28 +1398,55 @@ export interface OutboundMessage {
 }
 
 export type SendResult =
-  | { ok: true; provider: string; providerMessageId: string; requestBody: string; pushTicketIds?: string[] }
-  | { ok: false; provider: string; requestBody?: string;
+  | {
+      ok: true;
+      provider: string;
+      providerMessageId: string;
+      requestBody: string;
+      pushTicketIds?: string[];
+    }
+  | {
+      ok: false;
+      provider: string;
+      requestBody?: string;
       kind: "retry" | "permanent" | "config" | "account" | "recipient";
-      code: string; message: string; retryAfterSeconds?: number; disableTokens?: string[] };
+      code: string;
+      message: string;
+      retryAfterSeconds?: number;
+      disableTokens?: string[];
+    };
 
 export interface ChannelAdapter {
   readonly channel: Channel;
   readonly provider: "bird" | "expo" | "dev";
-  send(message: OutboundMessage, io: { fetch: typeof fetch; signal: AbortSignal }): Promise<SendResult>;
+  send(
+    message: OutboundMessage,
+    io: { fetch: typeof fetch; signal: AbortSignal },
+  ): Promise<SendResult>;
   /** Providers without webhooks (Expo receipts). */
-  confirm?(providerIds: string[], io: { fetch: typeof fetch; signal: AbortSignal }): Promise<DeliveryUpdate[]>;
+  confirm?(
+    providerIds: string[],
+    io: { fetch: typeof fetch; signal: AbortSignal },
+  ): Promise<DeliveryUpdate[]>;
 }
 
 export interface DeliveryUpdate {
   provider: string;
   providerMessageId: string;
-  deliveryId?: string;                       // from echoed metadata
-  status: "sent" | "delivered" | "read" | "bounced" | "failed" | "rejected" | "complained" | "unsubscribed";
+  deliveryId?: string; // from echoed metadata
+  status:
+    | "sent"
+    | "delivered"
+    | "read"
+    | "bounced"
+    | "failed"
+    | "rejected"
+    | "complained"
+    | "unsubscribed";
   permanent: boolean;
-  occurredAt: string;                        // provider timestamp; updates are applied monotonically
+  occurredAt: string; // provider timestamp; updates are applied monotonically
   reason?: string;
-  recipientAddress?: string;                 // for suppression mirroring only
+  recipientAddress?: string; // for suppression mirroring only
 }
 
 export interface WebhookAdapter {
@@ -1391,40 +1476,40 @@ nor W is possible). Template names are the same slug on every channel; WhatsApp
 slugs must be lowercase letters, digits and underscores [B15]. All copy in
 Spanish (`es-CR`); money already formatted by `packages/core`.
 
-| Event (topic) | Audience | Channels | Template | Variables |
-| --- | --- | --- | --- | --- |
-| `order.placed` | shopper | E, P | `order_placed` | `first_name`, `order_number`, `total`, `payment_method_label`, `payment_instructions` (SINPE or transfer: amount, destination, reference, deadline; empty for card and cash), `promise_window`, `items[]` (name, qty, line total; e-mail only), `ship_summary`, `order_url`, `withdrawal_deadline` |
-| `order.placed` with SINPE or bank transfer | staff, finance | E to role mailbox | `staff_payment_to_confirm` | `order_number`, `total`, `payment_method_label`, `console_url` |
-| `payment.captured` | shopper | E, P | `payment_received` | `first_name`, `order_number`, `amount`, `payment_method_label`, `order_url` |
-| `order.released` | each seller with lines in the order | E, W, P (seller app) | `seller_new_order` | `shop_name`, `order_number`, `line_count`, `unit_count`, `pack_by`, `fulfillment_label` (own location or warehouse), `seller_order_url` |
-| `shipment.scheduled` (to add) — "shipped" | shopper | E, P | `shipment_scheduled` | `first_name`, `order_number`, `delivery_date`, `window`, `cash_due` (cash on delivery only), `tracking_url` |
-| `shipment.out_for_delivery` (to add) | shopper | P, W, E; S as fallback | `shipment_out_for_delivery` | `first_name`, `order_number`, `window`, `cash_due`, `tracking_url` (WhatsApp: `button_url` = order number). Reminder text to have the delivery code ready; **never the code itself** |
-| `shipment.delivered` | shopper | E, P | `shipment_delivered` | `first_name`, `order_number`, `delivered_at`, `order_url`, `withdrawal_deadline`, `warranty_until`, `review_url` |
-| `shipment.delivery_failed` | shopper | P, W, E; S as fallback | `shipment_delivery_failed` | `first_name`, `order_number`, `reason_label`, `next_step`, `support_whatsapp`, `tracking_url` |
-| `shipment.delivery_failed` | staff, ops | E to role mailbox | `staff_delivery_failed` | `order_number`, `tracking_code`, `reason`, `attempt_count`, `console_url` |
-| `order.cancelled` | shopper | E, P | `order_cancelled` | `first_name`, `order_number`, `reason_label`, `refund_note`, `order_url` |
-| `order.cancelled` | sellers in the order | E, P | `seller_order_cancelled` | `shop_name`, `order_number`, `seller_order_url` |
-| `refund.requested` | shopper | E | `refund_initiated` | `first_name`, `order_number`, `amount` (if present), `refund_method_label`, `eta_text` |
-| `refund.completed` (to add) | shopper | E, P | `refund_completed` | `first_name`, `order_number`, `amount`, `refund_method_label` |
-| `return.requested` | shopper | E | `return_received` | `first_name`, `order_number`, `return_number`, `next_step` |
-| `return.requested` | staff, support | E to role mailbox | `staff_return_requested` | `order_number`, `return_number`, `console_url` |
-| `return.decided` | shopper | E, P | `return_approved` or `return_rejected` (by `approved`) | `first_name`, `order_number`, `return_number`, `instructions` or `reason_text`, `order_url` |
-| `complaint.filed` | shopper | E | `complaint_received` | `first_name`, `complaint_number`, `response_deadline` |
-| `complaint.filed` | staff, support | E to role mailbox | `staff_complaint_filed` | `complaint_number`, `order_number`, `console_url` |
-| `complaint.answered` | shopper | E | `complaint_answered` | `first_name`, `complaint_number`, `closed`, `complaint_url` |
-| `content.reported` | staff, trust | E to role mailbox (digest is enough) | `staff_content_reported` | `report_id`, `target_label`, `console_url` |
-| `report.resolved` | reporter | E | `report_resolved` | `first_name`, `outcome_label` |
-| `product.reviewed`, `approved = true` | seller members | E, P | `seller_listing_approved` | `shop_name`, `product_title`, `product_url` |
-| `product.reviewed`, `approved = false` | seller members | E, P | `seller_listing_rejected` | `shop_name`, `product_title`, `reason_text`, `edit_url` |
-| `seller.status_changed` | seller owner | E | `seller_account_status` | `shop_name`, `status_label`, `note`, `seller_url` |
-| `route.assigned` (to add) | driver | P (driver app) | `driver_route_assigned` | `route_date`, `stop_count`, `route_url` |
-| `invoice.requested` | — | none; consumed by e-invoicing. A later `invoice.issued` would send E with the documents | — | — |
-| Dead-lettered delivery, channel paused | staff, ops | console; daily E digest (sent outside this queue to avoid loops) | `staff_notification_failures` | `dead_count`, `oldest_at`, `top_errors`, `console_url` |
-| Auth hook `signup` | account holder | E (direct, not queued) | `auth_confirm_signup` | `confirm_url`, `code`, `expires_minutes` |
-| Auth hook `recovery` | account holder | E (direct) | `auth_recovery` | `reset_url`, `code`, `expires_minutes` |
-| Auth hook `email_change` | current and new address | E (direct, two messages) | `auth_email_change_current`, `auth_email_change_new` | `new_email`, `confirm_url`, `code` |
-| Auth hook `reauthentication` | account holder | E (direct) | `auth_reauthentication` | `code` |
-| Auth hook `*_notification` | account holder | E (direct) | `auth_security_notice` | `notice_label`, `occurred_at`, `account_url` |
+| Event (topic)                              | Audience                            | Channels                                                                                | Template                                               | Variables                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------ | ----------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `order.placed`                             | shopper                             | E, P                                                                                    | `order_placed`                                         | `first_name`, `order_number`, `total`, `payment_method_label`, `payment_instructions` (SINPE or transfer: amount, destination, reference, deadline; empty for card and cash), `promise_window`, `items[]` (name, qty, line total; e-mail only), `ship_summary`, `order_url`, `withdrawal_deadline` |
+| `order.placed` with SINPE or bank transfer | staff, finance                      | E to role mailbox                                                                       | `staff_payment_to_confirm`                             | `order_number`, `total`, `payment_method_label`, `console_url`                                                                                                                                                                                                                                     |
+| `payment.captured`                         | shopper                             | E, P                                                                                    | `payment_received`                                     | `first_name`, `order_number`, `amount`, `payment_method_label`, `order_url`                                                                                                                                                                                                                        |
+| `order.released`                           | each seller with lines in the order | E, W, P (seller app)                                                                    | `seller_new_order`                                     | `shop_name`, `order_number`, `line_count`, `unit_count`, `pack_by`, `fulfillment_label` (own location or warehouse), `seller_order_url`                                                                                                                                                            |
+| `shipment.scheduled` (to add) — "shipped"  | shopper                             | E, P                                                                                    | `shipment_scheduled`                                   | `first_name`, `order_number`, `delivery_date`, `window`, `cash_due` (cash on delivery only), `tracking_url`                                                                                                                                                                                        |
+| `shipment.out_for_delivery` (to add)       | shopper                             | P, W, E; S as fallback                                                                  | `shipment_out_for_delivery`                            | `first_name`, `order_number`, `window`, `cash_due`, `tracking_url` (WhatsApp: `button_url` = order number). Reminder text to have the delivery code ready; **never the code itself**                                                                                                               |
+| `shipment.delivered`                       | shopper                             | E, P                                                                                    | `shipment_delivered`                                   | `first_name`, `order_number`, `delivered_at`, `order_url`, `withdrawal_deadline`, `warranty_until`, `review_url`                                                                                                                                                                                   |
+| `shipment.delivery_failed`                 | shopper                             | P, W, E; S as fallback                                                                  | `shipment_delivery_failed`                             | `first_name`, `order_number`, `reason_label`, `next_step`, `support_whatsapp`, `tracking_url`                                                                                                                                                                                                      |
+| `shipment.delivery_failed`                 | staff, ops                          | E to role mailbox                                                                       | `staff_delivery_failed`                                | `order_number`, `tracking_code`, `reason`, `attempt_count`, `console_url`                                                                                                                                                                                                                          |
+| `order.cancelled`                          | shopper                             | E, P                                                                                    | `order_cancelled`                                      | `first_name`, `order_number`, `reason_label`, `refund_note`, `order_url`                                                                                                                                                                                                                           |
+| `order.cancelled`                          | sellers in the order                | E, P                                                                                    | `seller_order_cancelled`                               | `shop_name`, `order_number`, `seller_order_url`                                                                                                                                                                                                                                                    |
+| `refund.requested`                         | shopper                             | E                                                                                       | `refund_initiated`                                     | `first_name`, `order_number`, `amount` (if present), `refund_method_label`, `eta_text`                                                                                                                                                                                                             |
+| `refund.completed` (to add)                | shopper                             | E, P                                                                                    | `refund_completed`                                     | `first_name`, `order_number`, `amount`, `refund_method_label`                                                                                                                                                                                                                                      |
+| `return.requested`                         | shopper                             | E                                                                                       | `return_received`                                      | `first_name`, `order_number`, `return_number`, `next_step`                                                                                                                                                                                                                                         |
+| `return.requested`                         | staff, support                      | E to role mailbox                                                                       | `staff_return_requested`                               | `order_number`, `return_number`, `console_url`                                                                                                                                                                                                                                                     |
+| `return.decided`                           | shopper                             | E, P                                                                                    | `return_approved` or `return_rejected` (by `approved`) | `first_name`, `order_number`, `return_number`, `instructions` or `reason_text`, `order_url`                                                                                                                                                                                                        |
+| `complaint.filed`                          | shopper                             | E                                                                                       | `complaint_received`                                   | `first_name`, `complaint_number`, `response_deadline`                                                                                                                                                                                                                                              |
+| `complaint.filed`                          | staff, support                      | E to role mailbox                                                                       | `staff_complaint_filed`                                | `complaint_number`, `order_number`, `console_url`                                                                                                                                                                                                                                                  |
+| `complaint.answered`                       | shopper                             | E                                                                                       | `complaint_answered`                                   | `first_name`, `complaint_number`, `closed`, `complaint_url`                                                                                                                                                                                                                                        |
+| `content.reported`                         | staff, trust                        | E to role mailbox (digest is enough)                                                    | `staff_content_reported`                               | `report_id`, `target_label`, `console_url`                                                                                                                                                                                                                                                         |
+| `report.resolved`                          | reporter                            | E                                                                                       | `report_resolved`                                      | `first_name`, `outcome_label`                                                                                                                                                                                                                                                                      |
+| `product.reviewed`, `approved = true`      | seller members                      | E, P                                                                                    | `seller_listing_approved`                              | `shop_name`, `product_title`, `product_url`                                                                                                                                                                                                                                                        |
+| `product.reviewed`, `approved = false`     | seller members                      | E, P                                                                                    | `seller_listing_rejected`                              | `shop_name`, `product_title`, `reason_text`, `edit_url`                                                                                                                                                                                                                                            |
+| `seller.status_changed`                    | seller owner                        | E                                                                                       | `seller_account_status`                                | `shop_name`, `status_label`, `note`, `seller_url`                                                                                                                                                                                                                                                  |
+| `route.assigned` (to add)                  | driver                              | P (driver app)                                                                          | `driver_route_assigned`                                | `route_date`, `stop_count`, `route_url`                                                                                                                                                                                                                                                            |
+| `invoice.requested`                        | —                                   | none; consumed by e-invoicing. A later `invoice.issued` would send E with the documents | —                                                      | —                                                                                                                                                                                                                                                                                                  |
+| Dead-lettered delivery, channel paused     | staff, ops                          | console; daily E digest (sent outside this queue to avoid loops)                        | `staff_notification_failures`                          | `dead_count`, `oldest_at`, `top_errors`, `console_url`                                                                                                                                                                                                                                             |
+| Auth hook `signup`                         | account holder                      | E (direct, not queued)                                                                  | `auth_confirm_signup`                                  | `confirm_url`, `code`, `expires_minutes`                                                                                                                                                                                                                                                           |
+| Auth hook `recovery`                       | account holder                      | E (direct)                                                                              | `auth_recovery`                                        | `reset_url`, `code`, `expires_minutes`                                                                                                                                                                                                                                                             |
+| Auth hook `email_change`                   | current and new address             | E (direct, two messages)                                                                | `auth_email_change_current`, `auth_email_change_new`   | `new_email`, `confirm_url`, `code`                                                                                                                                                                                                                                                                 |
+| Auth hook `reauthentication`               | account holder                      | E (direct)                                                                              | `auth_reauthentication`                                | `code`                                                                                                                                                                                                                                                                                             |
+| Auth hook `*_notification`                 | account holder                      | E (direct)                                                                              | `auth_security_notice`                                 | `notice_label`, `occurred_at`, `account_url`                                                                                                                                                                                                                                                       |
 
 WhatsApp templates to submit first (all `utility`, language Spanish):
 `seller_new_order`, `shipment_out_for_delivery`, `shipment_delivery_failed`.
@@ -1450,14 +1535,14 @@ platform, for example `mail.<ROOT_DOMAIN>`. Copy every value from Bird's
 **Email > Domains** page after registering the domain; the DKIM selector and the
 region in the CNAME targets are specific to the account.
 
-| # | Type | Host | Value | Purpose |
-| --- | --- | --- | --- | --- |
-| 1 | TXT | `<DKIM_SELECTOR>._domainkey.<SENDING_DOMAIN>` | `v=DKIM1; k=rsa; p=<DKIM_PUBLIC_KEY>` | DKIM: ownership and signing (required) |
-| 2 | CNAME | `send.<SENDING_DOMAIN>` | `<BIRD_REGION>.bounce.bird.com` | return-path: bounces and SPF alignment (required) |
-| 3 | TXT | `_dmarc.<SENDING_DOMAIN>` | `v=DMARC1; p=none; rua=mailto:<DMARC_REPORTS_MAILBOX>` | DMARC (required; start at `p=none`, tighten later) |
-| 4 | CNAME | `links.<SENDING_DOMAIN>` | `<BIRD_REGION>.links.bird.com` | optional: only if open/click tracking is ever enabled |
-| — | MX | `<SENDING_DOMAIN>` | — | **do not add** Bird's inbound MX unless receiving mail through Bird |
-| — | TXT (SPF) | `<ROOT_DOMAIN>` | — | **nothing to add for Bird.** The mailbox provider for `ayuda@<ROOT_DOMAIN>` needs its own SPF, DKIM and DMARC records, set up separately |
+| #   | Type      | Host                                          | Value                                                  | Purpose                                                                                                                                  |
+| --- | --------- | --------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | TXT       | `<DKIM_SELECTOR>._domainkey.<SENDING_DOMAIN>` | `v=DKIM1; k=rsa; p=<DKIM_PUBLIC_KEY>`                  | DKIM: ownership and signing (required)                                                                                                   |
+| 2   | CNAME     | `send.<SENDING_DOMAIN>`                       | `<BIRD_REGION>.bounce.bird.com`                        | return-path: bounces and SPF alignment (required)                                                                                        |
+| 3   | TXT       | `_dmarc.<SENDING_DOMAIN>`                     | `v=DMARC1; p=none; rua=mailto:<DMARC_REPORTS_MAILBOX>` | DMARC (required; start at `p=none`, tighten later)                                                                                       |
+| 4   | CNAME     | `links.<SENDING_DOMAIN>`                      | `<BIRD_REGION>.links.bird.com`                         | optional: only if open/click tracking is ever enabled                                                                                    |
+| —   | MX        | `<SENDING_DOMAIN>`                            | —                                                      | **do not add** Bird's inbound MX unless receiving mail through Bird                                                                      |
+| —   | TXT (SPF) | `<ROOT_DOMAIN>`                               | —                                                      | **nothing to add for Bird.** The mailbox provider for `ayuda@<ROOT_DOMAIN>` needs its own SPF, DKIM and DMARC records, set up separately |
 
 If the long DKIM value is refused by the DNS host as one string, split it into
 quoted segments (Bird has a splitter tool) [B4].
@@ -1466,11 +1551,11 @@ For the other domains bought defensively (`.com`, `.app`, or `.cr` if it is not
 the primary): send no mail from them and say so in DNS, so nobody can spoof
 them. Standard practice, not re-verified against the RFCs today:
 
-| Type | Host | Value |
-| --- | --- | --- |
-| TXT | `<PARKED_DOMAIN>` | `v=spf1 -all` |
-| TXT | `_dmarc.<PARKED_DOMAIN>` | `v=DMARC1; p=reject;` |
-| MX | `<PARKED_DOMAIN>` | `0 .` (null MX) |
+| Type | Host                     | Value                 |
+| ---- | ------------------------ | --------------------- |
+| TXT  | `<PARKED_DOMAIN>`        | `v=spf1 -all`         |
+| TXT  | `_dmarc.<PARKED_DOMAIN>` | `v=DMARC1; p=reject;` |
+| MX   | `<PARKED_DOMAIN>`        | `0 .` (null MX)       |
 
 From addresses proposed: `pedidos@<SENDING_DOMAIN>` (orders),
 `cuenta@<SENDING_DOMAIN>` (Auth), `vendedores@<SENDING_DOMAIN>` (sellers);
@@ -1550,20 +1635,20 @@ From addresses proposed: `pedidos@<SENDING_DOMAIN>` (orders),
 
 ## Open points and unverified items
 
-| # | Item | Status |
-| --- | --- | --- |
-| 1 | Whether Bird allocates +506 numbers and which +506 number types Meta accepts for WhatsApp | UNVERIFIED |
-| 2 | Spanish language codes offered in Bird's WhatsApp template editor; whether Spanish opt-out keywords are in Bird's default catalogue | UNVERIFIED |
-| 3 | Which short or long code replaces an alphanumeric sender in Costa Rica; delivery quality per operator; the SMS quiet-hours window | UNVERIFIED |
-| 4 | GSM-7 treatment of `ó` (Bird confirms `á í ú` force UCS-2) | UNVERIFIED for `ó` only |
-| 5 | Postgres-hook timeout (the hourly e-mail limit does apply with the hook, see 3.3) | UNVERIFIED |
-| 6 | Ley 10946: articles 9 and 29 and the 12-month vacatio read from a law firm's reproduction of the full text; La Gaceta print and the exact publication date not opened | partly UNVERIFIED |
-| 7 | Whether the consulted print of Decreto 37554-JP includes all reforms | UNVERIFIED |
-| 8 | Whether transactional WhatsApp/SMS need consent separate from the privacy notice; reach of the existing-customer exception; whether Ley 8642 fines reach a merchant | legal question |
-| 9 | Version of `@messagebird/sdk`; whether Bird's `email_send` defaults differ from the pricing page | UNVERIFIED; read `RateLimit-Policy` at run time |
-| 10 | Prices and limits were read from public pages on 21 Nov 2026 and change | re-check before budgeting |
-| 11 | Whether `pg_net` cancelling a timed-out request stops an Edge Function mid-run | UNVERIFIED; `EdgeRuntime.waitUntil` avoids depending on it |
-| 12 | Null-MX and `-all` records for parked domains | standard practice, not re-verified today |
+| #   | Item                                                                                                                                                                  | Status                                                     |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 1   | Whether Bird allocates +506 numbers and which +506 number types Meta accepts for WhatsApp                                                                             | UNVERIFIED                                                 |
+| 2   | Spanish language codes offered in Bird's WhatsApp template editor; whether Spanish opt-out keywords are in Bird's default catalogue                                   | UNVERIFIED                                                 |
+| 3   | Which short or long code replaces an alphanumeric sender in Costa Rica; delivery quality per operator; the SMS quiet-hours window                                     | UNVERIFIED                                                 |
+| 4   | GSM-7 treatment of `ó` (Bird confirms `á í ú` force UCS-2)                                                                                                            | UNVERIFIED for `ó` only                                    |
+| 5   | Postgres-hook timeout (the hourly e-mail limit does apply with the hook, see 3.3)                                                                                     | UNVERIFIED                                                 |
+| 6   | Ley 10946: articles 9 and 29 and the 12-month vacatio read from a law firm's reproduction of the full text; La Gaceta print and the exact publication date not opened | partly UNVERIFIED                                          |
+| 7   | Whether the consulted print of Decreto 37554-JP includes all reforms                                                                                                  | UNVERIFIED                                                 |
+| 8   | Whether transactional WhatsApp/SMS need consent separate from the privacy notice; reach of the existing-customer exception; whether Ley 8642 fines reach a merchant   | legal question                                             |
+| 9   | Version of `@messagebird/sdk`; whether Bird's `email_send` defaults differ from the pricing page                                                                      | UNVERIFIED; read `RateLimit-Policy` at run time            |
+| 10  | Prices and limits were read from public pages on 21 Nov 2026 and change                                                                                               | re-check before budgeting                                  |
+| 11  | Whether `pg_net` cancelling a timed-out request stops an Edge Function mid-run                                                                                        | UNVERIFIED; `EdgeRuntime.waitUntil` avoids depending on it |
+| 12  | Null-MX and `-all` records for parked domains                                                                                                                         | standard practice, not re-verified today                   |
 
 ---
 
@@ -1714,22 +1799,22 @@ article (Ley 8642 arts. 44, 67 b) 7) and 68 b); Decreto 35205 arts. 31–33;
 Decreto 37899 art. 200; Ley 8968 art. 5.2 and the "adecuación al fin" principle
 in art. 6; Decreto 37554 arts. 4–8).
 
-| # | Where | What the note said | What is right | Source |
-| --- | --- | --- | --- | --- |
-| 1 | 1.3, 6.5, 6.6 | Retained `4xx` replayed for the same key: "after fixing a `422` use a new key"; account errors (`402`, quota) retried later with the same key | Bird retains `4xx` rejections in general, not only `422`. A `402` retried with the same key after a top-up can be replayed as `402` for 3 hours, so the message never goes. The worker now bumps `generation` (new key, new frozen body) after any `4xx` except `409 E01004` and `429`. Whether `429` is retained is not stated | [B3] |
-| 2 | 4.3, 4.4, 6.6, 7 | `collapseId` per order "replaces an older one" and limits duplicates on the device | On Android `collapseId` only coalesces messages in transit; replacing a notification already on screen needs `tag` (Android only). Both are now sent; `tag` added to the `Rendered` push type. Low `ttl` with normal priority may never reach a dozing Android phone | [E1] |
-| 3 | 5.1, 5.3, 5.4 | Ley 10946 known only from a law-firm summary; e-mail "subjects" begin with "Publicidad"… | Full text (law-firm reproduction) read: art. 9 says "al comienzo del mensaje", not the subject; art. 29 bans unconsented commercial messages "por cualquier medio" unless they derive from an existing contractual or pre-contractual relationship, requires immediate opt-out, and forbids making a purchase conditional on accepting commercial messages; in force 12 months after publication. Advice changed to subject **and** body start, and a lawyer question added on the contractual-relationship wording | [L7] |
-| 4 | 3.3, open point 5 | Whether Auth's hourly e-mail limit applies with the hook "UNVERIFIED" | It applies and is configurable with custom SMTP or the hook; raise it in both set-ups. Also added: give the Bird call a ~2 s timeout so Auth's 5 s budget leaves room for one retry | [S12]; [S2] |
-| 5 | 4.5 | No Apple/Google push-content rules | Apple 4.5.4: no sensitive personal data in push, no marketing push without explicit in-app consent and an in-app opt-out. No push-specific Google Play clause found | [A1] |
-| 6 | 2.1 | Personal WhatsApp number "must have that account deleted first"; "no extra Bird charge"; `422 E15023` without a name | Personal-app number: either move to the Business app and use coexistence, or delete the account and wait up to three minutes. Connection is free but a number bought from Bird is a paid subscription. `E15023` is `WhatsAppSenderWABAMismatch`; `WhatsAppSenderNotFound` added | [B15] [B17] [B19] [B23] |
-| 7 | 2.2 | Template statuses `pending/approved/rejected/paused/disabled`; utility TTL range only | Also `submit_failed`, `limit_exceeded`, `in_appeal`; sends use `live_version_id`. Utility TTL **defaults to 30 days** when not set, counted from hand-off to Meta | [B21] |
-| 8 | 2.5 | Default WhatsApp opt-out keywords: `STOP`/`START` | Full worldwide list (nine opt-out words, `start`/`unstop`), whole-message matching ignoring case and accents, and how to add Spanish words with `country: "CR"` | [B31] |
-| 9 | 2.8, open point 4 | `á í ó ú` outside GSM-7 "UNVERIFIED" | Bird confirms `á`, `í`, `ú` force UCS-2 and `é` does not; `ó`, `ñ`, `¿`, `¡` still rest on GSM 03.38 | [B38] |
-| 10 | 2.8 | SMS events list | Adds `sms.received` and `sms_suppression.created`; an SMS `STOP` suppresses one sender-and-subscriber pair | [B35] |
-| 11 | 1.7 | Complaints always create a `complaint` suppression | A complaint attributed to a Brand records a revoked preference instead, with `preference.revoked` and no `email_suppression.created`; the webhook list in section 10 already subscribes to it | [B7] [B10] |
-| 12 | 2.6 | 1,000 free service messages per number (Bird only) | Confirmed on Meta's pricing page, which also says Meta charges only delivered messages | [M2] |
-| 13 | 4.1 | Expo Go limitation "on Android" | The SDK page says Android; the FAQ says Expo Go in SDK 53+ has no push at all. Use a development build on both | [E2] [E3] |
-| 14 | 6.1 | Supabase Queues not discussed | `pgmq` noted and why the plain tables stay | [S13] |
+| #   | Where             | What the note said                                                                                                                            | What is right                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Source                  |
+| --- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| 1   | 1.3, 6.5, 6.6     | Retained `4xx` replayed for the same key: "after fixing a `422` use a new key"; account errors (`402`, quota) retried later with the same key | Bird retains `4xx` rejections in general, not only `422`. A `402` retried with the same key after a top-up can be replayed as `402` for 3 hours, so the message never goes. The worker now bumps `generation` (new key, new frozen body) after any `4xx` except `409 E01004` and `429`. Whether `429` is retained is not stated                                                                                                                                                                                     | [B3]                    |
+| 2   | 4.3, 4.4, 6.6, 7  | `collapseId` per order "replaces an older one" and limits duplicates on the device                                                            | On Android `collapseId` only coalesces messages in transit; replacing a notification already on screen needs `tag` (Android only). Both are now sent; `tag` added to the `Rendered` push type. Low `ttl` with normal priority may never reach a dozing Android phone                                                                                                                                                                                                                                                | [E1]                    |
+| 3   | 5.1, 5.3, 5.4     | Ley 10946 known only from a law-firm summary; e-mail "subjects" begin with "Publicidad"…                                                      | Full text (law-firm reproduction) read: art. 9 says "al comienzo del mensaje", not the subject; art. 29 bans unconsented commercial messages "por cualquier medio" unless they derive from an existing contractual or pre-contractual relationship, requires immediate opt-out, and forbids making a purchase conditional on accepting commercial messages; in force 12 months after publication. Advice changed to subject **and** body start, and a lawyer question added on the contractual-relationship wording | [L7]                    |
+| 4   | 3.3, open point 5 | Whether Auth's hourly e-mail limit applies with the hook "UNVERIFIED"                                                                         | It applies and is configurable with custom SMTP or the hook; raise it in both set-ups. Also added: give the Bird call a ~2 s timeout so Auth's 5 s budget leaves room for one retry                                                                                                                                                                                                                                                                                                                                 | [S12]; [S2]             |
+| 5   | 4.5               | No Apple/Google push-content rules                                                                                                            | Apple 4.5.4: no sensitive personal data in push, no marketing push without explicit in-app consent and an in-app opt-out. No push-specific Google Play clause found                                                                                                                                                                                                                                                                                                                                                 | [A1]                    |
+| 6   | 2.1               | Personal WhatsApp number "must have that account deleted first"; "no extra Bird charge"; `422 E15023` without a name                          | Personal-app number: either move to the Business app and use coexistence, or delete the account and wait up to three minutes. Connection is free but a number bought from Bird is a paid subscription. `E15023` is `WhatsAppSenderWABAMismatch`; `WhatsAppSenderNotFound` added                                                                                                                                                                                                                                     | [B15] [B17] [B19] [B23] |
+| 7   | 2.2               | Template statuses `pending/approved/rejected/paused/disabled`; utility TTL range only                                                         | Also `submit_failed`, `limit_exceeded`, `in_appeal`; sends use `live_version_id`. Utility TTL **defaults to 30 days** when not set, counted from hand-off to Meta                                                                                                                                                                                                                                                                                                                                                   | [B21]                   |
+| 8   | 2.5               | Default WhatsApp opt-out keywords: `STOP`/`START`                                                                                             | Full worldwide list (nine opt-out words, `start`/`unstop`), whole-message matching ignoring case and accents, and how to add Spanish words with `country: "CR"`                                                                                                                                                                                                                                                                                                                                                     | [B31]                   |
+| 9   | 2.8, open point 4 | `á í ó ú` outside GSM-7 "UNVERIFIED"                                                                                                          | Bird confirms `á`, `í`, `ú` force UCS-2 and `é` does not; `ó`, `ñ`, `¿`, `¡` still rest on GSM 03.38                                                                                                                                                                                                                                                                                                                                                                                                                | [B38]                   |
+| 10  | 2.8               | SMS events list                                                                                                                               | Adds `sms.received` and `sms_suppression.created`; an SMS `STOP` suppresses one sender-and-subscriber pair                                                                                                                                                                                                                                                                                                                                                                                                          | [B35]                   |
+| 11  | 1.7               | Complaints always create a `complaint` suppression                                                                                            | A complaint attributed to a Brand records a revoked preference instead, with `preference.revoked` and no `email_suppression.created`; the webhook list in section 10 already subscribes to it                                                                                                                                                                                                                                                                                                                       | [B7] [B10]              |
+| 12  | 2.6               | 1,000 free service messages per number (Bird only)                                                                                            | Confirmed on Meta's pricing page, which also says Meta charges only delivered messages                                                                                                                                                                                                                                                                                                                                                                                                                              | [M2]                    |
+| 13  | 4.1               | Expo Go limitation "on Android"                                                                                                               | The SDK page says Android; the FAQ says Expo Go in SDK 53+ has no push at all. Use a development build on both                                                                                                                                                                                                                                                                                                                                                                                                      | [E2] [E3]               |
+| 14  | 6.1               | Supabase Queues not discussed                                                                                                                 | `pgmq` noted and why the plain tables stay                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [S13]                   |
 
 Still **UNVERIFIED** after the fact-check: whether Bird can sell a +506 number
 and which +506 types Meta accepts (only the account's number search would tell;
