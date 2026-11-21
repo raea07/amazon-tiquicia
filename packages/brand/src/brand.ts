@@ -91,7 +91,9 @@ export const apps: Record<AppId, AppIdentity> = {
     audience: "Vendedores y PYMEs",
     host: `vende.${brand.domains.primary}`,
     accent: "guaria",
-    bundleId: null,
+    // Chosen 21 November 2026 for the native seller app, after the descriptor
+    // like the other apps (ruta, bodega). Cannot change once published.
+    bundleId: "cr.yuntera.vende",
   },
   driver: {
     id: "driver",

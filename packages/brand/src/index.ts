@@ -1,5 +1,6 @@
 export { type AppId, type AppIdentity, apps, brand } from "./brand";
 export { renderTokensCss } from "./css";
+export { markGeometry } from "./mark";
 export {
   color,
   contrastRatio,

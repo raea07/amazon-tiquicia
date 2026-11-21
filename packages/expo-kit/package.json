@@ -1,0 +1,73 @@
+{
+  "name": "@yuntera/expo-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./config": "./src/config.ts",
+    "./theme": "./src/theme/index.ts",
+    "./supabase": "./src/supabase/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./api": "./src/api.ts",
+    "./data": "./src/data/index.ts",
+    "./ui": "./src/ui/index.ts",
+    "./paths": "./src/paths.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@yuntera/brand": "workspace:*",
+    "@yuntera/core": "workspace:*",
+    "@yuntera/db": "workspace:*",
+    "aes-js": "3.1.2"
+  },
+  "peerDependencies": {
+    "@expo-google-fonts/bricolage-grotesque": "0.4.1",
+    "@expo-google-fonts/inter": "0.4.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "2.119.2",
+    "@tanstack/react-query": "5.108.2",
+    "expo": "~58.0.26",
+    "expo-constants": "~58.0.16",
+    "expo-crypto": "~58.0.8",
+    "expo-font": "~58.0.12",
+    "expo-network": "~58.0.5",
+    "expo-router": "~58.0.32",
+    "expo-secure-store": "~58.0.3",
+    "expo-status-bar": "~58.0.5",
+    "react": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-safe-area-context": "~5.11.1",
+    "react-native-svg": "15.16.0",
+    "react-native-web": "~0.21.4"
+  },
+  "devDependencies": {
+    "@expo-google-fonts/bricolage-grotesque": "0.4.1",
+    "@expo-google-fonts/inter": "0.4.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "2.119.2",
+    "@tanstack/react-query": "5.108.2",
+    "@types/aes-js": "3.1.4",
+    "@types/node": "^22",
+    "@types/react": "~19.3.0",
+    "expo": "~58.0.26",
+    "expo-constants": "~58.0.16",
+    "expo-crypto": "~58.0.8",
+    "expo-font": "~58.0.12",
+    "expo-network": "~58.0.5",
+    "expo-router": "~58.0.32",
+    "expo-secure-store": "~58.0.3",
+    "expo-status-bar": "~58.0.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-safe-area-context": "~5.11.1",
+    "react-native-svg": "15.16.0",
+    "react-native-web": "~0.21.4",
+    "typescript": "5.9.3",
+    "vitest": "5.1.1"
+  }
+}

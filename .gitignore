@@ -42,6 +42,20 @@ tools/dev-api/.keys
 
 # Browser journey screenshots
 tools/e2e/screenshots/
+tools/native-e2e/screenshots/
+
+# Native apps (apps/*-native): generated native projects, local exports and
+# signing material. Builds happen on EAS; nothing here is ever committed.
+dist-web
+apps/*-native/ios/
+apps/*-native/android/
+.metro-health-check*
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
 
 # Per-lane logs and process ids written by tools/dev/stack.sh
 .lane/

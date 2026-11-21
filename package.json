@@ -18,7 +18,9 @@
     "db:local:reset": "bash supabase/scripts/local-db.sh reset",
     "db:local:test": "bash supabase/scripts/local-db.sh test",
     "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "e2e": "pnpm --filter @yuntera/e2e journeys"
+    "e2e": "pnpm --filter @yuntera/e2e journeys",
+    "native:export": "turbo run export:native export:web --concurrency=1",
+    "native:e2e": "pnpm --filter @yuntera/native-e2e journeys"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",

@@ -20,7 +20,9 @@
       "!packages/db/src/database.types.ts",
       "!packages/brand/src/tokens.css",
       "!supabase/seed/geo-cr.json",
-      "!pnpm-lock.yaml"
+      "!pnpm-lock.yaml",
+      "!**/dist-web",
+      "!tools/native-e2e/screenshots"
     ]
   },
   "formatter": {
@@ -47,7 +49,12 @@
       "preset": "recommended",
       "suspicious": {
         "noExplicitAny": "error",
-        "noConsole": { "level": "warn", "options": { "allow": ["warn", "error", "info"] } }
+        "noConsole": {
+          "level": "warn",
+          "options": {
+            "allow": ["warn", "error", "info"]
+          }
+        }
       },
       "style": {
         "noNonNullAssertion": "error",
@@ -71,6 +78,30 @@
       "linter": {
         "domains": {
           "next": "recommended"
+        }
+      }
+    },
+    {
+      "includes": ["apps/*-native/**", "packages/expo-kit/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noReactNativeRawText": {
+              "level": "error",
+              "options": {
+                "skip": [
+                  "Text",
+                  "Button",
+                  "LinkButton",
+                  "TextLink",
+                  "Alert",
+                  "Badge",
+                  "EmptyState",
+                  "Item"
+                ]
+              }
+            }
+          }
         }
       }
     }

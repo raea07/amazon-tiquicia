@@ -3,7 +3,10 @@ name: CI
 # Every push to main and every pull request gets the same checks a developer
 # runs locally: lint, types, unit tests, the database built from scratch with
 # its own tests, the API contract tests, production builds of every app, and
-# the browser journeys.
+# the browser journeys. The native apps get their configuration and versions
+# checked, their JavaScript bundles exported for iOS, Android and the web, and
+# the native journeys run against the web export. No native binary is built
+# here: that is EAS Build, run by hand with the owner's Expo account.
 
 on:
   push:
@@ -126,4 +129,66 @@ jobs:
           path: |
             tools/e2e/screenshots
             *.log
+          retention-days: 7
+
+  native:
+    name: Native apps (config, bundles, journeys)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      EXPO_NO_TELEMETRY: "1"
+      CI: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Configuration resolves and versions match Expo SDK 58
+        run: |
+          for app in shop seller driver warehouse; do
+            echo "── $app"
+            (cd "apps/$app-native" && pnpm exec expo config --type public --json > /dev/null)
+            (cd "apps/$app-native" && pnpm exec expo install --check)
+          done
+
+      - name: Export the JavaScript bundles for iOS and Android
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://example.invalid
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_only
+        run: |
+          for app in shop seller driver warehouse; do
+            (cd "apps/$app-native" && pnpm exec expo export --platform ios --platform android --output-dir dist)
+          done
+
+      - name: Install the browser
+        run: pnpm --filter @yuntera/native-e2e exec playwright install --with-deps chromium
+
+      - name: Web export, served, and the native journeys
+        run: |
+          tools/dev/stack.sh native 0
+          tools/dev/stack.sh native-e2e 0
+
+      - name: Keep screenshots and logs when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native
+          path: |
+            tools/native-e2e/screenshots
+            .lane/0/*.log
           retention-days: 7

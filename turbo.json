@@ -24,9 +24,40 @@
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
     },
+    "@yuntera/expo-kit#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/*-native/app.config.ts",
+        "$TURBO_ROOT$/apps/*-native/package.json"
+      ],
+      "outputs": ["coverage/**"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "export:native": {
+      "dependsOn": ["^typecheck"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["dist/**"],
+      "env": [
+        "EXPO_PUBLIC_SUPABASE_URL",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+        "EXPO_PUBLIC_SHOP_URL",
+        "APP_VARIANT"
+      ]
+    },
+    "export:web": {
+      "dependsOn": ["^typecheck"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["dist-web/**"],
+      "env": [
+        "EXPO_PUBLIC_SUPABASE_URL",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+        "EXPO_PUBLIC_SHOP_URL",
+        "APP_VARIANT"
+      ]
     }
   }
 }
