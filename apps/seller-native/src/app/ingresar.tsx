@@ -1,5 +1,5 @@
 import { apps } from "@yuntera/brand";
-import { SignInForm, SignUpForm } from "@yuntera/expo-kit/auth";
+import { SignInForm, SignUpForm, useSession } from "@yuntera/expo-kit/auth";
 import { colors, space } from "@yuntera/expo-kit/theme";
 import { Button, Card, Logo, Screen, Text } from "@yuntera/expo-kit/ui";
 import { Link } from "expo-router";
@@ -22,6 +22,22 @@ const legalBase = shopUrl || `https://${apps.shop.host}`;
  */
 export default function SignInScreen() {
   const [creating, setCreating] = useState(false);
+  // After the password, an account with an authenticator app is asked for
+  // its code here (the kit's SignInForm); nothing else belongs on screen then.
+  const secondStep = useSession().status === "secondStep";
+  if (secondStep) {
+    return (
+      <Screen edges={["top", "bottom", "left", "right"]}>
+        <View style={{ flex: 1, justifyContent: "center", gap: 24 }}>
+          <Logo app="seller" size={36} />
+          <Card>
+            <Text variant="title">Ingresar</Text>
+            <SignInForm />
+          </Card>
+        </View>
+      </Screen>
+    );
+  }
   return (
     <Screen edges={["top", "bottom", "left", "right"]}>
       <View style={{ flex: 1, justifyContent: "center", gap: 24 }}>

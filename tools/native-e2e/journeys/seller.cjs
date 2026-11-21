@@ -627,11 +627,12 @@ function colones(text) {
   await on("second-step-code").fill(wrongCode());
   await on("second-step-submit").click();
   await on("second-step-message").waitFor();
+  const firstRefusal = await said("second-step-message");
   check(
     /El código no es correcto.*Le quedan 4 intentos antes de una pausa de 15 minutos/.test(
-      await said("second-step-message"),
+      firstRefusal,
     ),
-    "a wrong code is refused, saying how many tries are left",
+    `a wrong code is refused, saying how many tries are left: ${firstRefusal}`,
   );
   check((await on("second-step-code").inputValue()) === "", "the code typed is cleared");
   await on("second-step-code").fill(await freshCode(factor.totp.secret));
