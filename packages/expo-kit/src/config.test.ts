@@ -51,6 +51,12 @@ describe("defineAppConfig", () => {
     expect(ats()).toEqual({ NSAllowsArbitraryLoads: false, NSAllowsLocalNetworking: false });
   });
 
+  it("declares Spanish as the iOS app's language in every variant", () => {
+    for (const variant of ["development", "preview", undefined]) {
+      expect(configFor(variant).ios?.infoPlist?.CFBundleDevelopmentRegion).toBe("es");
+    }
+  });
+
   it("treats anything unknown as the store build", () => {
     expect(variantOf(undefined)).toBe("production");
     expect(variantOf("staging")).toBe("production");
