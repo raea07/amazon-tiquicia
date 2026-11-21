@@ -9,7 +9,7 @@ from a primary source and is listed again in section 11.
 
 Version 4.4 of Hacienda's "comprobantes electrónicos" is the only valid format
 (mandatory since 1 Sep 2025; a second round of adjustments dated 22 Apr 2026
-became mandatory on 1 Nov 2026), and everything needed to implement it is
+became mandatory on 1 Nov 2026 by Hacienda communiqué, key COM26), and everything needed to implement it is
 public and was fetched from this machine today: the annex PDF, the nine XSD
 files, the signature-policy PDF (whose SHA-256 matches the hash in Hacienda's
 own signature example), the REST reference for `recepcion`, and the identity
@@ -35,12 +35,14 @@ annually unless it formally opts into the under-EUR-1-million exclusion.
 | ----- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | ANX   | "Anexos y Estructuras v4.4", DGT, 99 pages, PDF last-modified 13 May 2026, "Bitácora de Ajustes al 22/04/2026" | Downloaded, full text extracted; page numbers below are "Página N de 99" |
 | XSD   | The v4.4 XSD files on `www.hacienda.go.cr/docs/` (last-modified 22 Apr 2026)                                   | Downloaded, parsed, sample XML validated with `xmllint`                 |
-| RCE   | Decreto 44739-H, Reglamento de Comprobantes Electrónicos (2 Oct 2024)                                         | Downloaded, full text read                                              |
+| RCE   | Decreto 44739-H, Reglamento de Comprobantes Electrónicos (signed 2 Oct 2024; RES27 cites it as "del 08 de noviembre del 2024", presumably the publication date) | Downloaded, full text read                                              |
 | RES27 | MH-DGT-RES-0027-2024, technical resolution (13 Nov 2024). This PDF is also the XAdES signature policy         | Downloaded from the CDN, full text read                                 |
 | API   | "Comprobantes Electrónicos API version v1" (HTML reference)                                                   | Downloaded, full text read                                              |
 | IDP   | "Guía de uso para IdP Comprobantes Electrónicos" (PDF, 2018)                                                  | Downloaded, full text read                                              |
 | RES25 | MH-DGT-RES-0025-2024, platform seller reporting, La Gaceta Alcance 179, 6 Nov 2024                            | Official Gazette PDF downloaded, articles 1–13 read                     |
 | HAPI  | `https://api.hacienda.go.cr/docs/` and live calls to that API                                                 | Fetched and called today                                                |
+| COM26 | Hacienda communiqué "Actualización de los Anexos y Estructuras versión 4.4 y validación de comprobantes electrónicos", `https://www.hacienda.go.cr/docs/ActualizacionAnexosyEstructurasVersion4.4CEv2.pdf` (Last-Modified 21 Apr 2026) | Downloaded in the fact-check, full text read                            |
+| RES43 | Hacienda's questions-and-answers PDF on MH-DGT-RES-0043-2025 (TRIBU-CR start), `https://www.hacienda.go.cr/docs/ResolucionMH-DGT-RES-0043-2025.pdf` | Downloaded in the fact-check, read                                      |
 
 Confidence: statements citing these keys are **primary**. Statements citing
 press, law firms or vendors are **secondary** and say so.
@@ -121,8 +123,12 @@ XML namespaces (XSD `targetNamespace`, `elementFormDefault="qualified"`):
 - **Régimen de Tributación Simplificada** taxpayers are exempt from issuing and
   confirming electronic documents, unless they registered voluntarily as
   "emisor receptor electrónico no confirmante", in which case they must issue
-  when the customer asks (RCE art. 7.1, art. 4.2.f). A buyer cannot issue a
-  factura electrónica de compra for purchases from them (RCE art. 2.13).
+  when the customer asks (RCE art. 7.1, art. 4.2.f). RCE art. 2.13 says the
+  factura electrónica de compra "no aplica ... a los contribuyentes del régimen
+  de tributación simplificada, inscritos como emisores receptores electrónicos
+  no confirmantes". The comma makes it ambiguous whether this covers every
+  simplified-regime seller or only those registered as "no confirmante"
+  **[ACCOUNTANT]**; it does not affect Yuntera's own documents.
 - The annex contains two mechanisms designed for money collected by someone
   other than the seller:
   - Payment-method code `05` "Recaudado por terceros": "cuando el pago sea
@@ -165,7 +171,7 @@ Alcance 179, 6 Nov 2024; read in the Gazette PDF):
 | Data to collect       | Individuals: name, main address, tax ID and issuing jurisdiction, **date of birth**. Entities: name, main address, tax ID, company registration number (art. 4.B)                                                                                                    |
 | Data to report        | Per seller and **per quarter**: total consideration paid or credited, number of relevant activities, and "cualquier tasa, comisión o impuesto retenido o cobrado" by the operator; financial account identifier where available (art. 5)                             |
 | Channel               | SIIF, `https://siif.hacienda.go.cr/siif`, OECD "Sharing and Gig Economy" XML (art. 5.3)                                                                                                                                                                              |
-| Dates                 | Due diligence from 1 Jan 2025; first report (2025 data) by 30 Apr 2026 (Transitorio único). A later resolution, MH-DGT-RES-0004-2026, reportedly moved the first filing window to 6 Apr–6 May 2026 (secondary: EAS Latam)                                           |
+| Dates                 | Due diligence from 1 Jan 2025; first report (2025 data) by 30 Apr 2026 (Transitorio único); afterwards a calendar-year period reported by 30 April of the following year (art. 5.6). A later resolution, MH-DGT-RES-0004-2026, reportedly moved the first filing window to 6 Apr–6 May 2026 (secondary: EAS Latam; **UNVERIFIED**, the resolution text was not found on hacienda.go.cr or by search). Either way the first window has passed: if Yuntera had sellers in 2025 the report was already due **[ACCOUNTANT]** |
 | Retention             | 5 years (art. 11)                                                                                                                                                                                                                                                    |
 | Penalty               | 2% of the operator's gross income of the previous period, minimum 3 and maximum 100 base salaries; reduced 75% if filed within 3 days (art. 7, CNPT art. 106 quáter)                                                                                                 |
 
@@ -325,7 +331,14 @@ The 6-character activity code: Hacienda's lookup API returns activities in the
 form `"6110.0"`. How that maps to the 6-character value expected in the XML
 after the TRIBU-CR migration is **UNVERIFIED**; take the exact code from the
 company's TRIBU-CR registration and test it in the sandbox. The codes in the
-samples of section 3.14 are placeholders.
+samples of section 3.14 are placeholders. Secondary sources (Siempre al Día)
+say activity codes had to follow CIIU revision 4 from TRIBU-CR's start on
+6 Oct 2025; the XSD fixes the length at exactly 6. Some of the same sources
+say the receiver's activity code is now required on every document: that
+contradicts the annex, which keeps `CodigoActividadReceptor` conditional (2)
+in FE until Hacienda announces otherwise (ANX p. 18 footnote 1). Follow the
+annex, and capture each seller's activity code anyway so the field can be
+filled the day it becomes mandatory.
 
 ### 3.5 Receiver rules
 
@@ -522,8 +535,16 @@ Other charges carry no IVA calculation in the document.
 | `10`        | Comprobante rechazado por Hacienda   | `07`     | Sustituye comprobante electrónico                      |
 | `11`        | Sustituye factura rechazada por el receptor | `13` | Anula por error material (new, Nov 2026)            |
 | `13`        | Facturación mes vencido              | `14`     | Corrige monto por error material (new)                 |
-| `20`        | Recibo electrónico de pago (new)     | `15`     | Sustituye por error material (new)                     |
-| `99`        | Otros                                | `16`     | Sustituye comprobante electrónico rechazado (new)      |
+| `19`        | Factura electrónica de exportación (new) | `15` | Sustituye comprobante electrónico por error material (new) |
+| `20`        | Recibo electrónico de pago (new)     | `16`     | Sustituye comprobante electrónico rechazado (new)      |
+| `99`        | Otros                                | `17`     | Pago a comprobante electrónico (new; REP only)         |
+|             |                                      | `99`     | Otros                                                  |
+
+Not listed above: `Codigo` `08`–`12` (endorsed invoice, financial credit and
+debit notes, non-domiciled provider, and `12`, reworded in April 2026 as
+"Nota de crédito financiera por exoneración posterior a la facturación"), and
+`TipoDocIR` `05`–`07`, `09` (disabled), `12`, `14`–`18`. Codes `13`–`17` and
+`TipoDocIR` `19`, `20` are mandatory in issuing systems from 1 Nov 2026 (COM26).
 
 Rules:
 
@@ -534,6 +555,8 @@ Rules:
   and exchange rate match the original (ANX p. 58).
 - Accounting period: codes `01`, `02`, `06` take effect in the period the note
   is issued; codes `13`, `14` in the period of the **original** document
+  (ANX p. 73). When a note with `01` is followed by a new document, that new
+  document references the original with `07`; after a `13` note it uses `15`
   (ANX p. 73). Which to use for an ordinary refund: `01` (full) or `06`
   (returned goods). **[ACCOUNTANT]**
 - A document **rejected by Hacienda** "carece de validez": do **not** issue a
@@ -649,29 +672,36 @@ Differences for the other two validated samples:
   `ImpuestoNeto`; `TipoTransaccion`; `DetalleSurtido` for bundles;
   `NumeroVINoSerie`; medicine fields.
 - Totals: "no sujeto" totals and `TotalDesgloseImpuesto` added;
-  `TotalComprobante` must equal the payment methods.
+  `TotalComprobante` must equal the sum of the `TotalMedioPago` amounts when
+  two or more payment methods are used (ANX p. 56).
 - `OtrosCargos`: element renames (`TipoDocumentoOC`, `PorcentajeOC`), nested
   `IdentificacionTercero`, codes `08`–`10`.
 - References: elements renamed `TipoDocIR`, `FechaEmisionIR`; many new codes.
 - Exemptions: `TipoDocumentoEX1`, `FechaEmisionEX`, `Articulo`, `Inciso`,
   institution codes (nota 23).
 - `Otros` text limits 500; signature node may hold counter-signatures.
-- **22 Apr 2026 adjustments** (mandatory 1 Nov 2026, secondary: Delfino):
-  alphanumeric identifications for legal entities; special short phone numbers;
-  clearer `TotalIVADevuelto`; reference codes `13`–`17` and reworded `12`;
-  reference document types `19`, `20`.
+- **22 Apr 2026 adjustments** (new codes mandatory in issuing systems from
+  1 Nov 2026, usable earlier, already live in both STAG and production: COM26,
+  primary): alphanumeric legal-entity identifications "cuando este [el Registro
+  Nacional] así lo comunique" (so not yet in use; KPMG gives `3-101-A00001` as
+  the expected shape, secondary); special short phone numbers; clearer
+  `TotalIVADevuelto`; reference codes `13`–`17` and reworded `12`; reference
+  document types `19`, `20`. COM26 is a communiqué, not a Gazette resolution
+  (RCE art. 12 allows parameter changes by notice).
 
 ### 3.16 Dates
 
 | Date        | Event                                                                                                         | Source                                    |
 | ----------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | 13 Nov 2024 | RES27 issued; six months from 1 Dec 2024 to implement 4.4; voluntary use from 1 Apr 2025                      | RES27 Transitorio I                       |
-| 11 Feb 2025 | Deadline moved to 1 Sep 2025                                                                                  | Hacienda press release CP-08-2025         |
+| 11 Feb 2025 | Deadline moved to 1 Sep 2025; the press release says the resolution "está en proceso de publicación"          | Hacienda press release CP-08-2025         |
+| Feb 2025    | That resolution: MH-DGT-RES-0001-2025 (secondary: Siempre al Día; Gazette text not located, **UNVERIFIED**)    | Secondary                                 |
 | 1 Sep 2025  | 4.4 in force, 4.3 repealed (older versions only for notes adjusting documents issued under them)              | ANX p. 3                                  |
-| 6 Oct 2025  | TRIBU-CR replaces ATV; free invoicing tool TICO Factura starts                                                | Secondary (Siempre al Día; fact sheet)    |
-| 22 Apr 2026 | Adjustment log and new XSDs published                                                                         | ANX p. 3; XSD `Last-Modified`             |
+| 6 Oct 2025  | TRIBU-CR starts at 09:00; ATV disabled partly or fully from 23:45 on 25 Sep 2025. MH-DGT-RES-0043-2025 lists RES27 among the resolutions it adapts to TRIBU-CR (what it changed in RES27 was not read) | RES43 (primary)                           |
+| 6 Oct 2025  | Free invoicing tool TICO Factura starts; activity codes on CIIU 4                                             | Secondary (Siempre al Día; fact sheet)    |
+| 22 Apr 2026 | Adjustment log, new XSDs and communiqué published                                                             | ANX p. 3; XSD `Last-Modified`; COM26      |
 | 27 Jul 2026 | New cryptographic keys need a 14-character PIN                                                                | Secondary (KPMG)                          |
-| 1 Nov 2026  | April adjustments mandatory                                                                                   | Secondary (Delfino, 29 Oct 2026)          |
+| 1 Nov 2026  | April adjustments mandatory                                                                                   | COM26 (primary); Delfino, 29 Oct 2026     |
 
 The header of Anexo 2 still says "rige a partir del 01 de junio del 2025"
 (ANX p. 84); that is stale text.
@@ -692,7 +722,7 @@ The header of Anexo 2 still says "rige a partir del 01 de junio del 2025"
 | Reference 2             | `Type="http://uri.etsi.org/01903#SignedProperties"`, `URI="#xades-id-…"`, transform exc-c14n, digest SHA-256                                                                                |
 | `KeyInfo`               | `X509Data/X509Certificate` with the signing certificate                                                                                                                                     |
 | `SigningTime`           | Present (example in UTC, `2021-11-27T19:35:06Z`)                                                                                                                                            |
-| `SigningCertificate`    | `CertDigest` + `IssuerSerial` (the example digests the certificate with **SHA-1**; whether SHA-256 is also accepted is UNVERIFIED)                                                          |
+| `SigningCertificate`    | `CertDigest` + `IssuerSerial` (the issuer's example digests the certificate with **SHA-1**; the receiver and endorsement counter-signature examples on pp. 89–94 name `xmlenc#sha512` but carry the same 20-byte value, so they prove nothing. Whether SHA-256 is accepted is UNVERIFIED) |
 | Policy identifier       | `SigPolicyId/Identifier` = `https://cdn.comprobanteselectronicos.go.cr/xml-schemas/Resoluci%C3%B3n_General_sobre_disposiciones_t%C3%A9cnicas_comprobantes_electr%C3%B3nicos_para_efectos_tributarios.pdf` |
 | Policy hash             | `SigPolicyHash`: `DigestMethod` `http://www.w3.org/2001/04/xmlenc#sha256`, `DigestValue` **`DWxin1xWOeI8OuWQXazh4VjLWAaCLAA954em7DMh0h8=`**                                                  |
 | `DataObjectFormat`      | `ObjectReference="#r-id-1"`, `MimeType` `application/octet-stream`                                                                                                                          |
@@ -714,12 +744,17 @@ not needed.
   and certificate ("RSA 2048 + SHA-256", ANX p. 86), generated by the taxpayer
   in the tax portal's "Comprobantes Electrónicos" section and protected by a
   PIN. Separate keys for the test and the production environments (ANX p. 86).
-  The annex still describes ATV; since 6 Oct 2025 this is done in TRIBU-CR's
-  virtual office (secondary). The exact menu path is UNVERIFIED.
+  The annex still describes ATV; since 6 Oct 2025 (RES43) this is done in
+  TRIBU-CR's virtual office (OVi), whose public portal also carries the current
+  "Anexos y Estructuras" (COM26). The exact menu path is UNVERIFIED (vendor
+  pages variously name "Tico Factura" and "Comprobantes Electrónicos").
 - PIN: 4 digits for keys issued before 27 Jul 2026; **14 characters** with
   upper case, lower case, digit and symbol for keys generated from that date;
-  old keys remain valid until expiry or revocation (secondary: KPMG).
-  Validity reported as 4 years (secondary: Siempre al Día).
+  old keys remain valid until expiry or revocation; KPMG also reports a
+  six-month transition for providers (secondary: KPMG; the Hacienda
+  communiqué itself was not found, **UNVERIFIED**). Validity reported as
+  4 years (Siempre al Día) or 2 years (Alegra): sources disagree, read the
+  expiry from the certificate itself (`notAfter`) and alert well before it.
 - **Alternative**: a BCCR "firma digital" certificate. Personal certificates
   live on a smart card and cannot sign unattended; legal-entity certificates
   ("sello electrónico") are requested from the BCCR (ANX p. 85). The
@@ -779,9 +814,15 @@ and list `password` and `refresh_token` among `grant_types_supported`.
 
 | Request                                                                              | Response                                                         |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| `GET https://api.comprobanteselectronicos.go.cr/recepcion/v1/recepcion/{clave}`      | 401 `UnauthorizedException` (route exists)                       |
-| `GET https://api-sandbox.comprobanteselectronicos.go.cr/recepcion/v1/recepcion/{clave}` | 401 `UnauthorizedException` (route exists)                    |
-| `GET https://api.comprobanteselectronicos.go.cr/recepcion-sandbox/v1/recepcion/{clave}` | 403 `MissingAuthenticationTokenException` (the gateway's answer for a route that does not exist) |
+| `GET https://api.comprobanteselectronicos.go.cr/recepcion/v1/recepcion/{clave}`      | 401, body `{"message":"Unauthorized"}`, header `x-amzn-errortype: UnauthorizedException` (route exists) |
+| `GET https://api-sandbox.comprobanteselectronicos.go.cr/recepcion/v1/recepcion/{clave}` | 401, same body and header (route exists)                     |
+| `GET https://api.comprobanteselectronicos.go.cr/recepcion-sandbox/v1/recepcion/{clave}` | 403, body `{"message":"Missing Authentication Token"}`, header `x-amzn-errortype: MissingAuthenticationTokenException` (the gateway's answer for a route that does not exist) |
+
+Re-run in the fact-check on 21 Nov 2026 with the same results. COM26 (April
+2026) still names a test environment "STAG", so the sandbox exists; nothing
+found suggests TRIBU-CR changed the IdP realms, client ids or API hosts. Both
+discovery documents advertise `http://` URLs in `issuer` and
+`token_endpoint`; always call the `https://` form.
 
 So the sandbox appears to live at
 `https://api-sandbox.comprobanteselectronicos.go.cr/recepcion/v1/`, not at the
@@ -803,9 +844,11 @@ grant_type=password&client_id=api-stag&username={url-encoded}&password={url-enco
   about 20 characters and contain symbols: always URL-encode the form.
 - Response (JSON): at least `access_token` and `refresh_token` (both JWTs);
   read `expires_in` and `refresh_expires_in` instead of hard-coding.
-- Access token lifetime: **5 minutes** (ANX p. 97). The refresh token in the
-  guide's 2017 sample lived 30 minutes (decoded `exp − iat`); today's value is
-  UNVERIFIED.
+- Access token lifetime: **5 minutes** (ANX p. 97; IDP p. 12). Refresh token:
+  the guide's text says `refresh_expires_in` was **10 hours** when it was
+  written (IDP p. 12, "Actualizado al 29 de octubre de 2018"), while its 2017
+  sample token lived 30 minutes (decoded `exp − iat`). Today's value is
+  UNVERIFIED; read `refresh_expires_in` from each response.
 - Refresh: same URL, `grant_type=refresh_token&client_id=…&refresh_token=…`.
 - Logout: `POST {logout URL}` with `client_id` and `refresh_token` → `204`.
   The annex asks clients to "cerrar la sesión al terminar".
@@ -849,6 +892,14 @@ Responses:
 | `400`  | Validation error                                                                                                                     | `X-Error-Cause` (e.g. "El comprobante con la Clave […] ya fue recibido."), `validation-exception` |
 | `401`  | Token missing or expired                                                                                                             |                                                                                                   |
 
+These three are the only statuses the reference documents for `POST
+/recepcion`. It documents no `202` (often quoted by vendors) and no `403`; a
+`403` observed so far is the API gateway's answer for a path that does not
+exist (5.1), not a validation answer; treat any other `403` as a configuration
+error and alert. `validation-exception` is a boolean
+header ("Indica si es un error con el body enviado"). The `Location` example
+ends with a trailing slash.
+
 A `400` whose cause says the clave was already received means an earlier
 attempt succeeded: switch to polling, do not create a new document.
 
@@ -859,8 +910,8 @@ attempt succeeded: switch to polling, do not create a new document.
 ```
 
 `ind-estado` ∈ `recibido`, `procesando`, `aceptado`, `rechazado`, `error`.
-`respuesta-xml` is Hacienda's signed `MensajeHacienda` in Base64 once a final
-state exists. `404` with `X-Error-Cause` when the clave is unknown.
+`respuesta-xml` is Hacienda's `MensajeHacienda` in Base64 once a final
+state exists, signed with XAdES-XL according to the reference. `404` with `X-Error-Cause` when the clave is unknown.
 
 `MensajeHacienda` (XSD): `Clave`, `NombreEmisor`, `TipoIdentificacionEmisor`,
 `NumeroCedulaEmisor`, optional receiver fields, `Mensaje` (`1` accepted, `3`
@@ -914,6 +965,7 @@ against its registries (ANX p. 17) — and has up to **3 hours** to answer
 | PDF                            | Legible content; document type, clave and consecutive number shown together; code descriptions instead of bare codes                                                                                                               | ANX notas 1, 7; RES27 art. 5 |
 | QR code                        | 2.5 × 2.5 cm, bottom right — but its entry into force was **suspended** until Hacienda announces it (RES27 Transitorio III). Whether it has since been activated is UNVERIFIED; reserve the space                                  | RES27                     |
 | Hacienda rejects               | Document is void; issue a replacement immediately; no credit note                                                                                                                                                                  | RCE art. 10, 19           |
+| No acceptance message          | A document without Hacienda's acceptance message cannot support the receiver's IVA credit or deductible expense. A fee factura stuck in `recibido` or rejected costs the seller their input IVA, so the 3-hour alert in 8.2 is a seller-facing issue | RCE art. 21; RES27 art. 11 |
 | Receiver's confirmation        | Taxpayer receivers send a `MensajeReceptor` (accept / partial / reject) to Hacienda within **8 business days counted from the first day of the month following** the transaction; silence = accepted. Not applicable to final consumers | RES27 art. 10; RCE art. 20 |
 | Receiver rejects               | Issuer must immediately issue the credit/debit note and, if needed, a new document                                                                                                                                                 | RES27 art. 10             |
 | Retention                      | All XML issued, sent and received and associated documents: **5 years** (CNPT art. 109), without prejudice to the longer limitation period of CNPT art. 51; unalterable, legible, retrievable                                      | RCE art. 4.1.i, 22        |
@@ -1197,6 +1249,12 @@ server-side only.
     rejections day to day.
 11. Whether Yuntera may later issue on sellers' behalf and what registering as
     a "proveedor de sistemas" involves.
+12. Whether a platform report was already due for 2025 (first window closed
+    30 Apr 2026, or 6 May 2026 if MH-DGT-RES-0004-2026 applies), and whether
+    the exclusion notice must be filed before each reporting year.
+13. Under RCE art. 2.13, may a business buyer issue a factura electrónica de
+    compra for goods bought from any simplified-regime seller, or only from
+    those not registered as "no confirmante"?
 
 ## 11. UNVERIFIED
 
@@ -1204,18 +1262,23 @@ server-side only.
   whether the validator checks the policy hash; whether a SHA-256 certificate
   digest is accepted in `SigningCertificate`; whether the `enveloped` transform
   is accepted in place of the XPath transform.
-- The sandbox base URL (observation only; needs credentials), the numeric rate
-  limits of the Recepción API, the refresh-token lifetime, the accepted offset
+- The sandbox base URL (observation only, repeated in the fact-check; needs
+  credentials), the numeric rate limits of the Recepción API, the current
+  refresh-token lifetime (guide: 10 hours in 2018), the accepted offset
   spelling in the JSON `fecha`, and whether success is always `201`.
 - Decimal tolerance in Hacienda's arithmetic checks.
 - How the 6-character activity code maps from TRIBU-CR's activity catalogue.
 - The format of alphanumeric legal-entity identifications.
 - Whether a rejected document's consecutive number counts as used.
 - Where exactly TRIBU-CR generates the key and API credentials; PKCS#12
-  encryption of new keys; key validity (4 years is secondary); the 14-character
-  PIN rule (secondary).
-- The 1 Nov 2026 enforcement date of the April adjustments (secondary) and the
-  resolution number that moved 4.4 to 1 Sep 2025.
+  encryption of new keys; key validity (4 or 2 years, secondary sources
+  disagree); the 14-character PIN rule (secondary).
+- The resolution that moved 4.4 to 1 Sep 2025 (MH-DGT-RES-0001-2025 per a
+  secondary source; Gazette text not located). The 1 Nov 2026 date is now
+  confirmed by COM26.
+- What MH-DGT-RES-0043-2025 changed in RES27.
+- The meaning of RCE art. 2.13 for simplified-regime sellers (all of them, or
+  only "no confirmante" ones).
 - Whether the QR code requirement has been activated.
 - MH-DGT-RES-0004-2026 and its filing window (secondary).
 - Current status, eligibility and limits of TICO Factura; whether the old ATV
@@ -1256,6 +1319,8 @@ Primary, fetched 21 Nov 2026:
   `https://api.hacienda.go.cr/fe/ae`, `https://api.hacienda.go.cr/indicadores/tc/dolar`
 - `https://www.imprentanacional.go.cr/pub/2024/11/06/ALCA179_06_11_2024.pdf` (MH-DGT-RES-0025-2024)
 - `https://www.w3.org/TR/xmldsig-core/xmldsig-core-schema.xsd`
+- Added in the fact-check: `https://www.hacienda.go.cr/docs/ActualizacionAnexosyEstructurasVersion4.4CEv2.pdf` (COM26),
+  `https://www.hacienda.go.cr/docs/ResolucionMH-DGT-RES-0043-2025.pdf` (RES43)
 - `https://registry.npmjs.org/` metadata for `xadesjs`, `xmldsigjs`, `xml-crypto`,
   `node-forge`, `@xmldom/xmldom`, `@facturacr/atv-sdk`, `haciendacostarica-signer`,
   `xmllint-wasm`, `libxmljs2`; `https://cdn.jsdelivr.net/npm/xadesjs@3.1.0/build/signed_xml.d.ts`
@@ -1264,6 +1329,10 @@ Secondary:
 
 - Delfino, 29 Oct 2026: `https://delfino.cr/2026/10/nuevos-codigos-de-facturacion-electronica-entraran-en-vigor-este-domingo`
 - KPMG Costa Rica, Aug 2026 (key PIN): `https://kpmg.com/cr/es/insights/2026/08/newsflash-ago-4.html`
+- KPMG Costa Rica, May 2026 (April adjustments): `https://kpmg.com/cr/es/insights/2026/05/newsflash-may-8.html`
+- Siempre al Día (MH-DGT-RES-0001-2025): `https://siemprealdia.co/costa-rica/impuestos/hacienda-confirma-obligatoriedad-de-la-factura-electronica-4-4/`;
+  (CIIU 4): `https://siemprealdia.co/costa-rica/impuestos/codigos-de-actividades-economicas-en-costa-rica/`
+- Alegra (key validity): `https://blog.alegra.com/costa-rica/llave-criptografica-hacienda/`
 - Siempre al Día: `https://siemprealdia.co/costa-rica/impuestos/tico-factura/`,
   `https://siemprealdia.co/costa-rica/impuestos/llave-criptografica-tribu-cr/`
 - EAS Latam (MH-DGT-RES-0004-2026): `https://www.easlatam.com/post/nueva-resoluci%C3%B3n-de-hacienda-plataformas-digitales-hacienda-traslada-el-primer-reporte-pero-no-ca`
@@ -1286,3 +1355,71 @@ Repository files read:
   `supabase/migrations/20261121080000_foundation.sql` (line 77),
   `supabase/migrations/20261121080100_identity.sql` (lines 71–97)
 - `STATUS.md`
+
+## Corrections after fact-check
+
+Fact-check of 21 November 2026. About 120 claims were re-checked against
+fresh downloads, not against the first draft's copies: the annex PDF
+(SHA-256 `6e093226…2769`, identical), the FE, TE, NC and MensajeHacienda XSDs
+(identical hashes) and the `.xsd.xml` FE variant, the RCE, RES27 (= the policy
+PDF), the API reference, the IdP guide, CP-08-2025, Gazette Alcance 179
+(RES25) and two Hacienda documents the draft did not have (COM26, RES43). The
+tiquete sample in 3.14 was re-validated with `xmllint` against the April 2026
+XSD and passes; both clave examples, the consecutive layout, the rounding
+examples, the policy hash (base64 of the PDF's SHA-256), the reception and
+IdP probes, the HAPI rate limits and the four CABYS candidates were reproduced.
+Every re-checked claim not listed below was confirmed as written: document type
+codes, clave and consecutivo structure and padding, namespaces and root
+elements, header field conditions, line and totals structure, notas 5, 6, 8,
+8.1, 15, 16, 20 and 22, the payment-method rules, XAdES-EPES requirements and
+policy identifier, the token endpoints, realms and client ids, the JSON
+envelope, the callback retry rule, the 3-hour validation window, the 2-business-
+day contingency and no-internet deadlines, the 8-business-day receiver
+confirmation, 5-year retention, the two-month provider retention, and RES25's
+scope, thresholds, data set, channel, penalty and Transitorio. The API HTML
+downloaded today differs from the draft's hash only in an injected CDN script.
+
+| # | Where | What the note said | What is right | Source |
+| --- | --- | --- | --- | --- |
+| 1 | Bottom line, 3.15, 3.16 | 1 Nov 2026 date of the April adjustments "secondary: Delfino" | Confirmed by Hacienda's own communiqué, which also says the codes are already live in STAG and production and may be used earlier; alphanumeric cédulas apply only once the Registro Nacional announces them | COM26 |
+| 2 | 3.16 | TRIBU-CR start 6 Oct 2025 "secondary" | Primary: 09:00 on 6 Oct 2025, ATV disabled from 23:45 on 25 Sep 2025; MH-DGT-RES-0043-2025 lists RES27 among the resolutions it adapts | RES43 |
+| 3 | 3.16, 11 | Resolution that moved 4.4 to 1 Sep 2025 unknown | MH-DGT-RES-0001-2025 per a secondary source; CP-08-2025 confirms only that a resolution was "en proceso de publicación" | CP-08-2025; Siempre al Día |
+| 4 | 3.13 | Reference-code table ended at `16`, omitted `17` and `TipoDocIR` `19` | `17` "Pago a comprobante electrónico" (REP only) and `TipoDocIR` `19` added; the `01`→`07` and `13`→`15` follow-up rule added | ANX pp. 72–73; COM26 |
+| 5 | 3.15 | "`TotalComprobante` must equal the payment methods" | Only when two or more methods are used | ANX p. 56 |
+| 6 | 5.2 | Refresh token "lived 30 minutes" in the guide | The guide's text says 10 hours (2018); the 30 minutes is its 2017 sample token. Both shown | IDP p. 12 |
+| 7 | 5.1 | Probe answers given as `UnauthorizedException` / `MissingAuthenticationTokenException` | Those are the `x-amzn-errortype` header values; bodies are `{"message":"Unauthorized"}` / `{"message":"Missing Authentication Token"}`. Discovery documents advertise `http://` URLs | Probes, 21 Nov 2026 |
+| 8 | 5.3 | Statuses 201/400/401 only | Confirmed, and now stated that the reference documents no `202` and no `403`; `validation-exception` is a boolean header | API |
+| 9 | 5.7 | — | Added: a document without Hacienda's acceptance cannot support the receiver's IVA credit or deduction, which makes stuck fee invoices a seller problem | RCE art. 21; RES27 art. 11 |
+| 10 | 2.1 | "A buyer cannot issue a factura de compra" for simplified-regime sellers | RCE art. 2.13 is ambiguous on whether it covers all of them or only "no confirmante" ones; marked **[ACCOUNTANT]** | RCE art. 2.13 |
+| 11 | 3.4 | Activity-code mapping UNVERIFIED | Still UNVERIFIED; added that secondary sources put CIIU 4 in force on 6 Oct 2025 and claim the receiver code is mandatory, which the annex contradicts (FE condition 2) | ANX p. 18; Siempre al Día |
+| 12 | 4.1 | `CertDigest` "SHA-1 in the example" | Also noted that the counter-signature examples name SHA-512 with a 20-byte value, so they settle nothing | ANX pp. 89–94 |
+| 13 | 4.2 | Key validity "4 years" | Sources disagree (4 or 2 years); read `notAfter`. PIN rule still secondary; KPMG adds a six-month provider transition | Siempre al Día; Alegra; KPMG |
+| 14 | 2.3 | RES-0004-2026 window "reportedly" | Still secondary and not found; added the yearly 30 April deadline (art. 5.6) and that the first window has passed | Gazette Alcance 179 |
+| 15 | Source keys | RCE dated 2 Oct 2024 | Signed 2 Oct 2024; RES27 cites it as of 8 Nov 2024 | RCE signature line; RES27 considerando VII |
+
+Nothing found changes the build-or-buy recommendation in 7 and 8: the API is
+still the documented two calls, the endpoints have not moved under TRIBU-CR,
+and using a provider remains optional (RCE art. 15, 16). The one change to what
+must be built: issuing code has to emit and accept reference codes `13`–`17`
+and `TipoDocIR` `19`, `20` from 1 Nov 2026 (already in force on the date of
+this check), and the alert on documents without an answer matters to sellers.
+
+Still **UNVERIFIED** after the fact-check: acceptance of any library's
+signature, SHA-256 in `CertDigest`, the `enveloped` transform and whether the
+policy hash is checked (all need a sandbox run); the sandbox base URL with real
+credentials; the Recepción API's numeric rate limits and current refresh-token
+lifetime; the JSON `fecha` offset spelling; decimal tolerance; the 6-character
+CIIU 4 activity code format; the shape of alphanumeric cédulas (KPMG example
+only); whether a rejected document's number is consumed; the TRIBU-CR menu path
+for keys and API passwords, new-key PKCS#12 algorithms, key validity and the
+14-character PIN rule (secondary only); the Gazette text of MH-DGT-RES-0001-2025
+and MH-DGT-RES-0004-2026; what RES-0043-2025 changed in RES27; QR activation
+(secondary sources say still suspended as of mid-2026); TICO Factura's current
+limits; the BCCR catalogue file; a public clave lookup; Gosocket, Alegra and
+FACTURATica details; whether simplified-regime sellers may sell online; RCE
+art. 2.13's scope; and the absence of a marketplace withholding or
+deemed-supplier rule (searched, not found; not proof). Vendor prices in 7.2
+were not re-checked.
+
+This note remains engineering research written by an AI, not legal or tax
+advice.
