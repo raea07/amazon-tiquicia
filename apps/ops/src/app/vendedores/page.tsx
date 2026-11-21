@@ -1,7 +1,7 @@
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
-import { Badge, EmptyState, formatDate, Skeleton, TextAreaField } from "@yuntera/ui";
+import { Alert, Badge, EmptyState, formatDate, Skeleton, TextAreaField } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -47,7 +47,11 @@ async function Sellers({ searchParams }: Pick<PageProps<"/vendedores">, "searchP
   const status =
     FILTERS.find(([value]) => value === (Array.isArray(asked) ? asked[0] : asked))?.[0] ??
     "pending";
-  const sellers = await (await sessionApi()).opsSellers(status);
+  const api = await sessionApi();
+  const [sellers, clashes] = await Promise.all([api.opsSellers(status), api.opsSellerIdClashes()]);
+  // Shops that share an identification number with another: one of them may
+  // not be who it says it is. Only one can ever be verified.
+  const sharedWith = new Map(clashes.map((clash) => [clash.seller_id, clash.shared_with]));
   const canChange = canSee(staff.staff_role, ["ops"]);
 
   return (
@@ -113,6 +117,18 @@ async function Sellers({ searchParams }: Pick<PageProps<"/vendedores">, "searchP
                     </dd>
                   </div>
                 </dl>
+                {sharedWith.has(seller.id) ? (
+                  <Alert tone="warning" className="mt-3" title="Identificación repetida">
+                    Otra tienda se registró con la misma identificación:{" "}
+                    {(sharedWith.get(seller.id) ?? [])
+                      .map(
+                        (other) =>
+                          `${other.trade_name} (${SELLER_STATUS[other.status]?.label ?? other.status})`,
+                      )
+                      .join(", ")}
+                    . Confirme con Hacienda y con cada una quién es la legítima antes de aprobar.
+                  </Alert>
+                ) : null}
                 {canChange && seller.status !== "closed" ? (
                   <div className="mt-4 border-t border-border pt-4">
                     {seller.status === "active" ? (

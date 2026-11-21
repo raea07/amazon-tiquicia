@@ -148,10 +148,11 @@ async function rpcAs(email, calls) {
     "| note kept:",
     await card.locator('textarea[name="note"]').inputValue(),
   );
+  // The listing's shop is still being verified, so it cannot go on sale yet.
   await card.locator('textarea[name="note"]').fill("");
   await card.locator('button:has-text("Publicar")').click();
-  await page.waitForSelector("main:visible >> text=No hay productos por revisar");
-  log("after approving: queue empty");
+  await card.locator('[role="alert"]', { hasText: "todavía no está verificada" }).waitFor();
+  log("publish before the shop is verified:", await text(card.locator('[role="alert"]')));
 
   // 5. Seller verification
   await page.goto(BASE + "/vendedores", { waitUntil: "networkidle" });
@@ -163,6 +164,12 @@ async function rpcAs(email, calls) {
   await page.goto(BASE + "/vendedores?estado=active", { waitUntil: "networkidle" });
   log("active sellers now:", await page.locator("main:visible ul.grid > li").count());
   await page.screenshot({ path: SHOTS + "/o3-sellers.png", fullPage: true });
+
+  // With the shop verified, its listing can be published.
+  await page.goto(BASE + "/catalogo", { waitUntil: "networkidle" });
+  await page.locator('main:visible ul > li button:has-text("Publicar")').first().click();
+  await page.waitForSelector("main:visible >> text=No hay productos por revisar");
+  log("after verifying the shop and approving: queue empty");
 
   // 6. Dispatch: plan the day
   await page.goto(BASE + "/despacho", { waitUntil: "networkidle" });

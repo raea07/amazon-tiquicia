@@ -118,7 +118,9 @@ $$;
 -- A visitor can report a listing, with a contact address.
 do $$
 begin
-  perform public.report_content('product', gen_random_uuid(), 'unsafe', 'Se calienta demasiado.', 'ana@correo.example');
+  -- About a listing that exists and is public (120_limits.sql covers the rest).
+  perform public.report_content('product', (select id from public.products where slug = 'parlante-bluetooth-nimbo-ola'),
+                                'unsafe', 'Se calienta demasiado.', 'ana@correo.example');
   begin
     perform public.report_content('product', gen_random_uuid(), 'unsafe');
     raise exception 'anonymous report without contact';

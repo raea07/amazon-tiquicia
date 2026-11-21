@@ -97,6 +97,11 @@ const currentAccount = z.object({
   iban_masked: z.string().nullable(),
   holder_name: z.string().nullable(),
   sinpe_number: z.string().nullable(),
+  /**
+   * Whether finance approved the account on file (limits migration). One
+   * entered before approvals existed is not, and is not paid until it is.
+   */
+  approved: z.boolean().optional(),
 });
 
 /** What a seller sees: masked numbers and the state of their latest request. */

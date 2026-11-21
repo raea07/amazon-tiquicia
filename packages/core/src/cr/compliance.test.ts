@@ -8,7 +8,7 @@ import {
   SHIPMENT_STATUSES,
   SHIPMENT_TRANSITIONS,
 } from "../lifecycle";
-import { DEFAULT_RANKING, TEXT_RELEVANCE } from "../search";
+import { boundSearchText, DEFAULT_RANKING, SEARCH_INPUT_LIMITS, TEXT_RELEVANCE } from "../search";
 import {
   addBusinessDays,
   CONSUMER_LAW,
@@ -215,5 +215,20 @@ describe("search ranking matches the database", () => {
     expect(search).toContain(`else ${DEFAULT_RANKING.outOfStockPenalty} end`);
     expect(search).toContain(`then ${DEFAULT_RANKING.newListingBoost} else 1 end`);
     expect(search).toContain(`interval '${DEFAULT_RANKING.newListingDays} days'`);
+  });
+
+  it("bounds what a search box sends the same way", () => {
+    const limits = migration("20261121083000_limits.sql");
+    const { maxChars, maxWords } = SEARCH_INPUT_LIMITS;
+    expect(limits).toContain(
+      `(regexp_split_to_array(trim(left(p_text, ${maxChars})), '\\s+'))[1:${maxWords}]`,
+    );
+    expect(limits).toContain(`search input limits ${maxChars} characters, ${maxWords} words`);
+    expect(boundSearchText("a".repeat(500))).toBe("a".repeat(maxChars));
+    expect(
+      boundSearchText("uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece"),
+    ).toBe("uno dos tres cuatro cinco seis siete ocho nueve diez once doce");
+    expect(boundSearchText("  licuadora   de  vaso ")).toBe("licuadora de vaso");
+    expect(boundSearchText("   ")).toBe("");
   });
 });

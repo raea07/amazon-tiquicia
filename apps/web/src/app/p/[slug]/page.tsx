@@ -164,6 +164,12 @@ async function Product({ params, searchParams }: PageProps<"/p/[slug]">) {
             </ul>
           ) : null}
           {product.description ? <p className="text-ink-muted">{product.description}</p> : null}
+          <Link
+            href={`/reportar?producto=${product.id}` as Route}
+            className="inline-flex min-h-11 w-fit items-center text-sm text-link underline"
+          >
+            Reportar un problema
+          </Link>
         </div>
 
         <BuyBox product={product} featured={featured} chosenLocation={location.chosen} />

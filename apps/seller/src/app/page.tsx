@@ -1,3 +1,4 @@
+import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader, Stat } from "@yuntera/next-kit/shell";
 import { Alert, Badge, buttonClass, formatPrice, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
@@ -20,8 +21,13 @@ export default function HomePage({ searchParams }: PageProps<"/">) {
 
 async function Dashboard({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   const { shop } = await requireShop("/");
-  const overview = await getOverview(shop.id);
-  const welcome = (await searchParams).bienvenida === "1";
+  const [overview, invitations] = await Promise.all([
+    getOverview(shop.id),
+    sessionApi().then((api) => api.myInvitations()),
+  ]);
+  const params = await searchParams;
+  const welcome = params.bienvenida === "1";
+  const joined = params.equipo === "1";
   const { counts, sales_30d: sales, seller } = overview;
   const health = SELLER_HEALTH[seller.health];
 
@@ -40,15 +46,32 @@ async function Dashboard({ searchParams }: Pick<PageProps<"/">, "searchParams">)
 
       {welcome ? (
         <Alert tone="success" title="Recibimos su solicitud">
-          Mientras verificamos sus datos puede ir creando sus productos. Se publican cuando su
-          tienda quede aprobada.
+          Mientras verificamos sus datos puede ir preparando sus productos como borradores. Los
+          envía a revisión cuando su tienda quede aprobada.
+        </Alert>
+      ) : null}
+      {joined ? (
+        <Alert tone="success" title="Ya es parte del equipo">
+          Está trabajando en {seller.trade_name}. Si pertenece a varias tiendas, cambie de una a
+          otra arriba, junto a su nombre.
+        </Alert>
+      ) : null}
+      {invitations.length > 0 ? (
+        <Alert tone="info" title="Tiene una invitación">
+          {invitations.length === 1
+            ? `${invitations[0]?.shop.trade_name} le invitó a su equipo.`
+            : `${invitations.length} tiendas le invitaron a su equipo.`}{" "}
+          <Link href="/invitaciones" className="font-semibold underline">
+            Ver y responder
+          </Link>
+          .
         </Alert>
       ) : null}
       {seller.status === "pending" ? (
         <Alert tone="info" title="Su tienda está en revisión">
           Estamos verificando su identidad con los datos que nos dio. Normalmente toma uno o dos
-          días hábiles y le avisamos por correo. Sus productos todavía no son visibles para los
-          compradores.
+          días hábiles y le avisamos por correo. Mientras tanto puede preparar productos como
+          borradores; se envían a revisión cuando la tienda quede aprobada.
         </Alert>
       ) : null}
       {seller.status === "suspended" ? (

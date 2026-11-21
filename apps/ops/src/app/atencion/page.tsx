@@ -39,7 +39,7 @@ function OrderLink({ number }: { number: string | null }) {
 
 async function Queues() {
   const staff = await requireStaff("/atencion", ["support", "ops", "finance", "catalog"]);
-  const { returns, complaints, reports } = await (await sessionApi()).opsCareQueues();
+  const { returns, complaints, reports, totals } = await (await sessionApi()).opsCareQueuesPaged();
   const canDecide = canSee(staff.staff_role, ["support", "ops"]);
   const canRefund = canSee(staff.staff_role, ["finance", "support"]);
   const canModerate = canSee(staff.staff_role, ["catalog", "support", "ops"]);
@@ -48,7 +48,7 @@ async function Queues() {
     <div className="flex flex-col gap-10">
       <section aria-labelledby="devoluciones">
         <h2 id="devoluciones" className="text-xl font-bold">
-          Devoluciones ({returns.length})
+          Devoluciones ({countLabel(returns.length, totals.returns)})
         </h2>
         {returns.length === 0 ? (
           <p className="mt-2 text-sm text-ink-muted">No hay devoluciones pendientes.</p>
@@ -144,7 +144,7 @@ async function Queues() {
 
       <section aria-labelledby="reclamos">
         <h2 id="reclamos" className="text-xl font-bold">
-          Reclamos ({complaints.length})
+          Reclamos ({countLabel(complaints.length, totals.complaints)})
         </h2>
         {complaints.length === 0 ? (
           <p className="mt-2 text-sm text-ink-muted">No hay reclamos abiertos.</p>
@@ -185,7 +185,7 @@ async function Queues() {
 
       <section aria-labelledby="reportes">
         <h2 id="reportes" className="text-xl font-bold">
-          Reportes de contenido ({reports.length})
+          Reportes de contenido ({countLabel(reports.length, totals.reports)})
         </h2>
         {reports.length === 0 ? (
           <p className="mt-2 text-sm text-ink-muted">No hay reportes por atender.</p>
@@ -230,4 +230,11 @@ async function Queues() {
       </section>
     </div>
   );
+}
+
+/** "12", or "100 de 2340, los más antiguos primero" when the list is a page of a longer queue. */
+function countLabel(shown: number, total: number) {
+  return total > shown
+    ? `${shown} de ${total.toLocaleString("es-CR")}, los más antiguos primero`
+    : String(total);
 }

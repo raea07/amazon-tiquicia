@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   decodePlusCode,
@@ -12,6 +14,7 @@ import {
 import {
   canReceiveSinpeMovil,
   HACIENDA_ID_CODE,
+  type IdentificationType,
   isValidIdentification,
   parseIdentification,
   parsePhone,
@@ -208,5 +211,35 @@ describe("delivery address", () => {
       "senas_too_short",
       "pin_outside_country",
     ]);
+  });
+});
+
+describe("identification numbers agree with the database", () => {
+  // supabase/tests/120_limits.sql runs these very lines through
+  // private.is_valid_identification; here they go through parseIdentification.
+  const suite = readFileSync(
+    fileURLToPath(new URL("../../../../supabase/tests/120_limits.sql", import.meta.url)),
+    "utf8",
+  );
+  const block = /-- BEGIN identification_cases([\s\S]*?)-- END identification_cases/.exec(suite);
+  const cases = [
+    ...(block?.[1] ?? "").matchAll(/check_id\('([a-z]+)', '(\d+)', (true|false)\)/g),
+  ].map((match) => ({
+    type: match[1] as IdentificationType,
+    value: match[2] ?? "",
+    valid: match[3] === "true",
+  }));
+
+  it("finds the shared cases, for every type", () => {
+    expect(cases.length).toBeGreaterThanOrEqual(12);
+    expect(new Set(cases.map((c) => c.type))).toEqual(
+      new Set(["fisica", "juridica", "dimex", "nite"]),
+    );
+  });
+
+  it("accepts and refuses the same numbers", () => {
+    for (const c of cases) {
+      expect(parseIdentification(c.value, c.type) !== null, `${c.type} ${c.value}`).toBe(c.valid);
+    }
   });
 });

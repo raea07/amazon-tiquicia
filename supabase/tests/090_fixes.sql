@@ -594,9 +594,9 @@ begin
     'laptops', null, array[repeat('x', 301)], 1900, 36, 26, 6)$q$, current_setting('t.laptop')), 'invalid_listing');
   -- The same package limits as the seller app: 30 kg, 200 cm a side.
   perform pg_temp.refused(format($q$select public.seller_update_listing('%s', 'Laptop de mucho peso',
-    'laptops', null, '{}', 30001, 36, 26, 6)$q$, current_setting('t.laptop')), 'invalid_listing');
+    'laptops', null, '{}', 30001, 36, 26, 6)$q$, current_setting('t.laptop')), 'package_over_limit');
   perform pg_temp.refused(format($q$select public.seller_update_listing('%s', 'Laptop de mucho largo',
-    'laptops', null, '{}', 1900, 200.1, 26, 6)$q$, current_setting('t.laptop')), 'invalid_listing');
+    'laptops', null, '{}', 1900, 200.1, 26, 6)$q$, current_setting('t.laptop')), 'package_over_limit');
   assert (select count(*) from public.product_change_requests where status = 'pending') = 1,
     'nothing invalid was queued';
 end
