@@ -66,6 +66,35 @@ describe.skipIf(!db.enabled)("notifications contract", () => {
     expect((await api.setMyCommercialConsent(false)).commercial.opt_in).toBe(false);
   });
 
+  it("saves channels and consent together, and refuses a save from an out-of-date page", async () => {
+    const api = db.as("comprador2@yuntera.example");
+    const loaded = await api.myNotificationSettings();
+    const saved = await api.setMyNotificationSettings({
+      email: true,
+      whatsapp: false,
+      sms: false,
+      push: true,
+      phone: loaded.phone,
+      commercial: true,
+      version: loaded.version,
+    });
+    expect(saved.commercial.opt_in).toBe(true);
+    expect(saved.version).toBeGreaterThan(loaded.version);
+    await expect(
+      api.setMyNotificationSettings({
+        email: true,
+        whatsapp: true,
+        sms: false,
+        push: true,
+        phone: loaded.phone,
+        commercial: false,
+        version: loaded.version,
+      }),
+    ).rejects.toMatchObject({ code: "notify_settings_changed" });
+    expect((await api.myNotificationSettings()).commercial.opt_in).toBe(true);
+    await api.setMyCommercialConsent(false);
+  });
+
   it("refuses a visitor", async () => {
     await expect(db.as().myNotificationSettings()).rejects.toBeInstanceOf(ApiError);
   });
@@ -95,8 +124,9 @@ describe.skipIf(!db.enabled)("notifications contract", () => {
     expect(settings.email_locked).toBe(true);
     const saved = await db
       .as("vendedor@yuntera.example")
-      .sellerSetNotificationSettings(shop, { whatsapp: false, sms: false, push: true });
+      .sellerSetNotificationSettings(shop, { whatsapp: false, push: true, commercial: false });
     expect(saved.push_enabled).toBe(true);
+    expect(saved.sms_enabled).toBe(false);
     await expect(
       db.as("comprador@yuntera.example").sellerNotificationSettings(shop),
     ).rejects.toMatchObject({ code: "seller_not_found" });
@@ -109,11 +139,24 @@ describe.skipIf(!db.enabled)("notifications contract", () => {
     expect(rows[0]).not.toHaveProperty("request_body");
     const dead = await staff.opsNotificationDeadLetters();
     expect(dead.dead_count).toBe(0);
+    expect(dead.failed_count).toBe(0);
     await expect(
       db.as("comprador@yuntera.example").opsOrderNotifications(orderNumber),
     ).rejects.toMatchObject({
       code: "forbidden",
     });
+  });
+
+  it("lists a message the provider failed after accepting it, and retries it", async () => {
+    const { rows } = await db.query<{ id: string }>(
+      `update private.notification_deliveries set status = 'failed', last_error_code = 'undeliverable'
+       where id = (select id from private.notification_deliveries order by created_at desc limit 1) returning id`,
+    );
+    const staff = db.as("central@yuntera.example");
+    const dead = await staff.opsNotificationDeadLetters();
+    expect(dead.failed_count).toBe(1);
+    expect(dead.items.find((row) => row.id === rows[0]?.id)?.status).toBe("failed");
+    expect((await staff.opsRetryNotification(rows[0]?.id ?? "")).status).toBe("pending");
   });
 
   it("retries a dead letter", async () => {

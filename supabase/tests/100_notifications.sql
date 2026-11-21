@@ -751,7 +751,7 @@ declare
 begin
   assert (s ->> 'can_edit')::boolean and (s ->> 'email_locked')::boolean, 'owner, e-mail always on';
   assert s ->> 'contact_email' = 'vendedor@yuntera.example', 'the shop''s contact';
-  s := public.seller_set_notification_settings(current_setting('t.tecnocasa')::uuid, true, false, true, '+50687001111');
+  s := public.seller_set_notification_settings(current_setting('t.tecnocasa')::uuid, true, true, '+50687001111');
   assert (s ->> 'whatsapp_enabled')::boolean and s ->> 'phone' = '+50687001111', 'WhatsApp on for the shop';
   s := public.seller_set_commercial_consent(current_setting('t.tecnocasa')::uuid, true, 'comercial-2026-11', 'seller_cuenta');
   assert (s #>> '{commercial,opt_in}')::boolean, 'shop consent';
@@ -770,7 +770,7 @@ begin
   assert (public.seller_notification_settings(current_setting('t.tecnocasa')::uuid) ->> 'can_edit')::boolean is false,
     'a staff member reads but cannot change';
   begin
-    perform public.seller_set_notification_settings(current_setting('t.tecnocasa')::uuid, false, false, false, null);
+    perform public.seller_set_notification_settings(current_setting('t.tecnocasa')::uuid, false, false, null);
     assert false, 'a staff member changed the shop''s settings';
   exception when raise_exception then assert sqlerrm = 'forbidden', sqlerrm;
   end;
@@ -786,6 +786,276 @@ exception when raise_exception then assert sqlerrm = 'seller_not_found', sqlerrm
 end
 $$;
 reset role;
+
+-- ── A shop has no SMS channel ─────────────────────────────────────────────
+
+do $$
+begin
+  assert to_regprocedure('public.seller_set_notification_settings(uuid, boolean, boolean, boolean, text)') is null,
+    'the shop''s save takes no SMS choice';
+  assert (select not sms_enabled from private.notification_preferences
+          where seller_id = current_setting('t.tecnocasa')::uuid), 'and a shop''s SMS is stored as off';
+end
+$$;
+
+-- ── An opt-out is lifted only by the phone itself ─────────────────────────
+
+select pg_temp.login('comprador@yuntera.example');
+select public.set_my_notification_settings(true, true, false, true, '8765 4321');
+reset role;
+select pg_temp.login_worker();
+select public.worker_notify_apply_update('{"provider":"bird","channel":"whatsapp","status":"opted_out",
+  "recipient_address":"+50687654321","permanent":true}', 'msg_optout_1');
+reset role;
+do $$
+begin
+  assert (select not whatsapp_enabled from private.notification_preferences
+          where user_id = current_setting('t.buyer')::uuid), 'the holder''s STOP turns WhatsApp off';
+end
+$$;
+select pg_temp.login('comprador2@yuntera.example');
+do $$
+begin
+  begin
+    perform public.set_my_notification_settings(true, true, false, true, '87654321');
+    assert false, 'another account lifted the opt-out by typing the number';
+  exception when raise_exception then assert sqlerrm = 'notify_phone_opted_out', sqlerrm;
+  end;
+end
+$$;
+reset role;
+select pg_temp.login('comprador@yuntera.example');
+do $$
+begin
+  begin
+    perform public.set_my_notification_settings(true, true, false, true, '87654321');
+    assert false, 'the form lifted the opt-out';
+  exception when raise_exception then assert sqlerrm = 'notify_phone_opted_out', sqlerrm;
+  end;
+  -- The other channels can still be saved with that number.
+  perform public.set_my_notification_settings(true, false, false, true, '87654321');
+end
+$$;
+reset role;
+do $$
+begin
+  assert exists (select 1 from private.notification_suppressions where channel = 'whatsapp'
+                 and address = '+50687654321' and reason = 'opt_out' and lifted_at is null), 'still suppressed';
+  assert not exists (select 1 from private.notification_preferences
+                     where phone = '+50687654321' and whatsapp_enabled), 'and nobody has WhatsApp on for it';
+end
+$$;
+-- The phone itself asks again (START): only then can it be switched on.
+select pg_temp.login_worker();
+select public.worker_notify_apply_update('{"provider":"bird","channel":"whatsapp","status":"opted_in",
+  "recipient_address":"+50687654321"}', 'msg_optin_1');
+reset role;
+select pg_temp.login('comprador@yuntera.example');
+do $$
+begin
+  assert (public.set_my_notification_settings(true, true, false, true, '87654321') ->> 'whatsapp_enabled')::boolean,
+    'switched on after the phone opted in';
+end
+$$;
+reset role;
+
+-- ── A save from an out-of-date page is refused; a save is all or nothing ──
+
+select pg_temp.login('comprador@yuntera.example');
+do $$
+declare
+  v_loaded bigint := (public.my_notification_settings() ->> 'version')::bigint;
+  s jsonb;
+begin
+  assert v_loaded > 0, 'the settings carry a version';
+  -- Tab 1 saves SMS on.
+  s := public.set_my_notification_settings(true, true, true, true, '87654321', null, null, v_loaded);
+  assert (s ->> 'sms_enabled')::boolean, 'tab 1 saved';
+  -- Tab 2, loaded before, saves only the commercial box: refused.
+  begin
+    perform public.set_my_notification_settings(true, true, false, true, '87654321', true, 'comercial-2026-11', v_loaded);
+    assert false, 'a stale tab undid a change';
+  exception when raise_exception then assert sqlerrm = 'notify_settings_changed', sqlerrm;
+  end;
+  s := public.my_notification_settings();
+  assert (s ->> 'sms_enabled')::boolean and not (s #>> '{commercial,opt_in}')::boolean, 'nothing of tab 2 was kept';
+  -- Channels and consent in one call: a bad consent keeps the channels unsaved too.
+  begin
+    perform public.set_my_notification_settings(true, true, false, true, '87654321', true, 'x',
+      (s ->> 'version')::bigint);
+    assert false, 'an invalid consent was accepted';
+  exception when raise_exception then assert sqlerrm = 'notify_consent_invalid', sqlerrm;
+  end;
+  assert (public.my_notification_settings() ->> 'sms_enabled')::boolean, 'the channels were not half saved';
+  s := public.set_my_notification_settings(true, true, false, true, '87654321', true, 'comercial-2026-11',
+    (s ->> 'version')::bigint);
+  assert not (s ->> 'sms_enabled')::boolean and (s #>> '{commercial,opt_in}')::boolean, 'both saved together';
+end
+$$;
+reset role;
+
+-- ── A push token moves to another account only from its own phone ────────
+
+select pg_temp.login('comprador2@yuntera.example');
+do $$
+begin
+  begin
+    perform public.register_push_token('shop', 'ExponentPushToken[buyer-phone-0001]', 'ios');
+    assert false, 'took someone else''s token';
+  exception when raise_exception then assert sqlerrm = 'push_token_invalid', sqlerrm;
+  end;
+  begin
+    perform public.register_push_token('shop', 'ExponentPushToken[buyer-phone-0001]', 'android', 'device-9');
+    assert false, 'took someone else''s token from another device';
+  exception when raise_exception then assert sqlerrm = 'push_token_invalid', sqlerrm;
+  end;
+end
+$$;
+reset role;
+do $$
+begin
+  assert (select user_id from private.push_tokens where expo_token = 'ExponentPushToken[buyer-phone-0001]')
+         = current_setting('t.buyer')::uuid, 'the token stays with its owner';
+end
+$$;
+select pg_temp.login('comprador@yuntera.example');
+select public.register_push_token('shop', 'ExponentPushToken[shared-phone-0002]', 'android');
+select public.unregister_push_token('ExponentPushToken[shared-phone-0002]');
+reset role;
+select pg_temp.login('comprador2@yuntera.example');
+select public.register_push_token('shop', 'ExponentPushToken[shared-phone-0002]', 'android');
+-- The same phone (same device id) signing in to another account without signing out first.
+select public.register_push_token('shop', 'ExponentPushToken[buyer-phone-0001]', 'android', 'device-1');
+reset role;
+do $$
+begin
+  assert (select user_id from private.push_tokens where expo_token = 'ExponentPushToken[shared-phone-0002]')
+         = (select id from auth.users where email = 'comprador2@yuntera.example'), 'after sign-out it can move';
+  assert (select user_id from private.push_tokens where expo_token = 'ExponentPushToken[buyer-phone-0001]')
+         = (select id from auth.users where email = 'comprador2@yuntera.example'), 'from the same device it can move';
+end
+$$;
+
+-- ── Failures the provider reports after accepting a message ───────────────
+
+create function pg_temp.delivery(p_channel text, p_pmid text, p_attempts integer default 1) returns uuid
+language sql as $$
+  insert into private.notification_deliveries
+    (dedupe_key, ordering_key, sequence, channel, template, recipient, recipient_user_id, audience,
+     context, status, attempts, provider, provider_message_id, sent_at)
+  values (gen_random_uuid()::text, 'test:' || gen_random_uuid(), 1, p_channel, 'order_placed',
+          'user:' || current_setting('t.buyer'), current_setting('t.buyer')::uuid, 'shopper',
+          jsonb_build_object('order_id', current_setting('t.order')), 'sent', p_attempts, 'bird', p_pmid, now())
+  returning id;
+$$;
+select pg_temp.remember('soft_id', pg_temp.delivery('email', 'em_async_1')::text);
+select pg_temp.remember('hard_id', pg_temp.delivery('whatsapp', 'wa_async_2')::text);
+select pg_temp.remember('spent_id', pg_temp.delivery('sms', 'sms_async_3', 10)::text);
+
+select pg_temp.login_worker();
+do $$
+begin
+  -- A soft bounce goes back through the retries, as a new request.
+  assert public.worker_notify_apply_update(jsonb_build_object('provider', 'bird', 'channel', 'email',
+    'provider_message_id', 'em_async_1', 'delivery_id', current_setting('t.soft_id'), 'generation', 0,
+    'status', 'bounced', 'permanent', false, 'reason', 'bounce_soft'), 'msg_soft') = 'requeued', 'soft bounce';
+  -- A late report about that first request changes nothing now, even when
+  -- the provider does not echo the generation: nothing is in flight.
+  assert public.worker_notify_apply_update(jsonb_build_object('provider', 'bird', 'channel', 'email',
+    'provider_message_id', 'em_async_1', 'delivery_id', current_setting('t.soft_id'),
+    'status', 'delivered'), 'msg_late_1') = 'unknown', 'a late report for the old request';
+  -- A permanent failure after sending ends as failed.
+  assert public.worker_notify_apply_update(jsonb_build_object('provider', 'bird', 'channel', 'whatsapp',
+    'provider_message_id', 'wa_async_2', 'delivery_id', current_setting('t.hard_id'), 'generation', 0,
+    'status', 'failed', 'permanent', true, 'reason', 'undeliverable'), 'msg_hard') = 'applied', 'hard failure';
+  -- A temporary failure with no attempts left is a dead letter.
+  assert public.worker_notify_apply_update(jsonb_build_object('provider', 'bird', 'channel', 'sms',
+    'provider_message_id', 'sms_async_3', 'status', 'failed', 'permanent', false, 'reason', 'expired'),
+    'msg_spent') = 'dead', 'spent';
+end
+$$;
+reset role;
+do $$
+begin
+  assert (select status = 'pending' and generation = 1 and provider_message_id is null and provider_status is null
+                 and last_error_code = 'bounce_soft' and available_at > now()
+          from private.notification_deliveries where id = current_setting('t.soft_id')::uuid),
+    'requeued under a new generation, with back-off';
+  assert (select status = 'failed' from private.notification_deliveries where id = current_setting('t.hard_id')::uuid),
+    'failed';
+  assert (select status = 'dead' from private.notification_deliveries where id = current_setting('t.spent_id')::uuid),
+    'dead when no attempts are left';
+  assert not exists (select 1 from private.notification_suppressions where address = 'comprador@yuntera.example'
+                     and reason = 'hard_bounce'), 'a soft bounce suppresses nothing';
+end
+$$;
+
+-- The next generation is in flight; a report about the earlier one is ignored.
+update private.notification_deliveries
+set status = 'sending', locked_by = 'w9', locked_until = now() + interval '1 minute', attempts = 2
+where id = current_setting('t.soft_id')::uuid;
+select pg_temp.login_worker();
+do $$
+begin
+  assert public.worker_notify_apply_update(jsonb_build_object('provider', 'bird', 'channel', 'email',
+    'provider_message_id', 'em_async_1', 'delivery_id', current_setting('t.soft_id'), 'generation', 0,
+    'status', 'failed', 'permanent', true), 'msg_late_2') = 'stale', 'generation 0 does not touch generation 1';
+  assert public.worker_notify_apply_update(jsonb_build_object('provider', 'bird', 'channel', 'email',
+    'provider_message_id', 'em_async_1b', 'delivery_id', current_setting('t.soft_id'), 'generation', 1,
+    'status', 'delivered'), 'msg_now') = 'applied', 'generation 1''s own report arrives before the send is recorded';
+  assert public.worker_notify_sent(current_setting('t.soft_id')::uuid, 'w9', 'bird', 'em_async_1b'), 'recorded';
+end
+$$;
+reset role;
+do $$
+begin
+  assert (select status = 'delivered' and provider_status = 'delivered'
+          from private.notification_deliveries where id = current_setting('t.soft_id')::uuid), 'delivered once';
+end
+$$;
+
+-- Staff see the failed message beside the dead ones, and can retry it.
+select pg_temp.login('central@yuntera.example');
+do $$
+declare
+  dead jsonb := public.ops_notification_dead_letters(200);
+begin
+  assert exists (select 1 from jsonb_array_elements(dead -> 'items') x
+                 where x ->> 'id' = current_setting('t.hard_id') and x ->> 'status' = 'failed'),
+    'a failure after sending is on the dead-letter page';
+  assert exists (select 1 from jsonb_array_elements(dead -> 'items') x
+                 where x ->> 'id' = current_setting('t.spent_id') and x ->> 'status' = 'dead'), 'and the dead one';
+  assert (dead ->> 'failed_count')::integer >= 1, 'counted';
+  perform public.ops_retry_notification(current_setting('t.hard_id')::uuid);
+end
+$$;
+reset role;
+do $$
+begin
+  assert (select old_row ->> 'status' = 'failed' and (new_row ->> 'generation')::integer = 1
+          from private.audit_log where table_name = 'notification_deliveries'
+            and row_key = current_setting('t.hard_id') order by id desc limit 1),
+    'the audit records the status it had';
+end
+$$;
+
+-- ── A lease that runs out after the last attempt ends as a dead letter ────
+
+update private.notification_deliveries
+set status = 'sending', locked_by = 'w-gone', locked_until = now() - interval '1 minute',
+    attempts = max_attempts, last_error_code = null
+where id = current_setting('t.spent_id')::uuid;
+select pg_temp.login_worker();
+select public.worker_notify_claim('w-next', 1, 60);
+reset role;
+do $$
+begin
+  assert (select status = 'dead' and last_error_code = 'lease_expired' and locked_by is null
+          from private.notification_deliveries where id = current_setting('t.spent_id')::uuid),
+    'dead, not claimed an eleventh time';
+end
+$$;
+
 
 rollback;
 

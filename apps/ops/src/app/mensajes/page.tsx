@@ -12,12 +12,23 @@ import { requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Mensajes detenidos" };
 
+const plural = (n: number, one: string, many: string) => (n === 1 ? `1 ${one}` : `${n} ${many}`);
+
+function countLine(dead: number, failed: number): string {
+  const parts = [
+    dead > 0 ? plural(dead, "mensaje detenido", "mensajes detenidos") : null,
+    failed > 0 ? plural(failed, "mensaje no entregado", "mensajes no entregados") : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? `${parts.join(" y ")}.` : "";
+}
+
 export default function DeadLettersPage() {
   return (
     <div className="shell py-8">
       <PageHeader title="Mensajes detenidos">
-        Avisos que no se pudieron enviar después de varios intentos, o que el proveedor rechazó.
-        Revise el motivo, corrija lo que haga falta y vuelva a enviarlos.
+        Avisos que no se pudieron enviar después de varios intentos, que el proveedor rechazó, o que
+        el proveedor aceptó y después informó que no llegaron. Revise el motivo, corrija lo que haga
+        falta y vuelva a enviarlos.
       </PageHeader>
       <div className="mt-6">
         <Suspense fallback={<Skeleton className="h-96" />}>
@@ -47,10 +58,8 @@ async function DeadLetters() {
       ) : (
         <>
           <p className="text-sm text-ink-muted">
-            {dead.dead_count === 1
-              ? "1 mensaje detenido."
-              : `${dead.dead_count} mensajes detenidos.`}{" "}
-            Reenviar crea un envío nuevo: si el primero sí llegó, la persona lo recibirá dos veces.
+            {countLine(dead.dead_count, dead.failed_count)} Reenviar crea un envío nuevo: si el
+            primero sí llegó, la persona lo recibirá dos veces.
           </p>
           <ul className="flex flex-col gap-2">
             {dead.items.map((row) => (

@@ -8,6 +8,8 @@ import { FormMessage, SubmitButton } from "./forms";
 type FormAction = (previous: ActionState, formData: FormData) => Promise<ActionState>;
 
 export interface NotificationSettingsValues {
+  /** Sent back on save, so a save from an out-of-date tab is refused. */
+  version: number;
   email_enabled: boolean;
   email_locked: boolean;
   whatsapp_enabled: boolean;
@@ -83,6 +85,7 @@ export function NotificationSettingsForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
+      <input type="hidden" name="version" value={settings.version} />
       <fieldset className="flex flex-col gap-1" disabled={!canEdit}>
         <legend className="mb-2 text-lg font-bold">Avisos sobre {about}</legend>
         <Choice
@@ -109,12 +112,16 @@ export function NotificationSettingsForm({
           }
           checked={on("whatsapp", settings.whatsapp_enabled)}
         />
-        <Choice
-          name="sms"
-          label="Mensaje de texto (SMS)"
-          hint="Solo el día de la entrega, y solo si no le llega el aviso por WhatsApp ni en la aplicación."
-          checked={on("sms", settings.sms_enabled)}
-        />
+        {shop ? null : (
+          // Shops are told by e-mail, WhatsApp and the app; SMS is only for a
+          // shopper's delivery day.
+          <Choice
+            name="sms"
+            label="Mensaje de texto (SMS)"
+            hint="Solo el día de la entrega, y solo si no le llega el aviso por WhatsApp ni en la aplicación."
+            checked={on("sms", settings.sms_enabled)}
+          />
+        )}
         <Choice
           name="push"
           label="Notificaciones en la aplicación"
@@ -123,7 +130,9 @@ export function NotificationSettingsForm({
         />
         <div className="mt-3 max-w-sm">
           <TextField
-            label="Número de celular para WhatsApp y SMS"
+            label={
+              shop ? "Número de celular para WhatsApp" : "Número de celular para WhatsApp y SMS"
+            }
             name="phone"
             type="tel"
             inputMode="tel"

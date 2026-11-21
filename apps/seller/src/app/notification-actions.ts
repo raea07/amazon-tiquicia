@@ -17,6 +17,7 @@ import {
   typed,
 } from "@yuntera/next-kit/server";
 import { refresh } from "next/cache";
+import { z } from "zod";
 import { currentShop } from "@/lib/shop";
 
 export async function saveShopNotificationSettings(
@@ -29,7 +30,6 @@ export async function saveShopNotificationSettings(
   const values = {
     phone: typed(formData, "phone").phone ?? "",
     whatsapp: flag("whatsapp"),
-    sms: flag("sms"),
     push: flag("push"),
     commercial: flag("commercial"),
   };
@@ -42,27 +42,25 @@ export async function saveShopNotificationSettings(
       values,
     };
   }
-  if ((values.whatsapp || values.sms) && !phone) {
+  if (values.whatsapp && !phone) {
     return {
-      error: "Para recibir avisos por WhatsApp o SMS, escriba un número de celular.",
+      error: "Para recibir avisos por WhatsApp, escriba un número de celular.",
       values,
     };
   }
+  const version = z.coerce.number().int().nonnegative().safeParse(formData.get("version"));
+  if (!version.success) return { error: "Recargue la página e inténtelo de nuevo.", values };
 
   try {
-    const api = await sessionApi();
-    await api.sellerSetNotificationSettings(session.shop.id, {
+    // Channels and consent in one call: saved together or not at all.
+    await (await sessionApi()).sellerSetNotificationSettings(session.shop.id, {
       whatsapp: values.whatsapp === "on",
-      sms: values.sms === "on",
       push: values.push === "on",
       phone: phone?.e164 ?? null,
+      commercial: values.commercial === "on",
+      textVersion: COMMERCIAL_CONSENT_VERSION,
+      version: version.data,
     });
-    await api.sellerSetCommercialConsent(
-      session.shop.id,
-      values.commercial === "on",
-      COMMERCIAL_CONSENT_VERSION,
-      "seller_cuenta",
-    );
     refresh();
     return { ok: "Guardamos las preferencias de su tienda.", values };
   } catch (error) {

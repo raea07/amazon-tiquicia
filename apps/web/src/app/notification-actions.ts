@@ -22,6 +22,8 @@ const settingsSchema = z.object({
   push: z.boolean(),
   commercial: z.boolean(),
   phone: z.string().trim().max(20),
+  /** What the page was loaded with: a save from an out-of-date tab is refused. */
+  version: z.coerce.number().int().nonnegative(),
 });
 
 export async function saveNotificationSettings(
@@ -44,6 +46,7 @@ export async function saveNotificationSettings(
     push: values.push === "on",
     commercial: values.commercial === "on",
     phone: values.phone,
+    version: formData.get("version"),
   });
   if (!parsed.success) return { error: "Revise los datos del formulario.", values };
   const input = parsed.data;
@@ -64,15 +67,17 @@ export async function saveNotificationSettings(
   }
 
   try {
-    const api = await sessionApi();
-    await api.setMyNotificationSettings({
+    // Channels and consent in one call: saved together or not at all.
+    await (await sessionApi()).setMyNotificationSettings({
       email: input.email,
       whatsapp: input.whatsapp,
       sms: input.sms,
       push: input.push,
       phone: phone?.e164 ?? null,
+      commercial: input.commercial,
+      textVersion: COMMERCIAL_CONSENT_VERSION,
+      version: input.version,
     });
-    await api.setMyCommercialConsent(input.commercial, COMMERCIAL_CONSENT_VERSION, "web_cuenta");
     refresh();
     return { ok: "Guardamos sus preferencias. Se aplican desde el próximo aviso.", values };
   } catch (error) {

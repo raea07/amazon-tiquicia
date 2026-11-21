@@ -22,6 +22,7 @@ export {
   type NotificationRow,
   type NotificationSettings,
   type SellerNotificationSettings,
+  type ShopChannelChoicesInput,
 } from "./notifications";
 export type { Caller, Messages } from "./types";
 

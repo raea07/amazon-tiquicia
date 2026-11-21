@@ -25,6 +25,8 @@ const commercial = z.object({
 });
 
 const channelChoices = {
+  /** What a save sends back, so a save from an out-of-date page is refused. 0: nothing saved yet. */
+  version: z.number().int().nonnegative(),
   email_enabled: z.boolean(),
   whatsapp_enabled: z.boolean(),
   sms_enabled: z.boolean(),
@@ -87,19 +89,46 @@ export type NotificationRow = z.infer<typeof notificationRow>;
 export const deadLetters = z.object({
   items: z.array(notificationRow),
   dead_count: z.number().int(),
+  /** Accepted by the provider, then reported as not delivered. Retryable like the dead ones. */
+  failed_count: z.number().int(),
   paused_channels: z.array(
     z.object({ channel: notificationChannel, until: timestamp, reason: z.string() }),
   ),
 });
 export type DeadLetters = z.infer<typeof deadLetters>;
 
-export interface ChannelChoicesInput {
+interface SaveOptions {
+  /** Also give (true) or withdraw (false) the commercial consent, in the same transaction. */
+  commercial?: boolean | null;
+  /** The wording shown for the commercial consent. */
+  textVersion?: string;
+  /** The `version` the screen was loaded with; omit to skip the check. */
+  version?: number | null;
+}
+
+export interface ChannelChoicesInput extends SaveOptions {
   whatsapp: boolean;
   sms: boolean;
   push: boolean;
   /** Mobile number for WhatsApp and SMS: "+5068…" or eight digits. */
   phone?: string | null;
 }
+
+/** Shops have no SMS channel. */
+export interface ShopChannelChoicesInput extends SaveOptions {
+  whatsapp: boolean;
+  push: boolean;
+  phone?: string | null;
+}
+
+const saveOptions = (input: SaveOptions) => ({
+  p_commercial: input.commercial ?? null,
+  p_text_version:
+    input.commercial === undefined || input.commercial === null
+      ? null
+      : (input.textVersion ?? COMMERCIAL_CONSENT_VERSION),
+  p_version: input.version ?? null,
+});
 
 export const errors = {
   worker_only: {
@@ -119,6 +148,16 @@ export const errors = {
     "es-CR":
       "Mientras tenga un pedido en curso, los avisos de ese pedido le llegan por correo: son su comprobante.",
     en: "While you have an order in progress, its updates come by e-mail: they are your receipt.",
+  },
+  notify_phone_opted_out: {
+    "es-CR":
+      "Ese número pidió no recibir nuestros mensajes por WhatsApp o SMS. Si es su número y quiere volver a recibirlos, envíe la palabra START desde ese teléfono al WhatsApp o al número de SMS de Yuntera, y después actívelo aquí.",
+    en: "That number asked not to receive our WhatsApp or SMS messages. If it is your number and you want them again, send the word START from that phone to Yuntera's WhatsApp or SMS number, then switch it on here.",
+  },
+  notify_settings_changed: {
+    "es-CR":
+      "Sus preferencias cambiaron en otra ventana o en otro dispositivo después de abrir esta página. Recargue la página para ver las actuales y vuelva a elegir.",
+    en: "Your preferences changed in another window or device after this page was opened. Reload the page to see the current ones and choose again.",
   },
   notify_consent_invalid: {
     "es-CR":
@@ -155,6 +194,7 @@ export const api = ({ call }: Caller) => ({
         p_sms: input.sms,
         p_push: input.push,
         p_phone: input.phone ?? null,
+        ...saveOptions(input),
       },
       notificationSettings,
     ),
@@ -174,15 +214,15 @@ export const api = ({ call }: Caller) => ({
   sellerNotificationSettings: (sellerId: string) =>
     call("seller_notification_settings", { p_seller_id: sellerId }, sellerNotificationSettings),
 
-  sellerSetNotificationSettings: (sellerId: string, input: ChannelChoicesInput) =>
+  sellerSetNotificationSettings: (sellerId: string, input: ShopChannelChoicesInput) =>
     call(
       "seller_set_notification_settings",
       {
         p_seller_id: sellerId,
         p_whatsapp: input.whatsapp,
-        p_sms: input.sms,
         p_push: input.push,
         p_phone: input.phone ?? null,
+        ...saveOptions(input),
       },
       sellerNotificationSettings,
     ),

@@ -169,11 +169,26 @@ create table private.notification_preferences (
   commercial_withdrawn_at timestamptz,
   updated_by uuid references auth.users (id) on delete set null,
   updated_at timestamptz not null default now(),
+  -- Counts the changes; a save names the revision its screen showed (0: none yet).
+  revision bigint not null default 1,
   check ((user_id is null) <> (seller_id is null))
 );
 
 create trigger notification_preferences_updated_at before update on private.notification_preferences
   for each row execute function private.set_updated_at();
+
+create or replace function private.bump_preferences_revision() returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.revision := old.revision + 1;
+  return new;
+end;
+$$;
+
+create trigger notification_preferences_revision before update on private.notification_preferences
+  for each row execute function private.bump_preferences_revision();
 
 create table private.commercial_consent_log (
   id bigint generated always as identity primary key,
@@ -1233,7 +1248,9 @@ $$;
 -- Applies a delivery report from a provider (webhook or push receipt).
 -- p_update: {provider, provider_message_id, delivery_id, channel, status, occurred_at,
 --            reason, permanent, recipient_address}
--- status: sent | delivered | read | bounced | failed | rejected | complained | unsubscribed | opted_out.
+-- status: sent | delivered | read | bounced | failed | rejected | complained | unsubscribed
+--         | opted_out | opted_in. p_update.generation, when the provider echoes it, must
+-- be the message's current generation.
 -- Reports arrive out of order and more than once: a report older than the last
 -- one applied never moves a message backwards, and a webhook id is applied once.
 create or replace function public.worker_notify_apply_update(p_update jsonb, p_webhook_id text default null)
@@ -1283,6 +1300,13 @@ begin
       set whatsapp_enabled = case when v_channel = 'whatsapp' then false else whatsapp_enabled end,
           sms_enabled = case when v_channel = 'sms' then false else sms_enabled end
       where phone = v_address;
+    elsif v_status = 'opted_in' and v_channel in ('whatsapp', 'sms') then
+      -- The number itself asked to receive messages again (START, or a keyword
+      -- rule): the only proof that whoever lifts an opt-out holds the phone.
+      -- It does not switch the channel on for anyone; the person does that.
+      update private.notification_suppressions
+      set lifted_at = now()
+      where channel = v_channel and address = v_address and reason = 'opt_out' and lifted_at is null;
     end if;
   end if;
 
@@ -1292,11 +1316,23 @@ begin
               or (x.channel = 'push' and exists (
                     select 1 from unnest(x.push_ticket_ids) as t (ref)
                     where split_part(t.ref, ' ', 1) = p_update ->> 'provider_message_id'))))
-     or (v_delivery is not null and x.id = v_delivery)
+     -- The echoed delivery id is shared by every generation of a message, so it
+     -- only identifies the request when the provider's id does not disagree:
+     -- the same id, or a send still being recorded (the report can arrive
+     -- before the provider's answer to the send is stored).
+     or (v_delivery is not null and x.id = v_delivery
+         and ((x.provider_message_id is null and x.status = 'sending')
+              or p_update ->> 'provider_message_id' is null
+              or x.provider_message_id = p_update ->> 'provider_message_id'))
   order by x.created_at desc limit 1
   for update;
   if not found then
     return 'unknown';
+  end if;
+  -- A late report about an earlier request (before a retry under a new key)
+  -- says nothing about the request now in flight.
+  if p_update ->> 'generation' ~ '^[0-9]{1,6}$' and (p_update ->> 'generation')::integer <> d.generation then
+    return 'stale';
   end if;
 
   v_rank_new := case v_status when 'sent' then 1 when 'delivered' then 2 when 'read' then 3
@@ -1318,6 +1354,31 @@ begin
     return 'stale';
   end if;
 
+  -- A temporary failure reported after the provider accepted the message (a
+  -- soft bounce, an undelivered or expired WhatsApp or SMS) goes back through
+  -- the ordinary retries. The provider kept the first request, so the next
+  -- one is a new request under a new key. With no attempts left, or once the
+  -- news is stale, it is a dead letter staff can see and retry.
+  -- ('sending': the report beat the worker's record of the send; the worker's
+  -- record then finds the lease gone and changes nothing.)
+  if v_rank_new = 4 and d.status in ('sent', 'sending') and d.channel in ('email', 'whatsapp', 'sms')
+     and p_update ->> 'permanent' = 'false' then
+    update private.notification_deliveries
+    set status = case when d.attempts >= d.max_attempts
+                        or (d.expires_at is not null and d.expires_at <= now()) then 'dead'
+                      else 'pending' end,
+        generation = generation + 1,
+        available_at = now() + make_interval(secs =>
+          least(3600, 15 * power(2, greatest(d.attempts - 1, 0))) * (0.8 + random() * 0.4)),
+        provider = null, provider_message_id = null, provider_status = null, last_event_at = null,
+        sent_at = null, request_body = null, locked_by = null, locked_until = null,
+        last_error_code = left(coalesce(p_update ->> 'reason', v_status), 80),
+        last_error = 'The provider reported a temporary failure after accepting the message.'
+    where id = d.id
+    returning status into v_status;
+    return case when v_status = 'dead' then 'dead' else 'requeued' end;
+  end if;
+
   update private.notification_deliveries
   set provider_status = case when v_rank_new = 4 then 'failed' else v_status end,
       last_event_at = greatest(coalesce(last_event_at, v_at), v_at),
@@ -1336,11 +1397,22 @@ $$;
 
 -- ═══ 9. People: preferences, consent, devices ══════════════════════════════
 
+-- What the settings screen was loaded with, sent back when saving: a save made
+-- from a page that is out of date is refused rather than silently undoing a
+-- change made since in another tab or device. 0 when nothing is saved yet.
+create or replace function private.preferences_version(p private.notification_preferences) returns bigint
+language sql immutable
+set search_path = ''
+as $$
+  select coalesce(p.revision, 0);
+$$;
+
 create or replace function private.preferences_json(p private.notification_preferences) returns jsonb
 language sql stable
 set search_path = ''
 as $$
   select jsonb_build_object(
+    'version', private.preferences_version(p),
     'email_enabled', coalesce(p.email_enabled, true),
     'whatsapp_enabled', coalesce(p.whatsapp_enabled, false),
     'sms_enabled', coalesce(p.sms_enabled, false),
@@ -1378,13 +1450,14 @@ $$;
 -- Shared by the shopper's and the shop's settings.
 create or replace function private.save_channels(
   p_user_id uuid, p_seller_id uuid, p_email boolean, p_whatsapp boolean, p_sms boolean,
-  p_push boolean, p_phone text
+  p_push boolean, p_phone text, p_version bigint
 ) returns void
 language plpgsql security definer
 set search_path = ''
 as $$
 declare
   v_phone text := nullif(regexp_replace(coalesce(p_phone, ''), '[\s-]', '', 'g'), '');
+  v_row private.notification_preferences;
 begin
   if v_phone ~ '^[5-8][0-9]{7}$' then
     v_phone := '+506' || v_phone;
@@ -1400,6 +1473,23 @@ begin
   end if;
   if not p_email and p_seller_id is not null then
     perform private.fail('notify_email_required');
+  end if;
+
+  select * into v_row from private.notification_preferences
+  where (p_user_id is not null and user_id = p_user_id) or (p_seller_id is not null and seller_id = p_seller_id)
+  for update;
+  if p_version is not null and p_version <> private.preferences_version(v_row) then
+    perform private.fail('notify_settings_changed');
+  end if;
+
+  -- A number whose holder sent STOP stays off until a message from that
+  -- phone lifts it (worker_notify_apply_update, 'opted_in'). Typing the number
+  -- into a form proves nothing about who holds it, so it never lifts it.
+  if v_phone is not null and exists (
+    select 1 from private.notification_suppressions s
+    where s.address = v_phone and s.reason = 'opt_out' and s.lifted_at is null
+      and ((s.channel = 'whatsapp' and p_whatsapp) or (s.channel = 'sms' and p_sms))) then
+    perform private.fail('notify_phone_opted_out');
   end if;
 
   insert into private.notification_preferences
@@ -1419,25 +1509,24 @@ begin
         phone = v_phone, updated_by = (select auth.uid())
     where (p_user_id is not null and user_id = p_user_id) or (p_seller_id is not null and seller_id = p_seller_id);
   end if;
-  -- Switching a channel back on lifts that person's own opt-out on it.
-  if v_phone is not null then
-    update private.notification_suppressions
-    set lifted_at = now()
-    where address = v_phone and reason = 'opt_out' and lifted_at is null
-      and ((channel = 'whatsapp' and p_whatsapp) or (channel = 'sms' and p_sms));
-  end if;
 end;
 $$;
 
 create unique index notification_preferences_subject_idx
   on private.notification_preferences ((coalesce(user_id, seller_id)));
 
+-- The settings screen saves channels and, when p_commercial is given, the
+-- commercial consent in one transaction: all of it or nothing. p_version is
+-- what the screen was loaded with (null skips the check, for other callers).
 create or replace function public.set_my_notification_settings(
   p_email boolean,
   p_whatsapp boolean,
   p_sms boolean,
   p_push boolean,
-  p_phone text default null
+  p_phone text default null,
+  p_commercial boolean default null,
+  p_text_version text default null,
+  p_version bigint default null
 ) returns jsonb
 language plpgsql security definer
 set search_path = ''
@@ -1446,7 +1535,11 @@ begin
   if (select auth.uid()) is null then
     perform private.fail('not_authenticated');
   end if;
-  perform private.save_channels((select auth.uid()), null, p_email, p_whatsapp, p_sms, p_push, p_phone);
+  perform private.save_channels((select auth.uid()), null, p_email, p_whatsapp, p_sms, p_push, p_phone,
+    p_version);
+  if p_commercial is not null then
+    perform private.save_commercial((select auth.uid()), null, p_commercial, p_text_version, 'web_cuenta');
+  end if;
   return public.my_notification_settings();
 end;
 $$;
@@ -1558,12 +1651,16 @@ begin
 end;
 $$;
 
+-- Shops get e-mail (always), WhatsApp and push; no SMS (private.notify_shop
+-- has no SMS branch), so it is stored as off.
 create or replace function public.seller_set_notification_settings(
   p_seller_id uuid,
   p_whatsapp boolean,
-  p_sms boolean,
   p_push boolean,
-  p_phone text default null
+  p_phone text default null,
+  p_commercial boolean default null,
+  p_text_version text default null,
+  p_version bigint default null
 ) returns jsonb
 language plpgsql security definer
 set search_path = ''
@@ -1578,7 +1675,10 @@ begin
   if not private.is_seller_admin(p_seller_id) then
     perform private.fail('forbidden');
   end if;
-  perform private.save_channels(null, p_seller_id, true, p_whatsapp, p_sms, p_push, p_phone);
+  perform private.save_channels(null, p_seller_id, true, p_whatsapp, false, p_push, p_phone, p_version);
+  if p_commercial is not null then
+    perform private.save_commercial(null, p_seller_id, p_commercial, p_text_version, 'seller_cuenta');
+  end if;
   return public.seller_notification_settings(p_seller_id);
 end;
 $$;
@@ -1605,7 +1705,10 @@ end;
 $$;
 
 -- The native apps call these after sign-in and at sign-out. A phone shared by
--- two accounts moves its token to whoever signed in last.
+-- two accounts moves its token to whoever signed in last, but only from that
+-- phone: the token must have been signed out (unregistered or found dead), or
+-- the call must name the same device. Knowing someone's token is not enough
+-- to take their notifications.
 create or replace function public.register_push_token(
   p_app text,
   p_token text,
@@ -1625,7 +1728,14 @@ begin
   on conflict (expo_token) do update
   set user_id = excluded.user_id, app = excluded.app, platform = excluded.platform,
       device_id = excluded.device_id, app_version = excluded.app_version,
-      last_seen_at = now(), disabled_at = null, disabled_reason = null;
+      last_seen_at = now(), disabled_at = null, disabled_reason = null
+  where private.push_tokens.user_id = excluded.user_id
+     or private.push_tokens.disabled_at is not null
+     or (private.push_tokens.device_id is not null
+         and private.push_tokens.device_id = excluded.device_id);
+  if not found then
+    perform private.fail('push_token_invalid');
+  end if;
 exception
   when check_violation or not_null_violation then
     perform private.fail('push_token_invalid');
@@ -1704,12 +1814,15 @@ begin
     perform private.fail('forbidden');
   end if;
   return jsonb_build_object(
+    -- Dead: the worker gave up. Failed: the provider accepted the message and
+    -- later reported it could not deliver it. Both reached nobody; both can be retried.
     'items', coalesce((
       select jsonb_agg(private.delivery_row(d) order by d.created_at desc)
       from (select * from private.notification_deliveries
-            where status = 'dead' order by created_at desc
+            where status in ('dead', 'failed') order by created_at desc
             limit greatest(1, least(p_limit, 200))) d), '[]'::jsonb),
     'dead_count', (select count(*) from private.notification_deliveries where status = 'dead'),
+    'failed_count', (select count(*) from private.notification_deliveries where status = 'failed'),
     'paused_channels', coalesce((
       select jsonb_agg(jsonb_build_object('channel', cp.channel, 'until', cp.paused_until, 'reason', cp.reason))
       from private.notify_channel_pauses cp where cp.paused_until > now()), '[]'::jsonb));
@@ -1724,6 +1837,7 @@ set search_path = ''
 as $$
 declare
   d private.notification_deliveries;
+  v_old_status text;
 begin
   if not private.has_staff_role('support') then
     perform private.fail('forbidden');
@@ -1735,6 +1849,7 @@ begin
   if d.status not in ('dead', 'failed') then
     perform private.fail('notification_not_retryable');
   end if;
+  v_old_status := d.status;
   update private.notification_deliveries
   set status = 'pending', attempts = 0, holds = 0, generation = generation + 1, available_at = now(),
       expires_at = null, request_body = null, provider_status = null, last_event_at = null,
@@ -1744,7 +1859,7 @@ begin
   returning * into d;
   insert into private.audit_log (actor_id, action, table_name, row_key, old_row, new_row)
   values ((select auth.uid()), 'UPDATE', 'notification_deliveries', p_delivery_id::text,
-          jsonb_build_object('status', 'dead'),
+          jsonb_build_object('status', v_old_status, 'generation', d.generation - 1),
           jsonb_build_object('status', 'pending', 'generation', d.generation));
   return private.delivery_row(d);
 end;
@@ -1765,7 +1880,9 @@ revoke execute on function
   private.notify_vars(jsonb), private.notify_resolve(private.notification_deliveries),
   private.withdraw_commercial(uuid, uuid, text, uuid),
   private.preferences_json(private.notification_preferences),
-  private.save_channels(uuid, uuid, boolean, boolean, boolean, boolean, text),
+  private.save_channels(uuid, uuid, boolean, boolean, boolean, boolean, text, bigint),
+  private.preferences_version(private.notification_preferences),
+  private.bump_preferences_revision(),
   private.save_commercial(uuid, uuid, boolean, text, text),
   private.delivery_row(private.notification_deliveries)
 from public, anon, authenticated;
@@ -1799,10 +1916,10 @@ to service_role;
 -- People and staff: signed-in callers, each function checks who.
 revoke execute on function
   public.my_notification_settings(),
-  public.set_my_notification_settings(boolean, boolean, boolean, boolean, text),
+  public.set_my_notification_settings(boolean, boolean, boolean, boolean, text, boolean, text, bigint),
   public.set_my_commercial_consent(boolean, text, text),
   public.seller_notification_settings(uuid),
-  public.seller_set_notification_settings(uuid, boolean, boolean, boolean, text),
+  public.seller_set_notification_settings(uuid, boolean, boolean, text, boolean, text, bigint),
   public.seller_set_commercial_consent(uuid, boolean, text, text),
   public.register_push_token(text, text, text, text, text),
   public.unregister_push_token(text),
@@ -1812,10 +1929,10 @@ revoke execute on function
 from public, anon, service_role;
 grant execute on function
   public.my_notification_settings(),
-  public.set_my_notification_settings(boolean, boolean, boolean, boolean, text),
+  public.set_my_notification_settings(boolean, boolean, boolean, boolean, text, boolean, text, bigint),
   public.set_my_commercial_consent(boolean, text, text),
   public.seller_notification_settings(uuid),
-  public.seller_set_notification_settings(uuid, boolean, boolean, boolean, text),
+  public.seller_set_notification_settings(uuid, boolean, boolean, text, boolean, text, bigint),
   public.seller_set_commercial_consent(uuid, boolean, text, text),
   public.register_push_token(text, text, text, text, text),
   public.unregister_push_token(text),

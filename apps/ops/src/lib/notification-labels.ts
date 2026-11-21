@@ -98,6 +98,8 @@ export function failureOf(code: string | null): string {
   if (/^(5\d\d|429)\b|timeout|network|lease_expired|worker_error|TypeError/.test(code)) {
     return "el proveedor no respondió a tiempo";
   }
-  if (code === "no_template") return "no hay plantilla para este canal";
+  if (code === "no_template" || code === "commercial_frame_required")
+    return "no hay plantilla para este canal";
+  if (/undeliver|expired/.test(code)) return "no llegó a la persona";
   return "no se pudo entregar";
 }
