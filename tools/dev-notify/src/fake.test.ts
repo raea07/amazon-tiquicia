@@ -84,7 +84,10 @@ describe("the fake providers", () => {
       }) as unknown as typeof fetch,
     });
     await post(fake, "/v1/email/messages", email);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Delivery is reported asynchronously: wait for it (up to two seconds).
+    for (let i = 0; i < 100 && fake.messages()[0]?.status !== "delivered"; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
     expect(received).toHaveLength(1);
     const delivery = received[0];
     expect(JSON.parse(delivery?.body ?? "{}")).toMatchObject({
