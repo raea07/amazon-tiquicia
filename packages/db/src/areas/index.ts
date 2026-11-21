@@ -12,10 +12,33 @@
  * rest, and `createApi()` returns its methods alongside the core ones.
  */
 
+import * as account from "./account";
 import type { Caller, Messages } from "./types";
 
+// Named rather than `export *`: every area has its own `errors` and `api`.
+export {
+  type AccountSecurity,
+  type AuthErrorCode,
+  accountSecurity,
+  authErrorMessage,
+  authErrors,
+  type DeletionBlocker,
+  type DeletionCheck,
+  type DeletionResult,
+  deletionBlocker,
+  deletionCheck,
+  deletionResult,
+  type FactorReset,
+  factorReset,
+  type MfaAttempts,
+  mfaAttempts,
+  retryAfterSeconds,
+  type StaffSecurityRow,
+  staffSecurityRow,
+  waitText,
+} from "./account";
 export type { Caller, Messages } from "./types";
 
-export const areaErrors = {} as const satisfies Messages;
+export const areaErrors = { ...account.errors } as const satisfies Messages;
 
-export const areaApi = (_caller: Caller) => ({});
+export const areaApi = (caller: Caller) => ({ ...account.api(caller) });
