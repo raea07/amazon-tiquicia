@@ -12,10 +12,30 @@
  * rest, and `createApi()` returns its methods alongside the core ones.
  */
 
+import * as peoplePayouts from "./people-payouts";
 import type { Caller, Messages } from "./types";
 
+// The types are re-exported by name rather than with `export *`: every area
+// has an `errors` and an `api`, and two of those cannot be star-exported.
+export type {
+  AuditTrailEntry,
+  CreatedPayoutRun,
+  OpsDriverRecord,
+  OpsStaffMember,
+  OpsWarehouseTeam,
+  PayoutBlock,
+  PayoutDetailRequest,
+  PayoutPreview,
+  PayoutRun,
+  PayoutRunSummary,
+  PayoutStatus,
+  SaveDriverInput,
+  SellerPayoutDetails,
+  SellerPayouts,
+  WarehouseRole,
+} from "./people-payouts";
 export type { Caller, Messages } from "./types";
 
-export const areaErrors = {} as const satisfies Messages;
+export const areaErrors = { ...peoplePayouts.errors } as const satisfies Messages;
 
-export const areaApi = (_caller: Caller) => ({});
+export const areaApi = (caller: Caller) => ({ ...peoplePayouts.api(caller) });
