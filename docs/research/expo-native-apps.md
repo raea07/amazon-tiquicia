@@ -485,6 +485,10 @@ operational permissions). Dependencies: `expo-secure-store` ~58.0.3,
 (Supabase's sample uses `react-native-get-random-values` instead; either works)."
 `aes-js`, `@types/aes-js` and the kit's `expo-crypto` have since been removed;
 `expo-crypto` remains only in the shop app, for a random identifier at checkout.
+That package is not cipher-free: since SDK 58 it also exports an AES-GCM API
+(`aesEncryptAsync`, `AESEncryptionKey`) over CryptoKit and javax.crypto. The
+apps may call only its random-number functions, which a source check in
+`packages/expo-kit/src/no-native-cipher.test.ts` enforces.
 
 The superseded sample (option A, no longer in the code):
 
@@ -1396,7 +1400,7 @@ the current npm version [N1]. Install Expo-pinned packages with
 | `@supabase/supabase-js`                             | 2.119.2          | Auth, RPC, storage (same as web)                               | all                                 |
 | `expo-secure-store`                                 | ~58.0.3          | Holds the session, in pieces (§3)                              | all                                 |
 | `@react-native-async-storage/async-storage`         | 2.2.0            | App state, query cache, queue (never the session)              | all                                 |
-| `expo-crypto`                                       | ~58.0.8          | UUIDs for idempotency keys (asks the OS; no cipher)            | shop                                |
+| `expo-crypto`                                       | ~58.0.8          | UUIDs for idempotency keys (asks the OS; its AES API unused)   | shop                                |
 | ~~`aes-js` (+ `@types/aes-js`)~~ removed, see §3    | 3.1.2 (3.1.4)    | ~~Session encryption~~ (the session is in SecureStore alone)   | none                                |
 | `@tanstack/react-query`                             | 5.108.2          | Data fetching and mutation queue                               | all                                 |
 | `@tanstack/react-query-persist-client`              | 5.108.2          | Persist cache and paused mutations                             | driver, warehouse (others optional) |

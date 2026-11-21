@@ -521,7 +521,12 @@ reinstall. All four apps declare `ios.config.usesNonExemptEncryption: false`
 (`packages/expo-kit/src/config.ts`): the apps' only encryption is the
 operating system's (HTTPS, Keychain, Keystore), which is exempt. A test fails
 if a cipher, hash or key-derivation library is added to the kit, a native
-app or a package they bundle. The web export, used only for the journeys,
+app or a package they bundle, and a scan of every exported bundle
+(`packages/expo-kit/scripts/scan-bundles.mjs`, run by `stack.sh native` and in
+CI) fails if one arrives through a dependency of a dependency. The shop keeps
+`expo-crypto` for a random identifier at checkout; since SDK 58 that package
+also offers AES-GCM through CryptoKit and javax.crypto, so a source check
+allows the apps only its random-number functions. The web export, used only for the journeys,
 keeps the session in the browser's local storage and must not serve as a
 model for a public website.
 
@@ -546,7 +551,10 @@ model for a public website.
   API call. A second JavaScript runtime writing the session at the same time
   is not supported.
 - The logic is unit-tested with fake stores, including stores that fail or
-  stop at every write of an update and of a sign-out.
+  stop at every write of an update and of a sign-out. A sign-out that could
+  not make the stored session unreadable (the secure store failing every
+  call) is reported as failed rather than as done, so the person stays
+  visibly signed in and can try again.
 
 ## 19. A darker field outline in the native apps than on the web
 

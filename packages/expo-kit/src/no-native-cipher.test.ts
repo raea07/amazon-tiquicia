@@ -70,11 +70,24 @@ const WORDS =
   /^(crypto|crypt|cipher|ciphers|aes|rsa|ecdsa|ed25519|sodium|nacl|forge|noble|stablelib|pbkdf2|scrypt|argon2|bcrypt|sha256|sha512|hmac|webcrypto|openpgp|pgp|encrypt|encryption)$/;
 
 /**
- * Allowed on purpose. Both call the operating system and contain no cipher:
- * expo-secure-store keeps values in the Keychain and Android Keystore;
- * expo-crypto (the shop's checkout) asks the system for a random identifier.
+ * Allowed on purpose, because both only call the operating system.
+ * expo-secure-store keeps values in the Keychain and Android Keystore.
+ * expo-crypto is NOT cipher-free: since SDK 58 it includes an AES-GCM API
+ * (`aesEncryptAsync`, `AESEncryptionKey`…) that wraps CryptoKit on iOS and
+ * javax.crypto on Android. The apps may use only its random-number functions
+ * (the shop's checkout takes a random identifier from it), which the source
+ * check below enforces; encrypting data with it would make
+ * `usesNonExemptEncryption: false` untrue.
  */
 const ALLOWED = new Set(["expo-secure-store", "expo-crypto"]);
+
+/** The only expo-crypto functions the apps may call: random numbers, not cryptography. */
+const EXPO_CRYPTO_ALLOWED = new Set([
+  "randomUUID",
+  "getRandomBytes",
+  "getRandomBytesAsync",
+  "getRandomValues",
+]);
 
 function isCryptography(name: string): boolean {
   if (ALLOWED.has(name)) return false;
@@ -202,6 +215,112 @@ describe("no cryptography of our own in the native apps", () => {
         "If the app really needs its own encryption, change usesNonExemptEncryption, answer the",
         "export-compliance question with the owner, and update docs/02-architecture/decisions.md",
         "before allowing the library here.",
+      ].join("\n"),
+    ).toEqual([]);
+  });
+});
+
+/** Source files of the native apps and the kit (tests excluded). */
+function sources(): string[] {
+  const roots = [
+    join(ROOT, "packages/expo-kit/src"),
+    ...readdirSync(join(ROOT, "apps"))
+      .filter((name) => name.endsWith("-native"))
+      .map((name) => join(ROOT, "apps", name, "src")),
+  ];
+  const found: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name))
+        found.push(path);
+    }
+  };
+  for (const root of roots) walk(root);
+  return found;
+}
+
+/** What a source file uses of expo-crypto, as problems; empty when it uses only random numbers. */
+function expoCryptoProblems(source: string): string[] {
+  const problems: string[] = [];
+  if (/require\(\s*["']expo-crypto["']\s*\)|import\(\s*["']expo-crypto["']\s*\)/.test(source))
+    problems.push("loads expo-crypto with require() or import(), which cannot be checked");
+  for (const match of source.matchAll(/import\s+([^;]*?)\s+from\s+["']expo-crypto["']/g)) {
+    const clause = (match[1] ?? "").trim();
+    const namespace = /^\*\s+as\s+([A-Za-z_$][\w$]*)$/.exec(clause);
+    const named = /^(?:type\s+)?\{([^}]*)\}$/.exec(clause);
+    if (namespace) {
+      const alias = namespace[1] as string;
+      const uses = [
+        ...source.matchAll(new RegExp(`\\b${alias}\\b(\\s*\\.\\s*([A-Za-z_$][\\w$]*))?`, "g")),
+      ];
+      // The first match is the import itself.
+      for (const use of uses.slice(1)) {
+        const member = use[2];
+        if (!member) problems.push(`passes the whole ${alias} module around`);
+        else if (!EXPO_CRYPTO_ALLOWED.has(member)) problems.push(`calls ${alias}.${member}`);
+      }
+    } else if (named) {
+      for (const part of (named[1] ?? "").split(",")) {
+        const name = part
+          .trim()
+          .replace(/^type\s+/, "")
+          .split(/\s+as\s+/)[0]
+          ?.trim();
+        if (name && !EXPO_CRYPTO_ALLOWED.has(name)) problems.push(`imports ${name}`);
+      }
+    } else {
+      problems.push(`imports expo-crypto as "${clause}"`);
+    }
+  }
+  if (
+    /\bcrypto\s*\.\s*subtle\b|\.subtle\s*\.\s*(encrypt|decrypt|wrapKey|unwrapKey|deriveKey|deriveBits)\b/.test(
+      source,
+    )
+  )
+    problems.push("calls WebCrypto (crypto.subtle) directly");
+  return problems;
+}
+
+describe("no cryptography in the apps' own code", () => {
+  it("recognises what is allowed of expo-crypto and what is not", () => {
+    expect(
+      expoCryptoProblems('import * as Crypto from "expo-crypto";\nCrypto.randomUUID();'),
+    ).toEqual([]);
+    expect(expoCryptoProblems('import { randomUUID as uuid } from "expo-crypto";')).toEqual([]);
+    expect(
+      expoCryptoProblems('import * as C from "expo-crypto";\nC.aesEncryptAsync(t, k);'),
+    ).toEqual(["calls C.aesEncryptAsync"]);
+    expect(expoCryptoProblems('import { AESEncryptionKey } from "expo-crypto";')).toEqual([
+      "imports AESEncryptionKey",
+    ]);
+    expect(expoCryptoProblems('import { digest, randomUUID } from "expo-crypto";')).toEqual([
+      "imports digest",
+    ]);
+    expect(expoCryptoProblems('import Crypto from "expo-crypto";')).toHaveLength(1);
+    expect(expoCryptoProblems('const C = require("expo-crypto");')).toHaveLength(1);
+    expect(expoCryptoProblems('import * as C from "expo-crypto";\nuse(C);')).toHaveLength(1);
+    expect(expoCryptoProblems("await crypto.subtle.encrypt(a, k, d);")).toHaveLength(1);
+  });
+
+  it("uses expo-crypto only for random numbers, and no WebCrypto of its own", () => {
+    const files = sources();
+    expect(files.length).toBeGreaterThan(20);
+    const found: string[] = [];
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      for (const problem of expoCryptoProblems(source))
+        found.push(`${file.slice(ROOT.length + 1)} ${problem}`);
+    }
+    expect(
+      found,
+      [
+        "Native app code uses cryptography. expo-crypto is allowed only for random numbers",
+        `(${[...EXPO_CRYPTO_ALLOWED].join(", ")}); its AES and digest functions, and WebCrypto,`,
+        "would make usesNonExemptEncryption: false in packages/expo-kit/src/config.ts untrue.",
+        "Keep secrets in expo-secure-store and let HTTPS protect the network instead; if the app",
+        "really must encrypt, change the declaration and decisions.md §18 with the owner first.",
       ].join("\n"),
     ).toEqual([]);
   });

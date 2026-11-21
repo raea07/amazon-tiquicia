@@ -175,6 +175,9 @@ jobs:
             (cd "apps/$app-native" && pnpm exec expo export --platform ios --platform android --output-dir dist)
           done
 
+      - name: No cipher or hash implementation in the bundles
+        run: node packages/expo-kit/scripts/scan-bundles.mjs apps/shop-native/dist apps/seller-native/dist apps/driver-native/dist apps/warehouse-native/dist
+
       - name: Install the browser
         run: pnpm --filter @yuntera/native-e2e exec playwright install --with-deps chromium
 
