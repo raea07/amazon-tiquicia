@@ -4,7 +4,9 @@ Researched 21 November 2026 for the "build native apps" phase. Nothing in this
 note was installed, built or run in this repository: every claim comes from a
 document or package file opened that day, and anything that could not be
 confirmed is marked **UNVERIFIED**. Source tags such as `[E1]` and `[N2]` refer
-to the [Sources](#sources) section.
+to the [Sources](#sources) section. Fact-checked the same day; what changed is
+listed under [Corrections after fact-check](#corrections-after-fact-check) at
+the end.
 
 ## Bottom line
 
@@ -22,8 +24,9 @@ for iOS, Android and web (and drive the web export with Playwright), but it
 cannot prove that a binary starts: native builds need EAS Build, and running
 them needs a phone, a Mac, or Expo's paid cloud simulators. The owner has to
 open three accounts before anything reaches a phone — Expo, Apple Developer
-Program (US$99 a year) and Google Play Console (US$25 once; an organisation
-account needs a D-U-N-S number) — plus a Firebase project for Android push.
+Program (US$99 a year) and Google Play Console (US$25 once); an organisation
+account on either store needs a D-U-N-S number — plus a Firebase project for
+Android push.
 Store rules add work that is not screen design: in-app account deletion on both
 stores, a web page for deletion requests on Google Play, privacy declarations,
 and a location-use declaration with a video for the drivers' app.
@@ -287,6 +290,16 @@ export default (): ExpoConfig =>
         {
           locationWhenInUsePermission:
             "Yuntera Ruta usa su ubicación para mostrar su avance en la ruta mientras reparte.",
+          // Any iOS string left out gets Expo's English default
+          // ("Allow $(PRODUCT_NAME) to access your location") written into
+          // Info.plist, which review can reject. Give every one in Spanish.
+          locationAlwaysAndWhenInUsePermission:
+            "Yuntera Ruta usa su ubicación para mostrar su avance en la ruta mientras reparte.",
+          locationAlwaysPermission:
+            "Yuntera Ruta usa su ubicación para mostrar su avance en la ruta mientras reparte.",
+          locationFullAccuracyPermission:
+            "Yuntera Ruta necesita su ubicación exacta para registrar cada entrega.",
+          motionUsagePermission: false, // no motion data: removes the string and the motion code
           isIosBackgroundLocationEnabled: true,
           isAndroidForegroundServiceEnabled: true,
           isAndroidBackgroundLocationEnabled: false,
@@ -381,7 +394,7 @@ Field meanings, all from [E13] [E14]:
 | `channel`                                      | Which EAS Update channel the binary listens to; ignored for development builds                   |
 | `environment`                                  | Which EAS environment's variables are applied (`development` / `preview` / `production`)         |
 | `appVersionSource: "remote"` + `autoIncrement` | EAS stores and bumps `versionCode` / `buildNumber`                                               |
-| `extends`                                      | Profile inheritance, up to 5 levels                                                              |
+| `extends`                                      | Profile inheritance; a chain of at most 5 profiles (the CLI throws at depth 5, `@expo/eas-json@27.11.0` `build/build/resolver.js`) |
 | `resourceClass: "large"`                       | Paid plans only                                                                                  |
 
 Public settings (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`)
@@ -552,8 +565,12 @@ Local development gaps to close first:
   "A physical device or an Android Emulator can't reach it, so use your
   computer's LAN address" [E18]. Android 9+ also blocks plain HTTP by default;
   `expo-build-properties` has `android.usesCleartextTraffic` [E54] — set it for
-  the development variant only. The iOS equivalent is **UNVERIFIED**; an HTTPS
-  tunnel to the stand-in avoids both.
+  the development variant only. On iOS, the SDK 58 native template already
+  sets `NSAppTransportSecurity` → `NSAllowsArbitraryLoads: false`,
+  `NSAllowsLocalNetworking: true` (`expo-template-bare-minimum@58.0.35`
+  `ios/*/Info.plist`); whether that exemption covers a plain-HTTP request to a
+  LAN **IP address** is **UNVERIFIED** (Apple's page could not be read). An
+  HTTPS tunnel to the stand-in avoids both questions.
 
 ---
 
@@ -585,12 +602,22 @@ Config plugin keys [E20]:
 | -------------------------------------- | -------- | ----------------------------------------------------------- |
 | `locationWhenInUsePermission`          | iOS      | `NSLocationWhenInUseUsageDescription`                       |
 | `locationAlwaysAndWhenInUsePermission` | iOS      | `NSLocationAlwaysAndWhenInUseUsageDescription`              |
+| `locationAlwaysPermission`             | iOS      | `NSLocationAlwaysUsageDescription`                          |
+| `locationFullAccuracyPermission`       | iOS      | temporary full-accuracy purpose string (`false` removes it) |
+| `motionUsagePermission`                | iOS      | `NSMotionUsageDescription`; `false` removes it and turns off the motion code |
 | `isIosBackgroundLocationEnabled`       | iOS      | adds `location` to `UIBackgroundModes`                      |
-| `isAndroidForegroundServiceEnabled`    | Android  | adds `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_LOCATION` |
-| `isAndroidBackgroundLocationEnabled`   | Android  | adds `ACCESS_BACKGROUND_LOCATION`                           |
+| `isAndroidForegroundServiceEnabled`    | Android  | adds `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION` and `POST_NOTIFICATIONS` (defaults to the value of `isAndroidBackgroundLocationEnabled`) |
+| `isAndroidBackgroundLocationEnabled`   | Android  | adds `ACCESS_BACKGROUND_LOCATION` and `RECEIVE_BOOT_COMPLETED` |
 | `androidForegroundServiceIcon`         | Android  | 96×96 all-white PNG for the service notification            |
 
 Always added on Android: `ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION` [E20].
+
+Every iOS string key that is **left out** is written with Expo's English
+default (`Allow $(PRODUCT_NAME) to access your location`, `… detect your
+current motion activity`, `… access your precise location`); only `false`
+removes a key (`expo-location@58.0.22` `plugin/build/withLocation.js`,
+`@expo/config-plugins@58.0.13` `build/ios/Permissions.js` [N5]). Set each one
+in Spanish or to `false`, as in the `app.config.ts` example in §2.
 
 API:
 
@@ -700,7 +727,7 @@ const [locked, setLocked] = useState(false);
 | One preview    | "Only one Camera preview can be active at any given time" — unmount on blur                                                                                          | [E22]                                                  |
 | System scanner | `CameraView.launchScanner({ barcodeTypes })` + `CameraView.onModernBarcodeScanned(listener)`: Google code scanner on Android, `DataScannerViewController` on iOS 16+ | [E22]                                                  |
 | Still image    | `scanFromURLAsync(url, types)`: "Only QR codes are supported on iOS"                                                                                                 | [E22]                                                  |
-| Permissions    | Android `CAMERA` added automatically; iOS `NSCameraUsageDescription` via plugin key `cameraPermission`. Set `recordAudioAndroid: false` for a scanner-only app       | [E22]                                                  |
+| Permissions    | Android `CAMERA` added automatically; iOS `NSCameraUsageDescription` via plugin key `cameraPermission`. For a scanner-only app set `recordAudioAndroid: false` **and** `microphonePermission: false` (otherwise iOS gets the English default microphone string) | [E22], `expo-camera@58.0.14` `plugin/build/withCamera.js` |
 | Emulators      | The module is "device only" on Android and iOS: **camera scanning cannot be verified on a simulator**, local or cloud                                                | [E22]                                                  |
 
 Keep the existing path where a Bluetooth scanner types into a focused text
@@ -731,7 +758,7 @@ const { error } = await supabase.storage
 | Web                                           | `asset.file` is a browser `File`; `expo-file-system`'s `File` does not exist on web. Split with `.web.ts`                                                   | [E23] [E24]                                     |
 | Library picker                                | "No permissions request is necessary for launching the image library"                                                                                       | [E23]                                           |
 | Android process death                         | Call `ImagePicker.getPendingResultAsync()` on start to recover a result lost when Android killed the activity                                               | [E23]                                           |
-| Microphone                                    | The plugin adds `RECORD_AUDIO` by default; set `microphonePermission: false`                                                                                | [E23]                                           |
+| Microphone                                    | The plugin adds `RECORD_AUDIO` and an English iOS microphone string by default; `microphonePermission: false` blocks `RECORD_AUDIO` and removes the string. `RECORD_AUDIO` is also blocked if listed in `android.blockedPermissions` (needed if any other module adds it) | [E23], `expo-image-picker@58.0.10` `plugin/build/withImagePicker.js` |
 | iOS strings                                   | `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription` via plugin keys `cameraPermission`, `photosPermission`                                         | [E23]                                           |
 | Size                                          | Use `quality` (0–1) or `expo-image-manipulator` ~58.0.16 to resize before upload                                                                            | [E23] [N2]                                      |
 
@@ -776,7 +803,7 @@ export async function registerForPush(): Promise<string | null> {
 | Topic               | Fact                                                                                                                                                                                                                                                                                   | Source      |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | Packages            | `expo-notifications` ~58.1.9, `expo-constants` ~58.0.16, `expo-device` ~58.0.5                                                                                                                                                                                                         | [E26] [N2]  |
-| Plugin keys         | `icon` (96×96 white PNG), `color`, `defaultChannel`, `sounds`, `enableBackgroundRemoteNotifications` (iOS, default `false`)                                                                                                                                                            | [E25]       |
+| Plugin keys         | `icon` (96×96 white PNG), `largeIcon`, `color`, `defaultChannel`, `sounds`, `mode` (iOS, `development` / `production`), `enableRemoteNotifications` (iOS, default `true`), `enableBackgroundRemoteNotifications` (iOS, default `false`)                                                  | [E25], `expo-notifications@58.1.9` `plugin/build/withNotifications.d.ts` |
 | Android credentials | Firebase project → service account JSON (role _Firebase Cloud Messaging API Admin_) uploaded with `eas credentials` → Android → Google Service Account → FCM V1; `google-services.json` referenced by `android.googleServicesFile` (may be committed; the service-account key may not) | [E28]       |
 | iOS credentials     | "A paid Apple Developer Account is required." EAS generates the APNs key during the first `eas build`                                                                                                                                                                                  | [E26]       |
 | iOS permission      | Read `ios.status` (`AUTHORIZED`, `PROVISIONAL`, `DENIED`…) rather than the root `status`                                                                                                                                                                                               | [E25]       |
@@ -1072,7 +1099,8 @@ Notes:
 - **`jest-expo` 58.0.15** peers: `jest ^29 || ^30` and
   **`@react-native/jest-preset ^0.88.1`** (a separate package now) [N1].
   `@testing-library/react-native` 14.1.0 replaces the deprecated
-  `react-test-renderer` [E37]. Under pnpm the docs give a specific
+  `react-test-renderer` [E37]; it has a required peer `test-renderer ^1.0.0`
+  (1.3.1 on npm) that must be added next to it [N1]. Under pnpm the docs give a specific
   `transformIgnorePatterns` starting `node_modules/(?!(.pnpm|(jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|…))`
   [E37]. The rest of the repo uses Vitest; the native apps would be the only
   Jest users.
@@ -1129,7 +1157,7 @@ Ways to get there without owning a Mac:
 | EAS Update             | 1,000 monthly active users, 100 GiB                   | 3,000 MAU then US$0.005/user; 100 GiB then US$0.10/GiB | 50,000 MAU; 1 TiB                  |
 | EAS Submit             | Included                                              | Included                                               | Included                           |
 | CI minutes (Workflows) | 60/month                                              | usage-based                                            | usage-based                        |
-| Expo Simulators        | **Not available**                                     | Available                                              | Available                          |
+| Expo Simulators        | **Not available** (no sessions)                       | US$0.10/minute; 60 minutes a month included until 2027 | US$0.10/minute; 60 minutes a month included until 2027 |
 
 Usage price per build beyond credit: Android US$1 (medium) / US$2 (large); iOS
 US$2 (medium) / US$4 (large) [E41] [E42].
@@ -1140,9 +1168,11 @@ Things that follow for four apps:
   two platforms is 8 of the 30 monthly builds.
 - "All commercial projects with >$1,500 USD in monthly revenue are required to
   be on a paid plan." [E43]
-- The per-minute price of an Expo Simulators session is not on the pages
-  opened — **UNVERIFIED**; the docs say only that it is a paid-plan feature
-  billed as usage [E50].
+- Expo Simulators cost US$0.10 a minute on Starter and Production, with 60
+  minutes a month included until 2027 [E42]; a session runs at most 115 minutes
+  and keeps running (and billing) until stopped, its idle limit or that maximum,
+  even after a `--non-interactive` command or CI job ends [E50]. Always pass a
+  maximum duration and an idle limit.
 
 ### What each kind of build needs
 
@@ -1160,8 +1190,12 @@ needed to build or to submit: "Expo Submit works on macOS, Linux, and Windows"
 
 ### EAS Update (over-the-air JavaScript updates)
 
-- `pnpm expo install expo-updates` (~58.0.22), then `eas update:configure`
-  writes `runtimeVersion` and `updates.url` [E46].
+- `pnpm expo install expo-updates` (~58.0.22), then `eas update:configure`.
+  On a static `app.json` it writes `runtimeVersion` and `updates.url` [E46];
+  with our dynamic `app.config.ts` it only prints a warning and the values to
+  add (`eas-cli@27.11.0` `build/update/configure.js:162-163`), so put them in
+  `defineAppConfig` by hand. It also sets `channel` on the `preview` and
+  `production` profiles in `eas.json` [E46].
 - A binary receives only updates whose runtime version, platform and channel
   match [E14]. Anything that changes native code or app config (a new
   permission string, a new native module) needs a new store build [E53].
@@ -1182,15 +1216,17 @@ needed to build or to submit: "Expo Submit works on macOS, Linux, and Windows"
 | Account                     | Cost                            | Notes                                                                                                                | Source |
 | --------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------ |
 | Expo                        | Free to start                   | Owns the four EAS projects                                                                                           | [E42]  |
-| Apple Developer Program     | **US$99 per membership year**   | Required for device builds, push, TestFlight, App Store. Enrolment as individual or organisation                     | [A3]   |
+| Apple Developer Program     | **US$99 per membership year**   | Required for device builds, push, TestFlight, App Store. Enrolment as individual or organisation. An organisation must be a legal entity (no trade names or DBAs, and its name is shown as the seller), have a **D-U-N-S number**, a public working website on its own domain, and a work e-mail on that domain; the enroller needs legal authority to sign for it and an Apple Account with two-factor authentication | [A3] [A5] |
 | Google Play Console         | **US$25 once**                  | Government ID and a credit card in the legal name may be required                                                    | [G6]   |
 | — personal Play account     |                                 | Created after 13 Nov 2023: **12 testers opted in for 14 consecutive days** in a closed test before production access | [G5]   |
 | — organisation Play account |                                 | "To create a developer account for an organization, you must provide a D-U-N-S number." (free from Dun & Bradstreet) | [G8]   |
 | Firebase (Google Cloud)     | Free for FCM                    | One project; register every Android package (12 with three variants per app)                                         | [E28]  |
 | Supabase                    | Decision pending in `STATUS.md` | Add app schemes and hosts to the Auth redirect allow-list                                                            | [SB3]  |
 
-Whether Apple's organisation enrolment also requires a D-U-N-S number was not
-on the page opened — **UNVERIFIED**; it bears on the timing of the legal entity.
+Apple's organisation enrolment **does** require a D-U-N-S number, as Google's
+does [A5] [G8]: both store accounts in the company's name wait on the legal
+entity, its D-U-N-S number (free from Dun & Bradstreet) and, for Apple, a live
+website and e-mail on the company's domain.
 
 ### Expo MCP tools available in this session
 
@@ -1234,8 +1270,11 @@ require (orders, invoices, ledger); a public web page per app for the same
 request; a confirmation message. No such function exists today
 (`supabase/migrations`, `packages/db/src/api.ts`). Driver and warehouse accounts
 are created by staff, not in the app; whether that takes those two apps out of
-scope of "supports account creation" is a judgement call — **UNVERIFIED**; the
-safe reading is to offer the same request path.
+scope of "supports account creation" is a judgement call — **UNVERIFIED**.
+Google's FAQ counts an app as supporting account creation when it "directs the
+user to an app account creation flow outside of the app" [G1], so an app that
+sends people to the website to sign up is in scope even if it never shows a
+sign-up form. The safe reading is to offer the same request path in all four.
 
 ### Sign-in
 
@@ -1267,7 +1306,7 @@ revisit this — **UNVERIFIED** how the stores would classify it.
 | Apple 2.5.4: background modes only for their intended purpose, location included                                                                                                                                                                                                                                   | The `location` background mode is justified by live route tracking; say so in the review notes | [A1]   |
 | Google, Android 14+ targets: declare each foreground service type in Play Console (App content) with a description, the user impact if the task is deferred or interrupted, and **a video** of the user starting the feature; listed location use cases include "user-initiated location sharing" and "navigation" | Record a short video of a driver starting a route                                              | [G7]   |
 | Google background location: only for a core feature; Permissions Declaration Form; a prominent in-app disclosure **before** the system prompt containing the word "location" and wording such as "even when the app is closed or not in use"; a video of 30 seconds or less; one feature evaluated at a time       | Applies if we request `ACCESS_BACKGROUND_LOCATION`                                             | [G3]   |
-| Google: a foreground service "must start as a continuation of a user-initiated in-app action" and stop when the use case ends; if its access is equivalent to background location, the background rules apply, "subject to review"                                                                                 | Start on "Iniciar ruta", stop on "Terminar ruta" and at sign-out                               | [G3]   |
+| Google: a foreground service "must be initiated as a continuation of an in-app, user-initiated action" and stop when the use case ends; if its access is equivalent to background location, the background rules apply, "subject to review"                                                                                 | Start on "Iniciar ruta", stop on "Terminar ruta" and at sign-out                               | [G3]   |
 
 Recommended design (see §4a): request "while using" only, start tracking from
 the route screen, run it as a foreground service with a visible notification on
@@ -1321,6 +1360,8 @@ the current npm version [N1]. Install Expo-pinned packages with
 | `react` / `react-dom`                               | 19.3.0             | UI runtime (exact pin)                                       | all                                 |
 | `react-native`                                      | 0.88.1             | Native runtime                                               | all                                 |
 | `expo-router`                                       | ~58.0.32           | File-based routing, protected routes                         | all                                 |
+| `@expo/metro-runtime`                               | ~58.0.17           | **Required** Router peer (not only for web)                  | all                                 |
+| `@expo/log-box`                                     | ^58.0.15           | **Required** Router peer (the version `expo` depends on)     | all                                 |
 | `react-native-screens`                              | ~4.30.1            | Router peer                                                  | all                                 |
 | `react-native-safe-area-context`                    | ~5.11.1            | Router peer                                                  | all                                 |
 | `react-native-gesture-handler`                      | ~3.3.0             | Router optional peer (in the template)                       | all                                 |
@@ -1354,11 +1395,12 @@ the current npm version [N1]. Install Expo-pinned packages with
 | `expo-updates`                                      | ~58.0.22           | Over-the-air updates                                         | all                                 |
 | `expo-build-properties`                             | ~58.0.12           | Cleartext HTTP in the development variant                    | all (dev)                           |
 | `expo-dev-client`                                   | ~58.0.21           | Development builds                                           | all (dev)                           |
-| `react-native-web` / `@expo/metro-runtime`          | ~0.21.4 / ~58.0.17 | Web export for browser tests                                 | all (test)                          |
+| `react-native-web` / `react-dom`                    | ~0.21.4 / 19.3.0   | Web export for browser tests (`@expo/metro-runtime` above)   | all (test)                          |
 | `jest-expo`                                         | ~58.0.15           | Jest preset                                                  | dev                                 |
 | `jest` / `@types/jest`                              | 30.5.2 / 30.0.0    | Test runner                                                  | dev                                 |
 | `@react-native/jest-preset`                         | 0.88.1             | Peer of `jest-expo`                                          | dev                                 |
 | `@testing-library/react-native`                     | 14.1.0             | Component tests                                              | dev                                 |
+| `test-renderer`                                     | 1.3.1              | Required peer of `@testing-library/react-native` 14 (`^1.0.0`) | dev                               |
 | `tsx`                                               | 4.23.15            | Lets `app.config.ts` import workspace TypeScript             | dev                                 |
 | `@types/react`                                      | ~19.3.0            | Types                                                        | dev                                 |
 | `typescript`                                        | 5.9.3 (repo)       | Template uses ~6.0.3; see §0                                 | dev                                 |
@@ -1380,12 +1422,14 @@ Google Maps as the web app does).
 
 1. **Accounts and money.** Open an Expo account, the Apple Developer Program
    (US$99 a year) and Google Play Console (US$25 once). Decide whether the
-   stores list a person or the company: an organisation account on Google
-   needs a D-U-N-S number, a personal one needs 12 testers for 14 days before
-   production.
+   stores list a person or the company: an organisation account on **both**
+   stores needs a D-U-N-S number (Apple also needs a live website and work
+   e-mail on the company's own domain), a personal Google account needs 12
+   testers for 14 days before production.
 2. **Expo plan.** Free gives 30 low-priority builds a month for all four apps
    together and no cloud simulators. Starter (US$19 a month) is the minimum for
-   an agent to run the apps on cloud devices from here. Free also stops being
+   an agent to run the apps on cloud devices from here; simulator time is
+   US$0.10 a minute beyond 60 included minutes a month (until 2027). Free also stops being
    allowed above US$1,500 of monthly revenue.
 3. **Four apps or three.** Separate driver and warehouse apps (as `brand.ts`
    names them) keep the location review to one small app, but mean four
@@ -1438,14 +1482,17 @@ Google Maps as the web app does).
 - `expo prebuild` on Linux for both platforms.
 - Barcode detection in the web export under headless Chromium.
 - Inter and Bricolage Grotesque variable files' named instances on iOS.
-- Per-minute price of Expo Simulators; whether the connected Expo account is on
-  a paid plan.
-- Whether Apple's organisation enrolment needs a D-U-N-S number.
+- Whether the connected Expo account is on a paid plan.
 - Whether `aes-js` changes Apple's export-compliance answer.
 - Whether staff-created driver and warehouse accounts fall under the stores'
   account-deletion rules.
 - Idempotency of the driver and warehouse database functions under retry.
-- iOS handling of plain-HTTP requests to a LAN address in development builds.
+- iOS handling of plain-HTTP requests to a LAN IP address in development builds
+  (the template sets `NSAllowsLocalNetworking`; its coverage of IP addresses is
+  unconfirmed).
+- Whether leaving the "Always" location strings out (`false`) instead of
+  giving them in Spanish draws an App Store Connect upload warning; the note
+  gives them in Spanish to avoid the question.
 - Which `runtimeVersion` policy suits us; Uniwind's maturity; map libraries.
 
 ---
@@ -1559,6 +1606,7 @@ or through the Expo documentation tools.
 - [A2] https://developer.apple.com/support/offering-account-deletion-in-your-app/
 - [A3] https://developer.apple.com/programs/whats-included/
 - [A4] https://developer.apple.com/news/upcoming-requirements/
+- [A5] https://developer.apple.com/programs/enroll/ (organisation requirements, D-U-N-S)
 
 ### Google Play
 
@@ -1581,3 +1629,55 @@ or through the Expo documentation tools.
 - `tools/dev-api/src/routes/auth.ts:94-183`, `apps/field/.env.example`
 - `supabase/migrations/20261121080700_logistics.sql:74`, `supabase/migrations/20261121081100_fulfillment.sql:550-564`
 - `docs/02-architecture/decisions.md` (decision 4), `STATUS.md`
+
+---
+
+## Corrections after fact-check
+
+Fact-check of 21 November 2026. About 150 claims were re-checked against
+primary sources: the published package files (`expo@58.0.26`
+`bundledNativeModules.json` and `tsconfig.base.json`, `@expo/cli@58.1.21`,
+`expo-location@58.0.22`, `expo-camera@58.0.14`, `expo-image-picker@58.0.10`,
+`expo-notifications@58.1.9`, `@expo/config-plugins@58.0.13`,
+`@expo/eas-json@27.11.0`, `eas-cli@27.11.0`, `expo-template-default@58.0.35`,
+`expo-template-bare-minimum@58.0.35`, `react-native@0.88.1`,
+`hermes-compiler@260318099.0.5`, TanStack Query 5.108.2), `npm view` for every
+version and peer range in §0 and the recommended stack, the Expo documentation
+pages [E1]–[E58] as Markdown, `expo.dev/pricing`, `expo.dev/acceptable-use`,
+the installed Supabase client sources, Supabase's docs [SB1] [SB4], Apple's
+pages [A1]–[A5] and Google Play's [G1]–[G8]. Every version pairing in §0 and in
+the recommended stack matched `bundledNativeModules.json` and npm exactly, and
+every re-checked claim not listed here was confirmed as written, including the
+EAS `sdk-58` images (Android: Node 22.23.2, pnpm 11.27.0, Maestro 2.10.0; iOS:
+Xcode 27.1, Node 22.23.3, pnpm 11.28.2, Maestro 2.11.0), the `pnpm` and `node`
+keys in `eas.json`, the push API limits, the SecureStore wording, the sticky
+dependency list, the Expo plan prices, and the store rules quoted in §8.
+
+| # | Where | What the note said | What is right | Source |
+| --- | --- | --- | --- | --- |
+| 1 | §2 `app.config.ts`, §4a | Only `locationWhenInUsePermission` set for iOS | Every iOS string the plugin knows (`locationAlwaysAndWhenInUsePermission`, `locationAlwaysPermission`, `motionUsagePermission`, `locationFullAccuracyPermission`) is written with Expo's **English default** unless given or set to `false`, which App Review can reject. Example now gives them in Spanish and sets `motionUsagePermission: false`; plugin-key table completed (foreground service also adds `POST_NOTIFICATIONS`; background adds `RECEIVE_BOOT_COMPLETED`) | `expo-location@58.0.22` `plugin/build/withLocation.js`; `@expo/config-plugins@58.0.13` `build/ios/Permissions.js:37-51` |
+| 2 | §4b | Scanner-only app: set `recordAudioAndroid: false` | Also set `microphonePermission: false`, or iOS gets the English default `NSMicrophoneUsageDescription` | `expo-camera@58.0.14` `plugin/build/withCamera.js:22-47`; [E22] |
+| 3 | Recommended stack | `@expo/metro-runtime` listed for "all (test)" only; `@expo/log-box` absent | Both are **required** (non-optional) peers of `expo-router@58.0.32` on every platform; listed for all apps | `npm view expo-router@58.0.32 peerDependencies peerDependenciesMeta` |
+| 4 | §6, stack | `@testing-library/react-native` 14.1.0 alone | It has a required peer `test-renderer ^1.0.0` (1.3.1); added | `npm view @testing-library/react-native@14.1.0 peerDependencies` |
+| 5 | §7 EAS Update | `eas update:configure` writes `runtimeVersion` and `updates.url` | Only for static `app.json`; with `app.config.ts` it warns and prints the values to add by hand | `eas-cli@27.11.0` `build/update/configure.js:162-163`; [E10] [E46] |
+| 6 | §7 plans, decision 2 | Expo Simulators per-minute price **UNVERIFIED** | US$0.10/minute on Starter and Production, 60 minutes a month included until 2027; sessions keep billing until stopped, idle limit or 115 minutes | [E42]; [E50] |
+| 7 | §7 accounts, bottom line, decision 1 | Whether Apple's organisation enrolment needs a D-U-N-S number **UNVERIFIED** | It does; also a legal entity (no DBAs), a public website on its own domain, a work e-mail on that domain, an enroller with signing authority and two-factor authentication | [A5] |
+| 8 | §2 `eas.json` table | `extends` "up to 5 levels" | A chain of at most 5 profiles: the resolver throws at depth 5 | `@expo/eas-json@27.11.0` `build/build/resolver.js:15-17` |
+| 9 | §3 local development | iOS plain-HTTP equivalent **UNVERIFIED** | The SDK 58 template sets `NSAllowsLocalNetworking: true`; whether that covers a LAN IP address is still unverified | `expo-template-bare-minimum@58.0.35` `ios/*/Info.plist:29-35` |
+| 10 | §4c | Image picker microphone | `microphonePermission: false` also removes the iOS string, not only `RECORD_AUDIO` | `expo-image-picker@58.0.10` `plugin/build/withImagePicker.js:35-95` |
+| 11 | §4d | Notifications plugin keys | Also `largeIcon`, `mode`, `enableRemoteNotifications` (default `true`) | `expo-notifications@58.1.9` `plugin/build/withNotifications.d.ts` |
+| 12 | §8 location | Quote "must start as a continuation of a user-initiated in-app action" | Verbatim: "must be initiated as a continuation of an in-app, user-initiated action"; meaning unchanged | [G3] |
+| 13 | §8 account deletion | Staff-created accounts: judgement call | Still a judgement call, but Google counts an app that directs people to sign up outside it as supporting account creation | [G1] FAQ |
+
+Still unverified after this pass (each also marked in the text or in "Not
+verified — summary"): everything that needs an install, build or device
+(`expo export`, `tsc` with TypeScript 5.9.3, `expo prebuild` on Linux, Hermes
+`String.prototype.normalize`, barcode detection in headless Chromium, variable
+font named instances); `NSAllowsLocalNetworking` and LAN IP addresses; whether
+`false` instead of Spanish "Always" strings triggers an upload warning; the
+`aes-js` export-compliance answer; staff-created accounts and deletion rules;
+idempotency of the driver and warehouse functions; the `runtimeVersion`
+policy; Uniwind's maturity; map libraries; whether the connected Expo account
+is on a paid plan. The 19.3.1 release notes [R19], the Supabase quotes [SB1]
+[SB4] and the line references into this repository and the installed
+`auth-js`, `supabase-js` and `storage-js` were re-opened and matched.
