@@ -181,6 +181,10 @@ export function PhotoQueue({
                 disabled={busy}
                 hint={ALT_HINT}
                 error={item.error}
+                // Checked when the photos are sent, with a message that says what to write;
+                // the browser's own "required" would stop the listing form without saying why.
+                required={false}
+                aria-required="true"
                 onChange={(event) => update(item.key, { alt: event.target.value, error: null })}
               />
               <div>
