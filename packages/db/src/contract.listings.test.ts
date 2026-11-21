@@ -144,4 +144,23 @@ describe.skipIf(!db.enabled)("listings contract (against a seeded database)", ()
       code: "edit_not_found",
     });
   });
+
+  it("archives a listing once, and says whether anything changed", async () => {
+    const { rows } = await db.query<{ id: string }>(
+      "select id from public.products where slug = $1",
+      ["cargador-usb-c-30w-nimbo"],
+    );
+    const charger = rows[0]?.id ?? "";
+    try {
+      await expect(otherSeller().sellerArchiveListing(charger)).rejects.toMatchObject({
+        code: "listing_not_found",
+      });
+      expect(await seller().sellerArchiveListing(charger)).toBe(true);
+      expect(await seller().sellerArchiveListing(charger)).toBe(false);
+      expect(await db.as().shopPathExists("product", "cargador-usb-c-30w-nimbo")).toBe(false);
+    } finally {
+      // Put it back for the other suites (as the database owner, outside the API).
+      await db.query("update public.products set status = 'active' where id = $1", [charger]);
+    }
+  });
 });

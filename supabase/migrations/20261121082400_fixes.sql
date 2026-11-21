@@ -40,16 +40,19 @@ as $$
   ),
   floored as (
     -- Whole-number arithmetic throughout: no rounding to disagree about.
+    -- An order that sold nothing (every weight 0) has nothing to share the
+    -- fee by: every seller's part is 0, as in splitFixedPaymentFee.
     select p.seller_id,
-           (p_fixed_minor * p.weight) / p.total as base,
-           (p_fixed_minor * p.weight) % p.total as remainder
+           case when p.total > 0 then (p_fixed_minor * p.weight) / p.total else 0 end as base,
+           case when p.total > 0 then (p_fixed_minor * p.weight) % p.total else 0 end as remainder,
+           p.total
     from parties p
-    where p.total > 0
   ),
   ranked as (
     select f.seller_id, f.base,
            row_number() over (order by f.remainder desc, f.seller_id) as position,
-           p_fixed_minor - (sum(f.base) over ())::bigint as left_over
+           case when f.total > 0 then p_fixed_minor - (sum(f.base) over ())::bigint else 0 end
+             as left_over
     from floored f
   )
   select r.seller_id, r.base + case when r.position <= r.left_over then 1 else 0 end
@@ -537,6 +540,65 @@ begin
 end;
 $$;
 
+-- A published listing changes only through review. Sellers kept column
+-- grants on products and skus (drafts are theirs to shape), so without this
+-- a seller could rewrite a live page, or move it to a cheaper category or
+-- package tier, straight through the table API and skip the review that
+-- seller_update_listing queues. Catalogue staff, and the system itself (no
+-- signed-in caller), are not limited; status changes keep their own guard.
+create or replace function private.guard_live_listing() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  if old.status = 'active'
+     and (select auth.uid()) is not null
+     and not private.has_staff_role('catalog')
+     and (new.slug, new.title, new.description, new.bullet_points, new.brand_id, new.category_id,
+          new.attributes, new.tax_rate_bps, new.warranty_months, new.made_in_cr)
+         is distinct from
+         (old.slug, old.title, old.description, old.bullet_points, old.brand_id, old.category_id,
+          old.attributes, old.tax_rate_bps, old.warranty_months, old.made_in_cr) then
+    perform private.fail('published_listing_locked');
+  end if;
+  return new;
+end;
+$$;
+
+create trigger products_guard_live_content before update on public.products
+  for each row execute function private.guard_live_listing();
+
+-- The same for a published listing's variants: their package decides the
+-- warehouse fee, and a new variant would go on sale unreviewed. A seller may
+-- still switch a variant on or off.
+create or replace function private.guard_live_variant() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  if (select auth.uid()) is null or private.has_staff_role('catalog') then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    if exists (select 1 from public.products p where p.id = new.product_id and p.status = 'active') then
+      perform private.fail('published_listing_locked');
+    end if;
+  elsif (new.product_id, new.code, new.gtin, new.variant_name, new.variant_attributes,
+         new.weight_grams, new.length_cm, new.width_cm, new.height_cm)
+        is distinct from
+        (old.product_id, old.code, old.gtin, old.variant_name, old.variant_attributes,
+         old.weight_grams, old.length_cm, old.width_cm, old.height_cm)
+        and exists (select 1 from public.products p
+                    where p.id in (old.product_id, new.product_id) and p.status = 'active') then
+    perform private.fail('published_listing_locked');
+  end if;
+  return new;
+end;
+$$;
+
+create trigger skus_guard_live_variant before insert or update on public.skus
+  for each row execute function private.guard_live_variant();
+
 -- What a listing says, in the shape proposals are stored in.
 create or replace function private.listing_content(p_product_id uuid, p_sku_id uuid) returns jsonb
 language sql stable security definer
@@ -674,6 +736,10 @@ declare
   v_title text := trim(p_title);
   v_description text := nullif(trim(p_description), '');
   v_bullets text[] := coalesce(p_bullet_points, '{}');
+  -- The package is stored to a tenth of a centimetre; check what will be stored.
+  v_length numeric := round(p_length_cm, 1);
+  v_width numeric := round(p_width_cm, 1);
+  v_height numeric := round(p_height_cm, 1);
   v_proposed jsonb;
   v_status public.product_status;
   v_request uuid;
@@ -699,17 +765,23 @@ begin
     perform private.fail('category_not_found');
   end if;
 
-  -- The same limits the tables enforce, checked now so that a proposal which
-  -- waits for review can never fail when it is finally applied.
+  -- The limits the tables enforce, on the values that will be stored, so that
+  -- a proposal which waits for review can never fail when it is finally
+  -- applied; plus the seller app's own limits (30 kg, 200 cm a side), so a
+  -- direct call cannot store what the form would refuse. Every characteristic
+  -- is a line of text: no empty ones, none longer than 300 characters.
   if coalesce(char_length(v_title), 0) not between 5 and 200
      or char_length(v_description) > 10000
      or cardinality(v_bullets) > 8
-     or p_weight_grams is null or p_weight_grams <= 0
-     or p_length_cm is null or p_length_cm <= 0 or p_length_cm >= 10000
-     or p_width_cm is null or p_width_cm <= 0 or p_width_cm >= 10000
-     or p_height_cm is null or p_height_cm <= 0 or p_height_cm >= 10000 then
+     or exists (select 1 from unnest(v_bullets) b
+                where b is null or trim(b) = '' or char_length(b) > 300)
+     or p_weight_grams is null or p_weight_grams <= 0 or p_weight_grams > 30000
+     or v_length is null or v_length <= 0 or v_length > 200
+     or v_width is null or v_width <= 0 or v_width > 200
+     or v_height is null or v_height <= 0 or v_height > 200 then
     perform private.fail('invalid_listing');
   end if;
+  v_bullets := array(select trim(b) from unnest(v_bullets) b);
 
   if p.status = 'active' then
     v_proposed := jsonb_build_object(
@@ -720,9 +792,9 @@ begin
       'category_name', v_category.name_es,
       'sku_id', v_sku,
       'weight_grams', p_weight_grams,
-      'length_cm', round(p_length_cm, 1),
-      'width_cm', round(p_width_cm, 1),
-      'height_cm', round(p_height_cm, 1));
+      'length_cm', v_length,
+      'width_cm', v_width,
+      'height_cm', v_height);
     if v_proposed = private.listing_content(p.id, v_sku) then
       perform private.fail('listing_unchanged');
     end if;
@@ -764,8 +836,8 @@ begin
   where id = p.id;
 
   update public.skus
-  set weight_grams = p_weight_grams, length_cm = p_length_cm, width_cm = p_width_cm,
-      height_cm = p_height_cm
+  set weight_grams = p_weight_grams, length_cm = v_length, width_cm = v_width,
+      height_cm = v_height
   where id = v_sku;
 
   return jsonb_build_object('product_id', p.id, 'slug', p.slug, 'status', v_status,
@@ -800,7 +872,9 @@ $$;
 
 -- Takes a listing out of the shop. Its page stops existing for shoppers and
 -- nothing on it can be bought; stock, past orders and statements are untouched.
-create or replace function public.seller_archive_listing(p_product_id uuid) returns void
+-- Answers whether it changed anything: false when the listing was already
+-- archived, so the caller need not tell the shop to refresh.
+create or replace function public.seller_archive_listing(p_product_id uuid) returns boolean
 language plpgsql security definer
 set search_path = ''
 as $$
@@ -813,7 +887,7 @@ begin
     perform private.fail('listing_not_found');
   end if;
   if p.status = 'archived' then
-    return; -- already done; safe to call twice
+    return false; -- already done; safe to call twice
   end if;
   -- The page is shared: another seller is selling from it. This seller can
   -- pause their own offer, but cannot take the page away from the other.
@@ -831,6 +905,7 @@ begin
   update public.products set status = 'archived' where id = p.id;
 
   perform private.emit('product.archived', jsonb_build_object('product_id', p.id));
+  return true;
 end;
 $$;
 

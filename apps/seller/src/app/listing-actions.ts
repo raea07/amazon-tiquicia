@@ -76,6 +76,9 @@ export async function updateListing(
     .map((line) => line.trim())
     .filter(Boolean);
   if (bulletPoints.length > 8) return { error: "Use como máximo 8 características.", values };
+  if (bulletPoints.some((line) => line.length > 300)) {
+    return { error: "Cada característica puede tener hasta 300 caracteres.", values };
+  }
 
   const state = await attempt(async () => {
     const result = await (await sessionApi()).sellerUpdateListing({
@@ -131,9 +134,10 @@ export async function archiveListing(
   }
 
   const state = await attempt(async () => {
-    await (await sessionApi()).sellerArchiveListing(productId.data);
+    const archived = await (await sessionApi()).sellerArchiveListing(productId.data);
     // Shoppers should stop seeing it now, not when the shop's cache next expires.
-    await refreshShopCatalog();
+    // Only when something changed: re-sending the form must not empty the shop's cache.
+    if (archived) await refreshShopCatalog();
     return "Producto archivado. Ya no aparece en la tienda.";
   });
   if (state.ok) refresh();

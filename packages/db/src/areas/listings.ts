@@ -136,6 +136,11 @@ export const listingsErrors = {
       "Otro vendedor también vende desde esta publicación, así que no se puede archivar. Ponga su oferta en pausa.",
     en: "Another seller also sells from this listing, so it cannot be archived. Pause your offer instead.",
   },
+  published_listing_locked: {
+    "es-CR":
+      "Esta publicación ya está a la venta. Cámbiela desde «Editar»: su cambio pasa por revisión y mientras tanto la publicación sigue igual.",
+    en: "This listing is already on sale. Change it from “Edit”: the change is reviewed, and the listing stays as it is meanwhile.",
+  },
   edit_not_found: {
     "es-CR":
       "Ese cambio ya no está pendiente: fue decidido, retirado o reemplazado por uno más reciente. Actualice la página.",
@@ -176,8 +181,9 @@ export const listingsApi = ({ call, run }: Caller) => ({
     ),
   sellerWithdrawListingEdit: (productId: string) =>
     run("seller_withdraw_listing_edit", { p_product_id: productId }),
+  /** True when the listing was archived now; false when it already was. */
   sellerArchiveListing: (productId: string) =>
-    run("seller_archive_listing", { p_product_id: productId }),
+    call("seller_archive_listing", { p_product_id: productId }, z.boolean()),
 
   opsListingEditsForReview: () => call("ops_listing_edits_for_review", {}, z.array(opsListingEdit)),
   opsReviewListingEdit: (requestId: string, approve: boolean, reason?: string | null) =>

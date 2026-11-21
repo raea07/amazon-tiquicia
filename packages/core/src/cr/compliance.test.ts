@@ -158,6 +158,7 @@ describe("the fixed payment fee is split the way the database splits it", () => 
   it("finds the shared cases", () => {
     expect(cases.length).toBeGreaterThanOrEqual(8);
     expect(cases.some((c) => c.sales.length >= 3)).toBe(true);
+    expect(cases.some((c) => c.fixed > 0 && c.sales.every((sale) => sale === 0))).toBe(true);
   });
 
   it("gives every seller the same part", () => {
@@ -170,7 +171,8 @@ describe("the fixed payment fee is split the way the database splits it", () => 
         })),
       );
       expect([...parts.values()], `${c.fixed} over ${c.sales.join(", ")}`).toEqual(c.expected);
-      expect(c.expected.reduce((a, b) => a + b, 0)).toBe(c.fixed);
+      const soldSomething = c.sales.some((sale) => sale > 0);
+      expect(c.expected.reduce((a, b) => a + b, 0)).toBe(soldSomething ? c.fixed : 0);
     }
   });
 

@@ -65,7 +65,11 @@ What is then granted:
 - **Tables, read.** `SELECT` where a policy can sensibly scope it.
 - **Tables, write.** Rare, and by column. A shopper may update four columns of
   their own profile, not `phone_verified_at`. A seller may write listing
-  content columns of `products`, not the ranking and summary columns. Orders,
+  content columns of `products` and `skus`, not the ranking and summary
+  columns, and only while the listing is not published: a trigger refuses
+  content changes to a published listing, and new variants on it, unless the
+  caller is catalogue staff. Edits to a published listing go through
+  `seller_update_listing` and wait for review. Orders,
   payments, shipments, stock, ledger, routes and stops have **no** write grant
   at all: they change only inside functions.
 
@@ -128,14 +132,14 @@ A summary; the migration is authoritative.
 
 ### Seller member
 
-| Can                                                                                                                 | Cannot                                                                                                            |
-| ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Read their seller's private details, members, listings, offers, stock, statements and payouts                       | Read another seller's                                                                                             |
-| Create listings as draft or pending review; edit their content; set price, handling time and status of their offers | Publish a listing; write ranking, rating or summary columns                                                       |
-| See the order lines they sold and each line's progress, with the shopper's first name, district and cantón          | See the shopper's full name, phone, e-mail, address or map pin — Yuntera delivers, so the seller never needs them |
-| Set stock at their own location; announce stock sent to a warehouse; mark their own parcels packed                  | Change stock held in a Yuntera warehouse                                                                          |
-| Reply to a review of their product                                                                                  | Remove or edit a review                                                                                           |
-| Admins and owners: edit shop-front and payout details, manage members                                               | Create, alter or remove an owner                                                                                  |
+| Can                                                                                                                 | Cannot                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Read their seller's private details, members, listings, offers, stock, statements and payouts                       | Read another seller's                                                                                                  |
+| Create listings as draft or pending review; edit their content; set price, handling time and status of their offers | Publish a listing; change a published listing except through a reviewed edit; write ranking, rating or summary columns |
+| See the order lines they sold and each line's progress, with the shopper's first name, district and cantón          | See the shopper's full name, phone, e-mail, address or map pin — Yuntera delivers, so the seller never needs them      |
+| Set stock at their own location; announce stock sent to a warehouse; mark their own parcels packed                  | Change stock held in a Yuntera warehouse                                                                               |
+| Reply to a review of their product                                                                                  | Remove or edit a review                                                                                                |
+| Admins and owners: edit shop-front and payout details, manage members                                               | Create, alter or remove an owner                                                                                       |
 
 ### Warehouse associate
 

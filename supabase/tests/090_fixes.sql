@@ -54,7 +54,11 @@ begin
      from generate_subscripts(p_sales, 1) n),
     p_sales) s;
   assert v_got = p_expected, format('%s over %s: expected %s, got %s', p_fixed, p_sales, p_expected, v_got);
-  assert (select sum(x) from unnest(v_got) x) = p_fixed, format('%s over %s does not add up', p_fixed, p_sales);
+  -- The parts add up to the fee, except when nothing was sold: then there is
+  -- nothing to share it by and every part is 0.
+  assert (select sum(x) from unnest(v_got) x)
+         = case when (select sum(x) from unnest(p_sales) x) > 0 then p_fixed else 0 end,
+         format('%s over %s does not add up', p_fixed, p_sales);
 end;
 $$;
 
@@ -68,6 +72,7 @@ select pg_temp.check_split(1, '{1,999999999}', '{0,1}');
 select pg_temp.check_split(17, '{300,200,100,100}', '{7,5,3,2}');
 select pg_temp.check_split(0, '{2000000,990000}', '{0,0}');
 select pg_temp.check_split(18000, '{1299000000,99,349900}', '{17995,0,5}');
+select pg_temp.check_split(18000, '{0,0}', '{0,0}');
 -- END fixed_fee_split_cases
 
 -- A product of a given seller at a known price, with stock where its offer sells from.
@@ -504,6 +509,8 @@ select pg_temp.remember('cargador', (select id::text from public.products where 
 select pg_temp.remember('parlante', (select id::text from public.products where slug = 'parlante-bluetooth-nimbo-ola'));
 select pg_temp.remember('audifonos', (select id::text from public.products where slug = 'audifonos-inalambricos-nimbo-aire'));
 select pg_temp.remember('laptop_title', (select title from public.products where slug = 'laptop-14-nimbo-libro'));
+select pg_temp.remember('laptop_tax', (select tax_rate_bps::text from public.products where slug = 'laptop-14-nimbo-libro'));
+select pg_temp.remember('laptop_description', (select md5(coalesce(description, '')) from public.products where slug = 'laptop-14-nimbo-libro'));
 
 -- Sends an edit that changes only the title (and optionally the weight) of a listing.
 create function pg_temp.retitle(p_product text, p_title text, p_weight integer default null, p_submit boolean default true)
@@ -566,6 +573,23 @@ begin
     'no-existe', null, '{}', 1900, 36, 26, 6)$q$, current_setting('t.laptop')), 'category_not_found');
   perform pg_temp.refused(format($q$select public.seller_update_listing('%s', 'Laptop Nimbo con mil cosas',
     'laptops', null, '{a,b,c,d,e,f,g,h,i}', 1900, 36, 26, 6)$q$, current_setting('t.laptop')), 'invalid_listing');
+  -- A side that rounds to 0.0 cm would be stored as 0 and break the table's own rule on approval.
+  perform pg_temp.refused(format($q$select public.seller_update_listing('%s', 'Laptop con medida rara',
+    'laptops', null, '{}', 1900, 0.04, 26, 6)$q$, current_setting('t.laptop')), 'invalid_listing');
+  -- Characteristics are lines of text: none missing, none blank, none endless.
+  perform pg_temp.refused(format($q$select public.seller_update_listing('%s', 'Laptop con viñetas vacías',
+    'laptops', null, array['a', null], 1900, 36, 26, 6)$q$, current_setting('t.laptop')), 'invalid_listing');
+  perform pg_temp.refused(format($q$select public.seller_update_listing('%s', 'Laptop con viñetas vacías',
+    'laptops', null, array['a', '   '], 1900, 36, 26, 6)$q$, current_setting('t.laptop')), 'invalid_listing');
+  perform pg_temp.refused(format($q$select public.seller_update_listing('%s', 'Laptop con viñeta larguísima',
+    'laptops', null, array[repeat('x', 301)], 1900, 36, 26, 6)$q$, current_setting('t.laptop')), 'invalid_listing');
+  -- The same package limits as the seller app: 30 kg, 200 cm a side.
+  perform pg_temp.refused(format($q$select public.seller_update_listing('%s', 'Laptop de mucho peso',
+    'laptops', null, '{}', 30001, 36, 26, 6)$q$, current_setting('t.laptop')), 'invalid_listing');
+  perform pg_temp.refused(format($q$select public.seller_update_listing('%s', 'Laptop de mucho largo',
+    'laptops', null, '{}', 1900, 200.1, 26, 6)$q$, current_setting('t.laptop')), 'invalid_listing');
+  assert (select count(*) from public.product_change_requests where status = 'pending') = 1,
+    'nothing invalid was queued';
 end
 $$;
 reset role; select pg_temp.logout();
@@ -584,6 +608,77 @@ begin
     'the replaced proposal is closed; one is waiting';
 end
 $$;
+
+-- ── The review cannot be skipped through the tables ────────────────────────
+
+-- Sellers keep column grants on products and skus for their drafts. On a
+-- published listing those writes are refused, whatever the column: text,
+-- category and tax rate (which set the referral fee), or the package (which
+-- sets the warehouse fee). Adding a variant would put it on sale unreviewed.
+select pg_temp.login('vendedor@yuntera.example');
+do $$
+declare
+  v_sku uuid := (select id from public.skus where product_id = current_setting('t.laptop')::uuid);
+begin
+  perform pg_temp.refused(format($q$update public.products set title = 'Título sin revisión' where id = %L$q$,
+    current_setting('t.laptop')), 'published_listing_locked');
+  perform pg_temp.refused(format($q$update public.products set description = 'spam' where id = %L$q$,
+    current_setting('t.laptop')), 'published_listing_locked');
+  perform pg_temp.refused(format($q$update public.products set bullet_points = '{spam}' where id = %L$q$,
+    current_setting('t.laptop')), 'published_listing_locked');
+  perform pg_temp.refused(format(
+    $q$update public.products set category_id = (select id from public.categories where slug = 'belleza') where id = %L$q$,
+    current_setting('t.laptop')), 'published_listing_locked');
+  perform pg_temp.refused(format($q$update public.products set tax_rate_bps = 0 where id = %L$q$,
+    current_setting('t.laptop')), 'published_listing_locked');
+  -- Changing the status and the text in one statement is no way round it.
+  perform pg_temp.refused(format(
+    $q$update public.products set status = 'draft', title = 'Título sin revisión' where id = %L$q$,
+    current_setting('t.laptop')), 'published_listing_locked');
+  perform pg_temp.refused(format($q$update public.skus set weight_grams = 1 where id = %L$q$, v_sku),
+    'published_listing_locked');
+  perform pg_temp.refused(format($q$update public.skus set length_cm = 1, width_cm = 1, height_cm = 1 where id = %L$q$,
+    v_sku), 'published_listing_locked');
+  perform pg_temp.refused(format($q$update public.skus set variant_name = 'Otra' where id = %L$q$, v_sku),
+    'published_listing_locked');
+  perform pg_temp.refused(format(
+    $q$insert into public.skus (product_id, code, weight_grams, length_cm, width_cm, height_cm)
+       values (%L, 'YT-SINREVISAR', 1, 1, 1, 1)$q$, current_setting('t.laptop')), 'published_listing_locked');
+
+  -- Switching a variant off and on again is still the seller's to do.
+  update public.skus set active = false where id = v_sku;
+  update public.skus set active = true where id = v_sku;
+  -- A listing that is not published yet is still theirs to shape directly.
+  update public.products set title = 'Producto de prueba en borrador, cambiado'
+  where slug = current_setting('t.draft_slug');
+  assert found, 'a draft can be changed directly';
+end
+$$;
+reset role; select pg_temp.logout();
+
+do $$
+begin
+  assert (select (title, md5(coalesce(description, '')), tax_rate_bps::text, status::text)
+                 = (current_setting('t.laptop_title'), current_setting('t.laptop_description'),
+                    current_setting('t.laptop_tax'), 'active')
+          from public.products p where p.id = current_setting('t.laptop')::uuid), 'the live listing is unchanged';
+  assert (select (count(*), min(weight_grams), bool_and(active)) = (1::bigint, 1900, true)
+          from public.skus where product_id = current_setting('t.laptop')::uuid), 'and so is its variant';
+  assert (select title from public.products where slug = current_setting('t.draft_slug'))
+       = 'Producto de prueba en borrador, cambiado', 'the draft was changed';
+end
+$$;
+
+-- Catalogue staff are not limited by this rule (they correct live listings).
+select pg_temp.login('central@yuntera.example');
+do $$
+begin
+  update public.products set warranty_months = warranty_months where id = current_setting('t.laptop')::uuid;
+  update public.products set made_in_cr = not made_in_cr where id = current_setting('t.laptop')::uuid;
+  update public.products set made_in_cr = not made_in_cr where id = current_setting('t.laptop')::uuid;
+end
+$$;
+reset role; select pg_temp.logout();
 
 -- The shop keeps showing the published text.
 select pg_temp.login_anon();
@@ -872,8 +967,9 @@ begin
   perform pg_temp.retitle('cargador', 'Cargador USB-C 30 W Nimbo, edición que no llegará');
   perform public.seller_archive_listing(current_setting('t.cargador')::uuid);
 
-  perform public.seller_archive_listing(current_setting('t.teclado')::uuid);
-  perform public.seller_archive_listing(current_setting('t.teclado')::uuid); -- twice is the same as once
+  assert public.seller_archive_listing(current_setting('t.teclado')::uuid), 'archiving reports a change';
+  -- Twice is the same as once, and says so: the seller app then leaves the shop's cache alone.
+  assert not public.seller_archive_listing(current_setting('t.teclado')::uuid), 'the second time changes nothing';
   assert public.seller_listing(current_setting('t.teclado')::uuid) ->> 'status' = 'archived', 'archived';
   assert (select not editable from public.seller_listing_edits(current_setting('t.tecnocasa')::uuid)
           where product_id = current_setting('t.teclado')::uuid), 'an archived listing cannot be edited';
