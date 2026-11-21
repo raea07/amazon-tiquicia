@@ -66,7 +66,16 @@ function check(condition, message) {
   await page.goto(`${BASE}/p/camiseta-algodon-sendero`, { waitUntil: "networkidle" });
   await visible("buy-box").waitFor();
   check((await page.getByRole("tab").count()) === 0, "a product opened by link fills the screen");
-  await page.getByRole("link", { name: /back/i }).first().click();
+  const back = page
+    .getByRole("button", { name: "Volver a Inicio" })
+    .filter({ visible: true })
+    .first();
+  const backBox = await back.boundingBox();
+  check(
+    backBox !== null && backBox.width >= 44 && backBox.height >= 44,
+    "its back button is named in Spanish and at least 44 px",
+  );
+  await back.click();
   await page.waitForURL((url) => new URL(url).pathname === "/");
   check(
     (await page.getByRole("tab").filter({ visible: true }).count()) === 5,

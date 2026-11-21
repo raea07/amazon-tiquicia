@@ -1,6 +1,8 @@
 import { AppProviders } from "@yuntera/expo-kit/auth";
 import { colors, fontFamily } from "@yuntera/expo-kit/theme";
-import { Stack } from "expo-router";
+import { BackIcon, IconButton } from "@yuntera/expo-kit/ui";
+import { router, Stack } from "expo-router";
+import { type ColorValue, Platform } from "react-native";
 import { CartProvider } from "@/lib/cart-context";
 import { env } from "@/lib/env";
 
@@ -12,6 +14,35 @@ export { ScreenErrorBoundary as ErrorBoundary } from "@yuntera/expo-kit/ui";
  * the tabs underneath it, so it always has a way back to the shop.
  */
 export const unstable_settings = { initialRouteName: "(tabs)" };
+
+/**
+ * On iOS and Android the header uses the system's own back control, sized and
+ * named in the phone's language. The web export would draw a 30 px link
+ * named in English ("Inicio, back"), so there it gets a 44 px button with a
+ * Spanish name instead.
+ */
+const webBack =
+  Platform.OS === "web"
+    ? {
+        headerLeft: ({
+          canGoBack,
+          label,
+          tintColor,
+        }: {
+          canGoBack?: boolean;
+          label?: string;
+          tintColor?: ColorValue;
+        }) =>
+          canGoBack ? (
+            <IconButton
+              label={label ? `Volver a ${label}` : "Volver"}
+              onPress={() => router.back()}
+            >
+              <BackIcon color={tintColor ?? colors.link} />
+            </IconButton>
+          ) : null,
+      }
+    : {};
 
 /**
  * The shop's navigation: five tabs for browsing, the cart and the account,
@@ -35,6 +66,7 @@ export default function RootLayout() {
             headerStyle: { backgroundColor: colors.surface },
             headerBackButtonDisplayMode: "minimal",
             contentStyle: { backgroundColor: colors.bg },
+            ...webBack,
           }}
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false, title: "Inicio" }} />
