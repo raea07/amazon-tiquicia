@@ -403,8 +403,15 @@ $$;
 -- it does not need a driver's name or ID number, or a shop's legal identity,
 -- contact details and bank account, to do that (for a sole trader those are a
 -- person's name, cédula and phone). Those columns are left out, and the names of
--- the ones that changed are kept under `changed_private`. The bank account
--- number was already left out; the rest of the list is new here.
+-- the ones that changed are kept under `changed_private`.
+--
+-- This replaces the version in 20261121082300_people_payouts.sql and keeps what
+-- that one does: any audited row that carries a payout account (shop details,
+-- payouts) keeps only its last four digits, as `payout_iban_masked`, so a change
+-- of account still shows and the number cannot be copied. Both rules apply
+-- together; neither may be dropped when this function is next replaced
+-- (supabase/tests/085_people_payouts.sql and 095_account_security.sql check
+-- each).
 create or replace function private.audit_private_columns(p_table text) returns text[]
 language sql immutable
 set search_path = ''
@@ -438,9 +445,21 @@ declare
   v_key text;
 begin
   if cardinality(v_hidden) > 0 then
+    -- Which personal columns changed, read before anything is removed.
     select coalesce(jsonb_agg(c order by c), '[]'::jsonb) into v_changed
     from unnest(v_hidden) c
     where (v_old -> c) is distinct from (v_new -> c);
+  end if;
+  -- A payout account keeps only its last four digits (from 082300).
+  if v_old ? 'payout_iban' then
+    v_old := (v_old - 'payout_iban')
+      || jsonb_build_object('payout_iban_masked', private.mask_iban(v_old ->> 'payout_iban'));
+  end if;
+  if v_new ? 'payout_iban' then
+    v_new := (v_new - 'payout_iban')
+      || jsonb_build_object('payout_iban_masked', private.mask_iban(v_new ->> 'payout_iban'));
+  end if;
+  if cardinality(v_hidden) > 0 then
     v_old := private.audit_redact(v_old, v_hidden);
     v_new := private.audit_redact(v_new, v_hidden);
     if v_new is not null and jsonb_array_length(v_changed) > 0 then
@@ -463,14 +482,96 @@ $$;
 -- Rows written before this migration still hold those columns. This is the one
 -- rewrite the immutable trail ever gets, done by the owner while the guard is
 -- off for this transaction only; it removes data and changes nothing else.
+-- The names of the columns that changed are kept, as the trigger now does, so
+-- what reads the trail for a change (finance's "contact changed recently"
+-- signal) still sees the older ones.
 alter table private.audit_log disable trigger audit_log_immutable;
 update private.audit_log l
 set old_row = private.audit_redact(l.old_row, private.audit_private_columns(l.table_name)),
-    new_row = private.audit_redact(l.new_row, private.audit_private_columns(l.table_name))
+    new_row = case
+      when l.new_row is null then null
+      else private.audit_redact(l.new_row, private.audit_private_columns(l.table_name))
+        || coalesce((
+          select jsonb_build_object('changed_private', jsonb_agg(c order by c))
+          from unnest(private.audit_private_columns(l.table_name)) c
+          where (l.old_row -> c) is distinct from (l.new_row -> c)
+          having count(*) > 0), '{}'::jsonb)
+    end
 where l.table_name in ('drivers', 'seller_private')
   and (l.old_row ?| private.audit_private_columns(l.table_name)
        or l.new_row ?| private.audit_private_columns(l.table_name));
 alter table private.audit_log enable trigger audit_log_immutable;
+
+-- Finance's queue of payout-account requests (from 082300) looked for a recent
+-- change of the shop's contact phone or e-mail by comparing them in the trail,
+-- which no longer holds them. The same signal, read from `changed_private`;
+-- nothing else differs.
+create or replace function public.ops_payout_detail_requests(p_status text default 'pending')
+returns jsonb
+language plpgsql stable security definer
+set search_path = ''
+as $$
+begin
+  if not private.has_staff_role('finance') then
+    perform private.fail('forbidden');
+  end if;
+  return coalesce((
+    select jsonb_agg(x.item order by x.pending desc, x.sort_key)
+    from (
+      select
+        (r.status = 'pending') as pending,
+        -- Oldest first while waiting; newest first once decided.
+        case when r.status = 'pending' then extract(epoch from r.requested_at)
+             else -extract(epoch from r.decided_at) end as sort_key,
+        jsonb_build_object(
+          'id', r.id, 'status', r.status, 'requested_at', r.requested_at,
+          'requested_by_name', rp.full_name, 'requested_by_email', ru.email,
+          'seller', jsonb_build_object(
+            'id', s.id, 'trade_name', s.trade_name, 'status', s.status,
+            'legal_name', sp.legal_name, 'id_type', sp.id_type, 'id_number', sp.id_number,
+            'contact_phone', sp.contact_phone, 'contact_email', sp.contact_email,
+            'since', s.created_at),
+          'current', jsonb_build_object(
+            'iban_masked', private.mask_iban(sp.payout_iban),
+            'holder_name', sp.payout_holder_name, 'sinpe_number', sp.sinpe_movil_number),
+          'requested', jsonb_build_object(
+            'iban', case when r.status = 'pending' then r.payout_iban end,
+            'iban_masked', private.mask_iban(r.payout_iban),
+            'holder_name', r.payout_holder_name, 'sinpe_number', r.sinpe_movil_number),
+          -- Things worth a second look before approving.
+          'signals', jsonb_build_object(
+            'first_account', sp.payout_iban is null,
+            'holder_differs', private.fold(r.payout_holder_name) <> private.fold(sp.legal_name),
+            'used_by_other_shop', exists (
+              select 1 from public.seller_private o
+              where o.payout_iban = r.payout_iban and o.seller_id <> r.seller_id),
+            -- The number finance calls is only worth calling if it has not just
+            -- changed: sellers cannot change it themselves, but staff can.
+            -- The trail no longer holds the contact details themselves, only
+            -- the names of the private columns that changed.
+            'contact_changed_recently', exists (
+              select 1 from private.audit_log l
+              where l.table_name = 'seller_private' and l.action = 'UPDATE'
+                and l.row_key = r.seller_id::text
+                and l.at > r.requested_at - interval '30 days'
+                and coalesce(l.new_row -> 'changed_private', '[]'::jsonb)
+                    ?| array['contact_phone', 'contact_email'])),
+          'decided_at', r.decided_at,
+          'decided_by_name', (select p.full_name from public.profiles p where p.id = r.decided_by),
+          'note', r.decision_note
+        ) as item
+      from public.payout_detail_requests r
+      join public.sellers s on s.id = r.seller_id
+      join public.seller_private sp on sp.seller_id = r.seller_id
+      join auth.users ru on ru.id = r.requested_by
+      left join public.profiles rp on rp.id = r.requested_by
+      where r.status <> 'replaced' and (p_status is null or r.status = p_status)
+      order by (r.status = 'pending') desc, r.requested_at desc
+      limit 100
+    ) x
+  ), '[]'::jsonb);
+end;
+$$;
 
 revoke execute on function
   private.audit_private_columns(text),
@@ -604,13 +705,18 @@ $$;
 -- paid loses them all, its legal name and identification number included. A
 -- shop that traded keeps those two (and the tax regime) with the invoices,
 -- payouts and ledger entries made under them, for the tax retention period;
--- its contact details and bank account go.
+-- its contact details and bank account go. Requests to change the payout
+-- account (20261121082300_people_payouts.sql) hold an account number, its
+-- holder and a SINPE number too; they go in both cases. The payouts already
+-- made keep the account they were paid to, as the ledger and the bank's
+-- statements do.
 create or replace function private.close_abandoned_shop(p_seller_id uuid) returns void
 language plpgsql security definer
 set search_path = ''
 as $$
 begin
   update public.sellers s set status = 'closed' where s.id = p_seller_id and s.status <> 'closed';
+  delete from public.payout_detail_requests r where r.seller_id = p_seller_id;
   if not exists (select 1 from public.order_items i where i.seller_id = p_seller_id)
      and not exists (select 1 from public.payouts po where po.seller_id = p_seller_id)
      and not exists (select 1 from public.ledger_entries e
@@ -797,8 +903,10 @@ grant execute on function
   public.delete_my_account()
 to authenticated;
 
--- The Data API runs check_request as the caller, visitors included.
-grant execute on function public.check_request() to anon, authenticated;
+-- The Data API runs check_request as the caller, visitors included, and the
+-- server-side caller too (the notification worker's secret key runs as
+-- service_role; it has no user id, so the function returns at once for it).
+grant execute on function public.check_request() to anon, authenticated, service_role;
 
 -- Only Auth itself calls the hook.
 grant execute on function public.hook_mfa_verification_attempt(jsonb) to supabase_auth_admin;

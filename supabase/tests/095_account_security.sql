@@ -128,10 +128,20 @@ do $$
 declare v_rows integer;
 begin
   assert not exists (select 1 from private.my_seller_ids()), 'no shops at aal1';
-  update public.seller_private set payout_iban = 'CR99999999999999999999'
+  -- The payout account itself is never written directly (082300: only an
+  -- approved request changes it); the columns a seller admin may still write
+  -- are refused at aal1 too.
+  update public.seller_private set fiscal_address = 'Dirección cambiada a aal1'
   where seller_id = current_setting('t.shop')::uuid;
   get diagnostics v_rows = row_count;
-  assert v_rows = 0, 'the payout account cannot be changed at aal1';
+  assert v_rows = 0, 'the shop''s fiscal details cannot be changed at aal1';
+  begin
+    update public.seller_private set payout_iban = 'CR99999999999999999999'
+    where seller_id = current_setting('t.shop')::uuid;
+    raise exception 'the payout account was writable directly';
+  exception when insufficient_privilege then
+    null;
+  end;
   assert not exists (select 1 from public.seller_private where seller_id = current_setting('t.shop')::uuid),
     'the bank details cannot be read at aal1';
   begin
@@ -881,7 +891,39 @@ select pg_temp.remember('traded_needles', (
 select pg_temp.remember('traded_identity', (
   select sp.legal_name || '|' || sp.id_number
   from public.seller_private sp where sp.seller_id = current_setting('t.traded_shop')::uuid));
+-- A request to change the payout account (082300) holds an account number, its
+-- holder and a SINPE number: it goes with the shop.
+insert into public.payout_detail_requests (seller_id, payout_iban, payout_holder_name, sinpe_movil_number, requested_by)
+select current_setting('t.traded_shop')::uuid, 'CR11015108410026019999', 'Titular De Prueba', '+50687779999', m.user_id
+from public.seller_members m where m.seller_id = current_setting('t.traded_shop')::uuid limit 1;
+select pg_temp.remember('traded_iban_last4', (
+  select right(sp.payout_iban, 4) from public.seller_private sp
+  where sp.seller_id = current_setting('t.traded_shop')::uuid));
 select private.close_abandoned_shop(current_setting('t.traded_shop')::uuid);
+do $$
+declare r record;
+begin
+  assert not exists (select 1 from public.payout_detail_requests
+                     where seller_id = current_setting('t.traded_shop')::uuid),
+    'the closed shop''s payout-account requests are gone';
+  -- Both audit rules hold in the same row: the payout account keeps only its
+  -- last four digits (082300), and the shop's personal columns are left out,
+  -- with the names of those that changed (082500).
+  select * into r from private.audit_log l
+  where l.table_name = 'seller_private' and l.action = 'UPDATE'
+    and l.row_key = current_setting('t.traded_shop')
+  order by l.id desc limit 1;
+  assert r.old_row ->> 'payout_iban_masked' = 'CR•• •••• •••• •••• ' || current_setting('t.traded_iban_last4'),
+    format('the old account keeps its last four digits: %s', r.old_row);
+  assert not (r.old_row ? 'payout_iban') and not (r.new_row ? 'payout_iban'),
+    'never the whole account number';
+  assert not (r.old_row ?| array['contact_email', 'contact_phone', 'fiscal_address', 'payout_holder_name'])
+     and not (r.new_row ?| array['contact_email', 'contact_phone', 'fiscal_address', 'payout_holder_name']),
+    format('no personal column of the shop: %s', r.new_row);
+  assert r.new_row -> 'changed_private' ?& array['contact_email', 'contact_phone', 'payout_iban'],
+    format('the changed columns are named: %s', r.new_row -> 'changed_private');
+end
+$$;
 -- (The same owner runs another shop with the same contact details, so the
 -- search is limited to this shop's own row and its audit trail.)
 do $$
@@ -931,7 +973,13 @@ begin
       'order_events.actor_id', 'stock_movements.actor_id', 'inbound_shipments.created_by',
       'pick_tasks.picked_by', 'routes.created_by', 'driver_settlements.settled_by',
       'ledger_transactions.created_by', 'content_reports.resolved_by',
-      'return_requests.decided_by', 'return_requests.refunded_by');
+      'return_requests.decided_by', 'return_requests.refunded_by',
+      -- the same, for payouts and listing edits (082300, 082400): who asked for
+      -- a payout account, who decided, who ran or marked a payout, who proposed
+      -- or decided a listing change
+      'payout_detail_requests.requested_by', 'payout_detail_requests.decided_by',
+      'payout_runs.created_by', 'payouts.paid_by', 'payouts.failed_by',
+      'product_change_requests.submitted_by', 'product_change_requests.decided_by');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end
 $$;
