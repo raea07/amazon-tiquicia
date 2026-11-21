@@ -14,7 +14,6 @@
  */
 
 import { ApiError, authErrorMessage, waitText } from "@yuntera/db";
-import { refresh } from "next/cache";
 import { isEmail, isLinkType, isTokenHash, normaliseCode, passwordProblem } from "../auth-rules";
 import { safeReturnPath } from "../paths";
 import type { ActionState } from "../types";
@@ -304,12 +303,9 @@ export async function confirmEnrolment(
   const failure = await passSecondStep(factorId, formData.get("code"));
   if (failure) return { ...keep, ...failure };
   const next = field(formData, "siguiente");
-  if (next) redirectTo(safeReturnPath(next));
-  refresh();
-  return {
-    ok: "Listo: la verificación en dos pasos quedó activada. Le pediremos un código cada vez que ingrese.",
-    step: "done",
-  };
+  // A redirect rather than a message: the new session cookie makes the page
+  // behind render again anyway, and the "manage" view shows the outcome.
+  redirectTo(next ? safeReturnPath(next) : "/dos-pasos?estado=activada");
 }
 
 /**
@@ -331,9 +327,11 @@ export async function removeSecondFactor(
   if (error) return { error: authErrorMessage(error) };
   // The token in the cookie still says aal2 until it is renewed.
   await supabase.auth.refreshSession();
-  if (formData.get("intent") === "replace") redirectTo("/dos-pasos");
-  refresh();
-  return { ok: "Quitamos la verificación en dos pasos de su cuenta." };
+  redirectTo(
+    formData.get("intent") === "replace"
+      ? "/dos-pasos?estado=cambiar"
+      : "/dos-pasos?estado=quitada",
+  );
 }
 
 // ── Account deletion ────────────────────────────────────────────────────────

@@ -252,8 +252,23 @@ export function SecondFactorPage({
   );
 }
 
+const OUTCOME: Record<string, { tone: "success" | "info"; text: string }> = {
+  activada: {
+    tone: "success",
+    text: "Listo: la verificación en dos pasos quedó activada. Le pediremos un código cada vez que ingrese.",
+  },
+  quitada: { tone: "info", text: "Quitamos la verificación en dos pasos de su cuenta." },
+  cambiar: {
+    tone: "info",
+    text: "Quitamos la aplicación anterior. Configure ahora la nueva para seguir protegido.",
+  },
+};
+
 async function SecondFactor({ searchParams }: { searchParams: SearchParams }) {
-  const next = one((await searchParams).siguiente);
+  const query = await searchParams;
+  const next = one(query.siguiente);
+  const outcome = OUTCOME[one(query.estado) ?? ""];
+  const notice = outcome ? <Alert tone={outcome.tone}>{outcome.text}</Alert> : null;
   const security = await getSecurity();
   if (!security) redirectTo(signInPath("/dos-pasos"));
   if (security.factorId && security.aal !== "aal2") {
@@ -262,6 +277,7 @@ async function SecondFactor({ searchParams }: { searchParams: SearchParams }) {
   if (security.factorId) {
     return (
       <div className="flex flex-col gap-4">
+        {notice}
         <p className="flex items-center gap-2 text-sm">
           Estado: <SecondFactorBadge active />
         </p>
@@ -272,11 +288,15 @@ async function SecondFactor({ searchParams }: { searchParams: SearchParams }) {
             seguir usando la consola.
           </p>
         ) : null}
+        <Link href="/cuenta" className={buttonClass({ variant: "secondary" })}>
+          Volver a su cuenta
+        </Link>
       </div>
     );
   }
   return (
     <div className="flex flex-col gap-4">
+      {notice}
       {security.mfaRequired ? (
         <Alert tone="warning" title="Su puesto requiere este paso">
           Para usar la consola interna, configure ahora la verificación en dos pasos. Toma un

@@ -342,13 +342,6 @@ export function EnrolFactor({ returnTo }: { returnTo?: string }) {
   const [confirmed, confirm] = useActionState(confirmEnrolment, started);
   const scan = confirmed.data ?? started.data;
 
-  if (confirmed.step === "done") {
-    return (
-      <Alert tone="success" title="Verificación activada">
-        {confirmed.ok}
-      </Alert>
-    );
-  }
   if (!scan?.factorId) {
     return (
       <form action={start} className="flex flex-col gap-4">
@@ -406,7 +399,6 @@ export function EnrolFactor({ returnTo }: { returnTo?: string }) {
 /** Removing or replacing the authenticator, each only with a fresh code from it. */
 export function RemoveFactorForm() {
   const [state, action] = useActionState(removeSecondFactor, initial);
-  if (state.ok) return <FormMessage state={state} />;
   return (
     <form action={action} className="flex flex-col gap-3">
       <CodeField

@@ -213,8 +213,8 @@ begin
 
   insert into private.audit_log (actor_id, action, table_name, row_key, old_row, new_row)
   values (v_admin, 'RESET_MFA', 'auth.mfa_factors', p_user_id::text,
-          jsonb_build_object('factors', v_factors),
-          jsonb_build_object('factors', 0, 'sessions_ended', v_sessions));
+          jsonb_build_object('factors', v_factors, 'sessions', v_sessions),
+          jsonb_build_object('factors', 0, 'sessions', 0));
 
   return jsonb_build_object('factors_removed', v_factors, 'sessions_ended', v_sessions);
 end;
