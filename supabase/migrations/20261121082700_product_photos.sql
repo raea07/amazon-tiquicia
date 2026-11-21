@@ -345,6 +345,13 @@ as $$
 declare
   ph public.product_photos;
 begin
+  -- Storage does not run the Data API's check_request, so the same checks
+  -- (20261121082500_account_security.sql) are made here: an ended session or a
+  -- deleted account, and a password-only session of an account with a second
+  -- factor, can do nothing with these files.
+  if not (private.session_alive() and private.factor_ok()) then
+    return false;
+  end if;
   if private.storage_upsert_requested() then
     return false;
   end if;
@@ -419,6 +426,10 @@ declare
   v_operation text := private.storage_operation();
 begin
   if p_bucket not in ('product-photos-pending', 'product-photos') then
+    return false;
+  end if;
+  -- As for adding files: Storage does not run check_request.
+  if not (private.session_alive() and private.factor_ok()) then
     return false;
   end if;
   if private.has_staff_role('catalog') then
@@ -1333,6 +1344,60 @@ begin
     jsonb_build_object('product_id', ph.product_id, 'photo_id', ph.id));
   return jsonb_build_object('product_id', ph.product_id, 'photo_id', ph.id,
                             'was_public', ph.published_at is not null);
+end;
+$$;
+
+-- ═══ Deleting an account ═══════════════════════════════════════════════════
+-- delete_my_account (20261121082500_account_security.sql) refuses while the
+-- person is the last one in charge of an open shop, and closes a shop they
+-- leave with nobody in charge. That was written before photos existed; the
+-- closing now also takes the shop's photos out of the review queue and the
+-- shop. The same function as in 082500 otherwise; keep the two in step.
+create or replace function private.close_abandoned_shop(p_seller_id uuid) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_product uuid;
+begin
+  update public.sellers s set status = 'closed' where s.id = p_seller_id and s.status <> 'closed';
+  delete from public.payout_detail_requests r where r.seller_id = p_seller_id;
+  -- The shop's photos (this file): nothing it left waiting for review goes on,
+  -- and what it published goes too, unless another shop still sells that
+  -- listing, which keeps its pictures. Removed photos' files become
+  -- disposable; the console deletes them through the storage API (no
+  -- database function can), keeping the public copy of any photo a past order
+  -- still shows. Their descriptions go: they may describe the person.
+  for v_product in
+    update public.product_photos ph
+    set state = 'removed', live_position = null, remove_requested_at = null,
+        alt = null, live_alt = null
+    where ph.seller_id = p_seller_id
+      and ph.state in ('uploading', 'pending', 'approved')
+      and not (ph.state = 'approved' and ph.published_at is not null
+               and exists (select 1 from public.offers o
+                           join public.skus k on k.id = o.sku_id
+                           where k.product_id = ph.product_id and o.seller_id <> p_seller_id
+                             and o.status = 'active'))
+    returning ph.product_id
+  loop
+    perform private.sync_product_images(v_product);
+  end loop;
+  if not exists (select 1 from public.order_items i where i.seller_id = p_seller_id)
+     and not exists (select 1 from public.payouts po where po.seller_id = p_seller_id)
+     and not exists (select 1 from public.ledger_entries e
+                     join public.ledger_accounts a on a.id = e.account_id
+                     where a.seller_id = p_seller_id) then
+    delete from public.seller_private sp where sp.seller_id = p_seller_id;
+  else
+    update public.seller_private sp
+    set contact_email = p_seller_id::text || '@tienda-cerrada.invalid',
+        contact_phone = '+50620000000',
+        fiscal_address = 'Eliminada junto con la cuenta.',
+        postal_code = null, payout_iban = null, payout_holder_name = null,
+        sinpe_movil_number = null, kyc_notes = null
+    where sp.seller_id = p_seller_id;
+  end if;
 end;
 $$;
 

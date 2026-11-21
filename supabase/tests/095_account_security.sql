@@ -901,8 +901,41 @@ select pg_temp.remember('bazar_shop', (
   where u.email = 'bazar@yuntera.example'));
 select pg_temp.remember('bazar_needles', (
   select jsonb_build_array(sp.legal_name, sp.id_number, sp.contact_phone, sp.fiscal_address,
-                           'bazar@yuntera.example')::text
+                           'bazar@yuntera.example', 'Laura sonriendo en su puesto del bazar')::text
   from public.seller_private sp where sp.seller_id = current_setting('t.bazar_shop')::uuid));
+-- Before that she uploaded a photo for a draft listing, described with her own
+-- name (20261121082700_product_photos.sql): it waits for review.
+select pg_temp.login('bazar@yuntera.example');
+do $$
+declare
+  created jsonb;
+  r jsonb;
+  f jsonb;
+begin
+  created := public.seller_create_listing(
+    current_setting('t.bazar_shop')::uuid, 'Canasta tejida a mano', 'hogar',
+    'Canasta de fibra natural.', array['Hecha a mano'], 1500000, 'seller', 2::smallint,
+    600, 30, 30, 20, false);
+  r := public.seller_reserve_photo((created ->> 'product_id')::uuid);
+  perform set_config('storage.operation', 'storage.object.upload', true);
+  for f in select * from jsonb_array_elements(r -> 'files') loop
+    insert into storage.objects (bucket_id, name, owner_id, metadata, version)
+    values ('product-photos-pending', f ->> 'path', auth.uid()::text,
+            jsonb_build_object('mimetype', 'image/jpeg', 'size', 90000, 'eTag', '"e' || (f ->> 'size') || '"'),
+            gen_random_uuid()::text);
+  end loop;
+  perform set_config('storage.operation', '', true);
+  perform public.seller_finish_photo((r ->> 'photo_id')::uuid, 'Laura sonriendo en su puesto del bazar', 1600, 1200);
+  perform set_config('t.bazar_photo', r ->> 'photo_id', true);
+end
+$$;
+reset role;
+do $$
+begin
+  assert (select state from public.product_photos where id = current_setting('t.bazar_photo')::uuid) = 'pending',
+    'the photo waits for review';
+end
+$$;
 select pg_temp.login('bazar@yuntera.example');
 do $$
 begin
@@ -929,6 +962,15 @@ begin
     'the shop left with nobody in charge is closed';
   assert not exists (select 1 from public.seller_members where seller_id = current_setting('t.bazar_shop')::uuid),
     'and has no members';
+  -- Her photo leaves the review queue and the shop; its files are now
+  -- disposable for the console's next clean-up.
+  assert (select state from public.product_photos where id = current_setting('t.bazar_photo')::uuid) = 'removed',
+    'the closed shop''s photo is removed';
+  assert exists (select 1 from storage.objects o
+                 where o.bucket_id = 'product-photos-pending'
+                   and o.name like current_setting('t.bazar_shop') || '/%'
+                   and private.photo_object_disposable(o.bucket_id, o.name, o.created_at)),
+    'and its files can be deleted';
 end
 $$;
 
@@ -1040,7 +1082,10 @@ begin
       -- kept without a message body: what was sent to the person, and who
       -- changed a shop's settings, recorded consent or retried a message
       'private.notification_deliveries.recipient_user_id', 'private.notification_preferences.updated_by',
-      'private.commercial_consent_log.actor_id', 'private.notification_deliveries.retried_by');
+      'private.commercial_consent_log.actor_id', 'private.notification_deliveries.retried_by',
+      -- who uploaded or decided a shop's photo (082700): the photo is the
+      -- shop's, and closing a shop with nobody in charge removes its photos
+      'product_photos.created_by', 'product_photos.decided_by');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end
 $$;

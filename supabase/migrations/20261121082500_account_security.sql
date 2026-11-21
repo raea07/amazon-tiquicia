@@ -238,6 +238,22 @@ as $$
   where m.user_id = (select auth.uid()) and private.factor_ok();
 $$;
 
+-- True for a visitor or a server key, and for a signed-in caller whose account
+-- still exists and whose session (the token's session_id) has not ended. The
+-- Data API gets this from check_request below; Storage and Realtime do not run
+-- that function, so their rules call this (and factor_ok) themselves.
+create or replace function private.session_alive() returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select (select auth.uid()) is null
+      or (exists (select 1 from auth.users u
+                  where u.id = (select auth.uid()) and u.deleted_at is null)
+          and ((select auth.jwt()) ->> 'session_id' is null
+               or exists (select 1 from auth.sessions s
+                          where s.id::text = (select auth.jwt()) ->> 'session_id')));
+$$;
+
 -- Runs before every Data API request (PostgREST's `db_pre_request`, set
 -- below), in the same transaction, as the caller. Refuses:
 --   * a token whose account was deleted, or whose session was ended (signed
@@ -878,6 +894,7 @@ $$;
 revoke execute on function
   private.mfa_status(uuid),
   private.factor_ok(),
+  private.session_alive(),
   private.account_deletion_blockers(uuid),
   private.close_abandoned_shop(uuid),
   public.mfa_attempt_status(),

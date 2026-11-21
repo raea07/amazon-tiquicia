@@ -213,6 +213,24 @@ select pg_temp.denied(format($q$select pg_temp.put('product-photos-pending', %L)
   current_setting('t.tecnocasa') || '/' || current_setting('t.draft') || '/' || gen_random_uuid() || '/400.jpg'));
 select pg_temp.denied(format($q$select pg_temp.put('product-photos-pending', %L)$q$, 'otra-carpeta/400.jpg'));
 select pg_temp.denied(format($q$select pg_temp.put('product-photos', %L)$q$, current_setting('t.prefix1') || '400.jpg'));
+reset role; select pg_temp.logout();
+-- Storage does not run the Data API's check_request: its rules refuse an ended
+-- session, and a password-only session of an account with a second factor.
+select set_config('request.jwt.claims', json_build_object(
+  'sub', (select id from auth.users where email = 'vendedor@yuntera.example'),
+  'role', 'authenticated', 'aal', 'aal1', 'session_id', gen_random_uuid())::text, true);
+set local role authenticated;
+select pg_temp.denied(format($q$select pg_temp.put('product-photos-pending', %L)$q$, current_setting('t.prefix1') || '400.jpg'));
+reset role; select pg_temp.logout();
+insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret)
+select gen_random_uuid(), id, 'Prueba', 'totp', 'verified', now(), now(), 'JBSWY3DPEHPK3PXP'
+from auth.users where email = 'vendedor@yuntera.example';
+select pg_temp.login('vendedor@yuntera.example');
+select pg_temp.denied(format($q$select pg_temp.put('product-photos-pending', %L)$q$, current_setting('t.prefix1') || '400.jpg'));
+reset role; select pg_temp.logout();
+delete from auth.mfa_factors f using auth.users u
+where u.id = f.user_id and u.email = 'vendedor@yuntera.example';
+select pg_temp.login('vendedor@yuntera.example');
 -- its own files
 select pg_temp.put('product-photos-pending', current_setting('t.prefix1') || '400.jpg');
 select pg_temp.put('product-photos-pending', current_setting('t.prefix1') || '800.jpg');
