@@ -101,6 +101,17 @@ describe.skipIf(!available)("resolved app configuration", () => {
     }
   }
 
+  // What App Store Connect reads to skip the export-compliance question
+  // (config.ts explains why "no" is the true answer).
+  for (const app of APPS) {
+    for (const variant of [undefined, "preview", "development"] as const) {
+      it(`${app} (${variant ?? "store build"}): declares no non-exempt encryption`, () => {
+        const { ios } = introspect(app, variant);
+        expect(ios.infoPlist.ITSAppUsesNonExemptEncryption).toBe(false);
+      }, 30_000);
+    }
+  }
+
   it("drivers' app runs in the background for location only", () => {
     const { ios } = introspect("driver");
     expect(ios.infoPlist.UIBackgroundModes).toEqual(["location"]);
