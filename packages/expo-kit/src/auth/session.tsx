@@ -49,7 +49,8 @@ export interface SessionValue {
     password: string;
     accepted: boolean;
   }): Promise<{ error?: string; ok?: string; signedIn?: boolean }>;
-  signOut(): Promise<void>;
+  /** Resolves to true when this phone is signed out (see signOutDevice). */
+  signOut(): Promise<boolean>;
   reloadRoles(): Promise<void>;
 }
 
@@ -64,7 +65,7 @@ function viewerOf(session: Session | null): Viewer | null {
 
 /**
  * Holds the signed-in person for the whole app: the session (kept by
- * supabase-js in the encrypted store), and their roles, read from the
+ * supabase-js in the phone's secure store), and their roles, read from the
  * database after every sign-in and whenever the app returns to the screen, so
  * removing someone's role takes effect without a new sign-in.
  */
@@ -116,7 +117,9 @@ export function SessionProvider({
       setRolesError(null);
     } catch (error) {
       // The session was ended elsewhere (signed out, password changed, account
-      // deleted): the database refuses its token, so the phone signs out too.
+      // deleted): the database refuses its token, so the phone signs out too
+      // and removes it from the secure store. If the store refuses, the next
+      // return to the screen tries again.
       if (error instanceof ApiError && error.code === "session_ended") {
         await signOutDevice(supabase.auth);
         queryClient.clear();
@@ -202,9 +205,11 @@ export function SessionProvider({
   );
 
   const signOut = useCallback(async () => {
-    // Never leaves the phone signed in, even offline (see signOutDevice).
-    await signOutDevice(supabase.auth);
+    // Signs the phone out even offline; false only when the secure store
+    // refused to delete the session (see signOutDevice).
+    const signedOut = await signOutDevice(supabase.auth);
     queryClient.clear();
+    return signedOut;
   }, [supabase, queryClient]);
 
   const value = useMemo<SessionValue>(
