@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Native build scripts we do not need to run on install.
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
+  - esbuild

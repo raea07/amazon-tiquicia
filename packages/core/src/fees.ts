@@ -1,0 +1,213 @@
+/**
+ * Marketplace fee engine: what the platform charges a seller for an order and
+ * what the seller is paid out.
+ *
+ * The NUMBERS in `DEFAULT_FEE_SCHEDULE` are working assumptions for planning,
+ * not a decided price list — see docs/01-product/pricing-and-fees.md. The
+ * STRUCTURE is what this module guarantees: every fee is itemised, fees carry
+ * IVA on top (they are a B2B service invoiced by the platform), and
+ * `payout + feesGross === itemsGross + shippingPassedToSeller` to the céntimo.
+ */
+
+import { add, type BasisPoints, type Money, money, percentage, subtract, sum } from "./money";
+
+export type PaymentMethod = "card" | "sinpe_movil" | "cash_on_delivery" | "bank_transfer";
+
+export interface SizeTier {
+  id: string;
+  maxWeightGrams: number;
+  maxLongestSideCm: number;
+  feeMinor: number;
+}
+
+export interface FeeSchedule {
+  version: string;
+  /** Referral (commission) rate by top-level category slug. */
+  referralBpsByCategory: Readonly<Record<string, BasisPoints>>;
+  defaultReferralBps: BasisPoints;
+  /** Floor per unit sold, so very cheap items still cover handling. */
+  minReferralFeePerUnitMinor: number;
+  /** Pick-pack-ship fee per unit when the platform fulfils. Ordered smallest first. */
+  fulfillmentTiers: readonly SizeTier[];
+  paymentBpsByMethod: Readonly<Record<PaymentMethod, BasisPoints>>;
+  /** Flat handling charge per order paid in cash on delivery. */
+  cashOnDeliveryHandlingMinor: number;
+  /** IVA charged on the platform's fees. */
+  feeTaxBps: BasisPoints;
+}
+
+export const DEFAULT_FEE_SCHEDULE: FeeSchedule = {
+  version: "2026-11-assumptions",
+  referralBpsByCategory: {
+    electronica: 800,
+    computacion: 800,
+    celulares: 800,
+    electrodomesticos: 1000,
+    hogar: 1200,
+    ferreteria: 1200,
+    deportes: 1200,
+    juguetes: 1200,
+    mascotas: 1200,
+    libros: 1200,
+    belleza: 1300,
+    moda: 1500,
+    abarrotes: 800,
+    "hecho-en-cr": 1000,
+  },
+  defaultReferralBps: 1200,
+  minReferralFeePerUnitMinor: 15_000, // ₡150
+  fulfillmentTiers: [
+    { id: "sobre", maxWeightGrams: 500, maxLongestSideCm: 30, feeMinor: 90_000 },
+    { id: "pequeno", maxWeightGrams: 2_000, maxLongestSideCm: 45, feeMinor: 140_000 },
+    { id: "mediano", maxWeightGrams: 10_000, maxLongestSideCm: 60, feeMinor: 240_000 },
+    { id: "grande", maxWeightGrams: 30_000, maxLongestSideCm: 120, feeMinor: 490_000 },
+  ],
+  paymentBpsByMethod: {
+    card: 350,
+    sinpe_movil: 100,
+    cash_on_delivery: 200,
+    bank_transfer: 50,
+  },
+  cashOnDeliveryHandlingMinor: 30_000, // ₡300
+  feeTaxBps: 1300,
+};
+
+export interface FeeLineInput {
+  lineId: string;
+  categorySlug: string;
+  /** Tax-inclusive unit price the buyer pays. */
+  unitGross: Money;
+  quantity: number;
+  /** True when stock ships from a platform warehouse. */
+  fulfilledByPlatform: boolean;
+  weightGrams: number;
+  longestSideCm: number;
+}
+
+export interface FeeLineResult {
+  lineId: string;
+  itemsGross: Money;
+  referralBps: BasisPoints;
+  referralFee: Money;
+  fulfillmentTierId: string | null;
+  fulfillmentFee: Money;
+}
+
+export interface SellerStatement {
+  scheduleVersion: string;
+  lines: FeeLineResult[];
+  itemsGross: Money;
+  /** Shipping the buyer paid that belongs to the seller (seller-fulfilled orders only). */
+  shippingPassedToSeller: Money;
+  referralFee: Money;
+  fulfillmentFee: Money;
+  paymentFee: Money;
+  feesNet: Money;
+  feesTax: Money;
+  feesGross: Money;
+  /** What the seller receives. Can be negative on tiny orders; the caller must handle that. */
+  payout: Money;
+}
+
+export class OversizeItemError extends Error {
+  constructor(public readonly lineId: string) {
+    super(`Line ${lineId} exceeds the largest fulfilment tier and cannot be platform-fulfilled`);
+    this.name = "OversizeItemError";
+  }
+}
+
+export function fulfillmentTierFor(
+  weightGrams: number,
+  longestSideCm: number,
+  schedule: FeeSchedule = DEFAULT_FEE_SCHEDULE,
+): SizeTier | null {
+  return (
+    schedule.fulfillmentTiers.find(
+      (t) => weightGrams <= t.maxWeightGrams && longestSideCm <= t.maxLongestSideCm,
+    ) ?? null
+  );
+}
+
+export function computeSellerStatement(
+  input: {
+    lines: readonly FeeLineInput[];
+    paymentMethod: PaymentMethod;
+    shippingPassedToSeller?: Money;
+  },
+  schedule: FeeSchedule = DEFAULT_FEE_SCHEDULE,
+): SellerStatement {
+  if (input.lines.length === 0) throw new RangeError("A statement needs at least one line");
+  const currency = input.lines[0]?.unitGross.currency ?? "CRC";
+  const zero = money(0, currency);
+
+  const lines: FeeLineResult[] = input.lines.map((line) => {
+    if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
+      throw new RangeError(`Line ${line.lineId}: quantity must be a positive integer`);
+    }
+    const itemsGross = money(line.unitGross.amountMinor * line.quantity, currency);
+    const referralBps =
+      schedule.referralBpsByCategory[line.categorySlug] ?? schedule.defaultReferralBps;
+    const byRate = percentage(itemsGross, referralBps).amountMinor;
+    const floor = schedule.minReferralFeePerUnitMinor * line.quantity;
+    // The floor can never exceed the sale itself.
+    const referralFee = money(Math.min(Math.max(byRate, floor), itemsGross.amountMinor), currency);
+
+    let fulfillmentFee = zero;
+    let fulfillmentTierId: string | null = null;
+    if (line.fulfilledByPlatform) {
+      const tier = fulfillmentTierFor(line.weightGrams, line.longestSideCm, schedule);
+      if (!tier) throw new OversizeItemError(line.lineId);
+      fulfillmentTierId = tier.id;
+      fulfillmentFee = money(tier.feeMinor * line.quantity, currency);
+    }
+    return {
+      lineId: line.lineId,
+      itemsGross,
+      referralBps,
+      referralFee,
+      fulfillmentTierId,
+      fulfillmentFee,
+    };
+  });
+
+  const itemsGross = sum(
+    lines.map((l) => l.itemsGross),
+    currency,
+  );
+  const shippingPassedToSeller = input.shippingPassedToSeller ?? zero;
+  const collected = add(itemsGross, shippingPassedToSeller);
+
+  const referralFee = sum(
+    lines.map((l) => l.referralFee),
+    currency,
+  );
+  const fulfillmentFee = sum(
+    lines.map((l) => l.fulfillmentFee),
+    currency,
+  );
+  const paymentFee = add(
+    percentage(collected, schedule.paymentBpsByMethod[input.paymentMethod]),
+    money(
+      input.paymentMethod === "cash_on_delivery" ? schedule.cashOnDeliveryHandlingMinor : 0,
+      currency,
+    ),
+  );
+
+  const feesNet = sum([referralFee, fulfillmentFee, paymentFee], currency);
+  const feesTax = percentage(feesNet, schedule.feeTaxBps);
+  const feesGross = add(feesNet, feesTax);
+
+  return {
+    scheduleVersion: schedule.version,
+    lines,
+    itemsGross,
+    shippingPassedToSeller,
+    referralFee,
+    fulfillmentFee,
+    paymentFee,
+    feesNet,
+    feesTax,
+    feesGross,
+    payout: subtract(collected, feesGross),
+  };
+}

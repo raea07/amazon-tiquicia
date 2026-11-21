@@ -1,0 +1,38 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# build output
+.next
+out
+dist
+build
+.turbo
+.expo
+web-build
+*.tsbuildinfo
+next-env.d.ts
+expo-env.d.ts
+
+# testing
+coverage
+playwright-report
+test-results
+
+# env — never commit secrets. `.env.example` files are the only env files tracked.
+.env
+.env.*
+!.env.example
+
+# platform
+.vercel
+supabase/.temp
+supabase/.branches
+
+# local postgres used for migration tests
+.pgdata
+
+# misc
+.DS_Store
+*.pem
+*.log

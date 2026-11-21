@@ -1,0 +1,28 @@
+{
+  "name": "yuntera",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Yuntera — marketplace, fulfillment and last-mile platform for Costa Rica",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "db:local:up": "bash supabase/scripts/local-db.sh up",
+    "db:local:reset": "bash supabase/scripts/local-db.sh reset",
+    "db:local:test": "bash supabase/scripts/local-db.sh test",
+    "db:types": "bash supabase/scripts/gen-types.sh",
+    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.8",
+    "turbo": "2.11.13",
+    "typescript": "5.9.3"
+  }
+}
