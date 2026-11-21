@@ -24,7 +24,7 @@ function HideSplashWhenReady({ children }: { children: ReactNode }) {
 
 /**
  * Everything an app needs around its screens: safe areas, the data cache,
- * the Supabase client with its encrypted session, the signed-in person and
+ * the Supabase client with its session in the secure store, the signed-in person and
  * their roles, and the brand's fonts. Each app's root `_layout.tsx` wraps its
  * navigator in this, passing the public settings it was built with.
  */
