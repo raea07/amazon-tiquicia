@@ -1,0 +1,13 @@
+{
+  "name": "@yuntera/native-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser journeys through the web export of the native apps. Run with tools/dev/stack.sh native-e2e <lane>.",
+  "scripts": {
+    "journeys": "node run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
