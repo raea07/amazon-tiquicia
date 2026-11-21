@@ -136,7 +136,9 @@ from cron.job_run_details d join cron.job j using (jobid) group by 1, 2;
 ```
 
 On the preview, `expire-unpaid-orders` had run 6 times in its first 25
-minutes, every run `succeeded` in under 0.06 s. `refresh-product-signals` runs
+minutes, every run `succeeded` in under 0.06 s, and at 18:55 it cancelled the
+seed's unpaid SINPE Móvil order, 33 minutes after it was placed (12 runs, none
+failed). `refresh-product-signals` runs
 daily at 08:17 UTC, so it has no history on the first day.
 
 Then read the security and performance advisors (Advisors in the dashboard,
