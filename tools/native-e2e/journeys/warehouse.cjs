@@ -10,6 +10,7 @@
 //
 // Fails on any console error, uncaught exception or 5xx.
 
+const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
@@ -39,7 +40,8 @@ async function rpcAs(email, calls) {
       data: args,
     });
     if (!response.ok()) throw new Error(`${fn}: HTTP ${response.status()}`);
-    out.push(await response.json());
+    const body = await response.text();
+    out.push(body ? JSON.parse(body) : null);
   }
   await context.dispose();
   return out;
@@ -53,14 +55,46 @@ async function rpcAs(email, calls) {
     ["seller_locations", { p_seller_id: tecno.id }],
     ["seller_listings", { p_seller_id: tecno.id }],
   ]);
+  const curridabat = locations.platform[0].id;
   await rpcAs("vendedor@yuntera.example", [
     [
       "seller_create_inbound",
       {
-        p_warehouse_id: locations.platform[0].id,
+        p_warehouse_id: curridabat,
         p_seller_id: tecno.id,
         p_lines: [{ sku_id: listings[0].sku_id, quantity: 12 }],
       },
+    ],
+  ]);
+
+  // A second platform warehouse, so the lead has two to choose from. The API
+  // has no function that creates a warehouse (they are set up once, by hand),
+  // so this one row goes straight into the lane's database; the assignment
+  // then goes through the API as operations staff.
+  const database = process.env.DATABASE_URL;
+  if (!database) throw new Error("DATABASE_URL is not set (run through tools/dev/stack.sh)");
+  const created = spawnSync(
+    "psql",
+    [
+      database,
+      "-X",
+      "-q",
+      "-t",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-c",
+      "insert into public.warehouses (code, name, kind, address, postal_code, lat, lng) " +
+        "values ('LIB1', 'Centro de distribución Liberia', 'platform', " +
+        "'Liberia, 200 m norte del parque', '50101', 10.6346, -85.4407) returning id",
+    ],
+    { encoding: "utf8" },
+  );
+  if (created.status !== 0) throw new Error(`psql: ${created.stderr}`);
+  const liberia = created.stdout.trim();
+  await rpcAs("central@yuntera.example", [
+    [
+      "ops_set_warehouse_staff",
+      { p_warehouse_id: liberia, p_email: "bodega@yuntera.example", p_role: "associate" },
     ],
   ]);
 
@@ -99,13 +133,48 @@ async function rpcAs(email, calls) {
   await byId("sign-in-password").fill(PASSWORD);
   await byId("sign-in-submit").click();
   await byId("warehouse-board").waitFor();
+
+  // ── Choosing the warehouse ──
+  // Assigned to two: the lead chooses, and the choice outlasts a reload.
+  const title = (name) => page.getByRole("heading", { name, exact: true }).first();
+  check(
+    await byId("warehouse-choice").isVisible(),
+    "assigned to two warehouses: a choice is offered",
+  );
+  await byId(`warehouse-choice-${liberia}`).click();
+  await title("Centro de distribución Liberia").waitFor();
+  await page.getByText("No hay pedidos en el piso ahora.").first().waitFor();
+  check(true, "choosing the other warehouse shows its board");
+  await shot("01-other-warehouse");
+  await page.reload({ waitUntil: "networkidle" });
+  await byId("warehouse-board").waitFor();
+  check(
+    await title("Centro de distribución Liberia").isVisible(),
+    "and the choice is kept after a reload",
+  );
+  await byId(`warehouse-choice-${curridabat}`).click();
+  await title("Centro de distribución Curridabat").waitFor();
+  // Both choices survive a reload, whichever of the two the app would start on.
+  await page.reload({ waitUntil: "networkidle" });
+  await byId("warehouse-board").waitFor();
+  check(
+    await title("Centro de distribución Curridabat").isVisible(),
+    "and so does choosing Curridabat again",
+  );
+  await page
+    .getByText(/Mercadería por recibir \(1\)/)
+    .first()
+    .waitFor();
   const board = await textOf("warehouse-board");
   log("   ", board.slice(0, 200));
-  check(/Pedidos \(\d+ por hacer\)/.test(board), "the board counts the parcels to do");
+  check(
+    /Pedidos \(\d+ por hacer\)/.test(board),
+    "back in Curridabat, the board counts the parcels to do",
+  );
   check(/Mercadería por recibir \(1\)/.test(board), "and lists the stock a seller announced");
   check(/Por alistar/.test(board), "a parcel waits to be picked, its state in words");
   await noSideways("board");
-  await shot("01-board");
+  await shot("02-board");
 
   // ── Pick list ──
   // A parcel with more than one line, so both ways of entering a code are used.
@@ -138,7 +207,7 @@ async function rpcAs(email, calls) {
   check(await byId("pick-input").isVisible(), "the typing path is there without a camera");
   check((await focusedId()) === "pick-input", "the scan field has the focus, ready for a scanner");
   await noSideways("pick list");
-  await shot("02-pick-start");
+  await shot("03-pick-start");
 
   // A wrong product is refused, and nothing is confirmed.
   await byId("pick-input").fill("YT-NOPE0000");
@@ -150,7 +219,7 @@ async function rpcAs(email, calls) {
     "a wrong code is refused, and the screen says which code it read",
   );
   check((await textOf("pick-progress")).startsWith("0 de"), "and no line was confirmed");
-  await shot("03-pick-wrong");
+  await shot("04-pick-wrong");
 
   for (let i = 0; i < lines; i++) {
     const location = await textOf("pick-location");
@@ -175,14 +244,14 @@ async function rpcAs(email, calls) {
       true,
       `line ${i + 1} (${location}, ${sku}) confirmed ${i === 0 ? "typed" : "as a scanner sends it"}: ${done}`,
     );
-    if (i === 0) await shot("04-pick-line-done");
+    if (i === 0) await shot("05-pick-line-done");
   }
   await byId("pack-submit").waitFor();
   check(
     (await textOf("pick-progress")).startsWith(`${lines} de ${lines}`),
     "every line is picked; packing opens",
   );
-  await shot("05-pick-all");
+  await shot("06-pick-all");
 
   // ── Pack ──
   await byId("pack-submit").click();
@@ -193,7 +262,7 @@ async function rpcAs(email, calls) {
     /zona de despacho/.test(packed) && packed.includes(tracking),
     "packed: take it to dispatch",
   );
-  await shot("06-packed");
+  await shot("07-packed");
 
   // ── Receive ──
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
@@ -216,7 +285,7 @@ async function rpcAs(email, calls) {
   await byId("receive-good").fill("10");
   await byId("receive-damaged").fill("1");
   await noSideways("receiving");
-  await shot("07-receive");
+  await shot("08-receive");
   await byId("receive-submit").click();
   await byId("receive-result").waitFor();
   const received = await textOf("receive-result");
@@ -228,7 +297,7 @@ async function rpcAs(email, calls) {
   const bin = /guardadas en (\S+)\./.exec(received)[1];
   await page.getByText("esperadas 12 · recibidas 10 · dañadas 1").first().waitFor();
   check(true, "the line now reads 10 received and 1 damaged");
-  await shot("08-received");
+  await shot("09-received");
 
   // ── Stock lookup ──
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
@@ -246,7 +315,7 @@ async function rpcAs(email, calls) {
   );
   check(found.includes(bin), `including the units just put away in ${bin}`);
   await noSideways("lookup");
-  await shot("09-lookup");
+  await shot("10-lookup");
   await byId("lookup-input").fill("NOEXISTE");
   await page.keyboard.press("Enter");
   await page
@@ -262,7 +331,7 @@ async function rpcAs(email, calls) {
     .first()
     .waitFor();
   check(true, "a barcode with a wrong check digit is refused before it is sent");
-  await shot("10-lookup-unknown");
+  await shot("11-lookup-unknown");
 
   log("\nERRORS:", errors.length ? errors : "none");
   await browser.close();
