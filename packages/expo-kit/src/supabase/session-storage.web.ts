@@ -7,7 +7,7 @@
  * this file must not be taken as the model for a public website.
  */
 
-import type { SessionStorage } from "./encrypted-storage";
+import type { SessionStorage } from "./secure-session-storage";
 
 function local(): Storage | null {
   try {

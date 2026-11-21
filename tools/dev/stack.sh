@@ -229,6 +229,8 @@ case "$COMMAND" in
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$API_KEY" EXPO_PUBLIC_SHOP_URL="" \
           pnpm exec expo export --platform web --clear --output-dir "$STATE/native/$app" \
           > "$STATE/native-$app-export.log" 2>&1 ) || { tail -40 "$STATE/native-$app-export.log" >&2; exit 1; }
+      # No cipher of our own may reach a bundle (decisions.md §18).
+      node "$ROOT/packages/expo-kit/scripts/scan-bundles.mjs" "$STATE/native/$app"
       start "native-$app" "$ROOT" node tools/native-e2e/serve.mjs "$STATE/native/$app" "$(native_port "$app")"
       wait_for "http://127.0.0.1:$(native_port "$app")/" 20
       echo "lane $LANE: $app-native (web export) on http://127.0.0.1:$(native_port "$app")"

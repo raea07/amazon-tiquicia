@@ -99,6 +99,17 @@ describe("defineAppConfig", () => {
     }
   });
 
+  it("declares in every app and variant that it uses no non-exempt encryption", () => {
+    for (const app of ["shop", "seller", "driver", "warehouse"] as const) {
+      for (const variant of ["development", "preview", undefined]) {
+        if (variant) process.env.APP_VARIANT = variant;
+        else delete process.env.APP_VARIANT;
+        const config = defineAppConfig(app, { slug: `yuntera-${app}` });
+        expect(config.ios?.config?.usesNonExemptEncryption, `${app} ${variant}`).toBe(false);
+      }
+    }
+  });
+
   it("carries no secret and no placeholder permission text", () => {
     const text = JSON.stringify(configFor());
     expect(text).not.toMatch(/secret|service_role|sb_secret/i);

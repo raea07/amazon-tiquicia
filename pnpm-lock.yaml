@@ -71,9 +71,6 @@ importers:
       expo-constants:
         specifier: ~58.0.16
         version: 58.0.16(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(typescript@5.9.3)
-      expo-crypto:
-        specifier: ~58.0.8
-        version: 58.0.8(expo@58.0.26)
       expo-dev-client:
         specifier: ~58.0.21
         version: 58.0.21(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))
@@ -387,9 +384,6 @@ importers:
       expo-constants:
         specifier: ~58.0.16
         version: 58.0.16(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(typescript@5.9.3)
-      expo-crypto:
-        specifier: ~58.0.8
-        version: 58.0.8(expo@58.0.26)
       expo-dev-client:
         specifier: ~58.0.21
         version: 58.0.21(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))
@@ -677,9 +671,6 @@ importers:
       expo-constants:
         specifier: ~58.0.16
         version: 58.0.16(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(typescript@5.9.3)
-      expo-crypto:
-        specifier: ~58.0.8
-        version: 58.0.8(expo@58.0.26)
       expo-dev-client:
         specifier: ~58.0.21
         version: 58.0.21(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))
@@ -893,9 +884,6 @@ importers:
       '@yuntera/db':
         specifier: workspace:*
         version: link:../db
-      aes-js:
-        specifier: 3.1.2
-        version: 3.1.2
     devDependencies:
       '@expo-google-fonts/bricolage-grotesque':
         specifier: 0.4.1
@@ -912,9 +900,6 @@ importers:
       '@tanstack/react-query':
         specifier: 5.108.2
         version: 5.108.2(@types/react@19.3.0)(react@19.3.0)
-      '@types/aes-js':
-        specifier: 3.1.4
-        version: 3.1.4
       '@types/node':
         specifier: ^22
         version: 22.20.5
@@ -927,9 +912,6 @@ importers:
       expo-constants:
         specifier: ~58.0.16
         version: 58.0.16(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(typescript@5.9.3)
-      expo-crypto:
-        specifier: ~58.0.8
-        version: 58.0.8(expo@58.0.26)
       expo-font:
         specifier: ~58.0.12
         version: 58.0.12(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
@@ -2788,9 +2770,6 @@ packages:
   '@tybys/wasm-util@0.10.5':
     resolution: {integrity: sha512-dOGOPxlaNV+G046mZzN+9C0dAcQZeSKcXiVaM0TYy/LM4ttTmgSBDxYfovcYI8Em3+eAbiAYpvWLOv8+ZVRJKA==}
 
-  '@types/aes-js@3.1.4':
-    resolution: {integrity: sha512-v3D66IptpUqh+pHKVNRxY8yvp2ESSZXe0rTzsGdzUhEwag7ljVfgCllkWv2YgiYXDhWFBrEywll4A5JToyTNFA==}
-
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
 
@@ -2893,9 +2872,6 @@ packages:
     resolution: {integrity: sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==}
     engines: {node: '>=0.4.0'}
     hasBin: true
-
-  aes-js@3.1.2:
-    resolution: {integrity: sha512-e5pEa2kBnBOgR4Y/p20pskXI74UEz7de8ZGVo58asOtvSVG5YAbJeELPZxOmt+Bnz3rX753YKhfIn4X4l1PPRQ==}
 
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
@@ -6749,8 +6725,6 @@ snapshots:
       tslib: 2.9.1
     optional: true
 
-  '@types/aes-js@3.1.4': {}
-
   '@types/chai@5.2.3':
     dependencies:
       '@types/deep-eql': 4.0.2
@@ -6850,8 +6824,6 @@ snapshots:
       negotiator: 1.1.0
 
   acorn@8.19.0: {}
-
-  aes-js@3.1.2: {}
 
   agent-base@7.1.4: {}
 

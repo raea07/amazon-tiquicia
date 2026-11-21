@@ -112,10 +112,12 @@ export function fontsPlugin(): PluginEntry {
  * both lines.
  *
  * expo-secure-store depends on androidx.biometric, whose Android manifest asks
- * for the fingerprint and biometric permissions; the manifest merger adds them
- * to every app (the first Android build of the shopper app requested them).
- * The apps keep the session in secure storage without biometric unlock
- * (no `requireAuthentication` anywhere), so both are removed.
+ * for USE_BIOMETRIC and USE_FINGERPRINT; the manifest merger adds them to
+ * every app (the first Android build of the shopper app requested them). No
+ * app unlocks anything with a fingerprint or face (the session is stored
+ * without `requireAuthentication`), so both are removed and the stores do not
+ * list a biometric permission. An app that adds a biometric feature deletes
+ * them here.
  */
 const ALWAYS_BLOCKED = [
   "android.permission.RECORD_AUDIO",
@@ -177,6 +179,21 @@ export function defineAppConfig(app: AppId, options: AppConfigOptions): ExpoConf
     ios: {
       bundleIdentifier: identifier,
       supportsTablet: false,
+      config: {
+        // Answers Apple's export-compliance question for every build (written
+        // to Info.plist as ITSAppUsesNonExemptEncryption), so TestFlight does
+        // not hold builds as "Missing Compliance". It is true because the apps
+        // ship no encryption of their own: network traffic is HTTPS through
+        // the operating system, and the session is kept in the platform's
+        // secure store (Keychain, Android Keystore) through expo-secure-store
+        // (supabase/session-storage.ts). Both are the operating system's
+        // encryption, which is exempt. It becomes FALSE, and must be changed
+        // and the question answered anew, if an app adds encryption of its
+        // own: a cipher or key-derivation library in JavaScript or native
+        // code, end-to-end encrypted messages, encrypted files or a VPN.
+        // no-native-cipher.test.ts fails when such a library is added.
+        usesNonExemptEncryption: false,
+      },
       infoPlist: {
         // The apps are Spanish only. Expo's template sets "en", and the first
         // iOS build carried it with no other language, so text iOS draws
@@ -233,9 +250,9 @@ export function defineAppConfig(app: AppId, options: AppConfigOptions): ExpoConf
           imageWidth: 96,
         },
       ],
-      // The session key stays on this phone: never Face ID, and kept out of
-      // Android backups here. On iOS the key is stored THIS_DEVICE_ONLY
-      // (supabase/session-storage.ts), so it is not restored from a backup.
+      // The session stays on this phone: never Face ID, and kept out of
+      // Android backups here. On iOS it is stored THIS_DEVICE_ONLY
+      // (supabase/session-storage.ts), so it is not restored on another phone.
       ["expo-secure-store", { faceIDPermission: false, configureAndroidBackup: true }],
       // Only the development build answers the dev server's links.
       ["expo-dev-client", { addGeneratedScheme: development }],

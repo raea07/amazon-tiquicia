@@ -126,10 +126,13 @@ version can take a few minutes to appear for testers.
 
 ## Part 2: iPhone (TestFlight)
 
-> **Do not run this part yet.** Wait until the developer side confirms that
-> the iOS configuration is ready: the app's encryption declaration is still
-> being settled. Running it earlier would make a build Apple may ask
-> questions about.
+> **The encryption question is answered in the app.** Every build tells
+> Apple that the app uses no encryption of its own (only the iPhone's: the
+> secure connection and the Keychain), so App Store Connect does not ask the
+> export-compliance question and TestFlight does not hold the build as
+> "Missing Compliance". Run this part once the developer side confirms that
+> this change is on the main branch; a build made from an older copy would
+> still be held until the question is answered by hand.
 
 This part is done once by the owner, on a computer, because Apple asks the
 account holder to sign in. Every later iPhone version is built and sent by

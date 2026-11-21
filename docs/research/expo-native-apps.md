@@ -464,22 +464,41 @@ larger than 2048 bytes" [SB1].
 | B. `expo-sqlite/localStorage/install` | SQLite-backed `localStorage` in the app sandbox                                               | No                      | Expo [E18]           |
 | C. AsyncStorage                       | Plain key-value file in the app sandbox                                                       | No                      | Supabase [SB1]       |
 
-**Recommendation: option A for all four apps** (drivers and warehouse staff hold
+> **What the project does now (21 November 2026).** Option A was built first
+> and then replaced: shipping `aes-js` made Apple's export-compliance answer
+> a question for an adviser. The apps now keep the session in `expo-secure-store`
+> **alone** — option D below — and declare
+> `ios.config.usesNonExemptEncryption: false`. See
+> [decision 18](../02-architecture/decisions.md#18-the-session-lives-in-the-phones-secure-store-alone)
+> and `packages/expo-kit/src/supabase/secure-session-storage.ts`. The original
+> recommendation and sample are kept below for the record.
+
+| Option                               | What it is                                                                                                                                                                    | Encrypted at rest by us | Documented by       |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ------------------- |
+| D. SecureStore in pieces (**built**) | The session split into pieces of at most 1,024 UTF-8 bytes in SecureStore, a manifest written last; no cipher in the app, the encryption is the Keychain's and the Keystore's | No (the OS encrypts)    | This project; [E19] |
+
+~~Recommendation: option A for all four apps~~ (superseded, see above). The
+original text: "option A for all four apps (drivers and warehouse staff hold
 operational permissions). Dependencies: `expo-secure-store` ~58.0.3,
 `@react-native-async-storage/async-storage` **2.2.0**, `aes-js` 3.1.2,
 `@types/aes-js` 3.1.4, and `expo-crypto` ~58.0.8 for `getRandomValues` [E58]
-(Supabase's sample uses `react-native-get-random-values` instead; either works).
+(Supabase's sample uses `react-native-get-random-values` instead; either works)."
+`aes-js`, `@types/aes-js` and the kit's `expo-crypto` have since been removed;
+`expo-crypto` remains only in the shop app, for a random identifier at checkout.
+That package is not cipher-free: since SDK 58 it also exports an AES-GCM API
+(`aesEncryptAsync`, `AESEncryptionKey`) over CryptoKit and javax.crypto. The
+apps may call only its random-number functions, which a source check in
+`packages/expo-kit/src/no-native-cipher.test.ts` enforces.
+
+The superseded sample (option A, no longer in the code):
 
 ```ts
-// packages/expo-kit/src/session-storage.ts — adapted from Supabase's LargeSecureStore [SB1]
+// SUPERSEDED: not what the project does. Kept to show what option A was.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import * as Crypto from "expo-crypto";
 import * as aesjs from "aes-js";
 
-// AFTER_FIRST_UNLOCK: readable while the phone is locked, which the drivers'
-// background task needs. The default is WHEN_UNLOCKED. [E19] THIS_DEVICE_ONLY
-// keeps the key out of backups restored on another phone.
 const keyOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
 };
@@ -489,7 +508,7 @@ export const sessionStorage = {
     const encrypted = await AsyncStorage.getItem(key);
     if (!encrypted) return null;
     const keyHex = await SecureStore.getItemAsync(key, keyOptions);
-    if (!keyHex) return null; // key lost (e.g. Android restore): treat as signed out
+    if (!keyHex) return null;
     const cipher = new aesjs.ModeOfOperation.ctr(
       aesjs.utils.hex.toBytes(keyHex),
       new aesjs.Counter(1),
@@ -510,18 +529,20 @@ export const sessionStorage = {
 };
 ```
 
-Gotchas:
+Gotchas (still true for option D):
 
-- SecureStore keys may contain only alphanumerics, `.`, `-`, `_` [E19].
-  Supabase's default storage key (`sb-<ref>-auth-token`) fits.
+- SecureStore keys may contain only alphanumerics, `.`, `-`, `_` [E19]
+  (expo-secure-store 58.0.3 checks `/^[\w.-]+$/`). The project escapes any
+  other character, so a local key such as `sb-127.0.0.1:54321-auth-token`
+  still gets a valid, unique name.
 - On iOS, keychain items **survive uninstalling the app**; on Android they do
-  not [E19]. The adapter above copes with a key that has no matching ciphertext.
-- Neither `expo-secure-store` nor this adapter works on web [E19]. For the web
-  export used in tests, add `session-storage.web.ts` that uses `localStorage`.
+  not [E19]. The project clears what a previous installation left on the
+  first start, using a non-secret marker in ordinary app storage.
+- Neither `expo-secure-store` nor the adapter works on web [E19]. The web
+  export used in tests has `session-storage.web.ts`, which uses `localStorage`.
 - App Store Connect asks about encryption. Expo's docs say an app using
-  `expo-secure-store` can set `ios.config.usesNonExemptEncryption: false` [E19].
-  Whether shipping `aes-js` changes that answer is a legal question —
-  **UNVERIFIED**, listed under owner decisions. Option B avoids the question.
+  `expo-secure-store` can set `ios.config.usesNonExemptEncryption: false`
+  [E19]. With `aes-js` gone the project sets it, for all four apps.
 
 ### Password recovery and e-mail confirmation
 
@@ -1377,10 +1398,10 @@ the current npm version [N1]. Install Expo-pinned packages with
 | `expo-image`                                        | ~58.0.18         | Cached product images                                          | shop, seller                        |
 | `react-native-svg`                                  | 15.16.0          | Logo and icons                                                 | all                                 |
 | `@supabase/supabase-js`                             | 2.119.2          | Auth, RPC, storage (same as web)                               | all                                 |
-| `expo-secure-store`                                 | ~58.0.3          | Holds the session key                                          | all                                 |
-| `@react-native-async-storage/async-storage`         | 2.2.0            | Encrypted session, query cache, queue                          | all                                 |
-| `expo-crypto`                                       | ~58.0.8          | Secure random bytes, UUIDs for idempotency keys                | all                                 |
-| `aes-js` (+ `@types/aes-js`)                        | 3.1.2 (3.1.4)    | Session encryption                                             | all                                 |
+| `expo-secure-store`                                 | ~58.0.3          | Holds the session, in pieces (§3)                              | all                                 |
+| `@react-native-async-storage/async-storage`         | 2.2.0            | App state, query cache, queue (never the session)              | all                                 |
+| `expo-crypto`                                       | ~58.0.8          | UUIDs for idempotency keys (asks the OS; its AES API unused)   | shop                                |
+| ~~`aes-js` (+ `@types/aes-js`)~~ removed, see §3    | 3.1.2 (3.1.4)    | ~~Session encryption~~ (the session is in SecureStore alone)   | none                                |
 | `@tanstack/react-query`                             | 5.108.2          | Data fetching and mutation queue                               | all                                 |
 | `@tanstack/react-query-persist-client`              | 5.108.2          | Persist cache and paused mutations                             | driver, warehouse (others optional) |
 | `@tanstack/query-async-storage-persister`           | 5.108.2          | Persister                                                      | driver, warehouse                   |
@@ -1457,7 +1478,8 @@ Google Maps as the web app does).
    at the door.
 9. **Session storage.** Encrypted (recommended; adds an AES library, which may
    change the answer to Apple's export-compliance question — to confirm with
-   whoever files it) or Expo's simpler unencrypted store.
+   whoever files it) or Expo's simpler unencrypted store. (Decided: neither;
+   the session is kept in SecureStore alone, with no AES library, see §3.)
 10. **Account deletion policy.** What is erased, what is kept and for how long
     (invoices, ledger, order history), and how long a request takes. Needs the
     lawyer and accountant already mentioned in `STATUS.md`; both stores require
@@ -1484,7 +1506,7 @@ Google Maps as the web app does).
 - Barcode detection in the web export under headless Chromium.
 - Inter and Bricolage Grotesque variable files' named instances on iOS.
 - Whether the connected Expo account is on a paid plan.
-- Whether `aes-js` changes Apple's export-compliance answer.
+- Whether `aes-js` changes Apple's export-compliance answer. (Moot: `aes-js` was removed, see §3.)
 - Whether staff-created driver and warehouse accounts fall under the stores'
   account-deletion rules.
 - Idempotency of the driver and warehouse database functions under retry.
