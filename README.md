@@ -121,6 +121,35 @@ the preview API over HTTPS; an APK on Android) and `preview-simulator` (the
 same for the iOS Simulator, which needs no Apple account). Both run without a
 computer feeding them JavaScript.
 
+### Building a preview in the cloud
+
+Only the shopper app has an EAS project so far (its id is in
+`apps/shop-native/app.config.ts`; the configuration is dynamic, so a new app's
+id from `eas init` is copied there by hand). Its `preview` settings live in the
+EAS `preview` environment, not in `.env.local`:
+`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and
+`EXPO_PUBLIC_SHOP_URL`, all plain text (`eas env:list preview` shows them).
+From `apps/shop-native`, with the owner's Expo account signed in:
+
+```bash
+npx eas-cli build -p android --profile preview --non-interactive --no-wait
+```
+
+```bash
+npx eas-cli build -p ios --profile preview-simulator --non-interactive --no-wait
+```
+
+EAS uploads the whole repository (the files Git tracks, so `.env.local` never
+leaves your computer), installs the Node and pnpm versions pinned in `eas.json`
+and runs `pnpm install --frozen-lockfile` at the root. On the first Android
+build without a terminal, EAS generates the signing keystore and keeps it in
+the Expo account. Each build counts against the account's monthly allowance
+(`npx eas-cli account:usage`). Expo's cloud simulators need a paid plan
+(`npx eas-cli simulator:availability`).
+
+While the shop's address is behind the Vercel login, the app cannot load
+product pictures from it and shows a placeholder instead.
+
 **A phone cannot reach `127.0.0.1`.** On the phone, `127.0.0.1` is the phone
 itself, not your computer, so the local API at `http://127.0.0.1:54321` is out
 of reach. In `.env.local`, set `EXPO_PUBLIC_SUPABASE_URL` to your computer's
