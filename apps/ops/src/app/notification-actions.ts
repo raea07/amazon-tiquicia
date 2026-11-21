@@ -10,7 +10,6 @@ import {
   sessionApi,
   signInPath,
 } from "@yuntera/next-kit/server";
-import { refresh } from "next/cache";
 import { z } from "zod";
 import { currentStaff } from "@/lib/staff";
 
@@ -21,10 +20,11 @@ export async function retryNotification(
   if (!(await currentStaff())) redirectTo(signInPath("/mensajes"));
   const id = z.uuid().safeParse(formData.get("deliveryId"));
   if (!id.success) return { error: GENERIC_ERROR };
-  const state = await attempt(async () => {
+  // No refresh() here on purpose: redrawing the list would remove this row,
+  // and with it the confirmation. The row shows the outcome in place; the next
+  // visit to the page shows the message's new status.
+  return attempt(async () => {
     await (await sessionApi()).opsRetryNotification(id.data);
     return "Lo enviamos de nuevo en los próximos segundos.";
   });
-  if (state.ok) refresh();
-  return state;
 }

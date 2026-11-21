@@ -136,8 +136,9 @@ export function NotificationSettingsForm({
         </div>
       </fieldset>
 
-      <fieldset className="flex flex-col gap-2 border-t border-border pt-5" disabled={!canEdit}>
-        <legend className="mb-2 pt-5 text-lg font-bold">Publicidad</legend>
+      <div className="border-t border-border" />
+      <fieldset className="flex flex-col gap-2" disabled={!canEdit}>
+        <legend className="mb-2 text-lg font-bold">Publicidad</legend>
         <p className="text-sm text-ink-muted">
           Aparte de los avisos {shop ? "de su tienda" : "de sus pedidos"}, podemos enviarle ofertas
           y novedades de Yuntera por correo. Es opcional: no hace falta para{" "}

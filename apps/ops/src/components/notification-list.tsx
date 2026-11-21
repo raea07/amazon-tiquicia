@@ -16,8 +16,8 @@ export function NotificationLine({ row }: { row: NotificationRow }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
       <span>
-        <span className="font-semibold">{TEMPLATE[row.template] ?? row.template}</span>
-        <span className="ml-2 text-ink-muted">
+        <span className="font-semibold">{TEMPLATE[row.template] ?? row.template}</span>{" "}
+        <span className="ml-1 text-ink-muted">
           {CHANNEL[row.channel] ?? row.channel} · {audienceOf(row)}
         </span>
         <span className="block text-xs text-ink-muted">
