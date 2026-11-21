@@ -18,6 +18,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { cancelOrder, confirmPayment } from "@/app/actions";
+import { DeliveryCodePanel, ReturnedParcelForm } from "@/components/integrity-forms";
 import { PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
 import { canSee, requireStaff } from "@/lib/staff";
 
@@ -51,6 +52,8 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
     throw error;
   });
   const payment = order.payment ? PAYMENT_STATUS[order.payment.status] : null;
+  const canHandleParcels = canSee(staff.staff_role, ["ops", "support"]);
+  const deliveryCode = canHandleParcels ? await api.opsDeliveryCode(order.id) : null;
   const awaitingTransfer =
     (order.status === "pending_payment" || order.status === "payment_review") &&
     (order.payment_method === "sinpe_movil" || order.payment_method === "bank_transfer");
@@ -122,6 +125,14 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                     </span>
                   </span>
                   <ShipmentStatusBadge status={shipment.status} />
+                  {shipment.status === "returning" && canSee(staff.staff_role, ["ops"]) ? (
+                    <div className="w-full border-t border-border pt-3">
+                      <ReturnedParcelForm
+                        shipmentId={shipment.id}
+                        orderNumber={order.order_number}
+                      />
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -209,6 +220,14 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
             El código de entrega solo lo ve el cliente. Nadie de Yuntera debe pedírselo por teléfono
             ni por mensaje.
           </Alert>
+          {deliveryCode ? (
+            <DeliveryCodePanel
+              state={deliveryCode}
+              orderId={order.id}
+              orderNumber={order.order_number}
+              canRelease={canHandleParcels}
+            />
+          ) : null}
         </section>
 
         {order.can_cancel && canSee(staff.staff_role, ["ops", "support"]) ? (
