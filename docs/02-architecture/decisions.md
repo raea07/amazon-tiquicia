@@ -23,6 +23,11 @@ its own entry, not something that happens by drift.
 | 14  | [The name lives in one file](#14-the-name-lives-in-one-file)                                                                                        | Built                                    |
 | 15  | [Fees regrounded on published gateway costs](#15-fees-regrounded-on-published-gateway-costs)                                                        | Built; amounts are assumptions           |
 | 16  | [No cloud resources created without the owner](#16-no-cloud-resources-created-without-the-owner)                                                    | Standing                                 |
+| 17  | [Native styling: plain StyleSheet with tokens from the brand package](#17-native-styling-plain-stylesheet-with-tokens-from-the-brand-package)       | Built                                    |
+| 18  | [The session is encrypted on phones](#18-the-session-is-encrypted-on-phones)                                                                        | Built; unverified on a device            |
+| 19  | [A darker field outline in the native apps than on the web](#19-a-darker-field-outline-in-the-native-apps-than-on-the-web)                          | Built                                    |
+| 20  | [The seller app's store identifier is cr.yuntera.vende](#20-the-seller-apps-store-identifier-is-cryunteravende)                                     | Chosen; owner to confirm                 |
+| 21  | [The brand package does not declare React](#21-the-brand-package-does-not-declare-react)                                                            | Built                                    |
 
 ---
 
@@ -154,6 +159,12 @@ the area their role allows. Native apps move to the roadmap.
 needs live positions, or when warehouse scanning speed becomes the constraint.
 The functions the native apps would call are the same ones the web app calls,
 so nothing below the screen has to change.
+
+**Since then.** Native apps for drivers (`apps/driver-native`) and the
+warehouse (`apps/warehouse-native`) exist as skeletons: sign-in, a home screen
+gated by role, the permissions they will need. Until their screens are built
+and a build has run on a phone, `apps/field` remains the tool drivers and the
+warehouse use.
 
 ## 5. The driver never sees the delivery PIN
 
@@ -454,3 +465,104 @@ domain. Leave a runbook the owner can follow, with the cost choice at the top.
   [environments](../07-deployment/environments.md#the-first-decision-where-the-database-lives).
 - The existing production project in that organisation was not touched and must
   not be used for this product.
+
+## 17. Native styling: plain StyleSheet with tokens from the brand package
+
+**Context.** The native apps need the same colours, type and spacing as the
+web apps, which take them from `packages/brand` as CSS variables. React Native
+has no CSS; the usual options are a utility-class library on top of React
+Native or plain `StyleSheet` objects.
+
+**Decision.** Plain `StyleSheet`, with a numeric token module in
+`packages/expo-kit/src/theme/tokens.ts` that is derived from `packages/brand`
+rather than copied: colours by name, sizes converted from the web's units to
+points. Every pair of text and background, and every control edge, that the
+native components draw is listed there and tested for 4.5:1 or 3:1 contrast.
+
+**Consequences.**
+
+- One less build-time dependency, and nothing that differs between iOS,
+  Android and the web export.
+- A change to the brand tokens reaches the apps with no copy to update; the
+  contrast test fails if a native pair stops passing.
+- Styles are written as objects, not class names, so screens are a little more
+  verbose than with a utility-class library.
+
+## 18. The session is encrypted on phones
+
+**Context.** A signed-in session holds a refresh token, which is as good as
+the password until it expires. The phone's secure store (Keychain, Keystore)
+is the right place for it, but it is meant for small values and a session is
+larger than it accepts reliably. Ordinary app storage takes any size but is
+plain text, readable from a backup or a rooted phone.
+
+**Decision.** Encrypt the session with AES (`aes-js`) and keep the ciphertext
+in ordinary app storage; keep only the random key in the secure store. On
+iOS the key is readable after the phone's first unlock (so a background task
+can still call the API) and only on this device
+(`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`), so a backup restored on another phone
+starts signed out. Signing out always removes the session from the phone,
+even with no connection. The web export of the apps, used only for the
+journeys, keeps the session in the browser's local storage instead and must
+not serve as a model for a public website.
+
+**Consequences.**
+
+- A copy of the app's storage without the secure store reveals nothing useful.
+- The logic is unit-tested with fake stores; whether the secure store and the
+  encryption behave on a real phone is unknown until a build is installed.
+- Because the app encrypts data, App Store Connect asks an export-compliance
+  question (`usesNonExemptEncryption`). It is left for the owner to answer.
+
+## 19. A darker field outline in the native apps than on the web
+
+**Context.** The web draws text fields and choice boxes with the brand's
+`borderStrong` (añil 200), which measures 1.5:1 against white. WCAG asks 3:1
+for the edge of a control that has nothing else to show where it is.
+
+**Decision.** The native apps outline fields and choice boxes in añil 400 from
+the same palette, and the contrast test checks it.
+
+**Consequences.**
+
+- Fields look slightly heavier in the apps than on the website. This is a
+  deliberate difference, not drift.
+- The web's outline has the same shortfall and should get the same change; it
+  has not been made there yet.
+
+## 20. The seller app's store identifier is cr.yuntera.vende
+
+**Context.** Each native app needs an identifier for the App Store and Google
+Play, and it can never change once the app is published. The shopper, driver
+and warehouse apps already had theirs (`cr.yuntera.shop`, `cr.yuntera.ruta`,
+`cr.yuntera.bodega`); the seller app had none.
+
+**Decision.** `cr.yuntera.vende`, after the app's name, Yuntera Vende, the same
+way the driver and warehouse identifiers follow theirs. It is recorded with the
+others in `packages/brand/src/brand.ts`; development and preview builds add
+`.dev` and `.preview`.
+
+**Consequences.**
+
+- The owner should confirm all four identifiers before the first upload to
+  either store, because after that they are fixed.
+
+## 21. The brand package does not declare React
+
+**Context.** `packages/brand` declared React 19.3.1 as a dependency for its
+logo component. The web apps use React 19.3.1; the native apps use 19.3.0, the
+version Expo SDK 58 is built against. Because of the declaration, the package
+manager installed a second React inside the native apps' dependencies, and
+Expo's checks reported a duplicate React. The bundles were still correct, but two copies of React in one bundle break an app at run time, and the check must stay clean to catch that.
+
+**Decision.** `packages/brand` declares React neither as a dependency nor as a
+peer. Its logo uses React only for types, which `@types/react` provides; each
+app brings its own React.
+
+**Consequences.**
+
+- The web apps resolve React 19.3.1 and the native apps 19.3.0, with one copy
+  each.
+- If the brand package ever needs React at run time, it should declare it as a
+  peer with a range both versions satisfy, and the duplicate check must pass
+  again.

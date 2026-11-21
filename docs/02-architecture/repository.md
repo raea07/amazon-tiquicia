@@ -10,8 +10,12 @@ each layer of tests actually proves.
 apps/
   web/        Yuntera — the shopper storefront (Next.js 16). Built.
   seller/     Yuntera Vende — seller centre (Next.js). Built.
-  ops/        Yuntera Central — internal console (Next.js). In progress.
-  field/      Yuntera Ruta + Yuntera Bodega — one mobile web app. Planned.
+  ops/        Yuntera Central — internal console (Next.js). Built.
+  field/      Yuntera Ruta + Yuntera Bodega — one mobile web app. Built.
+  shop-native/       Yuntera — the shopper app for iOS and Android (Expo SDK 58). Built.
+  seller-native/     Yuntera Vende — seller app. Skeleton: sign-in, role-gated home.
+  driver-native/     Yuntera Ruta — drivers' app. Skeleton: sign-in, role-gated home.
+  warehouse-native/  Yuntera Bodega — warehouse app. Skeleton: sign-in, role-gated home.
 packages/
   brand/      Name, app family, design tokens, logo. The only place the brand is defined.
   core/       Domain logic as pure TypeScript: money, fees, offers, search ranking,
@@ -23,6 +27,10 @@ packages/
               prices, ratings, status badges.
   next-kit/   Plumbing shared by the Next.js apps: session client, sign-in helpers,
               security headers, fonts, form components. In progress.
+  expo-kit/   What the native apps share: the app configuration with development,
+              preview and store variants, the Supabase client with the session
+              encrypted at rest, roles, the typed API, tokens derived from
+              packages/brand, fonts, components and the data layer.
   i18n/       Placeholder. Empty today; the apps render Spanish only.
 supabase/
   migrations/ The database, in filename order. See docs/03-data.
@@ -33,12 +41,17 @@ supabase/
               (what Supabase provides, for a plain PostgreSQL), gen-geo-migration.py.
 tools/
   dev-api/    Local stand-in for the Supabase API. Loopback only. Never deployed.
+  e2e/        Browser journeys for the four web apps (Playwright).
+  native-e2e/ Browser journeys through the web export of the native apps, and the
+              small static server that serves those exports.
+  dev/        stack.sh (an isolated copy of the whole stack per numbered lane),
+              native-icons.cjs (draws the native apps' icons from the brand geometry).
 docs/         This documentation.
 ```
 
-The root `README.md` still lists `apps/driver` and `apps/warehouse` as separate
-Expo apps. That was the earlier plan; the current one is `apps/field`
+Drivers and the warehouse work in `apps/field`
 ([decision 4](decisions.md#4-one-mobile-web-app-for-drivers-and-warehouse-native-apps-deferred)).
+Their native apps are skeletons until their screens are built.
 
 ## Package boundaries
 
@@ -52,7 +65,12 @@ flowchart BT
   kit["packages/next-kit"] --> db
   kit --> ui
   kit --> brand
-  apps["apps/*"] --> kit
+  expokit["packages/expo-kit"] --> db
+  expokit --> core
+  expokit --> brand
+  native["apps/*-native"] --> expokit
+  native --> db
+  apps["apps/* (web)"] --> kit
   apps --> db
   apps --> ui
   apps --> core
@@ -66,7 +84,8 @@ Rules, and the reason for each:
 | Rule                                                                                                                            | Why                                                                                                               |
 | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `packages/core` imports nothing: no framework, no database client, no clock it was not handed                                   | It is the specification. It must run in a unit test, a browser, a server and a phone identically                  |
-| `packages/brand` imports nothing but React for the logo                                                                         | Renaming or restyling must never pull in business logic                                                           |
+| `packages/brand` imports nothing but React's types for the logo, and declares no React of its own                               | Renaming or restyling must never pull in business logic; the web and native apps each bring their own React       |
+| `packages/ui` and `packages/next-kit` are for the web apps only; native apps use `packages/expo-kit`                            | They render HTML; the native apps render React Native views and use React 19.3.0, the web apps 19.3.1             |
 | `packages/db` knows function names, payload shapes and error codes, and nothing about HTTP or React                             | The same client works over supabase-js in an app and over a direct connection in a contract test (`RpcTransport`) |
 | `packages/ui` has no data access                                                                                                | Components receive data; they do not fetch it                                                                     |
 | Apps never import from another app                                                                                              | Shared code moves down into a package                                                                             |
@@ -94,6 +113,8 @@ Run from the repository root. Requires Node 22 or later and pnpm 10.
 | `pnpm --filter @yuntera/dev-api start` | Start the local API stand-in on `127.0.0.1:54321`                                  |
 | `pnpm --filter @yuntera/web dev`       | Start the storefront on `localhost:3000`                                           |
 | `pnpm --filter @yuntera/brand tokens`  | Regenerate `tokens.css` from `tokens.ts`                                           |
+| `tools/dev/stack.sh native [lane]`     | Export the native apps for the web and serve them on the lane's app ports + 10–13  |
+| `tools/dev/stack.sh native-e2e [lane]` | Run the native journeys against those exports                                      |
 
 Loose end: the root script `db:types` points at
 `supabase/scripts/gen-types.sh`, which does not exist. The typed client in
@@ -182,13 +203,14 @@ production.
 
 ## Test layers
 
-| Layer            | Where                                                                                | Runs with                                       | What it proves                                                                                                                                                                                                                                                                                                                                                                                       | What it does not                                                |
-| ---------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Unit tests       | `packages/core/src/**/*.test.ts`, `packages/brand`, `packages/db/src/errors.test.ts` | `pnpm test`                                     | The algorithms compute what they should, including edge cases; brand colours meet WCAG AA contrast; tokens and CSS are in sync                                                                                                                                                                                                                                                                       | Anything about the database                                     |
-| Parity tests     | `packages/core/src/cr/compliance.test.ts`, `packages/db/src/errors.test.ts`          | `pnpm test`                                     | The constants and rules written in SQL are the same ones written in TypeScript; every error code has a message                                                                                                                                                                                                                                                                                       | That the SQL arithmetic is right (the next layer does)          |
-| SQL suites       | `supabase/tests/010`–`070`                                                           | `pnpm db:local:test`                            | Run as real API roles with real claims: who can reach what (`020_access`), pricing, idempotency, reservation, cancellation and expiry (`030_checkout`), fees to the céntimo and a balanced ledger (`040_money`), pick, pack, route, PIN, cash and failures (`050_fulfillment`), accents, synonyms, typos and ranking (`060_search`), each screen function for the right and wrong caller (`070_api`) | Behaviour on the real Supabase platform                         |
-| Contract tests   | `packages/db/src/contract.test.ts`                                                   | `DATABASE_URL=… pnpm --filter @yuntera/db test` | Real function responses match the client's schemas, per role                                                                                                                                                                                                                                                                                                                                         | UI behaviour                                                    |
-| Browser journeys | `tools/e2e` (Playwright), four scripts: shopper, seller, staff, driver and warehouse | `pnpm e2e`                                      | The apps, the API and the database work together in a real browser, each from a freshly seeded database: purchase with SINPE Móvil and delivery code; seller registration, listing, stock and packing; payment confirmation, review, dispatch, refund; delivery with a wrong then right code, picking with a wrong then right scan                                                                   | Anything on a real Supabase project; real payments; real phones |
+| Layer            | Where                                                                                                                       | Runs with                                       | What it proves                                                                                                                                                                                                                                                                                                                                                                                       | What it does not                                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Unit tests       | `packages/core/src/**/*.test.ts`, `packages/brand`, `packages/db/src/errors.test.ts`                                        | `pnpm test`                                     | The algorithms compute what they should, including edge cases; brand colours meet WCAG AA contrast; tokens and CSS are in sync                                                                                                                                                                                                                                                                       | Anything about the database                                                                                                         |
+| Parity tests     | `packages/core/src/cr/compliance.test.ts`, `packages/db/src/errors.test.ts`                                                 | `pnpm test`                                     | The constants and rules written in SQL are the same ones written in TypeScript; every error code has a message                                                                                                                                                                                                                                                                                       | That the SQL arithmetic is right (the next layer does)                                                                              |
+| SQL suites       | `supabase/tests/010`–`070`                                                                                                  | `pnpm db:local:test`                            | Run as real API roles with real claims: who can reach what (`020_access`), pricing, idempotency, reservation, cancellation and expiry (`030_checkout`), fees to the céntimo and a balanced ledger (`040_money`), pick, pack, route, PIN, cash and failures (`050_fulfillment`), accents, synonyms, typos and ranking (`060_search`), each screen function for the right and wrong caller (`070_api`) | Behaviour on the real Supabase platform                                                                                             |
+| Contract tests   | `packages/db/src/contract.test.ts`                                                                                          | `DATABASE_URL=… pnpm --filter @yuntera/db test` | Real function responses match the client's schemas, per role                                                                                                                                                                                                                                                                                                                                         | UI behaviour                                                                                                                        |
+| Browser journeys | `tools/e2e` (Playwright), four scripts: shopper, seller, staff, driver and warehouse                                        | `pnpm e2e`                                      | The apps, the API and the database work together in a real browser, each from a freshly seeded database: purchase with SINPE Móvil and delivery code; seller registration, listing, stock and packing; payment confirmation, review, dispatch, refund; delivery with a wrong then right code, picking with a wrong then right scan                                                                   | Anything on a real Supabase project; real payments; real phones                                                                     |
+| Native journeys  | `tools/native-e2e` (Playwright), two scripts: the shopper app at phone size, and the seller, driver and warehouse skeletons | `tools/dev/stack.sh native-e2e [lane]`          | The native apps' screens, navigation, Spanish text, role gates and API calls work against the local API through their web export, including a full purchase; `packages/expo-kit` unit tests also check each app's resolved iOS and Android configuration                                                                                                                                             | That the binaries start, and anything that needs a phone: the secure store, embedded fonts, permissions, location, camera, gestures |
 
 Each SQL suite runs inside a transaction that is rolled back, so the suites do
 not affect each other or the seed data.
@@ -199,12 +221,15 @@ access tests prove the migrations' own revokes and policies are what protect
 the data, rather than a stricter local setup hiding a mistake.
 
 **Continuous integration** is defined in `.github/workflows/ci.yml` and runs on
-every pull request and every push to `main`, in two jobs. The first lints,
+every pull request and every push to `main`, in three jobs. The first lints,
 typechecks, runs the unit tests, builds the database from scratch on a
 PostgreSQL service, and runs the database tests and the API contract tests.
 The second builds every app, starts them against the local API stand-in and
-runs the four browser journeys in `tools/e2e`, keeping screenshots and logs
-when one fails. The workflow was written and its steps were run by hand
+runs the browser journeys in `tools/e2e`, keeping screenshots and logs
+when one fails. The third checks the native apps: their configuration and
+package versions against Expo SDK 58, the iOS and Android JavaScript bundles,
+and the two journeys in `tools/native-e2e` through the web export. It builds
+no native binary. The workflow was written and its steps were run by hand
 locally; it has not yet run on GitHub itself, so expect to adjust it on the
 first pull request.
 

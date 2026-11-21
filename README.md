@@ -116,6 +116,11 @@ pnpm --filter @yuntera/shop-native start
 
 Scan the QR code with the development build installed on the phone.
 
+Each app's `eas.json` also has `preview` (an installable copy that talks to
+the preview API over HTTPS; an APK on Android) and `preview-simulator` (the
+same for the iOS Simulator, which needs no Apple account). Both run without a
+computer feeding them JavaScript.
+
 **A phone cannot reach `127.0.0.1`.** On the phone, `127.0.0.1` is the phone
 itself, not your computer, so the local API at `http://127.0.0.1:54321` is out
 of reach. In `.env.local`, set `EXPO_PUBLIC_SUPABASE_URL` to your computer's
