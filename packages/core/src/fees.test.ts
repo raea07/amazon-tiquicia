@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeOrderStatements,
   computeSellerStatement,
   DEFAULT_FEE_SCHEDULE,
   type FeeLineInput,
   fulfillmentTierFor,
   OversizeItemError,
+  splitFixedPaymentFee,
 } from "./fees";
 import { fromMajor, money } from "./money";
 
@@ -146,5 +148,126 @@ describe("seller statement", () => {
     expect(() =>
       computeSellerStatement({ lines: [line({ quantity: 0 })], paymentMethod: "card" }),
     ).toThrow(RangeError);
+  });
+});
+
+describe("the fixed payment fee is charged once per order", () => {
+  const sellers = (...gross: number[]) =>
+    gross.map((itemsGrossMinor, index) => ({ sellerId: `seller-${index + 1}`, itemsGrossMinor }));
+  const shares = (fixedMinor: number, ...gross: number[]) => [
+    ...splitFixedPaymentFee(fixedMinor, sellers(...gross)).values(),
+  ];
+
+  it("gives a single seller the whole amount", () => {
+    expect(shares(18_000, 2_000_000)).toEqual([18_000]);
+  });
+
+  it("shares it in proportion to what each seller sold", () => {
+    // ₡180 over sales of ₡20 000, ₡9 900 and ₡4 200: 105.57 + 52.26 + 22.17.
+    expect(shares(18_000, 2_000_000, 990_000, 420_000)).toEqual([10_557, 5_226, 2_217]);
+    expect(shares(30_000, 1_000_000, 1_000_000, 1_000_000)).toEqual([10_000, 10_000, 10_000]);
+  });
+
+  it("hands left-over céntimos to the largest remainders, then to the lowest seller id", () => {
+    // 17 over 300 : 200 : 100 : 100 is 7.29, 4.86, 2.43, 2.43. The whole parts add up
+    // to 15; one céntimo goes to the .86 and the other to the first of the tied .43s.
+    expect(shares(17, 300, 200, 100, 100)).toEqual([7, 5, 3, 2]);
+    expect(shares(30_001, 500_000, 500_000)).toEqual([15_001, 15_000]);
+    // The tie is decided by seller id, not by the order the sellers are listed in.
+    const reversed = splitFixedPaymentFee(30_001, [
+      { sellerId: "seller-2", itemsGrossMinor: 500_000 },
+      { sellerId: "seller-1", itemsGrossMinor: 500_000 },
+    ]);
+    expect(reversed.get("seller-1")).toBe(15_001);
+    expect(reversed.get("seller-2")).toBe(15_000);
+  });
+
+  it("always adds up to exactly the fixed amount", () => {
+    // A small fixed generator: the same "random" orders on every run.
+    let seed = 20261121;
+    const next = (max: number) => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return seed % max;
+    };
+    for (let round = 0; round < 500; round += 1) {
+      const fixed = next(40_000);
+      const gross = Array.from({ length: 1 + next(6) }, () => 1 + next(150_000_000));
+      const parts = shares(fixed, ...gross);
+      expect(parts.reduce((a, b) => a + b, 0)).toBe(fixed);
+      expect(Math.min(...parts)).toBeGreaterThanOrEqual(0);
+      // Nobody is more than a céntimo away from their exact proportion.
+      const total = gross.reduce((a, b) => a + b, 0);
+      parts.forEach((part, index) => {
+        expect(Math.abs(part - (fixed * (gross[index] ?? 0)) / total)).toBeLessThan(1);
+      });
+    }
+  });
+
+  it("charges nothing when there is no fixed amount or nothing was sold", () => {
+    expect(shares(0, 2_000_000, 990_000)).toEqual([0, 0]);
+    expect(shares(18_000, 0, 0)).toEqual([0, 0]);
+    expect(shares(18_000)).toEqual([]);
+  });
+
+  it("rejects amounts that are not whole and sellers listed twice", () => {
+    expect(() => shares(-1, 100)).toThrow(RangeError);
+    expect(() => shares(10.5, 100)).toThrow(RangeError);
+    expect(() => shares(10, 100.5)).toThrow(RangeError);
+    expect(() =>
+      splitFixedPaymentFee(10, [
+        { sellerId: "a", itemsGrossMinor: 1 },
+        { sellerId: "a", itemsGrossMinor: 2 },
+      ]),
+    ).toThrow(RangeError);
+  });
+
+  it("itemises a three-seller card order with one fixed fee between them", () => {
+    // The same order is placed for real in supabase/tests/090_fixes.sql.
+    const statements = computeOrderStatements({
+      paymentMethod: "card",
+      sellers: [
+        { sellerId: "a", lines: [line()] },
+        {
+          sellerId: "b",
+          lines: [line({ unitGross: fromMajor(9_900), fulfilledByPlatform: true })],
+        },
+        {
+          sellerId: "c",
+          lines: [
+            line({
+              unitGross: fromMajor(4_200),
+              fulfilledByPlatform: true,
+              weightGrams: 300,
+              longestSideCm: 20,
+            }),
+          ],
+        },
+      ],
+    });
+    const of = (sellerId: string) => {
+      const s = statements.get(sellerId);
+      if (!s) throw new Error(`no statement for ${sellerId}`);
+      return [s.paymentFee, s.feesNet, s.feesTax, s.payout].map((m) => m.amountMinor);
+    };
+    // payment = 3.9 % of the seller's sales + their share of the ₡180.
+    expect(of("a")).toEqual([78_000 + 10_557, 328_557, 42_712, 1_628_731]);
+    expect(of("b")).toEqual([38_610 + 5_226, 302_636, 39_343, 648_021]);
+    expect(of("c")).toEqual([16_380 + 2_217, 158_997, 20_670, 240_333]);
+
+    const fixedCharged = [...statements.values()].reduce(
+      (sum, s) =>
+        sum + s.paymentFee.amountMinor - Math.round((s.itemsGross.amountMinor * 390) / 10_000),
+      0,
+    );
+    expect(fixedCharged).toBe(DEFAULT_FEE_SCHEDULE.paymentFixedMinorByMethod.card);
+  });
+
+  it("leaves a single-seller order exactly as before", () => {
+    const alone = computeOrderStatements({
+      paymentMethod: "card",
+      sellers: [{ sellerId: "a", lines: [line()] }],
+    }).get("a");
+    expect(alone).toEqual(computeSellerStatement({ lines: [line()], paymentMethod: "card" }));
+    expect(alone?.payout).toEqual(money(1_620_320));
   });
 });
