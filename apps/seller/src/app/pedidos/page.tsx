@@ -129,7 +129,8 @@ async function Orders() {
               head={["Pedido", "Producto", "Total", "Estado", "Entrega", "Comprador"]}
             >
               {lines.map((line) => (
-                <tr key={line.order_item_id}>
+                // A line that left from two places has one row per parcel.
+                <tr key={`${line.order_item_id}:${line.shipment_id ?? ""}`}>
                   <td>
                     <p className="font-semibold">{line.order_number}</p>
                     <p className="text-xs text-ink-muted">{formatDateTime(line.placed_at)}</p>

@@ -68,7 +68,7 @@ An item beyond the largest tier cannot be warehouse-fulfilled
 ### Payment fee
 
 A rate on the amount collected for the seller, plus a fixed amount per
-seller-order.
+order, shared between the order's sellers (see below).
 
 | Method           | Rate | Fixed | Basis                                                                                               |
 | ---------------- | ---: | ----: | --------------------------------------------------------------------------------------------------- |
@@ -89,7 +89,7 @@ For one seller's part of one order:
 ```
 referral    = Σ over lines of  min( max( round(lineTotal × rate), ₡150 × quantity ), lineTotal )
 fulfilment  = Σ over warehouse-fulfilled lines of  tierFee × quantity
-payment     = round(collected × methodRate) + methodFixed
+payment     = round(collected × methodRate) + fixedShare
 feesNet     = referral + fulfilment + payment
 feesTax     = round(feesNet × 13%)
 payout      = collected − feesNet − feesTax
@@ -97,6 +97,24 @@ payout      = collected − feesNet − feesTax
 
 Rounding is to the céntimo, half away from zero, once per line shown above.
 Amounts are integers of céntimos throughout; there is no floating-point money.
+
+`fixedShare` is the seller's part of the method's fixed amount. The gateway
+charges it once per payment, so it is charged once per order: with one seller
+it is the whole amount; with several, each seller's part is in proportion to
+their items total, by largest remainder. Each seller gets the whole céntimos
+of `fixed × theirItems / allItems`; the céntimos left over go one each to the
+largest remainders, a tie going to the lowest seller id; so the parts add up
+to exactly the fixed amount. `splitFixedPaymentFee` in `fees.ts` and
+`private.split_fixed_fee` in the database do the same integer arithmetic and
+run the same cases (`supabase/tests/090_fixes.sql`, read by
+`packages/core/src/cr/compliance.test.ts`).
+
+Example, a card order (₡180 fixed) with three sellers selling ₡20,000,
+₡9,900 and ₡4,200: the exact parts are ₡105.5718…, ₡52.2581… and ₡22.1699…;
+their whole céntimos add up to ₡179.98, and the two céntimos left over go to
+the two largest remainders (the third seller's, then the second's), so the
+parts are ₡105.57, ₡52.26 and ₡22.17. With a single seller nothing changes:
+the ₡20,000 example below still pays out ₡16,203.20.
 
 ## Worked example
 
@@ -143,20 +161,16 @@ When a payment is captured, `private.compute_seller_fees` writes one row per
 seller to `seller_order_fees` with every line above and the schedule version,
 and never recomputes it. A later change of fees does not touch past orders.
 
-Two differences from the TypeScript function, both deliberate simplifications
-of the current model:
+One difference from the TypeScript function, a deliberate simplification of
+the current model:
 
-|                                   | TypeScript                                   | SQL                                                                                                       |
-| --------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| What the payment rate applies to  | Items plus any shipping passed to the seller | Items only. Shipping is collected by Yuntera for its own delivery service and is never passed to a seller |
-| The fixed part of the payment fee | Once per statement                           | Once per seller per order                                                                                 |
+|                                  | TypeScript                                   | SQL                                                                                                       |
+| -------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| What the payment rate applies to | Items plus any shipping passed to the seller | Items only. Shipping is collected by Yuntera for its own delivery service and is never passed to a seller |
 
-The second matters: an order with items from two sellers, paid by card, charges
-each seller ₡180 while the gateway charges its fixed fee once. Yuntera keeps
-the difference. That is not a pass-through and should be fixed — by splitting
-one fixed fee across the sellers in proportion to their sales
-(`allocate` in `money.ts` does this without losing a céntimo) — before real
-sellers are charged.
+The fixed part of the payment fee is the same on both sides: once per order,
+shared as described above (`computeOrderStatements` in TypeScript,
+`private.compute_seller_fees` in SQL).
 
 ## The ledger
 
@@ -306,7 +320,6 @@ account and crediting the account the money left from.
   code sends money to a shopper.
 - **Discounts are not modelled.** `orders.discount_minor` exists and is always
   zero.
-- **The fixed payment fee is charged per seller**, as described above.
 - **Tax withholdings by card acquirers** (up to 6% on account of IVA and 2% on
   account of income tax) are not in the ledger. Whose cash they tie up depends
   on who is the merchant of record — a question for the accountant.

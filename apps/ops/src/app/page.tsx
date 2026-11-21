@@ -5,7 +5,7 @@ import { Alert, formatPrice, Skeleton } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { requireStaff } from "@/lib/staff";
+import { canSee, requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Resumen" };
 
@@ -31,8 +31,14 @@ function More({ href, children }: { href: Route; children: React.ReactNode }) {
 }
 
 async function Overview() {
-  await requireStaff("/");
-  const o = await (await sessionApi()).opsOverview();
+  const staff = await requireStaff("/");
+  const api = await sessionApi();
+  // Changes to published products wait in the same queue as new products, but
+  // only catalogue staff may read them.
+  const [o, edits] = await Promise.all([
+    api.opsOverview(),
+    canSee(staff.staff_role, ["catalog"]) ? api.opsListingEditsForReview() : [],
+  ]);
   const statuses = Object.entries(o.orders).filter(([, count]) => count > 0);
 
   return (
@@ -98,8 +104,8 @@ async function Overview() {
           />
           <Stat
             label="Productos por revisar"
-            value={o.listings_in_review}
-            hint={<More href="/catalogo">Revisar</More>}
+            value={o.listings_in_review + edits.length}
+            hint={<More href="/catalogo">Nuevos y cambios a publicados</More>}
           />
           <Stat
             label="Reportes de contenido"

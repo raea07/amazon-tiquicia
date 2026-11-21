@@ -1,6 +1,6 @@
 // Runs the browser journeys, one app at a time, each on a freshly seeded database.
 //
-//   pnpm --filter @yuntera/e2e journeys            all four
+//   pnpm --filter @yuntera/e2e journeys            all of them
 //   pnpm --filter @yuntera/e2e journeys web ops    only these
 //
 // Before running: PostgreSQL reachable (see supabase/scripts/local-db.sh), the
@@ -34,6 +34,14 @@ for (const journey of journeys) {
     console.error(`Could not reset the database before "${journey}".`);
     process.exit(1);
   }
+  // The shop keeps catalogue pages for about a minute, and what it kept
+  // describes the database that was just replaced (its offers no longer
+  // exist). Ask it to forget them, so the journey really starts from the seed.
+  // Nothing happens if the shop is not up or has no refresh key.
+  await fetch(`${process.env.WEB_URL ?? "http://127.0.0.1:3000"}/api/catalogo/refrescar`, {
+    method: "POST",
+    headers: { "x-refresh-key": process.env.SHOP_REFRESH_KEY ?? "" },
+  }).catch(() => undefined);
 
   console.log(`\n── ${journey} ${"─".repeat(60 - journey.length)}`);
   const run = spawnSync(process.execPath, [`${here}journeys/${journey}.cjs`], {

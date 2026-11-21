@@ -120,6 +120,14 @@ export const semantic = {
   warning: color.maiz[700],
 } as const;
 
+/**
+ * The colour a browser paints around the app: the address bar on a phone, the
+ * title bar of an app added to the home screen. Every app uses this one value
+ * (in its layout's `viewport` and in its web manifest) instead of spelling the
+ * colour out, so a change to the brand colour reaches them all.
+ */
+export const themeColor = semantic.brand;
+
 export const radius = {
   sm: "6px",
   md: "10px",

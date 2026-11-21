@@ -64,23 +64,33 @@ that moment the units are in a sealed parcel and no longer on a shelf.
 `place_order` handles each order line on its own, in a fixed order (by SKU,
 then seller):
 
-1. Find the locations of the right kind — Yuntera warehouse or the seller's own
-   — that are active and have **all** the units this line needs available.
-2. Among them, take the one with the most available units; break ties by
-   warehouse id.
-3. Raise `reserved` there by the quantity. The `UPDATE` repeats the
-   availability test in its `WHERE` clause, so if a concurrent order took the
-   units between steps 1 and 3 the statement matches nothing.
-4. If nothing was reserved, the whole order fails with `insufficient_stock`
-   naming the offer, and the transaction rolls back: no order, no partial
-   reservation.
-5. Write the order line and a reservation row. Attach the line to the order's
-   shipment from that location, creating the shipment if this is the first line
-   from there.
+1. Lock every stock row of this offer at locations of the right kind — Yuntera
+   warehouses or the seller's own — that are active, in warehouse-id order. A
+   concurrent order for the same stock waits here and then reads what is really
+   left, so the last unit cannot be promised twice, and because every checkout
+   locks in the same order two of them cannot deadlock.
+2. If one location has **all** the units the line needs, take them from there
+   (the fullest such location; ties by warehouse id). The line travels whole.
+3. Otherwise gather the line from the fullest locations first until it is
+   covered: each location gives what it has available. The line then leaves
+   in as few parcels as the stock allows.
+4. For each location used: raise `reserved` there, write a reservation row for
+   those units, and attach that many units of the line to the order's shipment
+   from that location (`shipment_items.quantity`), creating the shipment if it
+   is the first thing leaving from there.
+5. If all the locations together do not have the units, the whole order fails
+   with `insufficient_stock` naming the offer, and the transaction rolls back:
+   no order, no partial reservation.
 
 The result is one shipment per location the goods leave from. An order with
 warehouse items and one seller-shipped item becomes two parcels, each with its
-own tracking code and status.
+own tracking code and status; so does a line of two units whose stock is one
+unit in each of two warehouses. Everything downstream already works per
+reservation and per parcel: each parcel gets its own pick task for its own
+units, packing consumes only that parcel's reservation and writes its own
+`ship` movement, and cancelling releases every reservation of the order.
+What the shop shows (`offers.available_quantity`, the sum over the same
+locations) is therefore exactly what can be ordered.
 
 Lines are always processed in the same order so that two concurrent checkouts
 lock stock rows in the same sequence and cannot deadlock.
@@ -90,7 +100,8 @@ lock stock rows in the same sequence and cannot deadlock.
 With one Yuntera warehouse, and sellers who each ship from one location, every
 line has exactly one candidate. There is nothing to optimise. The rule becomes
 visibly suboptimal only when the same seller's stock of the same SKU sits in
-more than one place.
+more than one place: it then still sells every unit, but it decides line by
+line, so it can use more parcels than a plan for the whole order would.
 
 ## The planner that is specified but not wired
 
@@ -136,19 +147,19 @@ Round 2: one cargador remains. Only the shop has it.
 Plan: two parcels — four units from the warehouse, one cargador from the shop.
 Fully sourced.
 
-**The same order under the rule that is actually built would be refused.** The
-cargador line needs 2 units from a single location of the kind its offer
-declares; if that offer is warehouse-fulfilled, the warehouse has only 1. That
-is the gap the planner closes, at the cost of splitting a line across parcels.
+**The rule that is actually built** looks at one offer at a time, and an offer
+sells from one kind of location (Yuntera warehouses, or the seller's own). If
+the cargador offer is warehouse-fulfilled, the shop's 8 units are not its stock
+at all, the warehouse has 1, and the line for 2 is refused, as the shop said it
+would be ("1 available"). Stock of one offer spread over two warehouses is
+gathered from both, one parcel each.
 
 ## Known limits
 
-- **A line cannot be split across locations.** As above.
-- **Listed availability can exceed what one line can buy.** An offer's
-  available quantity is summed across locations; a line needs it all in one
-  place. With three units in one warehouse and two in another, the page says
-  five are available and an order for four is refused. This cannot happen with
-  a single warehouse.
+- **Lines are sourced one at a time, fullest location first.** A line is split
+  only when no single location can send it whole, but the choice does not look
+  at the order's other lines, so two lines can leave from different places
+  when one place could have sent both. The planner above would do better.
 - **Distance is not considered by the built rule**, only quantity. The planner
   uses straight-line distance, not road distance or delivery zones.
 - **The delivery promise is computed before sourcing** and assumes warehouse

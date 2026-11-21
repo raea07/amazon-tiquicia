@@ -9,5 +9,6 @@ export {
   relativeLuminance,
   semantic,
   shadow,
+  themeColor,
   touchTarget,
 } from "./tokens";

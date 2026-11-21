@@ -43,10 +43,10 @@ Today `payments_mode` is `sandbox` and every payment is simulated.
       with each method, on production, before announcing anything.
 - [ ] **Decide** the cash-on-delivery ceiling and whether cash is offered at
       launch at all.
-- [ ] **Build** the fix for the fixed payment fee being charged once per seller
-      ([fees](../04-algorithms/fees-and-settlement.md#what-the-database-does-and-where-it-differs-from-the-specification)),
-      and update the fee schedule to the contracted rates in both the SQL rows
-      and `packages/core/src/fees.ts`.
+- [ ] **Update** the fee schedule to the contracted rates in both the SQL rows
+      and `packages/core/src/fees.ts`. (The fixed payment fee is already charged
+      once per order and shared between its sellers:
+      [fees](../04-algorithms/fees-and-settlement.md#the-calculation).)
 - [ ] **Confirm in writing** with the gateway what PCI DSS obligations remain
       with Yuntera under the hosted-fields model.
 

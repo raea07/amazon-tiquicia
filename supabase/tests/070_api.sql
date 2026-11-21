@@ -468,7 +468,7 @@ begin
   where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute');
   assert open_to_visitors =
     'cart_lines, checkout_quote, delivery_estimate, get_product, list_categories, list_districts, '
-    || 'report_content, reviewer_display_name, search_products, suggest_products',
+    || 'report_content, reviewer_display_name, search_products, shop_path_exists, suggest_products',
     format('functions open to visitors changed: %s', open_to_visitors);
 end
 $$;

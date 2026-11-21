@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_FEE_SCHEDULE } from "../fees";
+import { DEFAULT_FEE_SCHEDULE, splitFixedPaymentFee } from "../fees";
 import {
   ORDER_STATUSES,
   ORDER_TRANSITIONS,
@@ -134,6 +134,51 @@ describe("fee schedule matches the database", () => {
       `('${DEFAULT_FEE_SCHEDULE.version}', true, ${DEFAULT_FEE_SCHEDULE.defaultReferralBps}, ` +
         `${DEFAULT_FEE_SCHEDULE.minReferralFeePerUnitMinor}, ${DEFAULT_FEE_SCHEDULE.feeTaxBps},`,
     );
+  });
+});
+
+describe("the fixed payment fee is split the way the database splits it", () => {
+  // The database test runs these very lines through private.split_fixed_fee;
+  // here the same inputs go through the TypeScript and must give the same parts.
+  const suite = readFileSync(
+    fileURLToPath(new URL("../../../../supabase/tests/090_fixes.sql", import.meta.url)),
+    "utf8",
+  );
+  const block = /-- BEGIN fixed_fee_split_cases([\s\S]*?)-- END fixed_fee_split_cases/.exec(suite);
+  const cases = [
+    ...(block?.[1] ?? "").matchAll(/check_split\((\d+), '\{([\d,]*)\}', '\{([\d,]*)\}'\)/g),
+  ].map((match) => ({
+    fixed: Number(match[1]),
+    sales: (match[2] ?? "").split(",").filter(Boolean).map(Number),
+    expected: (match[3] ?? "").split(",").filter(Boolean).map(Number),
+  }));
+  // Both sides name the sellers of a case by position, so ties fall the same way.
+  const sellerId = (position: number) => `00000000-0000-4000-8000-00000000000${position}`;
+
+  it("finds the shared cases", () => {
+    expect(cases.length).toBeGreaterThanOrEqual(8);
+    expect(cases.some((c) => c.sales.length >= 3)).toBe(true);
+    expect(cases.some((c) => c.fixed > 0 && c.sales.every((sale) => sale === 0))).toBe(true);
+  });
+
+  it("gives every seller the same part", () => {
+    for (const c of cases) {
+      const parts = splitFixedPaymentFee(
+        c.fixed,
+        c.sales.map((itemsGrossMinor, index) => ({
+          sellerId: sellerId(index + 1),
+          itemsGrossMinor,
+        })),
+      );
+      expect([...parts.values()], `${c.fixed} over ${c.sales.join(", ")}`).toEqual(c.expected);
+      const soldSomething = c.sales.some((sale) => sale > 0);
+      expect(c.expected.reduce((a, b) => a + b, 0)).toBe(soldSomething ? c.fixed : 0);
+    }
+  });
+
+  it("is the function the fee computation calls", () => {
+    const fixes = migration("20261121082400_fixes.sql");
+    expect(fixes).toContain("from private.split_fixed_fee(coalesce(v_pay.fixed_minor, 0)");
   });
 });
 

@@ -31,7 +31,11 @@ export interface FeeSchedule {
   fulfillmentTiers: readonly SizeTier[];
   /** Cost of collecting the money, passed through at cost: a rate on what was collected… */
   paymentBpsByMethod: Readonly<Record<PaymentMethod, BasisPoints>>;
-  /** …plus a flat amount per order (the gateway's fixed fee, or cash handling). */
+  /**
+   * …plus a flat amount per order (the gateway's fixed fee, or cash handling).
+   * It is charged once per order: when several sellers share an order they
+   * share it too, see `splitFixedPaymentFee`.
+   */
   paymentFixedMinorByMethod: Readonly<Record<PaymentMethod, number>>;
   /** IVA charged on the platform's fees. */
   feeTaxBps: BasisPoints;
@@ -136,11 +140,71 @@ export function fulfillmentTierFor(
   );
 }
 
+/**
+ * Shares the fixed part of a payment fee between the sellers of one order, in
+ * proportion to what each sold, without losing or inventing a céntimo.
+ *
+ * Each seller gets the whole céntimos of their proportion; the céntimos left
+ * over go one each to the largest remainders, and a tie goes to the lowest
+ * seller id. The arithmetic is done in whole numbers so that it is exactly the
+ * arithmetic of `private.split_fixed_fee` in the database: the two are run
+ * against the same cases (see cr/compliance.test.ts).
+ *
+ * Returns each seller's share in céntimos. A seller who sold nothing gets 0.
+ */
+export function splitFixedPaymentFee(
+  fixedMinor: number,
+  sellers: readonly { sellerId: string; itemsGrossMinor: number }[],
+): Map<string, number> {
+  if (!Number.isSafeInteger(fixedMinor) || fixedMinor < 0) {
+    throw new RangeError(`The fixed fee must be a whole, non-negative amount, got ${fixedMinor}`);
+  }
+  const seen = new Set<string>();
+  for (const seller of sellers) {
+    if (!Number.isSafeInteger(seller.itemsGrossMinor) || seller.itemsGrossMinor < 0) {
+      throw new RangeError(`Seller ${seller.sellerId}: sales must be a whole, non-negative amount`);
+    }
+    if (seen.has(seller.sellerId)) throw new RangeError(`Seller ${seller.sellerId} appears twice`);
+    seen.add(seller.sellerId);
+  }
+
+  const total = sellers.reduce((sum, seller) => sum + BigInt(seller.itemsGrossMinor), 0n);
+  if (total === 0n) return new Map(sellers.map((seller) => [seller.sellerId, 0]));
+
+  const parts = sellers.map((seller) => {
+    const exact = BigInt(fixedMinor) * BigInt(seller.itemsGrossMinor);
+    return { sellerId: seller.sellerId, share: exact / total, remainder: exact % total };
+  });
+  let leftOver = BigInt(fixedMinor) - parts.reduce((sum, part) => sum + part.share, 0n);
+
+  const byRemainder = [...parts].sort((a, b) =>
+    a.remainder !== b.remainder
+      ? a.remainder > b.remainder
+        ? -1
+        : 1
+      : a.sellerId < b.sellerId
+        ? -1
+        : 1,
+  );
+  for (const part of byRemainder) {
+    if (leftOver === 0n) break;
+    part.share += 1n;
+    leftOver -= 1n;
+  }
+  return new Map(parts.map((part) => [part.sellerId, Number(part.share)]));
+}
+
 export function computeSellerStatement(
   input: {
     lines: readonly FeeLineInput[];
     paymentMethod: PaymentMethod;
     shippingPassedToSeller?: Money;
+    /**
+     * This seller's share of the order's fixed payment fee, in céntimos, when
+     * the order has other sellers too (from `splitFixedPaymentFee`). Leave it
+     * out for an order with one seller: the whole fixed amount is theirs.
+     */
+    paymentFixedShareMinor?: number;
   },
   schedule: FeeSchedule = DEFAULT_FEE_SCHEDULE,
 ): SellerStatement {
@@ -195,7 +259,10 @@ export function computeSellerStatement(
   );
   const paymentFee = add(
     percentage(collected, schedule.paymentBpsByMethod[input.paymentMethod]),
-    money(schedule.paymentFixedMinorByMethod[input.paymentMethod], currency),
+    money(
+      input.paymentFixedShareMinor ?? schedule.paymentFixedMinorByMethod[input.paymentMethod],
+      currency,
+    ),
   );
 
   const feesNet = sum([referralFee, fulfillmentFee, paymentFee], currency);
@@ -215,4 +282,46 @@ export function computeSellerStatement(
     feesGross,
     payout: subtract(collected, feesGross),
   };
+}
+
+/**
+ * The statements of every seller in one order. The percentage part of the
+ * payment fee is charged on what each seller sold; the fixed part is charged
+ * once for the order and shared between them (`splitFixedPaymentFee`).
+ */
+export function computeOrderStatements(
+  input: {
+    sellers: readonly {
+      sellerId: string;
+      lines: readonly FeeLineInput[];
+      shippingPassedToSeller?: Money;
+    }[];
+    paymentMethod: PaymentMethod;
+  },
+  schedule: FeeSchedule = DEFAULT_FEE_SCHEDULE,
+): Map<string, SellerStatement> {
+  const shares = splitFixedPaymentFee(
+    schedule.paymentFixedMinorByMethod[input.paymentMethod],
+    input.sellers.map((seller) => ({
+      sellerId: seller.sellerId,
+      itemsGrossMinor: seller.lines.reduce(
+        (sum, line) => sum + line.unitGross.amountMinor * line.quantity,
+        0,
+      ),
+    })),
+  );
+  return new Map(
+    input.sellers.map((seller) => [
+      seller.sellerId,
+      computeSellerStatement(
+        {
+          lines: seller.lines,
+          paymentMethod: input.paymentMethod,
+          shippingPassedToSeller: seller.shippingPassedToSeller,
+          paymentFixedShareMinor: shares.get(seller.sellerId) ?? 0,
+        },
+        schedule,
+      ),
+    ]),
+  );
 }
