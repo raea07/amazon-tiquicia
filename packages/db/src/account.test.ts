@@ -44,7 +44,10 @@ describe("Auth error messages", () => {
       "Ya le enviamos un correo hace poco. Puede pedir otro en 42 segundos.",
     );
     expect(
-      authErrorMessage({ code: "over_email_send_rate_limit", message: "email rate limit exceeded" }),
+      authErrorMessage({
+        code: "over_email_send_rate_limit",
+        message: "email rate limit exceeded",
+      }),
     ).toBe(authErrors.over_email_send_rate_limit["es-CR"]);
   });
 

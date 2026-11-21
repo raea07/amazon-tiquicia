@@ -1,4 +1,15 @@
 export type { ActionState } from "../types";
+export {
+  ChangePasswordForm,
+  CodeField,
+  ConfirmEmailPanel,
+  DeleteAccountForm,
+  EnrolFactor,
+  PasswordRules,
+  RemoveFactorForm,
+  SecondFactorBadge,
+  SecondFactorForm,
+} from "./account-forms";
 export { DistrictPicker } from "./district-picker";
 export {
   ActionForm,

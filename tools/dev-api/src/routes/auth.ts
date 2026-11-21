@@ -328,9 +328,9 @@ export const authRoutes: Routes = async ({ req, res, url, route }) => {
     const id = rows[0]?.id ?? "";
     await pool.query(
       `insert into auth.identities (user_id, provider_id, provider, identity_data, created_at, updated_at)
-       values ($1, $1::text, 'email', jsonb_build_object('sub', $1::text, 'email', $2::text,
+       values ($1::uuid, $3::text, 'email', jsonb_build_object('sub', $3::text, 'email', $2::text,
                'email_verified', false, 'phone_verified', false), now(), now())`,
-      [id, email],
+      [id, email, id],
     );
     const user = await userById(id);
     if (!user) throw new Error("sign-up insert returned no user");

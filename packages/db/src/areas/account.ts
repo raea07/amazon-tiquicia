@@ -196,8 +196,7 @@ export const authErrors = {
     en: "We could not check the code. Enter the one your app shows now.",
   },
   mfa_factor_not_found: {
-    "es-CR":
-      "No encontramos su aplicación de autenticación en esta cuenta. Vuelva a configurarla.",
+    "es-CR": "No encontramos su aplicación de autenticación en esta cuenta. Vuelva a configurarla.",
     en: "We could not find your authenticator app on this account. Set it up again.",
   },
   mfa_factor_name_conflict: {
