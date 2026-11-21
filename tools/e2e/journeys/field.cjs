@@ -107,8 +107,10 @@ async function pinFor(email, tracking) {
 
   // Stop 1: cash on delivery
   await stops.first().locator("a").click();
+  // The route page has its own h1, so wait for the address to change first.
+  await page.waitForURL((u) => /^\/ruta\/[^/]+$/.test(new URL(u).pathname));
   await page.waitForSelector("main h1:visible");
-  const header = await text(page.locator("main:visible header"));
+  const header = await text(page.locator("main:visible header:visible"));
   const tracking1 = /paquete (YT\d+)/.exec(header)[1];
   log(
     "stop 1:",
@@ -227,8 +229,10 @@ async function pinFor(email, tracking) {
     .locator('main:visible section[aria-labelledby="paquetes"] li a', { hasText: "Por alistar" })
     .first()
     .click();
+  // The board has its own header and h1: wait for the parcel's page itself.
+  await w.waitForURL((u) => new URL(u).pathname.startsWith("/bodega/paquete/"));
   await w.waitForSelector("main h1:visible");
-  log("parcel:", await text(w.locator("main:visible header")));
+  log("parcel:", await text(w.locator("main:visible header:visible")));
   await w.click('main:visible button:has-text("Empezar a alistar")');
   await w.waitForSelector('main:visible input[name="code"]');
   const lines = await w.locator("main:visible ol > li").count();
