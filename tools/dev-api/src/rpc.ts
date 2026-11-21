@@ -22,6 +22,16 @@ export interface Claims {
   [claim: string]: unknown;
 }
 
+/**
+ * The database role a request runs as, for every route that reaches the
+ * database (RPC and storage alike): `anon` for a visitor, `service_role` for
+ * the local secret key, `authenticated` for a session token.
+ */
+export function roleFor(claims: Claims | null): "anon" | "authenticated" | "service_role" {
+  if (!claims) return "anon";
+  return claims.role === "service_role" ? "service_role" : "authenticated";
+}
+
 export interface RpcError {
   /** SQLSTATE, or a PGRST code for errors raised before the database is reached. */
   code: string;
@@ -159,12 +169,7 @@ export async function callRpc(
 
     await client.query("begin");
     try {
-      const role = !claims
-        ? "anon"
-        : claims.role === "service_role"
-          ? "service_role"
-          : "authenticated";
-      await client.query(`set local role ${role}`);
+      await client.query(`set local role ${roleFor(claims)}`);
       await client.query("select set_config('request.jwt.claims', $1, true)", [
         claims ? JSON.stringify(claims) : "",
       ]);

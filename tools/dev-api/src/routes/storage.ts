@@ -55,7 +55,7 @@ import {
   send,
   sendBytes,
 } from "../context.ts";
-import type { Claims } from "../rpc.ts";
+import { type Claims, roleFor } from "../rpc.ts";
 
 const PREFIX = "/storage/v1";
 /** Largest upload the platform accepts at all (free plan: 50 MB). */
@@ -296,7 +296,7 @@ async function asCaller<T>(
   try {
     await client.query("begin");
     try {
-      await client.query(`set local role ${claims ? "authenticated" : "anon"}`);
+      await client.query(`set local role ${roleFor(claims)}`);
       await client.query(
         `select set_config('request.jwt.claims', $1, true),
                 set_config('request.headers', $2, true),

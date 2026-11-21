@@ -129,6 +129,21 @@ export async function readJson(req: IncomingMessage): Promise<Record<string, unk
 }
 
 /**
+ * Checks a session token this stand-in issued (its signature, issuer and
+ * audience) and returns its claims; throws for anything else. The one check
+ * every route uses: `authenticate` below for the Data API and storage, and the
+ * Auth routes, which also require the token's session to exist.
+ */
+export async function verifySessionToken(token: string): Promise<Claims> {
+  const { payload } = await jwtVerify(token, keys.publicKey, {
+    issuer: ISSUER,
+    audience: "authenticated",
+    algorithms: ["ES256"],
+  });
+  return payload as unknown as Claims;
+}
+
+/**
  * Resolves who is calling. No token, or the publishable key, is a visitor. A
  * token that fails verification is rejected outright rather than downgraded to
  * a visitor: an expired session must surface as 401 so the client refreshes it.
@@ -142,12 +157,7 @@ export async function authenticate(req: IncomingMessage): Promise<Claims | null>
   }
   if (!token || token === PUBLISHABLE_KEY) return null;
   try {
-    const { payload } = await jwtVerify(token, keys.publicKey, {
-      issuer: ISSUER,
-      audience: "authenticated",
-      algorithms: ["ES256"],
-    });
-    return payload as unknown as Claims;
+    return await verifySessionToken(token);
   } catch {
     throw new HttpError(401, { code: "PGRST301", message: "JWT expired or invalid" });
   }

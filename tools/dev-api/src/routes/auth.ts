@@ -16,7 +16,6 @@
 
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
-import { jwtVerify } from "jose";
 import qrcode from "qrcode-generator";
 import { authError, isEmail, isUuid } from "../auth/errors.ts";
 import { sendMail, type TemplateName } from "../auth/mail.ts";
@@ -41,7 +40,15 @@ import {
   userByEmail,
   userById,
 } from "../auth/store.ts";
-import { ISSUER, keys, PUBLISHABLE_KEY, pool, type Routes, readJson, send } from "../context.ts";
+import {
+  keys,
+  PUBLISHABLE_KEY,
+  pool,
+  type Routes,
+  readJson,
+  send,
+  verifySessionToken,
+} from "../context.ts";
 import type { Claims } from "../rpc.ts";
 import { newSecret, otpauthUri, verifyTotp } from "../totp.ts";
 
@@ -66,12 +73,7 @@ async function caller(req: IncomingMessage): Promise<Caller> {
   }
   let claims: Claims;
   try {
-    const { payload } = await jwtVerify(token, keys.publicKey, {
-      issuer: ISSUER,
-      audience: "authenticated",
-      algorithms: ["ES256"],
-    });
-    claims = payload as unknown as Claims;
+    claims = await verifySessionToken(token);
   } catch {
     throw authError(req, 403, "bad_jwt", "invalid JWT: unable to parse or verify signature");
   }
