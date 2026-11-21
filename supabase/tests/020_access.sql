@@ -175,6 +175,11 @@ begin
   assert (select count(*) from public.my_addresses()) = 1, 'only their own address';
   assert public.my_profile() ->> 'email' = 'comprador@yuntera.example', 'their own profile';
   assert public.my_roles() ->> 'staff_role' is null, 'no staff role';
+  -- Since the review of 21 November 2026 the delivery code is in no table an
+  -- API role can read: get_order is the only way to it.
+  assert not exists (select 1 from information_schema.columns
+                     where table_schema = 'public' and table_name = 'orders' and column_name = 'delivery_pin'),
+    'the delivery code is not in the orders table';
 end
 $$;
 

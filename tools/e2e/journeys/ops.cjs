@@ -197,6 +197,10 @@ async function rpcAs(email, calls) {
   const ret = page.locator('main:visible section[aria-labelledby="devoluciones"] li').first();
   log("return:", (await text(ret)).slice(0, 210));
   await ret.locator('button:has-text("Aprobar")').click();
+  // Since 21 November 2026 the refund waits until the product is back.
+  await page.waitForSelector('main:visible button:has-text("Registrar que llegó a bodega")');
+  await ret.locator('select[name="condition"]').selectOption("damaged");
+  await ret.locator('button:has-text("Registrar que llegó a bodega")').click();
   await page.waitForSelector("main:visible >> text=/Registrar reembolso de/");
   await page.screenshot({ path: SHOTS + "/o6-care.png", fullPage: true });
   await page.locator('main:visible button:has-text("Registrar reembolso de")').first().click();

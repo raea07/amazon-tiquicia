@@ -313,7 +313,7 @@ export async function requestReturn(
   const state = await orderAction(String(formData.get("orderNumber") ?? ""), async (api) => {
     await api.requestReturn({ ...parsed.data, reason: parsed.data.reason || null });
     return parsed.data.kind === "withdrawal"
-      ? "Devolución aprobada. Le reembolsamos en un máximo de 8 días por el mismo medio de pago."
+      ? "Devolución aprobada. Le contactaremos para recoger el producto, sin costo para usted; cuando llegue a nuestra bodega le reembolsamos por el mismo medio de pago."
       : "Recibimos su solicitud. Le respondemos en un máximo de 2 días hábiles.";
   });
   return state.error ? { ...state, values } : state;

@@ -556,10 +556,10 @@ begin
   perform pg_temp.act_as(pg_temp.id(p_driver_user));
   perform public.driver_start_route(p_route);
   for st in
-    select rs.id, rs.recipient_name, rs.cod_amount_minor, o.delivery_pin
+    select rs.id, rs.recipient_name, rs.cod_amount_minor, c.code as delivery_pin
     from public.route_stops rs
     join public.shipments sh on sh.id = rs.shipment_id
-    join public.orders o on o.id = sh.order_id
+    join private.delivery_codes c on c.order_id = sh.order_id
     where rs.route_id = p_route order by rs.sequence
   loop
     v_result := public.driver_complete_stop(

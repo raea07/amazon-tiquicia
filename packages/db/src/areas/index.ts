@@ -13,6 +13,7 @@
  */
 
 import * as account from "./account";
+import { integrityApi, integrityErrors } from "./integrity";
 import { listingsApi, listingsErrors } from "./listings";
 import * as notifications from "./notifications";
 import * as peoplePayouts from "./people-payouts";
@@ -45,6 +46,7 @@ export {
   staffSecurityRow,
   waitText,
 } from "./account";
+export * from "./integrity";
 export * from "./listings";
 export {
   type ChannelChoicesInput,
@@ -81,6 +83,7 @@ export const areaErrors = {
   ...account.errors,
   ...notifications.errors,
   ...photosErrors,
+  ...integrityErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -89,4 +92,5 @@ export const areaApi = (caller: Caller) => ({
   ...account.api(caller),
   ...notifications.api(caller),
   ...photosApi(caller),
+  ...integrityApi(caller),
 });

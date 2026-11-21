@@ -25,8 +25,10 @@ export const ORDER_TRANSITIONS: Readonly<Record<OrderStatus, readonly OrderStatu
   payment_review: ["confirmed", "cancelled"],
   confirmed: ["processing", "cancelled"],
   processing: ["partially_shipped", "shipped", "cancelled"],
-  partially_shipped: ["shipped", "delivered"],
-  shipped: ["delivered"],
+  // Cancelled from here only when every parcel came back without being
+  // delivered (wms_receive_returned_shipment); nobody can ask for it.
+  partially_shipped: ["shipped", "delivered", "cancelled"],
+  shipped: ["delivered", "cancelled"],
   delivered: ["completed", "refunded"],
   completed: ["refunded"],
   cancelled: ["refunded"],

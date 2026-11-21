@@ -9,7 +9,7 @@
  * good message. Errors come back as text safe to show.
  */
 
-import { parseColones, parseIdentification, parsePhone } from "@yuntera/core";
+import { format, money, parseColones, parseIdentification, parsePhone } from "@yuntera/core";
 import { ApiError } from "@yuntera/db";
 import {
   type ActionState,
@@ -17,6 +17,7 @@ import {
   endSession,
   GENERIC_ERROR,
   getViewer,
+  isRedirect,
   messageOf,
   passwordSignIn,
   passwordSignUp,
@@ -282,7 +283,7 @@ export async function updateOffer(
     return { error: "Los días para alistar deben estar entre 0 y 10.", values };
   }
 
-  const state = await attempt(async () => {
+  try {
     await (await sessionApi()).sellerUpdateOffer({
       offerId: offerId.data,
       priceMinor,
@@ -290,10 +291,20 @@ export async function updateOffer(
       status: status.data,
       handlingDays,
     });
-    return "Cambios guardados.";
-  }, values);
-  if (state.ok) refresh();
-  return state;
+  } catch (error) {
+    if (isRedirect(error)) throw error;
+    // The database says the lowest price it would accept: tell the seller.
+    if (error instanceof ApiError && error.code === "price_below_fees" && error.detail) {
+      const minimum = format(money(Number(error.detail)));
+      return {
+        error: `${messageOf(error)} El precio mínimo para este producto es ${minimum}.`,
+        values,
+      };
+    }
+    return { error: messageOf(error), values };
+  }
+  refresh();
+  return { ok: "Cambios guardados." };
 }
 
 // ── Inventory ───────────────────────────────────────────────────────────────

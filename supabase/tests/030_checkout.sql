@@ -4,6 +4,12 @@ begin;
 \ir _helpers.sql
 select pg_temp.allow_inspection();
 
+-- This suite places many unpaid orders as one shopper to test pricing and
+-- reservations. The limits on what one account may hold unpaid are tested in
+-- 115_integrity.sql; here they are lifted.
+update public.app_settings set value = '100'
+where key in ('max_unpaid_orders_per_account', 'max_held_units_per_account');
+
 select pg_temp.remember('cafe', pg_temp.offer('cafe-molido-tarrazu-340g')::text);
 select pg_temp.remember('laptop', pg_temp.offer('laptop-14-nimbo-libro')::text);
 select pg_temp.remember('hamaca', pg_temp.offer('hamaca-algodon-doble')::text);

@@ -20,9 +20,9 @@ select pg_temp.remember('seller_shipment',
   (select id::text from public.shipments where order_id = current_setting('t.seller_order')::uuid));
 -- PINs are known only to the shopper; the test reads them as superuser to play that part.
 select pg_temp.remember('packed_pin',
-  (select delivery_pin from public.orders where id = current_setting('t.packed')::uuid));
+  (select code from private.delivery_codes where order_id = current_setting('t.packed')::uuid));
 select pg_temp.remember('cod_pin',
-  (select delivery_pin from public.orders where id = current_setting('t.cod_order')::uuid));
+  (select code from private.delivery_codes where order_id = current_setting('t.cod_order')::uuid));
 select pg_temp.remember('cod_total',
   (select total_minor::text from public.orders where id = current_setting('t.cod_order')::uuid));
 
@@ -411,16 +411,19 @@ begin
   where rt.status = 'in_progress' and rs.status = 'pending' limit 1;
   perform set_config('request.jwt.claims', json_build_object(
     'sub', (select id from auth.users where email = 'repartidor@yuntera.example'))::text, true);
-  for i in 1 .. 5 loop
+  for i in 1 .. 4 loop
     r := public.driver_complete_stop(v_stop, 'xxxx', 'Alguien');
     assert r ->> 'error' = 'wrong_pin', format('attempt %s: %s', i, r);
   end loop;
+  -- The attempt that reaches the limit already says the order is locked.
+  r := public.driver_complete_stop(v_stop, 'xxxx', 'Alguien');
+  assert r ->> 'error' = 'pin_locked', format('fifth attempt: %s', r);
   r := public.driver_complete_stop(v_stop, 'xxxx', 'Alguien');
   assert r ->> 'error' = 'pin_locked', format('sixth attempt: %s', r);
   -- Even the right PIN no longer works once locked: support has to step in.
   r := public.driver_complete_stop(
     v_stop,
-    (select o.delivery_pin from public.orders o join public.shipments s on s.order_id = o.id
+    (select c.code from private.delivery_codes c join public.shipments s on s.order_id = c.order_id
      join public.route_stops rs on rs.shipment_id = s.id where rs.id = v_stop),
     'Alguien');
   assert r ->> 'error' = 'pin_locked', 'locked means locked';

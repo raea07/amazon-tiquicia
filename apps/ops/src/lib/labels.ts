@@ -73,7 +73,7 @@ export const RETURN_KIND: Record<string, string> = {
 
 export const RETURN_STATUS: Record<string, { label: string; tone: Tone }> = {
   requested: { label: "Por decidir", tone: "warning" },
-  approved: { label: "Aprobada: falta reembolsar", tone: "info" },
+  approved: { label: "Aprobada: falta recibir el producto", tone: "info" },
   received: { label: "Producto recibido: falta reembolsar", tone: "info" },
 };
 

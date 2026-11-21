@@ -1365,39 +1365,6 @@ reset role;
 update public.seller_private set payout_iban = 'CR23015108410026012345'
 where seller_id = current_setting('t.tecnocasa')::uuid;
 
--- The amount is frozen: a refund after scheduling does not change the payout,
--- it leaves the shop with less (here: a negative amount) available.
-select pg_temp.login('comprador@yuntera.example');
-select set_config('t.return', public.request_return((
-  select i.id from public.order_items i join public.orders o on o.id = i.order_id
-  where o.idempotency_key = 'seed-h01' and i.seller_id = current_setting('t.tecnocasa')::uuid
-  limit 1), 'damaged', 1, 'La caja llegó abierta y el producto golpeado.')::text, true);
-reset role;
-
-select pg_temp.login('central@yuntera.example');
-do $$
-declare
-  v_tecnocasa uuid := current_setting('t.tecnocasa')::uuid;
-  v_debit bigint;
-  s jsonb;
-begin
-  perform public.ops_decide_return(current_setting('t.return')::uuid, true, null);
-  v_debit := (public.ops_complete_return(current_setting('t.return')::uuid) ->> 'seller_debit_minor')::bigint;
-  assert v_debit > 0, 'the seller gives back what they were paid for the returned unit';
-  assert probe.value(format('select amount_minor from public.payouts where id = %L', current_setting('t.payout')))
-         = current_setting('t.expected_tecnocasa'), 'the scheduled amount did not move';
-  s := (select x from jsonb_array_elements(public.ops_payout_preview() -> 'sellers') x
-        where (x ->> 'seller_id')::uuid = v_tecnocasa);
-  assert (s ->> 'available_minor')::bigint = -v_debit
-     and (s ->> 'payable_minor')::bigint = current_setting('t.payable_before')::bigint - v_debit,
-    format('the refund comes out of what is available: %s', s);
-  perform set_config('t.debit', v_debit::text, true);
-end
-$$;
-reset role;
-
-select pg_temp.check_balances('after a refund on a paid-out order');
-
 -- Marking it paid: this is when the ledger changes. Once only.
 select pg_temp.login('central@yuntera.example');
 do $$
@@ -1446,7 +1413,7 @@ begin
           where e.transaction_id = v_tx and a.code = 'bank_operating' and a.kind = 'asset') = -v_expected,
     'and the operating bank account is credited: that much has left it';
   assert (public.seller_overview(v_tecnocasa) ->> 'payable_minor')::bigint
-         = current_setting('t.payable_before')::bigint - current_setting('t.debit')::bigint - v_expected,
+         = current_setting('t.payable_before')::bigint - v_expected,
     'the seller centre''s summary went down by the payout';
 
   -- A payout is paid once.
@@ -1463,6 +1430,43 @@ $$;
 reset role;
 
 select pg_temp.check_balances('after paying');
+
+-- A refund after the payout was paid leaves the shop with less (here: a
+-- negative amount) available, recovered from its next sales. The paid amount
+-- does not move. (A refund between scheduling and paying stops the payment
+-- instead, since 21 November 2026: see 115_integrity.sql, INT-10.)
+select pg_temp.login('comprador@yuntera.example');
+select set_config('t.return', public.request_return((
+  select i.id from public.order_items i join public.orders o on o.id = i.order_id
+  where o.idempotency_key = 'seed-h01' and i.seller_id = current_setting('t.tecnocasa')::uuid
+  limit 1), 'damaged', 1, 'La caja llegó abierta y el producto golpeado.')::text, true);
+reset role;
+
+select pg_temp.login('central@yuntera.example');
+do $$
+declare
+  v_tecnocasa uuid := current_setting('t.tecnocasa')::uuid;
+  v_debit bigint;
+  s jsonb;
+begin
+  perform public.ops_decide_return(current_setting('t.return')::uuid, true, null);
+  perform public.ops_receive_return(current_setting('t.return')::uuid, true, null);
+  v_debit := (public.ops_complete_return(current_setting('t.return')::uuid) ->> 'seller_debit_minor')::bigint;
+  assert v_debit > 0, 'the seller gives back what they were paid for the returned unit';
+  assert probe.value(format('select amount_minor from public.payouts where id = %L', current_setting('t.payout')))
+         = current_setting('t.expected_tecnocasa'), 'the scheduled amount did not move';
+  s := (select x from jsonb_array_elements(public.ops_payout_preview() -> 'sellers') x
+        where (x ->> 'seller_id')::uuid = v_tecnocasa);
+  assert (s ->> 'available_minor')::bigint = -v_debit
+     and (s ->> 'payable_minor')::bigint = current_setting('t.payable_before')::bigint
+                                          - current_setting('t.expected_tecnocasa')::bigint - v_debit,
+    format('the refund comes out of what is available: %s', s);
+  perform set_config('t.debit', v_debit::text, true);
+end
+$$;
+reset role;
+
+select pg_temp.check_balances('after a refund on a paid-out order');
 
 -- Money that becomes available after a shop was paid in a run is paid by the
 -- same run when it is called again, as the preview says: a second payout for
