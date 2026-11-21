@@ -17,6 +17,9 @@ begin;
 select pg_temp.remember('buyer2_order',
   (select o.order_number from public.orders o join auth.users u on u.id = o.user_id
    where u.email = 'comprador2@yuntera.example' limit 1));
+select pg_temp.remember('buyer2_order_id',
+  (select o.id::text from public.orders o join auth.users u on u.id = o.user_id
+   where u.email = 'comprador2@yuntera.example' order by o.placed_at desc limit 1));
 select pg_temp.remember('buyer_orders',
   (select count(*)::text from public.orders o join auth.users u on u.id = o.user_id
    where u.email = 'comprador@yuntera.example'));
@@ -202,6 +205,26 @@ begin
   raise exception 'shopper suspended a seller';
 exception when others then
   if sqlerrm <> 'forbidden' then raise; end if;
+end
+$$;
+
+-- Paying for or cancelling someone else's order answers "not found" before
+-- the order's state is even looked at.
+do $$
+begin
+  perform public.confirm_sandbox_payment(current_setting('t.buyer2_order_id')::uuid);
+  raise exception 'shopper paid for a stranger''s order';
+exception when others then
+  if sqlerrm <> 'order_not_found' then raise; end if;
+end
+$$;
+
+do $$
+begin
+  perform public.cancel_order(current_setting('t.buyer2_order_id')::uuid, 'no es mío');
+  raise exception 'shopper cancelled a stranger''s order';
+exception when others then
+  if sqlerrm <> 'order_not_found' then raise; end if;
 end
 $$;
 
