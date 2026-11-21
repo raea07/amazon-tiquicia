@@ -1267,7 +1267,30 @@ begin
     if sqlerrm <> 'price_below_fees' then raise; end if;
   end;
   perform pg_temp.logout();
-  -- Nor by any other path: the variant's package, or the product's category.
+  -- Nor by moving the listing to a category whose commission the price no
+  -- longer covers (the category trigger, its own path). The target is a
+  -- category in which this very offer would pay less than nothing.
+  declare
+    v_target uuid;
+    v_before uuid := (select category_id from public.products where id = v_product);
+  begin
+    select c.id into v_target
+    from public.categories c, public.offers o join public.skus k on k.id = o.sku_id
+    where o.id = v_offer and c.id <> v_before
+      and private.worst_unit_payout(o.price_minor, o.fulfillment, c.id, k.weight_grams,
+                                    greatest(k.length_cm, k.width_cm, k.height_cm)) < 0
+    order by c.slug limit 1;
+    assert v_target is not null, 'REV-3: some category takes more than this price leaves';
+    begin
+      update public.products set category_id = v_target where id = v_product;
+      raise exception 'REV-3: a category change pushed the offer below its fees';
+    exception when others then
+      if sqlerrm <> 'price_below_fees' then raise; end if;
+    end;
+    assert (select category_id from public.products where id = v_product) = v_before,
+      'REV-3: the listing stays in its category';
+  end;
+  -- Nor by any other path: the variant's package.
   begin
     update public.skus set weight_grams = 29000, length_cm = 100, width_cm = 50, height_cm = 50 where id = v_sku;
     raise exception 'REV-3: a direct package change passed';

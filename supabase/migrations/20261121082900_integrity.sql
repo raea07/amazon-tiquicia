@@ -504,6 +504,11 @@ begin
   if p_kind is null or p_kind not in ('withdrawal', 'warranty', 'damaged', 'wrong_item') then
     perform private.fail('invalid_return_kind');
   end if;
+  -- The table keeps at most 2,000 characters; say so instead of failing on
+  -- the constraint (FA-M3).
+  if char_length(trim(p_reason)) > 2000 then
+    perform private.fail('reason_too_long');
+  end if;
   if not private.order_returnable(v_order) then
     perform private.fail('order_not_returnable', v_order.status::text);
   end if;
@@ -1174,6 +1179,11 @@ begin
 
   if jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0 then
     perform private.fail('cart_empty');
+  end if;
+  -- Counted before anything is locked or priced, as checkout_quote does
+  -- (FA-8): a cart of thousands of lines is refused at once.
+  if jsonb_array_length(p_items) > v_max_lines then
+    perform private.fail('too_many_lines');
   end if;
 
   select * into v_addr from public.addresses

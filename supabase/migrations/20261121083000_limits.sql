@@ -2009,7 +2009,9 @@ declare
 begin
   select m.role into v_my_role from public.seller_members m
   where m.seller_id = p_seller_id and m.user_id = v_me;
-  if v_my_role is null then
+  -- A member who turned the second factor on acts only from a session that
+  -- passed it, as everywhere else in the seller centre (is_seller_member).
+  if v_my_role is null or not private.factor_ok() then
     perform private.fail('forbidden');
   end if;
   select m.role into v_their_role from public.seller_members m
@@ -2038,6 +2040,9 @@ language plpgsql security definer
 set search_path = ''
 as $$
 begin
+  if not private.is_seller_member(p_seller_id) then
+    perform private.fail('forbidden');
+  end if;
   if not exists (select 1 from public.seller_members m
                  where m.seller_id = p_seller_id and m.user_id = (select auth.uid()) and m.role = 'owner') then
     perform private.fail('owner_only');
@@ -2947,6 +2952,69 @@ begin
     null, 'seller_count', null, 'Conteo del vendedor');
 end;
 $$;
+
+-- ═══ 12c. A suspended shop's listings leave the shop (DTA-15) ══════════════
+--
+-- Search stopped listing a suspended shop's products, but its product pages
+-- were still served to a visitor who had the address, by get_product and by
+-- the check the shop's router makes (shop_path_exists). A product page is now
+-- open to a visitor while the shop that created the listing is active, or
+-- while another active shop sells it (a shared page stays for its other
+-- sellers). Staff, and the shop itself, see it as before. get_product keeps
+-- its body (20261121082800_lockdown.sql) behind a gate, as the search
+-- functions above do, so its visibility rules for staff and the shop's own
+-- drafts stay in one place.
+
+create or replace function private.product_page_open(p_product_id uuid) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.products p
+    where p.id = p_product_id
+      and (p.created_by_seller_id is null
+           or private.seller_is_active(p.created_by_seller_id)
+           or private.is_staff()
+           or p.created_by_seller_id in (select private.my_seller_ids())
+           or exists (select 1 from public.offers o
+                      join public.skus k on k.id = o.sku_id
+                      join public.sellers s on s.id = o.seller_id
+                      where k.product_id = p.id and o.status = 'active' and s.status = 'active')));
+$$;
+
+alter function public.get_product(text, text) rename to get_product_page;
+alter function public.get_product_page(text, text) set schema private;
+revoke all on function private.get_product_page(text, text) from public, anon, authenticated;
+
+create function public.get_product(p_slug text, p_postal_code text default null) returns jsonb
+language sql stable security definer
+set search_path = ''
+as $$
+  select private.get_product_page(p.slug, p_postal_code)
+  from public.products p
+  where p.slug = p_slug and private.product_page_open(p.id);
+$$;
+
+create or replace function public.shop_path_exists(p_kind text, p_slug text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select case p_kind
+    when 'product' then exists (
+      select 1 from public.products p
+      where p.slug = p_slug and p.status = 'active' and private.product_page_open(p.id))
+    when 'category' then exists (
+      select 1 from public.categories c where c.slug = p_slug and c.active)
+    else false
+  end;
+$$;
+
+revoke all on function private.product_page_open(uuid) from public, anon, authenticated;
+revoke all on function public.get_product(text, text) from public;
+grant execute on function public.get_product(text, text) to anon, authenticated;
 
 -- ═══ 13. Grants ════════════════════════════════════════════════════════════
 

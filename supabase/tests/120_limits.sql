@@ -1658,6 +1658,116 @@ do $$ begin
     'a delivery to a visitor''s typed address is dropped; one to an account is kept';
 end $$;
 
+-- ═══ Merge: what the streams left to each other ══════════════════════════
+
+-- FA-8: place_order counts the lines before it locks or prices anything, as
+-- checkout_quote does.
+select pg_temp.remember('fa8_address', (
+  select a.id::text from public.addresses a join auth.users u on u.id = a.user_id
+  where u.email = 'comprador@yuntera.example' and a.deleted_at is null order by a.is_default desc limit 1));
+select pg_temp.remember('fa8_max_lines', (private.setting('max_lines_per_order'))::text);
+select pg_temp.login('comprador@yuntera.example');
+do $$
+declare
+  v_cart jsonb := (select jsonb_agg(jsonb_build_object('offer_id', gen_random_uuid(), 'quantity', 1))
+                   from generate_series(1, 200000));
+  v_start timestamptz := clock_timestamp();
+begin
+  begin
+    perform public.place_order(v_cart, current_setting('t.fa8_address')::uuid, 'card', 'fa8-many-lines');
+    raise exception 'FA-8: an order of 200,000 lines was placed';
+  exception when others then
+    if sqlerrm <> 'too_many_lines' then raise; end if;
+  end;
+  assert clock_timestamp() - v_start < interval '250 milliseconds',
+    format('FA-8: refused without pricing the lines (%s)', clock_timestamp() - v_start);
+  -- One line over the limit is the edge.
+  begin
+    perform public.place_order(
+      (select jsonb_agg(jsonb_build_object('offer_id', gen_random_uuid(), 'quantity', 1))
+       from generate_series(1, current_setting('t.fa8_max_lines')::integer + 1)),
+      current_setting('t.fa8_address')::uuid, 'card', 'fa8-one-over');
+    raise exception 'FA-8: one line over the limit was accepted';
+  exception when others then
+    if sqlerrm <> 'too_many_lines' then raise; end if;
+  end;
+end
+$$;
+reset role; select pg_temp.logout();
+
+-- FA-M3: a return's reason over 2,000 characters is a code, not a raw
+-- constraint error.
+select pg_temp.remember('fam3_item', (
+  select i.id::text from public.order_items i join public.orders o on o.id = i.order_id
+  join auth.users u on u.id = o.user_id
+  where u.email = 'comprador@yuntera.example' and private.delivered_units(i.id) > 0
+  order by i.id limit 1));
+select pg_temp.login('comprador@yuntera.example');
+do $$
+begin
+  perform public.request_return(current_setting('t.fam3_item')::uuid, 'damaged', 1, repeat('Golpeado. ', 201));
+  raise exception 'FA-M3: a reason of 2,010 characters was stored';
+exception when others then
+  if sqlerrm <> 'reason_too_long' then raise; end if;
+end
+$$;
+reset role; select pg_temp.logout();
+
+-- DTA-15: a suspended shop's own listing is no longer served to a visitor who
+-- has its address, while a listing another active shop also sells stays.
+select pg_temp.remember('dta15_seller', (select id::text from public.sellers where slug = 'tecnocasa'));
+select pg_temp.remember('dta15_own', (
+  select p.slug from public.products p
+  where p.created_by_seller_id = current_setting('t.dta15_seller')::uuid and p.status = 'active'
+    and not exists (select 1 from public.offers o join public.skus k on k.id = o.sku_id
+                    where k.product_id = p.id and o.seller_id <> p.created_by_seller_id and o.status = 'active')
+  order by p.slug limit 1));
+select pg_temp.remember('dta15_shared', coalesce((
+  select p.slug from public.products p
+  where p.created_by_seller_id = current_setting('t.dta15_seller')::uuid and p.status = 'active'
+    and exists (select 1 from public.offers o join public.skus k on k.id = o.sku_id
+                join public.sellers s on s.id = o.seller_id
+                where k.product_id = p.id and o.seller_id <> p.created_by_seller_id
+                  and o.status = 'active' and s.status = 'active')
+  order by p.slug limit 1), ''));
+select pg_temp.login_anon();
+do $$
+begin
+  assert public.get_product(current_setting('t.dta15_own')) is not null, 'DTA-15: the page is served while the shop is active';
+  assert public.shop_path_exists('product', current_setting('t.dta15_own')), 'and its address exists';
+end
+$$;
+reset role;
+select pg_temp.login('central@yuntera.example', 'aal2');
+select public.ops_set_seller_status(current_setting('t.dta15_seller')::uuid, 'suspended',
+                                    'Suspendida para la prueba de DTA-15.');
+reset role; select pg_temp.logout();
+select pg_temp.login_anon();
+do $$
+begin
+  assert public.get_product(current_setting('t.dta15_own')) is null,
+    'DTA-15: a suspended shop''s own listing is not served to a visitor';
+  assert not public.shop_path_exists('product', current_setting('t.dta15_own')), 'nor does its address exist';
+  if current_setting('t.dta15_shared') <> '' then
+    assert public.get_product(current_setting('t.dta15_shared')) is not null,
+      'a listing another active shop sells stays';
+    assert public.shop_path_exists('product', current_setting('t.dta15_shared')), 'with its address';
+  end if;
+end
+$$;
+reset role;
+-- Staff and the shop itself still see it.
+select pg_temp.login('central@yuntera.example', 'aal2');
+do $$ begin
+  assert public.get_product(current_setting('t.dta15_own')) is not null, 'DTA-15: staff still see it';
+end $$;
+reset role;
+select pg_temp.login('vendedor@yuntera.example');
+do $$ begin
+  assert public.get_product(current_setting('t.dta15_own')) is not null, 'DTA-15: so does the shop';
+end $$;
+reset role; select pg_temp.logout();
+
 -- ═══ Identification numbers: the same cases as packages/core ═══════════════
 
 -- packages/core/src/cr/cr.test.ts reads the lines between the markers and runs

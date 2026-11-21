@@ -82,6 +82,10 @@ export const integrityErrors = {
       "Todavía no ha recibido este producto. Si ya no lo quiere, cancele el pedido mientras se pueda; si no, podrá devolverlo sin dar motivo cuando lo reciba.",
     en: "You have not received this product yet. If you no longer want it, cancel the order while you still can; otherwise you can return it without giving a reason once it arrives.",
   },
+  reason_too_long: {
+    "es-CR": "El motivo es demasiado largo: use como máximo 2000 caracteres.",
+    en: "The reason is too long: use at most 2,000 characters.",
+  },
   return_not_received: {
     "es-CR":
       "El producto todavía no ha vuelto a bodega. Registre primero que llegó y después el reembolso.",
