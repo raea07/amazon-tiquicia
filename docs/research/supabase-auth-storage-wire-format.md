@@ -2,6 +2,8 @@
 
 Researched 21 November 2026. Scope: what the apps must call, and what `tools/dev-api` must imitate.
 
+Fact-checked 21 November 2026 against the installed packages, the Auth and Storage server sources and the documentation pages. What changed is listed under "Corrections after fact-check" at the end, followed by "Implementation risks".
+
 ## Bottom line
 
 The installed clients (`@supabase/supabase-js`, `auth-js`, `storage-js`, `functions-js` 2.119.2 and `@supabase/ssr` 0.12.7) and the Auth server source (supabase/auth v2.198.0, 13 Nov 2026) agree on a small, stable HTTP surface, documented below endpoint by endpoint. For this project the safest designs are: **token-hash e-mail links** (`/auth/confirm?token_hash=…&type=…` then `verifyOtp`) for password reset, sign-up confirmation and e-mail change, because they work with server-only cookies and across devices; **TOTP MFA via `challengeAndVerify` inside one Server Action**, which returns a *new* token pair carrying `aal: "aal2"` that the existing `private.staff_session_ok()` already reads; **Storage through signed upload URLs or direct uploads under RLS on `storage.objects`**, with buckets and policies created in SQL migrations; and **Edge Functions written as a web-standard `(Request) => Response` handler** exported as `export default { fetch }`, which also runs under Node 22 for tests. Five things will bite on first contact with real Supabase and are not visible in the stand-in today: (1) every Auth call is made from the Next.js server, so Auth's per-IP rate limits and the MFA "same IP" check see the server, not the shopper, and the documented fix (`Sb-Forwarded-For`) requires a secret key; (2) the built-in SMTP only mails organisation members at 2 messages/hour, so a custom SMTP provider is a hard prerequisite; (3) with e-mail confirmation on, `signUp` returns no session and never reports "already registered"; (4) a user with a verified factor cannot change password or e-mail from an `aal1` session, which includes the session a recovery link creates; (5) the stand-in's refresh tokens are strictly single-use and its `session_id` changes on every refresh, both unlike the real server.
@@ -34,7 +36,7 @@ Anything marked **UNVERIFIED** could not be confirmed from a primary source.
 | Auth body content type | `application/json;charset=UTF-8`; `GET` has no body | `AUTHJS/lib/fetch.ts:156-162` |
 | `redirectTo` / `emailRedirectTo` | sent as query string `?redirect_to=…`, never in the body | `AUTHJS/lib/fetch.ts:194-199` |
 
-Gateway behaviour (documented for the self-hosted gateway, which the page says matches the platform): `apikey` is required on `/auth/v1/*` and `/rest/v1/*` (401 without); `/auth/v1/verify`, `/auth/v1/callback`, `/auth/v1/authorize` and `/auth/v1/.well-known/jwks.json` are open; `/storage/v1/*` and `/functions/v1/*` do their own authorisation. An `Authorization` header that is absent or starts with `Bearer sb_` is replaced by an internal `anon`/`service_role` JWT; a real user JWT passes through unchanged. Source: https://supabase.com/docs/guides/self-hosting/self-hosted-auth-keys and https://supabase.com/docs/guides/self-hosting/self-hosted-envoy. **Consequence for the stand-in:** `Authorization: Bearer sb_publishable_…` means "visitor" (already handled, `tools/dev-api/src/server.ts:188`).
+Gateway behaviour (documented for the self-hosted Envoy gateway; that page states parity with the hosted platform only for CORS, so treat the rest as a close model of the hosted gateway, not a guarantee): `apikey` is required on `/auth/v1/*` and `/rest/v1/*` (401 without); `/auth/v1/verify`, `/auth/v1/callback`, `/auth/v1/authorize` and `/auth/v1/.well-known/jwks.json` are open; `/storage/v1/*` and `/functions/v1/*` do their own authorisation. An `Authorization` header that is absent or starts with `Bearer sb_` is replaced by an internal `anon`/`service_role` JWT; a real user JWT passes through unchanged. Source: https://supabase.com/docs/guides/self-hosting/self-hosted-auth-keys and https://supabase.com/docs/guides/self-hosting/self-hosted-envoy. **Consequence for the stand-in:** `Authorization: Bearer sb_publishable_…` means "visitor" (already handled, `tools/dev-api/src/context.ts:124-127`).
 
 ### Server client facts (`@supabase/ssr` 0.12.7)
 
@@ -114,7 +116,7 @@ POST /auth/v1/verify
  "refresh_token":"<opaque>","user":{…}}
 ```
 
-The client saves the session and emits `PASSWORD_RECOVERY` (`GoTrueClient.ts:2508-2514`), which makes `@supabase/ssr` write the cookies. Send only `token_hash` and `type`: adding `email`, `phone` or a body `redirect_to` gives `400 validation_failed` "Only the token_hash and type should be provided" (`verify.go:83-87`). `verifyOtp` spreads its whole argument into the body (`GoTrueClient.ts:2489-2492`), so do not pass `options` with a token hash.
+The client saves the session and emits `PASSWORD_RECOVERY` (`GoTrueClient.ts:2508-2514`), which makes `@supabase/ssr` write the cookies. Send only `token_hash` and `type`: adding `email`, `phone` or a body `redirect_to` gives `400 validation_failed` "Only the token_hash and type should be provided" (`verify.go:83-87`). `verifyOtp` spreads its whole argument into the body (`GoTrueClient.ts:2489-2492`), so any extra top-level key such as `email` reaches the server and triggers that 400: pass exactly `{ token_hash, type }`. (`options.redirectTo` would travel as the `?redirect_to=` query string, not in the body, and the server ignores unknown body keys such as `options`, `GOTRUE/api/helpers.go:86-98`; the `VerifyTokenHashParams` type has no `options` field in any case, `AUTHJS/lib/types.ts:896-902`.)
 
 | Status | Code | Message | Source |
 | --- | --- | --- | --- |
@@ -205,7 +207,7 @@ Which template variable carries which mailbox's hash when both e-mails are sent 
 | `auth.email.secure_password_change` (default off) | password change needs a `nonce` when the session was created more than 24 h ago | `reauthenticate()` → `GET /auth/v1/reauthenticate` with the user token → `200 {}`, e-mails a 6-digit code; then `updateUser({ password, nonce })` (`GoTrueClient.ts:2653-2675`, `reauthenticate.go:17-67`, `user.go:153-165`) |
 | `auth.email.require_current_password` (default off) | password change needs `current_password`; skipped in a recovery session | `updateUser({ password, current_password })` (`AUTHJS/lib/types.ts:536-545`, `user.go:171-187`) |
 
-Neither is required for the recovery flow. The password-reset guide writes `currentPassword`; the installed client's type and the password-security guide use **`current_password`**, which is what the server parses (`user.go:21`).
+Neither is required for the recovery flow. "Recovery session" on the server means any session whose `amr` contains `otp`, `magiclink` or `recovery` (`GOTRUE/models/sessions.go:114-127`, `GOTRUE/models/factor.go:66-73`); every session created by `POST /verify` carries `otp`, so a session born from a sign-up confirmation link also skips the current-password check. The password-reset guide writes `currentPassword`; the installed client's type and the password-security guide use **`current_password`**, which is what the server parses (`user.go:21`).
 
 ---
 
@@ -213,7 +215,7 @@ Neither is required for the recovery flow. The password-reset guide writes `curr
 
 ### 2.1 Endpoints
 
-All require `Authorization: Bearer <user access token>`; anonymous users get `403 no_authorization` (`api.go` `/factors` routes, `GOTRUE/api/auth.go:69-76`).
+All require `Authorization: Bearer <user access token>`; anonymous users get `403 no_authorization` (`api.go` `/factors` routes, `GOTRUE/api/auth.go:70-77`). On the three `/factors/{id}…` routes an id that is unknown or belongs to another user answers `404 mfa_factor_not_found` "Factor not found", and an id that is not a UUID answers `404 validation_failed` "factor_id must be an UUID" (`GOTRUE/api/admin.go:75-94`).
 
 | Client call | HTTP | Request body | Success body | Source |
 | --- | --- | --- | --- | --- |
@@ -329,14 +331,14 @@ Client parsing (`AUTHJS/lib/fetch.ts:79-146`): reads `data.code` as the error co
 | code `session_not_found` | `AuthSessionMissingError`; `getUser()` then removes the local session (`GoTrueClient.ts:3274-3281`) |
 | anything else non-2xx | `AuthApiError { status, code, message }` |
 
-Codes the apps should branch on (full union: `AUTHJS/lib/error-codes.ts:6-95`): `invalid_credentials` (400), `email_not_confirmed` (400), `user_already_exists` (422), `email_exists` (422), `weak_password` (422), `same_password` (422), `otp_expired` (403), `over_email_send_rate_limit` / `over_request_rate_limit` (429), `refresh_token_not_found`, `refresh_token_already_used`, `session_not_found`, `session_expired`, `user_banned` (400 on the token endpoint), `insufficient_aal`, `mfa_*`, `reauthentication_needed`, `validation_failed`, `signup_disabled`, `email_address_not_authorized` (built-in SMTP refusing a non-member address; HTTP status **UNVERIFIED**).
+Codes the apps should branch on (full union: `AUTHJS/lib/error-codes.ts:6-95`): `invalid_credentials` (400), `email_not_confirmed` (400), `user_already_exists` (422), `email_exists` (422), `weak_password` (422), `same_password` (422), `otp_expired` (403), `over_email_send_rate_limit` / `over_request_rate_limit` (429), `refresh_token_not_found`, `refresh_token_already_used`, `session_not_found`, `session_expired`, `user_banned` (400 on the token endpoint), `insufficient_aal`, `mfa_*`, `reauthentication_needed`, `validation_failed`, `signup_disabled`, `email_address_not_authorized` (built-in SMTP refusing a non-member address; `400`, `GOTRUE/api/mail.go:773-790`).
 
 ### 3.2 `getClaims()` (`AUTHJS/GoTrueClient.ts:6752-6860`)
 
 1. No argument: calls `getSession()`, which refreshes first if the token expires within 90 s (`AUTHJS/lib/constants.ts:4-13`).
 2. Decodes the three base64url parts; rejects a missing or past `exp` (`AUTHJS/lib/helpers.ts:185-217`, `534-542`).
 3. If `alg` starts with `HS`, or there is no `kid`, or WebCrypto is missing: falls back to `GET /user`.
-4. Otherwise finds the key by `kid` in a process-wide cache (per storage key, 10 minutes), else `GET /auth/v1/.well-known/jwks.json` and expects `{"keys":[…]}` (`GoTrueClient.ts:236`, `277-291`, `6649-6685`; `constants.ts:58`).
+4. Otherwise finds the key by `kid` in a process-wide cache (per storage key, 10 minutes), else `GET /auth/v1/.well-known/jwks.json` and expects `{"keys":[…]}` (`GoTrueClient.ts:236`, `277-291`, `6649-6685`; `constants.ts:58`). If the fetched set is empty or has no key with that `kid`, it also falls back to `GET /user` (`GoTrueClient.ts:6672-6685`, `6801-6824`), so a stand-in whose JWKS `kid` does not match the token header silently turns every `getClaims()` into a network call.
 5. Verifies with `crypto.subtle`; supported `alg`: `ES256` (P-256) and `RS256` only (`helpers.ts:544-562`).
 
 **It validates the signature and `exp` only**, not `iss`, `aud`, `role` or `nbf`. That is acceptable because PostgREST and the database re-verify, and the project reads roles from the database (`packages/next-kit/src/server/session.ts`). The real JWKS response has `Cache-Control: public, max-age=600` and excludes symmetric keys (`GOTRUE/api/jwks.go`); Supabase also edge-caches it for 10 minutes, so a rotated key can take up to about 20 minutes to be picked up (https://supabase.com/docs/guides/auth/signing-keys).
@@ -350,7 +352,7 @@ Server rules (`GOTRUE/tokens/service.go:194-420`; https://supabase.com/docs/guid
 | Case | Result |
 | --- | --- |
 | Current token | new access + refresh token, same `session_id`, same `aal`/`amr` |
-| Already-used token, within the **reuse interval (10 s default)** | accepted again |
+| Already-used token, within the **reuse interval** (10 s on the platform and in the CLI, `auth.refresh_token_reuse_interval`; the Auth server's own default is 0, `GOTRUE/conf/configuration.go:935`, so it only exists where it is configured) | accepted again |
 | Already-used token that is the **parent of the currently active** token | accepted; returns the active token (covers "response was lost") |
 | Any other reuse | `400 refresh_token_already_used`; with rotation on, the whole token family is revoked (session ends) |
 | Unknown token | `400 refresh_token_not_found` "Invalid Refresh Token: Refresh Token Not Found" |
@@ -360,7 +362,7 @@ Server rules (`GOTRUE/tokens/service.go:194-420`; https://supabase.com/docs/guid
 
 Client rules (`GoTrueClient.ts:5050-5230`): concurrent refreshes in one client share one request; a retryable failure keeps the session; a non-retryable failure removes the session **only if the access token has really expired**; failures are cached per refresh token for 60 s; after the request it re-reads storage and discards the result if storage changed meanwhile (`AuthRefreshDiscardedError`, status 409).
 
-Why the reuse interval matters here: on one page load the proxy (`packages/next-kit/src/server/proxy.ts`) and a Server Component can each create a client holding the same cookie. If the proxy's cookie write is lost or races, the second client presents the just-used token. Real Supabase tolerates that for 10 s; the stand-in deletes the token immediately (`tools/dev-api/src/server.ts:260`) and the user is signed out.
+Why the reuse interval matters here: on one page load the proxy (`packages/next-kit/src/server/proxy.ts`) and a Server Component can each create a client holding the same cookie. If the proxy's cookie write is lost or races, the second client presents the just-used token. Real Supabase tolerates that for 10 s; the stand-in deletes the token immediately (`tools/dev-api/src/routes/auth.ts:125`) and the user is signed out.
 
 ### 3.4 `GET /user`, `PUT /user`, `/logout`
 
@@ -411,7 +413,7 @@ Server defaults (`GOTRUE/conf/configuration.go:489-499`, `GOTRUE/api/apilimiter/
 | **Private bucket** | every operation goes through RLS; read with the user's JWT or a signed URL | buckets/fundamentals |
 | Do not edit rows by SQL | deleting a row leaves the file (and its bill) behind; only `insert into storage.buckets` is a documented SQL write | schema/design, buckets/creating-buckets |
 | Object names | letters, digits, `_ - . ' , ! * & $ @ = ; : + ? ( )` and spaces. Use generated names (uuid or content hash), never user file names | …/uploads/file-limits |
-| Size | global limit: Free at most 50 MB, Pro up to 500 GB; per-bucket limit cannot exceed it; standard upload recommended up to 6 MB, larger via resumable (TUS) | file-limits, …/uploads/standard-uploads |
+| Size | global limit: Free at most 50 MB, Pro up to 500 GB; per-bucket limit cannot exceed it; standard upload recommended up to 6 MB (hard cap 5 GB), larger via resumable (TUS) | file-limits, …/uploads/standard-uploads |
 | Quota | Free 1 GB, Pro 100 GB then $0.0213 per GB-month | https://supabase.com/docs/guides/storage/pricing |
 
 ### 4.2 RLS needed per operation
@@ -495,9 +497,11 @@ Sources: `STJS/packages/StorageFileApi.ts:24-37` (defaults), `78-148` (upload), 
 Gotchas:
 
 - With a `Blob`/`File`, the `contentType` option is **not sent**; the stored type is the Blob's own `type` (or a `contentType` form field you add yourself). With a `Buffer` or stream, forgetting `contentType` stores `text/plain` and an image-only bucket rejects it. (`StorageFileApi.ts:103-119`, `1519-1549`; `STORAGE/storage/uploader.ts:608`, `644`.)
-- Signed upload URLs are valid for 2 hours (`StorageFileApi.ts:333-335`). The uploader needs no session, so a browser or phone can `PUT` the file directly while the Server Action only creates the URL after checking who is asking. This suits the "no token in the browser" design.
+- Signed upload URLs are documented as valid for 2 hours on the hosted platform (`StorageFileApi.ts:333-335`; https://supabase.com/docs/reference/javascript/file-buckets-createsigneduploadurl). The lifetime is a server setting, not a request parameter, and the open-source Storage server defaults it to **60 seconds** (`UPLOAD_SIGNED_URL_EXPIRATION_TIME`, `STORAGE/config.ts:512-517`); what the local CLI stack uses is **UNVERIFIED**. Create the URL immediately before the upload and never store it. The token is a JWT signed by Storage with payload `{ owner, url: "<bucket>/<path>", upsert, scope: <upload scope>, exp }` (`STORAGE/storage/object.ts:1976-2005`). The uploader needs no session, so a browser or phone can `PUT` the file directly while the Server Action only creates the URL after checking who is asking. This suits the "no token in the browser" design.
 - Since 2.119.2 a path that escapes the bucket (`../other/x`) fails locally without a request (`STJS/migrations/url-path-boundaries.md`).
 - Duplicate path without upsert is a conflict; use fresh names instead of overwriting, because CDN and browsers keep the old bytes (standard-uploads doc).
+- The current server also returns a `version` field next to `Id`/`Key` on upload responses (`createObject.ts:90-94`, `uploadSignedObject.ts:103-106`); storage-js ignores it.
+- `createSignedUploadUrl` runs the same permission probe as a real upload, as the caller, at signing time (`object.ts:1987-1995`, `STORAGE/storage/uploader.ts:90-128`); with `upsert: true` the probe is an upsert, so the caller then also needs `SELECT` and `UPDATE`.
 
 Error body (`STORAGE/internal/errors/storage-error.ts` `render()`, `STORAGE/http/error-handler.ts:70-83`):
 
