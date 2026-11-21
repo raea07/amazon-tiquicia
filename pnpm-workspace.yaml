@@ -1,6 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "tools/*"
 
 # Native build scripts we do not need to run on install.
 ignoredBuiltDependencies:

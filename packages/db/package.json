@@ -1,0 +1,26 @@
+{
+  "name": "@yuntera/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@yuntera/core": "workspace:*",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/pg": "8.23.1",
+    "@yuntera/dev-api": "workspace:*",
+    "pg": "8.23.1",
+    "typescript": "5.9.3",
+    "vitest": "5.1.1"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@yuntera/dev-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local stand-in for the Supabase API (function calls and sign-in), for development and tests without Docker. Never deployed.",
+  "exports": {
+    "./rpc": "./src/rpc.ts"
+  },
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jose": "6.2.18",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/pg": "8.23.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

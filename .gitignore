@@ -32,6 +32,9 @@ supabase/.branches
 # local postgres used for migration tests
 .pgdata
 
+# signing key of the local API stand-in (generated per machine)
+tools/dev-api/.keys
+
 # misc
 .DS_Store
 *.pem
