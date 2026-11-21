@@ -420,6 +420,18 @@ reset role;
 
 -- ── Staff ──────────────────────────────────────────────────────────────────
 
+-- Counted from the tables rather than fixed to the seed's numbers, so the suite
+-- also passes on a shared preview where people have placed orders since.
+select pg_temp.remember('orders_all', (select count(*)::text from public.orders));
+select pg_temp.remember('orders_delivered',
+  (select count(*)::text from public.orders where status = 'delivered'));
+select pg_temp.remember('packed', (select count(*)::text from public.shipments where status = 'packed'));
+select pg_temp.remember('ready',
+  (select count(*)::text from public.shipments sh
+   where sh.status in ('packed', 'delivery_failed')
+     and not exists (select 1 from public.route_stops rs
+                     where rs.shipment_id = sh.id and rs.status in ('pending', 'arrived'))));
+
 select pg_temp.login('central@yuntera.example');
 do $$
 declare
@@ -428,21 +440,25 @@ declare
   q jsonb;
 begin
   assert public.my_roles() ->> 'staff_role' = 'admin', 'staff role';
-  assert (o #>> '{orders,delivered}')::integer = 10 and (o ->> 'sellers_pending')::integer = 1
+  assert (o #>> '{orders,delivered}')::integer = current_setting('t.orders_delivered')::integer
+         and (o ->> 'sellers_pending')::integer = 1
          -- two in review: the seeded one, and the one the seller block above submitted
-         and (o ->> 'listings_in_review')::integer = 2 and (o ->> 'awaiting_dispatch')::integer = 1,
+         and (o ->> 'listings_in_review')::integer = 2
+         and (o ->> 'awaiting_dispatch')::integer = current_setting('t.packed')::integer,
     format('overview: %s', o);
   assert o ->> 'payments_mode' = 'sandbox', 'the console shows which payment mode is live';
 
-  assert (select count(*) from public.ops_orders()) = 17, 'all orders';
-  assert (select count(*) from public.ops_orders('delivered')) = 10, 'filtered by status';
+  assert (select count(*) from public.ops_orders()) = current_setting('t.orders_all')::bigint, 'all orders';
+  assert (select count(*) from public.ops_orders('delivered')) = current_setting('t.orders_delivered')::bigint,
+    'filtered by status';
   assert (select count(*) from public.ops_orders(null, 'sofia')) > 0, 'search by name, accent-insensitive';
   assert (select count(*) from public.ops_orders(null, '%')) = 0, 'wildcards are literal';
   assert (select count(*) from public.ops_sellers('pending')) = 1, 'sellers awaiting approval';
   assert (select count(*) = 2 and bool_and(title like 'Lámpara%') from public.ops_listings_for_review()),
     'listings awaiting review';
 
-  assert jsonb_array_length(b -> 'ready') = 1 and jsonb_array_length(b -> 'drivers') = 2
+  assert jsonb_array_length(b -> 'ready') = current_setting('t.ready')::integer
+         and jsonb_array_length(b -> 'drivers') = 2
          and jsonb_array_length(b -> 'depots') = 1, format('dispatch board: %s', b);
   assert b #>> '{routes,0,status}' = 'in_progress', 'live route first';
   assert (b #>> '{ready,0,lat}')::numeric between 8 and 11.25, 'coordinates for the route planner';

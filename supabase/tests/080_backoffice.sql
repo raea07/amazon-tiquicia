@@ -19,8 +19,7 @@ select pg_temp.remember('delivered_item', (
   where u.email = 'comprador@yuntera.example' and o.status in ('delivered', 'completed')
     and not exists (select 1 from public.return_requests r where r.order_item_id = i.id)
   order by o.placed_at, i.id limit 1));
-select pg_temp.remember('pending_sinpe',
-  (select id::text from public.orders where idempotency_key = 'seed-today-e1'));
+select pg_temp.remember('pending_sinpe', pg_temp.unpaid_order('test-unpaid-080')::text);
 select pg_temp.remember('card_order',
   (select id::text from public.orders where idempotency_key = 'seed-today-d1'));
 select pg_temp.remember('live_product',

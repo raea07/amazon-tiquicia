@@ -44,3 +44,26 @@ language sql as $$
   where p.slug = p_slug and k.variant_name = p_variant
   order by (o.fulfillment = 'platform') desc, o.price_minor desc, o.id limit 1
 $$;
+
+-- Places, as the demo shopper, a SINPE Móvil order that is waiting for its
+-- transfer, and returns its id. Suites use this rather than the seed's unpaid
+-- order: the expiry job cancels that one 30 minutes after seeding wherever the
+-- scheduler runs (a hosted project), and it is stale on any older database.
+create function pg_temp.unpaid_order(p_key text) returns uuid
+language plpgsql as $$
+declare
+  v_user uuid;
+  v_result jsonb;
+begin
+  select id into strict v_user from auth.users where email = 'comprador@yuntera.example';
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_user, 'role', 'authenticated')::text, true);
+  v_result := public.place_order(
+    jsonb_build_array(jsonb_build_object(
+      'offer_id', pg_temp.offer('parlante-bluetooth-nimbo-ola'), 'quantity', 1)),
+    (select a.id from public.addresses a where a.user_id = v_user and a.is_default),
+    'sinpe_movil', p_key);
+  perform set_config('request.jwt.claims', '', true);
+  return (v_result ->> 'order_id')::uuid;
+end;
+$$;

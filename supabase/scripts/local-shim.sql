@@ -31,16 +31,48 @@ alter default privileges in schema public grant all on tables to anon, authentic
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 
+-- The parts of Supabase Auth's tables that a password sign-in depends on, with
+-- the same names, nullability and defaults as on a hosted project (checked
+-- against one in November 2026), so supabase/seed.sql runs unchanged on both.
+-- Two deliberate differences: `id` and the metadata columns have defaults here,
+-- because the local API stand-in inserts users without them.
 create table if not exists auth.users (
+  instance_id uuid,
   id uuid primary key default gen_random_uuid(),
-  email text unique,
-  phone text unique,
-  encrypted_password text,
+  aud varchar(255),
+  role varchar(255),
+  email varchar(255) unique,
+  encrypted_password varchar(255),
   email_confirmed_at timestamptz,
+  confirmation_token varchar(255),
+  recovery_token varchar(255),
+  email_change_token_new varchar(255),
+  email_change varchar(255),
+  last_sign_in_at timestamptz,
   raw_app_meta_data jsonb not null default '{}',
   raw_user_meta_data jsonb not null default '{}',
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  phone text unique,
+  phone_change text default '',
+  phone_change_token varchar(255) default '',
+  email_change_token_current varchar(255) default '',
+  reauthentication_token varchar(255) default '',
+  is_sso_user boolean not null default false,
+  is_anonymous boolean not null default false
+);
+
+create table if not exists auth.identities (
+  provider_id text not null,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  identity_data jsonb not null,
+  provider text not null,
+  last_sign_in_at timestamptz,
+  created_at timestamptz,
+  updated_at timestamptz,
+  email text generated always as (lower(identity_data ->> 'email')) stored,
+  id uuid primary key default gen_random_uuid(),
+  unique (provider_id, provider)
 );
 
 -- PostgREST exposes the verified JWT as the `request.jwt.claims` setting.
