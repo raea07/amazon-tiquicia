@@ -48,9 +48,16 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
     page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 
   // Three people, three browsers: a shopper who is not signed in, the seller, and staff.
-  const shopper = await (await browser.newContext({ locale: "es-CR" })).newPage();
-  watch(shopper);
+  // The shopper comes back several times. Each visit is a fresh browser: on a second
+  // visit to the same page Chromium answers the page's link prefetches from its own
+  // HTTP cache without ever reporting them finished, so "networkidle" never arrives.
+  // (That happens on any page of the shop, /ayuda included, and is no server fault:
+  // the same requests over plain HTTP answer at once.)
+  let shopper;
   const shopTitle = async () => {
+    await shopper?.context().close();
+    shopper = await (await browser.newContext({ locale: "es-CR" })).newPage();
+    watch(shopper);
     await shopper.goto(WEB + PRODUCT, { waitUntil: "networkidle" });
     return text(shopper.locator("main h1"));
   };
@@ -135,7 +142,12 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
     card.includes("Cambio a un producto publicado"),
     "staff: the edit is not marked as an edit",
   );
-  check(card.includes("Publicado ahora") && card.includes("Propuesto"), "staff: no side-by-side");
+  // (The column labels are set in capitals by the style sheet, and innerText follows it.)
+  const labels = card.toLowerCase();
+  check(
+    labels.includes("publicado ahora") && labels.includes("propuesto"),
+    "staff: no side-by-side",
+  );
   check(card.includes(oldTitle) && card.includes(NEW_TITLE), "staff: old or new title missing");
   check(
     !(await text(staff.locator('main:visible section[aria-labelledby="nuevos"]'))).includes(
