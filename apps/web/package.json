@@ -9,13 +9,12 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@fontsource-variable/bricolage-grotesque": "latest",
-    "@fontsource-variable/inter": "latest",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.119.2",
     "@yuntera/brand": "workspace:*",
     "@yuntera/core": "workspace:*",
     "@yuntera/db": "workspace:*",
+    "@yuntera/next-kit": "workspace:*",
     "@yuntera/ui": "workspace:*",
     "next": "16.4.6",
     "react": "19.3.1",

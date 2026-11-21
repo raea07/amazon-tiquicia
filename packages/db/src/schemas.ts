@@ -574,6 +574,46 @@ export const sellerParcel = z.object({
 });
 export type SellerParcel = z.infer<typeof sellerParcel>;
 
+export const sellerLocations = z.object({
+  /** The seller's own dispatch points, where our drivers collect. */
+  own: z.array(
+    z.object({
+      id,
+      code: z.string(),
+      name: z.string(),
+      address: z.string(),
+      postal_code: z.string().nullable(),
+      active: z.boolean(),
+    }),
+  ),
+  /** Yuntera warehouses that accept stock from sellers. */
+  platform: z.array(z.object({ id, code: z.string(), name: z.string(), address: z.string() })),
+});
+export type SellerLocations = z.infer<typeof sellerLocations>;
+
+export const sellerInbound = z.object({
+  inbound_id: id,
+  reference: z.string(),
+  status: z.enum(["draft", "in_transit", "receiving", "received", "closed", "cancelled"]),
+  expected_on: date.nullable(),
+  created_at: timestamp,
+  received_at: timestamp.nullable(),
+  warehouse_name: z.string(),
+  lines: z
+    .array(
+      z.object({
+        sku_code: z.string(),
+        title: z.string(),
+        variant_name: z.string(),
+        expected: z.number().int(),
+        received: z.number().int(),
+        damaged: z.number().int(),
+      }),
+    )
+    .nullable(),
+});
+export type SellerInbound = z.infer<typeof sellerInbound>;
+
 // ── Warehouse ───────────────────────────────────────────────────────────────
 
 export const wmsBoard = z.object({
@@ -903,6 +943,9 @@ export const careQueues = z.object({
       title: z.string(),
       order_number: z.string(),
       seller_name: z.string().nullable(),
+      customer: z.string().nullable(),
+      /** What the shopper paid for the returned units, and so what goes back to them. */
+      amount_minor: money,
     }),
   ),
   reports: z.array(
@@ -914,10 +957,29 @@ export const careQueues = z.object({
       details: z.string().nullable(),
       status: z.string(),
       created_at: timestamp,
+      /** The product title, seller name or start of the review that was reported. */
+      target_label: z.string().nullable(),
     }),
   ),
 });
 export type CareQueues = z.infer<typeof careQueues>;
+
+export const refundResult = z.object({ refund_minor: money, seller_debit_minor: money });
+
+export const opsDriverRow = z.object({
+  id,
+  full_name: z.string(),
+  phone: z.string(),
+  status: z.enum(["pending", "active", "suspended", "offboarded"]),
+  vehicle_type: z.enum(["motorcycle", "car", "van", "bicycle"]),
+  plate: z.string().nullable(),
+  capacity_kg: z.number(),
+  license_expires_on: date.nullable(),
+  inspection_expires_on: date.nullable(),
+  insurance_expires_on: date.nullable(),
+  documents_expired: z.boolean(),
+});
+export type OpsDriverRow = z.infer<typeof opsDriverRow>;
 
 export const auditEntry = z.object({
   id: z.number().int(),

@@ -1,9 +1,10 @@
 "use client";
 
+import type { ActionState } from "@yuntera/next-kit/client";
 import { TextField } from "@yuntera/ui";
 import Link from "next/link";
 import { useActionState } from "react";
-import { type ActionState, signIn, signUp, updateProfile } from "@/app/actions";
+import { signIn, signUp, updateProfile } from "@/app/actions";
 import { FormMessage, SubmitButton } from "./forms";
 
 const initial: ActionState = {};

@@ -206,12 +206,16 @@ describe.skipIf(!DATABASE_URL)("API contract (against a seeded database)", () =>
         await api.sellerStatements(shop.id);
         await api.sellerOrderLines(shop.id);
         await api.sellerToPack(shop.id);
+        expect((await api.sellerLocations(shop.id)).platform.length).toBeGreaterThan(0);
+        await api.sellerInbounds(shop.id);
       }
 
       const cafetal = (await pool.query("select id from sellers where slug = 'cafetal-los-santos'"))
         .rows[0].id as string;
       await expect(api.sellerOverview(cafetal)).rejects.toMatchObject({ code: "forbidden" });
       await expect(api.sellerStatements(cafetal)).rejects.toMatchObject({ code: "forbidden" });
+      await expect(api.sellerLocations(cafetal)).rejects.toMatchObject({ code: "forbidden" });
+      await expect(api.sellerInbounds(cafetal)).rejects.toMatchObject({ code: "forbidden" });
     });
   });
 
@@ -256,6 +260,7 @@ describe.skipIf(!DATABASE_URL)("API contract (against a seeded database)", () =>
       expect(board.drivers.length).toBe(2);
       expect((await api.opsSettlements("settled")).length).toBe(2);
       await api.opsCareQueues();
+      expect((await api.opsDrivers()).length).toBe(2);
       expect((await api.auditEntries(null, 5)).length).toBe(5);
     });
   });

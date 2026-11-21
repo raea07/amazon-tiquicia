@@ -1,9 +1,10 @@
 "use client";
 
 import type { Address } from "@yuntera/db";
+import type { ActionState } from "@yuntera/next-kit/client";
 import { formatPrice } from "@yuntera/ui";
 import { useActionState } from "react";
-import { type ActionState, placeOrder } from "@/app/actions";
+import { placeOrder } from "@/app/actions";
 import { FormMessage, SubmitButton } from "./forms";
 
 const initial: ActionState = {};

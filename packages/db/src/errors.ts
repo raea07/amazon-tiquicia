@@ -338,6 +338,35 @@ export const ERROR_MESSAGES = {
     en: "Enter the name of the person receiving it.",
   },
 
+  // ── Seller locations ──
+  invalid_location: {
+    "es-CR":
+      "Revise la ubicación: hace falta un nombre, señas completas y un punto dentro de Costa Rica.",
+    en: "Check the location: it needs a name, full directions and a point inside Costa Rica.",
+  },
+  too_many_locations: {
+    "es-CR": "Ya tiene el máximo de ubicaciones. Escríbanos si necesita más.",
+    en: "You already have the maximum number of locations. Write to us if you need more.",
+  },
+
+  // ── Returns, complaints and reports (staff) ──
+  return_not_found: {
+    "es-CR": "No encontramos esa devolución.",
+    en: "We could not find that return.",
+  },
+  invalid_return_state: {
+    "es-CR": "Esa devolución ya fue resuelta o todavía no está aprobada.",
+    en: "That return was already settled or is not approved yet.",
+  },
+  complaint_not_found: {
+    "es-CR": "No encontramos ese reclamo, o ya está cerrado.",
+    en: "We could not find that complaint, or it is already closed.",
+  },
+  report_not_found: {
+    "es-CR": "No encontramos ese reporte, o ya fue resuelto.",
+    en: "We could not find that report, or it was already resolved.",
+  },
+
   // ── Cash settlement ──
   settlement_not_found: {
     "es-CR": "No encontramos la liquidación de esa ruta.",

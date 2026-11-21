@@ -10,7 +10,14 @@
  */
 
 import { parsePhone } from "@yuntera/core";
-import { ApiError } from "@yuntera/db";
+import {
+  type ActionState,
+  GENERIC_ERROR,
+  isRedirect,
+  messageOf,
+  passwordSignIn,
+  typed,
+} from "@yuntera/next-kit/server";
 import type { Route } from "next";
 import { refresh, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
@@ -26,44 +33,7 @@ import {
 import { getViewer, safeReturnPath, signInUrl } from "@/lib/session";
 import { sessionApi, sessionClient } from "@/lib/supabase";
 
-export interface ActionState {
-  error?: string;
-  ok?: string;
-  /**
-   * What the person typed, sent back so the form keeps it. Browsers clear a
-   * form once its action finishes; without this a single mistake would wipe
-   * every field. Passwords are never echoed.
-   */
-  values?: Record<string, string>;
-}
-
-const GENERIC = "Algo salió mal de nuestro lado. Inténtelo de nuevo en un momento.";
-
-function messageOf(error: unknown): string {
-  if (error instanceof ApiError) return error.userMessage("es-CR");
-  // Never show an unexpected error's text: it may describe internals.
-  console.error(error);
-  return GENERIC;
-}
-
-function typed(formData: FormData, ...names: string[]): Record<string, string> {
-  return Object.fromEntries(
-    names.map((name) => {
-      const value = formData.get(name);
-      return [name, typeof value === "string" ? value : ""];
-    }),
-  );
-}
-
-/** `redirect()` works by throwing; let that through instead of reporting it as a failure. */
-function isRedirect(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "digest" in error &&
-    String((error as { digest: unknown }).digest).startsWith("NEXT_REDIRECT")
-  );
-}
+const GENERIC = GENERIC_ERROR;
 
 // ── Cart ────────────────────────────────────────────────────────────────────
 
@@ -129,20 +99,7 @@ const credentials = z.object({
 });
 
 export async function signIn(_previous: ActionState, formData: FormData): Promise<ActionState> {
-  const parsed = credentials.safeParse({
-    email: String(formData.get("email") ?? "").trim(),
-    password: String(formData.get("password") ?? ""),
-  });
-  const values = typed(formData, "email");
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? GENERIC, values };
-
-  const supabase = await sessionClient();
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
-  // One message for "no such account" and "wrong password": saying which would
-  // tell a stranger whether an e-mail address has an account here.
-  if (error) return { error: "El correo o la contraseña no coinciden.", values };
-
-  redirect(safeReturnPath(String(formData.get("siguiente") ?? "/")) as Route);
+  return passwordSignIn(formData);
 }
 
 export async function signUp(_previous: ActionState, formData: FormData): Promise<ActionState> {

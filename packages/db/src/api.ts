@@ -397,6 +397,31 @@ export function createApi(transport: RpcTransport) {
         z.uuid(),
       ),
 
+    sellerLocations: (sellerId: string) =>
+      call("seller_locations", { p_seller_id: sellerId }, s.sellerLocations),
+    sellerSaveLocation: (input: {
+      sellerId: string;
+      name: string;
+      address: string;
+      postalCode: string;
+      lat: number;
+      lng: number;
+    }) =>
+      call(
+        "seller_save_location",
+        {
+          p_seller_id: input.sellerId,
+          p_name: input.name,
+          p_address: input.address,
+          p_postal_code: input.postalCode,
+          p_lat: input.lat,
+          p_lng: input.lng,
+        },
+        z.uuid(),
+      ),
+    sellerInbounds: (sellerId: string) =>
+      call("seller_inbounds", { p_seller_id: sellerId }, z.array(s.sellerInbound)),
+
     // ── Warehouse ───────────────────────────────────────────────────────────
     wmsBoard: (warehouseId: string) =>
       call("wms_board", { p_warehouse_id: warehouseId }, s.wmsBoard),
@@ -555,6 +580,35 @@ export function createApi(transport: RpcTransport) {
         p_status: status,
         p_note: note ?? undefined,
       }),
+    opsDecideReturn: (returnId: string, approve: boolean, note?: string | null) =>
+      run("ops_decide_return", {
+        p_return_id: returnId,
+        p_approve: approve,
+        p_note: note ?? undefined,
+      }),
+    opsCompleteReturn: (returnId: string, note?: string | null) =>
+      call(
+        "ops_complete_return",
+        { p_return_id: returnId, p_note: note ?? undefined },
+        s.refundResult,
+      ),
+    opsResolveComplaint: (complaintId: string, resolution: string, close = true) =>
+      run("ops_resolve_complaint", {
+        p_complaint_id: complaintId,
+        p_resolution: resolution,
+        p_close: close,
+      }),
+    opsResolveReport: (reportId: string, action: boolean, resolution: string) =>
+      run("ops_resolve_report", {
+        p_report_id: reportId,
+        p_action: action,
+        p_resolution: resolution,
+      }),
+    opsConfirmPayment: (orderId: string, bankReference: string) =>
+      run("ops_confirm_payment", { p_order_id: orderId, p_bank_reference: bankReference }),
+    opsDrivers: () => call("ops_drivers", {}, z.array(s.opsDriverRow)),
+    opsSetDriverStatus: (driverId: string, status: z.infer<typeof s.opsDriverRow>["status"]) =>
+      run("ops_set_driver_status", { p_driver_id: driverId, p_status: status }),
     auditEntries: (table?: string | null, limit?: number) =>
       call("audit_entries", { p_table: table ?? undefined, p_limit: limit }, z.array(s.auditEntry)),
   };

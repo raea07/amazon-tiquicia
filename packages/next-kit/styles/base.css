@@ -1,0 +1,106 @@
+/*
+ * Styles shared by every Yuntera web app. An app's globals.css starts with:
+ *
+ *   @import "tailwindcss";
+ *   @import "@yuntera/brand/tokens.css";
+ *   @import "@yuntera/next-kit/base.css";
+ */
+
+/* Tailwind must also see the classes used by the shared packages. */
+@source "../../ui/src";
+@source "../../brand/src";
+@source "../src";
+
+/* The brand tokens name the typefaces; here they are bound to the self-hosted
+   font files loaded by @yuntera/next-kit/fonts. */
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    /* Never let iOS inflate text in landscape; respect the user's own size. */
+    -webkit-text-size-adjust: 100%;
+    scroll-padding-top: 6rem;
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+
+  p,
+  li {
+    text-wrap: pretty;
+  }
+
+  /* One visible focus style everywhere, for keyboard users. */
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  a {
+    text-underline-offset: 0.18em;
+  }
+}
+
+/*
+ * People who ask their device for less motion get none. This rule sits outside
+ * every @layer on purpose: unlayered styles win over layered ones, so it beats
+ * any animation or transition utility without resorting to !important.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+    scroll-behavior: auto;
+  }
+}
+
+@layer components {
+  /* Page width used by every screen. */
+  .shell {
+    width: 100%;
+    max-width: 76rem;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+
+  @media (min-width: 48rem) {
+    .shell {
+      padding-inline: 1.5rem;
+    }
+  }
+
+  /* The painted-wheel band: the brand's one decorative element, used sparingly. */
+  .wheel-band {
+    background-image:
+      radial-gradient(
+        circle at 1.25rem 1.25rem,
+        var(--color-celeste-200) 0.3rem,
+        transparent 0.33rem
+      ),
+      radial-gradient(
+        circle at 1.25rem 1.25rem,
+        transparent 0.75rem,
+        var(--color-celeste-100) 0.78rem,
+        var(--color-celeste-100) 0.95rem,
+        transparent 0.98rem
+      );
+    background-size: 2.5rem 2.5rem;
+  }
+}

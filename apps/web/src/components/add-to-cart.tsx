@@ -1,7 +1,8 @@
 "use client";
 
+import type { ActionState } from "@yuntera/next-kit/client";
 import { useActionState } from "react";
-import { type ActionState, addToCart } from "@/app/actions";
+import { addToCart } from "@/app/actions";
 import { FormMessage, SubmitButton } from "./forms";
 
 const initial: ActionState = {};

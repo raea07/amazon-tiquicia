@@ -2,9 +2,10 @@
 
 import { decodePlusCode, encodePlusCode, isInCostaRica } from "@yuntera/core";
 import type { District } from "@yuntera/db";
+import type { ActionState } from "@yuntera/next-kit/client";
 import { Alert, Button, TextAreaField, TextField } from "@yuntera/ui";
 import { useActionState, useState } from "react";
-import { type ActionState, saveAddress } from "@/app/actions";
+import { saveAddress } from "@/app/actions";
 import { DistrictPicker } from "./district-picker";
 import { FormMessage, SubmitButton } from "./forms";
 
