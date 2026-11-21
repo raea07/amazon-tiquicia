@@ -6,9 +6,11 @@
 // (₡20 000, hogar, card, shipped by the seller: ₡16 203,20); edits the title of
 // a published listing and sees it waiting for review; checks that the three
 // balances on the payouts screen add up; sees the payout account masked and a
-// wrong IBAN refused before anything is sent; and packs an order. Then a shop
-// in review sees what the web shows it, and an account with no shop registers
-// one (a wrong identification first).
+// wrong IBAN refused before anything is sent; and packs an order. In the
+// other shop, the first shop's messages are gone and each balance matches
+// the API. Then a shop in review sees what the web shows it, and a newcomer
+// creates an account, registers a shop (a wrong identification first) and
+// marks its pickup point with the short Plus Code Google Maps shows.
 //
 // Fails on any console error, uncaught exception or 5xx response. Takes a
 // screenshot at each step; they are meant to be looked at.
@@ -43,6 +45,9 @@ function colones(text) {
   const browser = await chromium.launch();
   const errors = [];
   const payoutRequests = [];
+  // What the API answered, by shop: its name (seller_overview) and its balances (seller_payouts).
+  const shopIds = new Map();
+  const balancesBy = new Map();
 
   const open = async (name) => {
     const context = await browser.newContext({
@@ -60,6 +65,18 @@ function colones(text) {
     page.on("pageerror", (e) => errors.push(`${name} pageerror: ${String(e).slice(0, 300)}`));
     page.on("response", (r) => {
       if (r.status() >= 500) errors.push(`${name} HTTP ${r.status()} ${r.url()}`);
+    });
+    page.on("response", async (r) => {
+      const fn = /\/rpc\/(seller_overview|seller_payouts)\b/.exec(r.url())?.[1];
+      if (!fn || r.status() !== 200) return;
+      try {
+        const sellerId = JSON.parse(r.request().postData() ?? "{}").p_seller_id;
+        const body = await r.json();
+        if (fn === "seller_overview") shopIds.set(body.seller.trade_name, sellerId);
+        else balancesBy.set(sellerId, body);
+      } catch {
+        // A page closing mid-response; nothing to record.
+      }
     });
     page.on("request", (r) => {
       if (/\/rpc\/seller_request_payout_details/.test(r.url())) payoutRequests.push(r.url());
@@ -96,12 +113,24 @@ function colones(text) {
   const tab = (name) => page.getByRole("tab", { name: new RegExp(`^${name}`) }).first();
   const signIn = async (p, email) => {
     await p.goto(`${BASE}/`, { waitUntil: "networkidle" });
+    await p.getByTestId("sign-in-email").first().waitFor();
     await p.getByTestId("sign-in-email").first().fill(email);
     await p.getByTestId("sign-in-password").first().fill(PASSWORD);
     await p.getByTestId("sign-in-submit").first().click();
   };
 
-  // 1. Sign in as the seller with two shops
+  // 1. Sign in as the seller with two shops. The screen says which account
+  // (the Yuntera one) and offers to create it.
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  await visible("sign-in-email").waitFor();
+  check(
+    /cuenta de Yuntera, la misma con que compra/.test(
+      (await page.locator("body").textContent()).replace(/\s+/g, " "),
+    ),
+    "the sign-in screen says the account is the Yuntera one",
+  );
+  await visible("show-sign-up").waitFor();
+  check(true, "and offers to create an account");
   await signIn(page, "vendedor@yuntera.example");
   await visible("seller-overview").waitFor();
   const firstShop = await textOf("current-shop");
@@ -331,6 +360,56 @@ function colones(text) {
   await noSideways("inventory");
   await shot("12b-inventory-own-place");
   await chooseShop("TecnoCasa");
+
+  // The first shop's messages stay with it
+  await tab("Pedidos").click();
+  await page.getByText("Por empacar").filter({ visible: true }).first().waitFor();
+  check(
+    (await page.getByTestId("pack-result").filter({ visible: true }).count()) === 0,
+    "in TecnoCasa, Pedidos no longer says Ferretería's parcel is ready",
+  );
+  await tab("Productos").click();
+  await visible("new-listing").waitFor();
+  check(
+    (await page.getByTestId("created-message").filter({ visible: true }).count()) === 0,
+    "and Productos no longer says a product was sent for review",
+  );
+
+  // Each balance is the API's figure, on a shop where they are not zero
+  await tab("Pagos").click();
+  await visible("balance-total").waitFor();
+  // The response handler reads the body asynchronously; give it a moment.
+  for (let i = 0; i < 50 && !balancesBy.get(shopIds.get("TecnoCasa")); i++) {
+    await page.waitForTimeout(100);
+  }
+  const tecnoId = shopIds.get("TecnoCasa");
+  const api = balancesBy.get(tecnoId);
+  check(Boolean(tecnoId && api), "the API's balances for TecnoCasa were read");
+  const shown = {
+    available: colones(await textOf("balance-available")),
+    pending: colones(await textOf("balance-pending")),
+    inTransit: colones(await textOf("balance-in-transit")),
+    total: colones(await textOf("balance-total")),
+  };
+  log("    TecnoCasa", JSON.stringify(shown));
+  check(
+    [api.available_minor, api.pending_minor, api.in_transit_minor].filter((n) => n !== 0).length >=
+      2,
+    "TecnoCasa has at least two balances that are not zero",
+  );
+  check(
+    shown.available === api.available_minor &&
+      shown.pending === api.pending_minor &&
+      shown.inTransit === api.in_transit_minor &&
+      shown.total === api.payable_minor,
+    "available, pending, in transit and the total are each the API's figure, under its own label",
+  );
+  check(
+    shown.available + shown.pending + shown.inTransit === shown.total,
+    "and the three add up to the total",
+  );
+  await shot("12a-payouts-tecnocasa");
+
   await tab("Inventario").click();
   await visible("new-inbound").click();
   await page.locator('[data-testid^="inbound-qty-"]').filter({ visible: true }).first().fill("15");
@@ -349,12 +428,20 @@ function colones(text) {
   await pendingShop.page.screenshot({ path: `${SHOTS}/native-seller-13-pending-shop.png` });
   await pendingShop.context.close();
 
-  // 12. An account with no shop registers one
+  // 12. A newcomer creates an account in the app, then registers a shop
   const newcomer = await open("newcomer");
   const p = newcomer.page;
   const by = (id) => p.getByTestId(id).filter({ visible: true }).first();
-  await signIn(p, "comprador@yuntera.example");
+  await p.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  await by("show-sign-up").click();
+  await by("sign-up-name").fill("Ana Mora Solís");
+  await by("sign-up-email").fill(`ana.mora.${Date.now()}@yuntera.example`);
+  await by("sign-up-password").fill("ceramica-orosi-2026");
+  await p.screenshot({ path: `${SHOTS}/native-seller-14-sign-up.png` });
+  await by("sign-up-consent").click();
+  await by("sign-up-submit").click();
   await by("no-access").waitFor();
+  check(true, "a newcomer creates an account in the app and is offered the shop registration");
   await p.screenshot({ path: `${SHOTS}/native-seller-14a-no-shop.png` });
   await by("start-registration").click();
   await by("shop-trade-name").fill("Cerámica La Guaria");
@@ -369,7 +456,7 @@ function colones(text) {
     /no es válido/.test(await by("shop-result").innerText()),
     "a wrong identification is refused",
   );
-  await p.screenshot({ path: `${SHOTS}/native-seller-14-register-error.png` });
+  await p.screenshot({ path: `${SHOTS}/native-seller-14b-register-error.png` });
   await by("shop-id-number").fill("3-0456-0789");
   await by("shop-submit").click();
   await p.getByTestId("seller-overview").filter({ visible: true }).first().waitFor();
@@ -418,9 +505,14 @@ function colones(text) {
     /código Plus/.test(await by("location-result").innerText()),
     "without the exact point it asks for the Plus Code",
   );
-  await by("location-plus-code").fill("66XRQ4XR+RH");
+  // The short form Google Maps shows beside a place, with the place's name.
+  await by("location-plus-code").fill("Q4XR+RH Orosi, Cartago");
   await by("location-plus-apply").click();
   await p.getByText("Punto marcado").first().waitFor();
+  check(
+    (await p.locator("body").textContent()).includes("Código Plus 66XRQ4XR+RH"),
+    "the short Plus Code is read as the full one (66XRQ4XR+RH)",
+  );
   await p.waitForTimeout(500); // the district sheet slides away
   await p.screenshot({ path: `${SHOTS}/native-seller-16-pickup-place.png` });
   await by("location-save").click();
