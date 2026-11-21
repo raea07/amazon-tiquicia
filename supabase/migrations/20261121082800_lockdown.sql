@@ -595,49 +595,27 @@ $$;
 -- several of these were what the review exploited (offers, seller_members,
 -- return_requests, consents, reviews, complaints, content_reports, products).
 -- Without them, row-level security refuses every write even if a privilege
--- were ever granted again by mistake.
-drop policy if exists "admin writes" on public.app_settings;
-drop policy if exists "ops writes" on public.cantons;
-drop policy if exists "ops writes" on public.districts;
-drop policy if exists "ops writes" on public.delivery_zones;
-drop policy if exists "ops writes" on public.holidays;
-drop policy if exists "ops writes" on public.zone_closures;
-drop policy if exists "catalog writes" on public.categories;
-drop policy if exists "catalog writes" on public.brands;
-drop policy if exists "catalog writes" on public.search_synonyms;
-drop policy if exists "finance writes" on public.fee_schedules;
-drop policy if exists "finance writes" on public.fee_payment_methods;
-drop policy if exists "finance writes" on public.fee_fulfillment_tiers;
-drop policy if exists "edit own profile" on public.profiles;
-drop policy if exists "admin manages staff" on public.staff_members;
-drop policy if exists "seller admins edit the shop front" on public.sellers;
-drop policy if exists "seller admins edit details" on public.seller_private;
-drop policy if exists "seller admins add members" on public.seller_members;
-drop policy if exists "seller admins change members" on public.seller_members;
-drop policy if exists "seller admins remove members" on public.seller_members;
-drop policy if exists "ops manages drivers" on public.drivers;
-drop policy if exists "record own consent" on public.consents;
-drop policy if exists "withdraw own consent" on public.consents;
-drop policy if exists "add own address" on public.addresses;
-drop policy if exists "edit own address" on public.addresses;
-drop policy if exists "sellers create listings" on public.products;
-drop policy if exists "sellers edit their listings" on public.products;
-drop policy if exists "listing owner writes" on public.product_images;
-drop policy if exists "listing owner adds variants" on public.skus;
-drop policy if exists "listing owner edits variants" on public.skus;
-drop policy if exists "sellers make offers" on public.offers;
-drop policy if exists "sellers change their offers" on public.offers;
-drop policy if exists "sellers and ops add locations" on public.warehouses;
-drop policy if exists "sellers and ops edit locations" on public.warehouses;
-drop policy if exists "ops assigns staff" on public.warehouse_staff;
-drop policy if exists "ops defines locations" on public.warehouse_locations;
-drop policy if exists "finance manages payouts" on public.payouts;
-drop policy if exists "staff moderate" on public.reviews;
-drop policy if exists "support resolves" on public.return_requests;
-drop policy if exists "file a complaint" on public.complaints;
-drop policy if exists "support resolves" on public.complaints;
-drop policy if exists "anyone reports" on public.content_reports;
-drop policy if exists "staff act on reports" on public.content_reports;
+-- were ever granted again by mistake. A sweep rather than a list of names, so
+-- write policies that earlier migrations of other workstreams added go too; a
+-- policy `for all` is a write policy as well (the guard in 110_lockdown.sql
+-- allows only `for select`). Policies on the auth and storage schemas' own
+-- tables are not ours and are left alone.
+do $$
+declare
+  r record;
+begin
+  for r in
+    select pol.polname, n.nspname, c.relname
+    from pg_policy pol
+    join pg_class c on c.oid = pol.polrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname in ('public', 'private') and pol.polcmd <> 'r'
+    order by n.nspname, c.relname, pol.polname
+  loop
+    execute format('drop policy %I on %I.%I', r.polname, r.nspname, r.relname);
+  end loop;
+end
+$$;
 
 -- Read policies that read another table directly: same rows, through the helpers.
 alter policy "follows product" on public.product_images
@@ -785,11 +763,18 @@ $$;
 -- `postgres` role creates (the Supabase guide "Securing your API"), and
 -- PostgreSQL itself lets PUBLIC execute every new function. The local shim
 -- copies the same defaults. Both are switched off here for the API roles and
--- PUBLIC, in `public`, in `private` and for functions everywhere. The
+-- PUBLIC, in `public`, in `private`, globally and in any other schema where
+-- `postgres` holds such a default. The
 -- `service_role` defaults are the platform's and are left as they are.
 -- (The 080000 migration did most of this without naming the role; naming it
 -- makes the result the same whoever runs the migration.)
 alter default privileges for role postgres revoke execute on functions from public;
+alter default privileges for role postgres
+  revoke all on tables from anon, authenticated, public;
+alter default privileges for role postgres
+  revoke all on sequences from anon, authenticated, public;
+alter default privileges for role postgres
+  revoke execute on functions from anon, authenticated;
 alter default privileges for role postgres in schema public
   revoke all on tables from anon, authenticated, public;
 alter default privileges for role postgres in schema public
@@ -802,3 +787,33 @@ alter default privileges for role postgres in schema private
   revoke all on sequences from anon, authenticated, public;
 alter default privileges for role postgres in schema private
   revoke all on functions from anon, authenticated, public;
+
+-- And any other default that `postgres` holds for the API roles or PUBLIC, in
+-- whatever schema an earlier migration set it (the auth and storage schemas
+-- belong to the platform and are left alone). A default set for one schema is
+-- not cancelled by a revoke for another, nor a global one by a schema's.
+do $$
+declare
+  r record;
+begin
+  for r in
+    select distinct d.defaclnamespace, d.defaclobjtype,
+           case when acl.grantee = 0 then 'public' else quote_ident(pg_get_userbyid(acl.grantee)) end
+             as grantee
+    from pg_default_acl d
+    cross join lateral aclexplode(d.defaclacl) acl
+    where d.defaclrole = 'postgres'::regrole
+      and d.defaclobjtype in ('r', 'S', 'f')
+      and (acl.grantee = 0 or pg_get_userbyid(acl.grantee) in ('anon', 'authenticated'))
+      and (d.defaclnamespace = 0
+           or d.defaclnamespace::regnamespace::text not in ('auth', 'storage'))
+  loop
+    execute format('alter default privileges for role postgres %s revoke all on %s from %s',
+                   case when r.defaclnamespace = 0 then ''
+                        else 'in schema ' || quote_ident(r.defaclnamespace::regnamespace::text) end,
+                   case r.defaclobjtype when 'r' then 'tables' when 'S' then 'sequences'
+                                        else 'functions' end,
+                   r.grantee);
+  end loop;
+end
+$$;

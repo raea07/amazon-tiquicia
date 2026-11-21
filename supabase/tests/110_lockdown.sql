@@ -5,13 +5,18 @@
 -- or sequence for `anon`, `authenticated` or PUBLIC; adds a function in
 -- `public` that is not owner's-rights with an empty search path; lets a role
 -- execute a function that the list in docs/03-data/access-control.md does not
--- name for it; leaves a table without row-level security; or writes a policy
--- that reads another public table directly.
+-- name for it; leaves a table without row-level security; writes a policy
+-- that reads another of our tables directly or calls a caller's-rights
+-- function; adds a policy other than `for select` on our tables; or leaves a
+-- default that would grant new objects.
 --
 -- Part 2 replays each finding of the security review of 21 November 2026 as
 -- its original reproduction, by the same kind of user. Each is now refused for
 -- lack of a privilege, and where the legitimate action exists as a function,
 -- the function is still there.
+--
+-- Part 3 tests the second lock: what each kind of user would see through the
+-- read policies if a SELECT privilege came back by mistake.
 
 begin;
 \ir _helpers.sql
@@ -193,9 +198,12 @@ begin
 end
 $$;
 
--- No policy, in any schema, reads a table of `public` other than its own
--- directly. It would fail for lack of a privilege; it must ask an
--- owner's-rights helper in `private` instead.
+-- No policy, in any schema, reads a table of `public` or `private` other than
+-- its own directly, or calls a function that runs with the caller's rights
+-- (other than the pure helpers named here). Either would fail for lack of a
+-- privilege; a policy must ask an owner's-rights helper in `private` instead.
+-- Only read policies remain on our tables: a write policy would reopen a hole
+-- the moment a write privilege came back by mistake.
 do $$
 declare
   found_ text;
@@ -207,8 +215,32 @@ begin
   join pg_depend d on d.classid = 'pg_policy'::regclass and d.objid = pol.oid
   join pg_class c on c.oid = d.refobjid and d.refclassid = 'pg_class'::regclass
   join pg_namespace n on n.oid = c.relnamespace
-  where n.nspname = 'public' and d.refobjid <> pol.polrelid;
-  assert found_ is null, format('policies that read a public table directly: %s', found_);
+  where n.nspname in ('public', 'private') and d.refobjid <> pol.polrelid;
+  assert found_ is null, format('policies that read a table directly: %s', found_);
+
+  select string_agg(format('%s on %s calls %s.%s', pol.polname, pol.polrelid::regclass, n.nspname, p.proname),
+                    '; ')
+  into found_
+  from pg_policy pol
+  join pg_depend d on d.classid = 'pg_policy'::regclass and d.objid = pol.oid
+                  and d.refclassid = 'pg_proc'::regclass
+  join pg_proc p on p.oid = d.refobjid
+  join pg_namespace n on n.oid = p.pronamespace
+  where not p.prosecdef
+    and n.nspname <> 'pg_catalog'
+    -- Read only the request's claims or the object's name, no table.
+    and (n.nspname, p.proname) not in (('auth', 'uid'), ('auth', 'jwt'), ('auth', 'role'),
+                                       ('storage', 'foldername'), ('storage', 'filename'),
+                                       ('storage', 'extension'));
+  assert found_ is null, format('policies that call a caller''s-rights function: %s', found_);
+
+  select string_agg(format('%s on %s (%s)', pol.polname, pol.polrelid::regclass, pol.polcmd), '; ')
+  into found_
+  from pg_policy pol
+  join pg_class c on c.oid = pol.polrelid
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname in ('public', 'private') and pol.polcmd <> 'r';
+  assert found_ is null, format('policies other than for select: %s', found_);
 end
 $$;
 
@@ -559,6 +591,10 @@ select pg_temp.denied('DTA-14', format('delete from public.product_images where 
 reset role;
 
 -- ── DTA-15, DTA-M1: suspended sellers' products; sales volumes ─────────────
+-- DTA-15 is closed here only as far as the direct read goes. get_product and
+-- shop_path_exists still serve a suspended seller's own product pages to a
+-- visitor (search no longer lists them): that is a rule of those functions,
+-- left to the workstream that owns them.
 
 update public.sellers set status = 'suspended' where slug = 'tienda-sendero';
 select pg_temp.login_anon();
@@ -591,5 +627,123 @@ select pg_temp.denied('DTA-M2', format(
 select pg_temp.denied('DTA-M2', format(
   $q$update public.offers set status = 'active' where seller_id = %L$q$, current_setting('t.sendero')));
 reset role;
+
+-- ═══ Part 3: the second lock ════════════════════════════════════════════════
+--
+-- The policies are what would still stand if a privilege came back by
+-- mistake. To see them work, this part gives `authenticated` that mistaken
+-- privilege (SELECT on the tables that hold personal data, inside this
+-- rolled-back transaction only) and checks what each kind of user would see.
+-- Without the policies, or with one opened to everyone, these counts change.
+
+select pg_temp.remember('n_profiles', (select count(*)::text from public.profiles));
+select pg_temp.remember('n_drivers', (select count(*)::text from public.drivers));
+select pg_temp.remember('n_orders', (select count(*)::text from public.orders));
+select pg_temp.remember('buyer_orders', (
+  select count(*)::text from public.orders o join auth.users u on u.id = o.user_id
+  where u.email = 'comprador@yuntera.example'));
+select pg_temp.remember('c3_orders', (
+  select count(*)::text from public.orders o join auth.users u on u.id = o.user_id
+  where u.email = 'comprador3@yuntera.example'));
+select pg_temp.remember('buyer_items', (
+  select count(*)::text from public.order_items i join public.orders o on o.id = i.order_id
+  join auth.users u on u.id = o.user_id where u.email = 'comprador@yuntera.example'));
+select pg_temp.remember('vendedor_items', (
+  select count(*)::text from public.order_items i
+  where i.seller_id in (select m.seller_id from public.seller_members m
+                        join auth.users u on u.id = m.user_id where u.email = 'vendedor@yuntera.example')));
+select pg_temp.remember('carlos_open_stops', (
+  select count(*)::text from public.route_stops rs
+  join public.routes r on r.id = rs.route_id
+  join public.drivers d on d.id = r.driver_id
+  join auth.users u on u.id = d.user_id
+  where u.email = 'repartidor@yuntera.example'
+    and (r.status in ('assigned', 'in_progress')
+         or (r.status = 'completed' and r.completed_at > now() - interval '24 hours'))));
+grant select on public.profiles, public.drivers, public.orders, public.order_items,
+                public.payments, public.route_stops
+to authenticated;
+
+-- DTA-10: customer profiles are for support only, drivers' records for ops only.
+select pg_temp.staff_as('catalog');
+select pg_temp.login('comprador3@yuntera.example');
+do $$
+begin
+  assert (select count(*) from public.profiles) = 1, 'DTA-10: catalog staff see only their own profile';
+  assert (select count(*) from public.drivers) = 0, 'DTA-10: catalog staff see no driver';
+  assert (select count(*) from public.orders) = current_setting('t.c3_orders')::bigint,
+    'catalog staff see only the orders they placed themselves';
+end
+$$;
+reset role;
+select pg_temp.staff_as('support');
+select pg_temp.login('comprador3@yuntera.example');
+do $$
+begin
+  assert (select count(*) from public.profiles) = current_setting('t.n_profiles')::bigint,
+    'support see the customer profiles';
+  assert (select count(*) from public.drivers) = 0, 'DTA-10: support see no driver record';
+  assert (select count(*) from public.orders) = current_setting('t.n_orders')::bigint,
+    'support see the orders';
+end
+$$;
+reset role;
+select pg_temp.staff_as('ops');
+select pg_temp.login('comprador3@yuntera.example');
+do $$
+begin
+  assert (select count(*) from public.drivers) = current_setting('t.n_drivers')::bigint
+     and current_setting('t.n_drivers')::integer > 0, 'ops see the drivers';
+  assert (select count(*) from public.profiles) = 1, 'DTA-10: ops see only their own profile';
+end
+$$;
+reset role;
+delete from public.staff_members
+where user_id = (select id from auth.users where email = 'comprador3@yuntera.example');
+
+-- A shopper: their own orders, lines and profile, and nobody else's.
+select pg_temp.login('comprador@yuntera.example');
+do $$
+begin
+  assert (select count(*) from public.orders) = current_setting('t.buyer_orders')::bigint
+     and current_setting('t.buyer_orders')::integer > 0, 'a shopper sees only their own orders';
+  assert (select count(*) from public.order_items) = current_setting('t.buyer_items')::bigint,
+    'and only their lines';
+  assert (select count(*) from public.profiles) = 1, 'and only their own profile';
+  assert (select count(*) from public.drivers) = 0, 'and no driver';
+end
+$$;
+reset role;
+
+-- A seller: the lines they sold, never the order, its payment or the buyer.
+select pg_temp.login('vendedor@yuntera.example');
+do $$
+begin
+  assert (select count(*) from public.order_items) = current_setting('t.vendedor_items')::bigint
+     and current_setting('t.vendedor_items')::integer > 0, 'a seller sees exactly the lines they sold';
+  assert (select count(*) from public.orders) = 0, 'a seller sees no order';
+  assert (select count(*) from public.payments) = 0, 'a seller sees no payment';
+  assert (select count(*) from public.profiles) = 1, 'a seller sees only their own profile';
+end
+$$;
+reset role;
+
+-- A driver: the stops of their own open routes, their own record, no order.
+select pg_temp.login('repartidor@yuntera.example');
+do $$
+begin
+  assert (select count(*) from public.route_stops) = current_setting('t.carlos_open_stops')::bigint
+     and current_setting('t.carlos_open_stops')::integer > 0, 'a driver sees the stops of their open routes';
+  assert (select count(*) from public.drivers) = 1, 'a driver sees only their own record';
+  assert (select count(*) from public.orders) = 0, 'a driver sees no order';
+  assert (select count(*) from public.order_items) = 0, 'nor what is in it';
+  assert (select count(*) from public.profiles) = 1, 'a driver sees only their own profile';
+end
+$$;
+reset role;
+
+revoke select on public.profiles, public.drivers, public.orders, public.order_items,
+                  public.payments, public.route_stops
+from authenticated;
 
 rollback;
