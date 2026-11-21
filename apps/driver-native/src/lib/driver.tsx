@@ -1,0 +1,494 @@
+/**
+ * Everything the driver's screens share: the day's routes (from the API, or
+ * the copy saved on the phone when there is no signal), the queue of actions
+ * waiting to be sent, position sharing, and the actions themselves.
+ *
+ * The database checks every call; what is decided here is only what the
+ * phone shows and when it sends.
+ */
+
+import { onlineManager, useQueryClient } from "@tanstack/react-query";
+import { ApiError, type DriverDay } from "@yuntera/db";
+import { messageOf } from "@yuntera/expo-kit/api";
+import { type Access, useAccess, useSession } from "@yuntera/expo-kit/auth";
+import { useApiQuery } from "@yuntera/expo-kit/data";
+import {
+  createSnapshotCache,
+  type QueueEntry,
+  type QueueSnapshot,
+  useQueue,
+} from "@yuntera/expo-kit/offline";
+import { sessionStorage } from "@yuntera/expo-kit/supabase";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { AppState } from "react-native";
+import {
+  type ArrivePayload,
+  connectOutbox,
+  type FailPayload,
+  flushOutbox,
+  isNoAnswer,
+  outbox,
+  queuedStopActions,
+  timed,
+} from "./outbox";
+import {
+  type FailureReason,
+  findStop,
+  needsTracking,
+  type QueuedStopAction,
+  refusalMessage,
+  type ShownRoute,
+  withQueued,
+} from "./route";
+import {
+  askLocationPermission,
+  currentPoint,
+  isTracking,
+  locationPermission,
+  type Permission,
+  startTracking,
+  stopTracking,
+} from "./tracking";
+
+/**
+ * The day's routes, kept encrypted on the phone so they stay readable without
+ * signal. They hold customers' names, phones and addresses, so they are
+ * cleared at sign-out and when access is lost, and expire after a day.
+ */
+const savedDay = createSnapshotCache<DriverDay>({
+  store: sessionStorage,
+  key: "yuntera-ruta.day.v1",
+  maxAgeMs: 24 * 60 * 60 * 1000,
+});
+
+const DAY_KEY = ["driver-today"] as const;
+const RETRY_EVERY_MS = 15_000;
+/** How long an arrival or a failed delivery waits for the server before it is left queued. */
+const WAIT_FOR_ANSWER_MS = 4_000;
+
+export type Tracking = "off" | "starting" | "on" | "denied" | "gps_off" | "failed";
+
+export type DeliverOutcome =
+  | { kind: "delivered"; routeCompleted: boolean }
+  | { kind: "refused"; message: string; clearPin: boolean }
+  | { kind: "offline" }
+  | { kind: "error"; message: string };
+
+export interface DriverValue {
+  /** The routes as shown, with unsent actions applied. Null while nothing is known yet. */
+  routes: ShownRoute[] | null;
+  driverName: string | null;
+  loading: boolean;
+  /** Could not load and nothing is saved: the error to show. */
+  error: unknown;
+  retry(): void;
+  refreshing: boolean;
+  /** When the routes on screen are the copy saved on the phone: when it was saved. */
+  savedAt: number | null;
+  /** The API did not answer the last time the phone tried. */
+  offline: boolean;
+  queue: QueueSnapshot;
+  /** What waited for the signal has just all been sent. */
+  drained: boolean;
+  sendNow(): Promise<void>;
+  dismiss(id: string): Promise<void>;
+  tracking: Tracking;
+  permission: Permission | null;
+  /** Starts sharing; asks for the permission first if it has not been asked. */
+  shareLocation(): Promise<Tracking>;
+  startRoute(routeId: string): Promise<string | null>;
+  arrive(stopId: string): Promise<{ queued: boolean; error?: string }>;
+  fail(
+    stopId: string,
+    reason: FailureReason,
+  ): Promise<{ queued: boolean; error?: string; routeCompleted: boolean }>;
+  deliver(input: {
+    stopId: string;
+    pin: string;
+    recipientName: string;
+    codCollectedMinor: number;
+  }): Promise<DeliverOutcome>;
+  /** Stops left for later ("Dejar pendiente y seguir"), only on this phone. */
+  later: ReadonlySet<string>;
+  leaveForLater(stopId: string): void;
+  signOut(): Promise<void>;
+}
+
+const DriverContext = createContext<DriverValue | null>(null);
+
+/** Access as the navigator should treat it: offline with a saved day counts as allowed. */
+export interface DriverAccess {
+  access: Access;
+  /** Signed in, roles unreadable (no signal), and this account's day is saved here. */
+  offlineAllowed: boolean;
+  /** Still finding out whether a day is saved. */
+  deciding: boolean;
+}
+
+const AccessContext = createContext<DriverAccess>({
+  access: "checking",
+  offlineAllowed: false,
+  deciding: true,
+});
+
+export function DriverProvider({ children }: { children: ReactNode }) {
+  const session = useSession();
+  const { viewer, api, reloadRoles } = session;
+  const access = useAccess("driver");
+  const client = useQueryClient();
+  const userId = viewer?.id ?? null;
+  const [tracking, setTracking] = useState<Tracking>("off");
+  const [permission, setPermission] = useState<Permission | null>(null);
+
+  // The day saved on this phone for this account, read once per sign-in.
+  const [saved, setSaved] = useState<{
+    owner: string | null;
+    day: DriverDay | null;
+    savedAt: number | null;
+    loaded: boolean;
+  }>({ owner: null, day: null, savedAt: null, loaded: false });
+  useEffect(() => {
+    let active = true;
+    setSaved({ owner: userId, day: null, savedAt: null, loaded: userId === null });
+    if (!userId) return;
+    void savedDay.load(userId).then((snapshot) => {
+      if (!active) return;
+      setSaved({
+        owner: userId,
+        day: snapshot?.value ?? null,
+        savedAt: snapshot?.savedAt ?? null,
+        loaded: true,
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
+  const savedLoaded = saved.loaded && saved.owner === userId;
+  const offlineAllowed = access === "unavailable" && savedLoaded && saved.day !== null;
+  const inside = access === "allowed" || offlineAllowed;
+  const accessValue = useMemo<DriverAccess>(
+    () => ({ access, offlineAllowed, deciding: access === "unavailable" && !savedLoaded }),
+    [access, offlineAllowed, savedLoaded],
+  );
+
+  // The queue belongs to whoever is signed in as a driver; nobody else's is shown or sent.
+  useEffect(() => {
+    void outbox.setOwner(inside ? userId : null);
+    connectOutbox(inside ? api : null);
+    if (inside) void flushOutbox();
+  }, [inside, userId, api]);
+  const queue = useQueue(outbox);
+
+  const day = useApiQuery(DAY_KEY, (a) => timed(a.driverToday()), {
+    personal: true,
+    enabled: inside,
+    refetchInterval: (query) => (query.state.status === "error" ? RETRY_EVERY_MS : 60_000),
+  });
+
+  // A good answer is saved for offline use and proves the connection is back.
+  useEffect(() => {
+    if (!day.data || !userId || !inside) return;
+    void savedDay.save(userId, day.data);
+    if (access === "unavailable") void reloadRoles();
+  }, [day.data, userId, inside, access, reloadRoles]);
+
+  // Lost access or signed out: nothing of the day stays on the phone.
+  useEffect(() => {
+    if (access === "denied" || access === "signedOut") {
+      void savedDay.clear();
+      void stopTracking();
+      setTracking("off");
+      void outbox.discard((entry) => entry.kind === "position");
+    }
+  }, [access]);
+
+  // Actions the server has just taken stay applied until the day is read
+  // again, so a stop does not flick back to "Pendiente" in between.
+  const [justSent, setJustSent] = useState<Array<{ action: QueuedStopAction; at: number }>>([]);
+  const previous = useRef<readonly QueueEntry[]>([]);
+  useEffect(() => {
+    const gone = previous.current.filter(
+      (entry) =>
+        entry.status !== "rejected" &&
+        entry.owner === queue.owner &&
+        !queue.entries.some((current) => current.id === entry.id),
+    );
+    previous.current = queue.entries;
+    const actions = queuedStopActions(gone);
+    if (actions.length === 0) return;
+    const at = Date.now();
+    setJustSent((list) => [...list, ...actions.map((action) => ({ action, at }))]);
+    // Whoever sent them (a screen, the timer, the location task): read the day again.
+    void client.invalidateQueries({ queryKey: ["user", queue.owner ?? "anonymous", ...DAY_KEY] });
+  }, [queue.entries, queue.owner, client]);
+
+  const shownDay = day.data ?? (saved.owner === userId ? saved.day : null);
+  const routes = useMemo(() => {
+    if (!shownDay) return null;
+    const recent = justSent
+      .filter((item) => item.at > day.dataUpdatedAt)
+      .map((item) => item.action);
+    return withQueued(shownDay, [...recent, ...queuedStopActions(queue.entries)]);
+  }, [shownDay, queue.entries, justSent, day.dataUpdatedAt]);
+  const noAnswer = day.isError && isNoAnswer(day.error);
+  const offline =
+    noAnswer ||
+    !onlineManager.isOnline() ||
+    (queue.lastFlush?.offline === true && queue.pending > 0) ||
+    offlineAllowed;
+
+  // "Todo enviado" is worth saying only after actions waited for the signal.
+  const [drained, setDrained] = useState(false);
+  const waitedForSignal = useRef(false);
+  const stopActionsWaiting = queue.entries.some(
+    (entry) => entry.status !== "rejected" && entry.kind !== "position",
+  );
+  useEffect(() => {
+    if (stopActionsWaiting && queue.lastFlush?.offline) waitedForSignal.current = true;
+    else if (!stopActionsWaiting && waitedForSignal.current) {
+      waitedForSignal.current = false;
+      setDrained(true);
+    }
+  }, [stopActionsWaiting, queue.lastFlush]);
+  useEffect(() => {
+    if (!drained) return;
+    const timer = setTimeout(() => setDrained(false), 30_000);
+    return () => clearTimeout(timer);
+  }, [drained]);
+
+  // ── Sending what waits ──
+  const refreshDay = useCallback(
+    () => client.invalidateQueries({ queryKey: ["user", userId ?? "anonymous", ...DAY_KEY] }),
+    [client, userId],
+  );
+  const sendNow = useCallback(async () => {
+    const result = await flushOutbox();
+    if (result && (result.sent > 0 || result.rejected > 0)) await refreshDay();
+    if (result && !result.offline && access === "unavailable") void reloadRoles();
+  }, [refreshDay, access, reloadRoles]);
+
+  useEffect(() => {
+    if (!inside || queue.pending === 0) return;
+    const timer = setInterval(() => void sendNow(), RETRY_EVERY_MS);
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") void sendNow();
+    });
+    const online = onlineManager.subscribe((isOnline) => {
+      if (isOnline) void sendNow();
+    });
+    return () => {
+      clearInterval(timer);
+      appState.remove();
+      online();
+    };
+  }, [inside, queue.pending, sendNow]);
+
+  // ── Position sharing ──
+  const routeNeedsTracking = routes ? needsTracking(routes) : null;
+
+  useEffect(() => {
+    if (!inside) return;
+    void locationPermission().then(setPermission);
+    // Still running from before (the app's JavaScript reloaded): show it as on.
+    void isTracking().then((running) => running && setTracking("on"));
+  }, [inside]);
+
+  // The route ended (every stop closed, here or on the server): stop sharing.
+  // Sign-out and lost access stop it too (above, and in signOut).
+  useEffect(() => {
+    if (routeNeedsTracking === false) {
+      void stopTracking();
+      setTracking((current) => (current === "on" || current === "starting" ? "off" : current));
+    }
+  }, [routeNeedsTracking]);
+
+  const shareLocation = useCallback(async (): Promise<Tracking> => {
+    setTracking("starting");
+    let allowed = await locationPermission();
+    if (allowed === "undetermined") allowed = await askLocationPermission();
+    setPermission(allowed);
+    const started = allowed === "granted" ? await startTracking() : "denied";
+    setTracking(started);
+    return started;
+  }, []);
+
+  // ── Actions ──
+  const startRoute = useCallback(
+    async (routeId: string) => {
+      try {
+        await timed(api.driverStartRoute(routeId));
+      } catch (error) {
+        return isNoAnswer(error)
+          ? "Para iniciar la ruta necesita señal: Central tiene que saber que salió. Intente de nuevo en un momento."
+          : messageOf(error);
+      }
+      await refreshDay();
+      return null;
+    },
+    [api, refreshDay],
+  );
+
+  const queueAndSend = useCallback(
+    async (kind: "arrive" | "fail", payload: ArrivePayload | FailPayload) => {
+      try {
+        const entry = await outbox.enqueue(kind, payload);
+        // Wait a little for the answer; with a weak signal the action stays
+        // queued and goes on being sent, and the driver does not wait at the door.
+        const result = await Promise.race([
+          flushOutbox(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), WAIT_FOR_ANSWER_MS)),
+        ]);
+        const left = outbox.snapshot().entries.find((candidate) => candidate.id === entry.id);
+        if (left?.status === "rejected") {
+          // Shown on the screen that made it, so it need not wait in the list.
+          await outbox.dismiss(entry.id);
+          return { queued: false, error: left.message };
+        }
+        if (!left || (result && (result.sent > 0 || result.rejected > 0))) await refreshDay();
+        return { queued: left !== undefined };
+      } catch (error) {
+        return { queued: false, error: messageOf(error) };
+      }
+    },
+    [refreshDay],
+  );
+
+  const arrive = useCallback(
+    (stopId: string) => queueAndSend("arrive", { stopId }),
+    [queueAndSend],
+  );
+
+  const fail = useCallback(
+    async (stopId: string, reason: FailureReason) => {
+      const point = await currentPoint();
+      const result = await queueAndSend("fail", {
+        stopId,
+        reason,
+        lat: point?.lat ?? null,
+        lng: point?.lng ?? null,
+      });
+      if (result.error || result.queued) return { ...result, routeCompleted: false };
+      // Sent: the refreshed day says whether that was the route's last open stop.
+      const fresh = client.getQueryData<DriverDay>(["user", userId ?? "anonymous", ...DAY_KEY]);
+      const found = fresh ? findStop(withQueued(fresh, []), stopId) : null;
+      return { ...result, routeCompleted: found?.route.status === "completed" };
+    },
+    [queueAndSend, client, userId],
+  );
+
+  const deliver = useCallback<DriverValue["deliver"]>(
+    async (input) => {
+      // An arrival still waiting goes first, so the server sees them in order.
+      if (outbox.snapshot().pending > 0) {
+        const sent = await flushOutbox();
+        if (sent?.offline) return { kind: "offline" };
+      }
+      const point = await currentPoint();
+      try {
+        const result = await timed(
+          api.driverCompleteStop({
+            stopId: input.stopId,
+            pin: input.pin,
+            recipientName: input.recipientName,
+            codCollectedMinor: input.codCollectedMinor,
+            lat: point?.lat ?? null,
+            lng: point?.lng ?? null,
+          }),
+        );
+        await refreshDay();
+        if (!result.ok) {
+          return {
+            kind: "refused",
+            message: refusalMessage(result),
+            clearPin: result.error === "wrong_pin" || result.error === "pin_locked",
+          };
+        }
+        return { kind: "delivered", routeCompleted: result.route_completed };
+      } catch (error) {
+        if (isNoAnswer(error)) return { kind: "offline" };
+        // A first try whose answer was lost may have delivered it already.
+        if (error instanceof ApiError && error.code === "invalid_stop_state") {
+          await refreshDay();
+          const fresh = client.getQueryData<DriverDay>(["user", userId ?? "anonymous", ...DAY_KEY]);
+          const found = fresh ? findStop(withQueued(fresh, []), input.stopId) : null;
+          if (found?.stop.status === "delivered") {
+            return { kind: "delivered", routeCompleted: found.route.status === "completed" };
+          }
+        }
+        return { kind: "error", message: messageOf(error) };
+      }
+    },
+    [api, refreshDay, client, userId],
+  );
+
+  const [later, setLater] = useState<ReadonlySet<string>>(new Set());
+  const leaveForLater = useCallback(
+    (stopId: string) => setLater((current) => new Set([...current, stopId])),
+    [],
+  );
+  const lastUser = useRef(userId);
+  useEffect(() => {
+    if (lastUser.current !== userId) setLater(new Set());
+    lastUser.current = userId;
+  }, [userId]);
+
+  const signOut = useCallback(async () => {
+    await stopTracking();
+    setTracking("off");
+    await savedDay.clear();
+    await outbox.discard((entry) => entry.kind === "position");
+    await outbox.setOwner(null);
+    connectOutbox(null);
+    await session.signOut();
+  }, [session]);
+
+  const value: DriverValue = {
+    routes,
+    driverName: shownDay?.driver.full_name ?? viewer?.name ?? null,
+    loading: !routes && (day.isPending || !savedLoaded),
+    error: !routes && day.isError ? day.error : null,
+    retry: () => void day.refetch(),
+    refreshing: day.isRefetching,
+    savedAt: !day.data && saved.day ? saved.savedAt : null,
+    offline,
+    queue,
+    drained,
+    sendNow,
+    dismiss: (id) => outbox.dismiss(id),
+    tracking,
+    permission,
+    shareLocation,
+    startRoute,
+    arrive,
+    fail,
+    deliver,
+    later,
+    leaveForLater,
+    signOut,
+  };
+
+  return (
+    <AccessContext.Provider value={accessValue}>
+      <DriverContext.Provider value={value}>{children}</DriverContext.Provider>
+    </AccessContext.Provider>
+  );
+}
+
+export function useDriver(): DriverValue {
+  const value = useContext(DriverContext);
+  if (!value) throw new Error("useDriver must be used inside <DriverProvider>.");
+  return value;
+}
+
+export const useDriverAccess = () => useContext(AccessContext);
