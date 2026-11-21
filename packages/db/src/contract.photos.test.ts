@@ -91,6 +91,9 @@ describe.skipIf(!db.enabled)("photos contract (against a seeded database)", () =
       state: "pending",
       alt: "Laptop abierta de frente",
       live: false,
+      files_changed: false,
+      // A published listing stays published; the photo waits as a change.
+      listing_status: "active",
     });
 
     const photos = await seller().sellerPhotos(laptop);
@@ -100,7 +103,7 @@ describe.skipIf(!db.enabled)("photos contract (against a seeded database)", () =
     const saved = await seller().sellerSavePhotos(laptop, [
       { photoId, alt: "Laptop abierta vista de frente" },
     ]);
-    expect(saved.outcome).toBe("in_review");
+    expect(saved).toMatchObject({ outcome: "in_review", listing_status: "active" });
     await expect(seller().sellerSavePhotos(laptop, [])).rejects.toMatchObject({
       code: "photos_changed",
     });
@@ -113,16 +116,57 @@ describe.skipIf(!db.enabled)("photos contract (against a seeded database)", () =
     expect(item?.before).toEqual([]);
     expect(item?.after.map((p) => p.alt)).toEqual(["Laptop abierta vista de frente"]);
     expect(await staff().opsPhotoFilesToPublish(laptop)).toEqual([]);
-    expect(await staff().opsConfirmPhotosPublished(laptop)).toEqual({ published: 0, waiting: 0 });
+    expect(await staff().opsConfirmPhotosPublished(laptop)).toEqual({
+      published: 0,
+      waiting: 0,
+      refused: 0,
+    });
 
     await expect(seller().opsPhotosForReview()).rejects.toMatchObject({ code: "forbidden" });
     await expect(seller().photoFilesToDelete()).rejects.toMatchObject({ code: "forbidden" });
   });
 
+  it("lets catalogue staff look up a listing's photos and take one down", async () => {
+    const listing = await staff().opsProductPhotos("laptop-14-nimbo-libro");
+    expect(listing).toMatchObject({ product_id: laptop, status: "active" });
+    expect(listing.photos.map((p) => p.photo_id)).toEqual([photoId]);
+    await expect(staff().opsProductPhotos("no-existe")).rejects.toMatchObject({
+      code: "catalog_product_not_found",
+    });
+    await expect(seller().opsProductPhotos("laptop-14-nimbo-libro")).rejects.toMatchObject({
+      code: "forbidden",
+    });
+    await expect(seller().opsRemovePhoto(photoId, "Quitar sin ser staff")).rejects.toMatchObject({
+      code: "forbidden",
+    });
+
+    // A second photo, taken down by staff while it waits.
+    const reserved = await seller().sellerReservePhoto(laptop);
+    for (const file of reserved.files) {
+      await db.query(
+        `insert into storage.objects (bucket_id, name, metadata, version)
+         values ($1, $2, '{"mimetype": "image/jpeg", "size": 90000}', gen_random_uuid()::text)`,
+        [reserved.bucket, file.path],
+      );
+    }
+    await seller().sellerFinishPhoto(reserved.photo_id, "Laptop cerrada de lado", 1600, 1200);
+    expect(
+      await staff().opsRemovePhoto(reserved.photo_id, "Se ve el logotipo de otra marca."),
+    ).toEqual({ product_id: laptop, photo_id: reserved.photo_id, was_public: false });
+    const mine = await seller().sellerPhotos(laptop);
+    expect(mine.rejected.map((p) => [p.photo_id, p.rejection_reason])).toEqual([
+      [reserved.photo_id, "Se ve el logotipo de otra marca."],
+    ]);
+  });
+
   it("removes a waiting photo at once and lists its files for deletion", async () => {
-    expect(await seller().sellerRemovePhoto(photoId)).toEqual({ outcome: "removed" });
+    expect(await seller().sellerRemovePhoto(photoId)).toEqual({
+      outcome: "removed",
+      listing_status: "active",
+    });
     const files = await seller().photoFilesToDelete(laptop);
-    expect(files).toHaveLength(3);
+    // This photo's three files and the three of the one staff took down.
+    expect(files).toHaveLength(6);
     expect(files.every((f) => f.bucket === "product-photos-pending")).toBe(true);
     expect((await staff().photoFilesToDelete()).length).toBeGreaterThanOrEqual(3);
     await expect(seller().sellerRemovePhoto(photoId)).rejects.toMatchObject({

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  checkDecodedPhoto,
   checkDimensions,
   checkSourceFile,
   fitWithin,
@@ -128,6 +129,44 @@ describe("what a file really is", () => {
   });
 });
 
+describe("what the console publishes", () => {
+  const recorded = { format: "jpeg" as const, width: 1600, height: 1200 };
+
+  it("accepts the picture that was recorded", () => {
+    expect(checkDecodedPhoto({ format: "jpeg", width: 1600, height: 1200 }, recorded)).toBeNull();
+    // Rounding in a browser may differ by a pixel.
+    expect(checkDecodedPhoto({ format: "jpeg", width: 1600, height: 1199 }, recorded)).toBeNull();
+  });
+
+  it("refuses what does not decode, another format, or another size", () => {
+    expect(
+      checkDecodedPhoto({ format: undefined, width: undefined, height: undefined }, recorded),
+    ).toBe("not_an_image");
+    expect(checkDecodedPhoto({ format: "png", width: 1600, height: 1200 }, recorded)).toBe(
+      "wrong_format",
+    );
+    // A huge picture declared as 1600 px, served to phones as the small size.
+    expect(checkDecodedPhoto({ format: "jpeg", width: 20000, height: 15000 }, recorded)).toBe(
+      "wrong_size",
+    );
+    expect(checkDecodedPhoto({ format: "jpeg", width: 1200, height: 900 }, recorded)).toBe(
+      "wrong_size",
+    );
+    expect(
+      checkDecodedPhoto(
+        { format: "jpeg", width: 400, height: 300 },
+        { format: "jpeg", width: 400, height: 300 },
+      ),
+    ).toBe("wrong_size");
+    expect(
+      checkDecodedPhoto(
+        { format: "jpeg", width: 1600, height: 1200 },
+        { format: "jpeg", width: null, height: null },
+      ),
+    ).toBe("wrong_size");
+  });
+});
+
 describe("alternative text", () => {
   it("collapses spaces and keeps it within the limits", () => {
     expect(normaliseAlt("  Licuadora   vista de frente ")).toBe("Licuadora vista de frente");
@@ -165,6 +204,8 @@ describe("photo rules in the database", () => {
     expect(number("alt_min")).toBe(PHOTO_RULES.altMin);
     expect(number("alt_max")).toBe(PHOTO_RULES.altMax);
     expect(number("upload_window_minutes")).toBe(PHOTO_RULES.uploadWindowMinutes);
+    expect(number("max_waiting_per_shop")).toBe(PHOTO_RULES.maxWaitingPerShop);
+    expect(number("max_new_per_day")).toBe(PHOTO_RULES.maxNewPerDay);
   });
 
   it("create the buckets with the same names and size limit", () => {

@@ -16,9 +16,12 @@
  *   <seller id>/<product id>/<photo id>/1600.jpg    product page, larger screens
  *
  * The same path is used in the private bucket (waiting for review) and in the
- * public bucket (approved), so promotion is a copy to the same name. The free
- * plan has no image transformation and the web host's optimiser is billed per
- * image, so these copies are the only sizes there are.
+ * public bucket (approved). Promotion does not copy the seller's files: the
+ * console decodes the largest waiting copy (the one staff looked at) and makes
+ * the three public sizes from it, so a client that uploaded three different
+ * pictures, or left location data in them, cannot get either into the shop.
+ * The free plan has no image transformation and the web host's optimiser is
+ * billed per image, so these copies are the only sizes there are.
  */
 
 export const PHOTO_RULES = {
@@ -35,6 +38,13 @@ export const PHOTO_RULES = {
   altMax: 250,
   /** Minutes a reserved photo may stay without its files before it is abandoned. */
   uploadWindowMinutes: 120,
+  /**
+   * Photos a shop may have waiting at once, over all its listings. Files of
+   * removed or abandoned photos count until they are deleted.
+   */
+  maxWaitingPerShop: 40,
+  /** New photos a shop may start in a day. */
+  maxNewPerDay: 100,
 } as const;
 
 /** Largest original file the browser will try to open, in bytes. Not a server rule. */
@@ -206,6 +216,39 @@ export function checkSourceFile(file: {
 /** Checks a picture's pixel size once it has been opened. */
 export function checkDimensions(width: number, height: number): PhotoProblem | null {
   return Math.max(width, height) < PHOTO_RULES.minEdge ? "too_small" : null;
+}
+
+/** Why the console will not publish a waiting photo, once it has decoded it. */
+export type DecodedPhotoProblem =
+  | "not_an_image" // the bytes do not decode as a picture at all
+  | "wrong_format" // a picture, but not the format the photo was recorded with
+  | "wrong_size"; // larger than the largest rendition, too small, or not the recorded size
+
+/**
+ * Checks what the largest waiting copy really is, as decoded on the server,
+ * against what was recorded for the photo when it was finished. A client that
+ * skipped the browser's resizing can declare any type and any size; this is
+ * where that stops mattering.
+ */
+export function checkDecodedPhoto(
+  decoded: { format: string | undefined; width: number | undefined; height: number | undefined },
+  recorded: { format: PhotoFormat; width: number | null; height: number | null },
+): DecodedPhotoProblem | null {
+  const { format, width, height } = decoded;
+  if (!format || !width || !height) return "not_an_image";
+  if (format !== recorded.format) return "wrong_format";
+  const largest = Math.max(...PHOTO_RULES.sizes);
+  const edge = Math.max(width, height);
+  if (edge > largest || edge < PHOTO_RULES.minEdge) return "wrong_size";
+  if (
+    recorded.width === null ||
+    recorded.height === null ||
+    Math.abs(width - recorded.width) > 1 ||
+    Math.abs(height - recorded.height) > 1
+  ) {
+    return "wrong_size";
+  }
+  return null;
 }
 
 /** Alternative text as it will be stored, or null when it is not acceptable. */

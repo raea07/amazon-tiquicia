@@ -27,6 +27,8 @@ export const photoRules = z.object({
   alt_min: z.number().int(),
   alt_max: z.number().int(),
   upload_window_minutes: z.number().int(),
+  max_waiting_per_shop: z.number().int(),
+  max_new_per_day: z.number().int(),
 });
 
 /** One photo as its seller and catalogue staff see it. */
@@ -48,6 +50,8 @@ export const productPhoto = z.object({
   live_alt: z.string().nullable(),
   /** Its files are in the public bucket. */
   published: z.boolean(),
+  /** A waiting photo whose files were uploaded again after it was finished: never approved. */
+  files_changed: z.boolean(),
   /** The seller asked to remove it; it stays in the shop until staff approve. */
   remove_requested: z.boolean(),
   rejection_reason: z.string().nullable(),
@@ -85,13 +89,23 @@ export const reservedPhoto = z.object({
 });
 export type ReservedPhoto = z.infer<typeof reservedPhoto>;
 
+/**
+ * A finished photo, with the listing's status afterwards: changing the photos
+ * of a listing that waits for review sends it back to draft.
+ */
+export const finishedPhoto = productPhoto.extend({ listing_status: productStatus });
+
 export const savedPhotos = z.object({
   /** `in_review`: a published listing; the shop keeps its photos until approved. */
   outcome: z.enum(["saved", "in_review"]),
   revision: z.string(),
+  listing_status: productStatus,
 });
 
-export const removedPhoto = z.object({ outcome: z.enum(["removed", "in_review"]) });
+export const removedPhoto = z.object({
+  outcome: z.enum(["removed", "in_review"]),
+  listing_status: productStatus,
+});
 
 /** A listing with photos waiting for a catalogue decision. */
 export const opsPhotoReview = z.object({
@@ -113,12 +127,43 @@ export const opsPhotoReview = z.object({
 export type OpsPhotoReview = z.infer<typeof opsPhotoReview>;
 
 export const photoFilesToPublish = z.array(
-  z.object({ photo_id: id, format: photoFormat, paths: z.array(z.string()) }),
+  z.object({
+    photo_id: id,
+    format: photoFormat,
+    /** Pixel size of the largest copy, as the seller's device reported it. */
+    width: z.number().int().nullable(),
+    height: z.number().int().nullable(),
+    /** The waiting copy staff looked at (the largest); the public sizes are made from it. */
+    source: z.string(),
+    /** Where each public size goes, smallest first. */
+    paths: z.array(z.string()),
+  }),
 );
+export type PhotoFileToPublish = z.infer<typeof photoFilesToPublish>[number];
 
 export const photosPublished = z.object({
   published: z.number().int(),
   waiting: z.number().int(),
+  /** Photos refused because their waiting files changed after they were finished. */
+  refused: z.number().int(),
+});
+
+/** A listing's photos as catalogue staff look them up to take one down. */
+export const opsProductPhotos = z.object({
+  product_id: id,
+  slug: z.string(),
+  title: z.string(),
+  status: productStatus,
+  seller_name: z.string().nullable(),
+  photos: z.array(productPhoto),
+});
+export type OpsProductPhotos = z.infer<typeof opsProductPhotos>;
+
+export const removedByStaff = z.object({
+  product_id: id,
+  photo_id: id,
+  /** It was in the shop until now. */
+  was_public: z.boolean(),
 });
 
 export const storedFile = z.object({ bucket: z.string(), path: z.string() });
@@ -158,6 +203,20 @@ export const photosErrors = {
       "Las fotos cambiaron desde que abrió esta página. Actualícela para ver las más recientes.",
     en: "The photos changed since this page was opened. Refresh it to see the latest ones.",
   },
+  photo_shop_limit_reached: {
+    "es-CR":
+      "Su tienda tiene 40 fotos esperando revisión o por borrar. Espere a que las revisemos, o quite las que no necesite, antes de subir más.",
+    en: "Your shop has 40 photos waiting for review or to be deleted. Wait until we review them, or remove the ones you do not need, before uploading more.",
+  },
+  photo_daily_limit_reached: {
+    "es-CR": "Hoy ya agregó 100 fotos, el máximo por día. Podrá agregar más mañana.",
+    en: "You have already added 100 photos today, the daily maximum. You can add more tomorrow.",
+  },
+  catalog_product_not_found: {
+    "es-CR":
+      "No encontramos un producto de vendedor con esa dirección. Copie la dirección de la página del producto en la tienda.",
+    en: "We could not find a seller's product at that address. Copy the address of the product's page in the shop.",
+  },
   photo_change_not_found: {
     "es-CR": "No hay cambios de fotos pendientes en este producto. Actualice la página.",
     en: "There are no photo changes waiting on this product. Refresh the page.",
@@ -174,7 +233,7 @@ export const photosApi = ({ call, run }: Caller) => ({
     call(
       "seller_finish_photo",
       { p_photo_id: photoId, p_alt: alt, p_width: width, p_height: height },
-      productPhoto,
+      finishedPhoto,
     ),
   /** The whole working set, in its new order, with each photo's text. */
   sellerSavePhotos: (productId: string, items: PhotoOrderItem[]) =>
@@ -210,6 +269,12 @@ export const photosApi = ({ call, run }: Caller) => ({
     call("ops_photo_files_to_publish", { p_product_id: productId }, photoFilesToPublish),
   opsConfirmPhotosPublished: (productId: string) =>
     call("ops_confirm_photos_published", { p_product_id: productId }, photosPublished),
+  /** Catalogue staff: a listing's photos, found by its slug. */
+  opsProductPhotos: (slug: string) =>
+    call("ops_product_photos", { p_slug: slug }, opsProductPhotos),
+  /** Catalogue staff: takes a photo down at once, with a reason the seller reads. */
+  opsRemovePhoto: (photoId: string, reason: string) =>
+    call("ops_remove_photo", { p_photo_id: photoId, p_reason: reason }, removedByStaff),
   /** Files nobody needs any more: for one listing, or (catalogue staff) everywhere. */
   photoFilesToDelete: (productId?: string | null) =>
     call("photo_files_to_delete", { p_product_id: productId ?? undefined }, z.array(storedFile)),

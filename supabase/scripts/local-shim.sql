@@ -179,3 +179,14 @@ grant all on storage.objects to anon, authenticated, service_role;
 grant all on storage.buckets to anon, authenticated, service_role;
 grant execute on function storage.foldername(text), storage.filename(text), storage.extension(text)
   to anon, authenticated, service_role;
+
+-- Which storage operation is running (the service sets it for every request;
+-- the local stand-in does the same). The photo rules read the setting itself.
+create or replace function storage.operation() returns text
+language plpgsql stable
+as $$
+begin
+  return current_setting('storage.operation', true);
+end;
+$$;
+grant execute on function storage.operation() to anon, authenticated, service_role;
