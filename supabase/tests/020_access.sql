@@ -19,6 +19,11 @@ select pg_temp.remember('tecnocasa_offer', pg_temp.offer('cargador-usb-c-30w-nim
 select pg_temp.remember('luis_route',
   (select r.id::text from public.routes r join public.drivers d on d.id = r.driver_id
    where d.full_name like 'Luis%' limit 1));
+-- The preview gains routes after seeding (the smoke test routes its own
+-- order), so the driver's routes are counted rather than taken from the seed.
+select pg_temp.remember('carlos_routes',
+  (select count(*)::text from public.routes r join public.drivers d on d.id = r.driver_id
+   join auth.users u on u.id = d.user_id where u.email = 'repartidor@yuntera.example'));
 select pg_temp.remember('luis_stop',
   (select rs.id::text from public.route_stops rs where rs.route_id = current_setting('t.luis_route')::uuid limit 1));
 select pg_temp.remember('total_orders', (select count(*)::text from public.orders));
@@ -396,7 +401,9 @@ select pg_temp.login('repartidor@yuntera.example');
 
 do $$
 begin
-  assert (select count(*) from public.routes) = 2, 'a driver sees only routes assigned to them';
+  assert (select count(*) from public.routes) = current_setting('t.carlos_routes')::bigint
+         and current_setting('t.carlos_routes')::bigint >= 2,
+    'a driver sees only routes assigned to them';
   assert not exists (select 1 from public.routes where id = current_setting('t.luis_route')::uuid),
     'another driver''s route is invisible';
   assert (select count(*) from public.route_stops) > 0, 'their stops are visible';

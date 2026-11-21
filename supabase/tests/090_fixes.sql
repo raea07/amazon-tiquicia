@@ -8,6 +8,13 @@ begin;
 select pg_temp.remember('buyer', (select id::text from auth.users where email = 'comprador@yuntera.example'));
 select pg_temp.remember('tecnocasa', (select id::text from public.sellers where slug = 'tecnocasa'));
 select pg_temp.remember('depot', (select id::text from public.warehouses where code = 'SJO1'));
+-- Listing edits made on a shared preview before this suite runs are counted,
+-- so the suite stays re-runnable there.
+select pg_temp.remember('prior_requests', (select count(*)::text from public.product_change_requests));
+select pg_temp.remember('prior_vendedor_requests',
+  (select count(*)::text from public.product_change_requests r
+   join public.seller_members m on m.seller_id = r.seller_id
+   join auth.users u on u.id = m.user_id where u.email = 'vendedor@yuntera.example'));
 
 -- Back to the superuser with nobody signed in. (`reset role` alone leaves the
 -- last user's claims in place, and the listing rules look at them.)
@@ -564,7 +571,8 @@ begin
 
   assert (select (editable, edit_status) = (true, 'pending') from public.seller_listing_edits(current_setting('t.tecnocasa')::uuid)
           where product_id = current_setting('t.laptop')::uuid), 'the list of products shows the edit is waiting';
-  assert (select count(*) from public.product_change_requests) = 2, 'the owner reads their own proposals';
+  assert (select count(*) from public.product_change_requests)
+         = current_setting('t.prior_vendedor_requests')::bigint + 2, 'the owner reads their own proposals';
 
   -- What cannot be saved is refused before it ever reaches a reviewer.
   perform pg_temp.refused($q$select pg_temp.retitle('laptop', 'abc')$q$, 'invalid_listing');
@@ -602,7 +610,8 @@ begin
   assert p.title = current_setting('t.laptop_title') and p.status = 'active',
     'the published listing has not changed';
   assert (select weight_grams from public.skus where product_id = p.id) = 1900, 'nor has its package';
-  assert (select jsonb_object_agg(id::text, status) from public.product_change_requests where product_id = p.id)
+  assert (select jsonb_object_agg(id::text, status) from public.product_change_requests
+          where product_id = p.id and submitted_at >= now()) -- made in this suite's transaction
        = jsonb_build_object(current_setting('t.first_request'), 'withdrawn',
                             current_setting('t.second_request'), 'pending'),
     'the replaced proposal is closed; one is waiting';
@@ -755,7 +764,8 @@ begin
   assert q #> '{0,changed}' = '["title", "weight_grams"]'::jsonb,
     format('only what differs is flagged: %s', q #> '{0,changed}');
   -- Staff also read the proposals table itself.
-  assert (select count(*) from public.product_change_requests) = 2, 'catalogue staff read every proposal';
+  assert (select count(*) from public.product_change_requests)
+         = current_setting('t.prior_requests')::bigint + 2, 'catalogue staff read every proposal';
 
   -- A rejection must say why; the proposal that was replaced cannot be decided at all.
   perform pg_temp.refused(format('select public.ops_review_listing_edit(%L, false, %L)',

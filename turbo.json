@@ -13,7 +13,8 @@
         "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
         "NEXT_PUBLIC_SITE_URL",
         "NEXT_PUBLIC_SHOP_URL"
-      ]
+      ],
+      "passThroughEnv": ["SHOP_REFRESH_KEY"]
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],
