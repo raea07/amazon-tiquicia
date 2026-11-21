@@ -25,6 +25,7 @@ export const PAYOUT_STATUS: Record<PayoutStatus, { label: string; tone: Tone }> 
 export const PAYOUT_BLOCK: Record<PayoutBlock, string> = {
   shop_suspended: "Tienda suspendida o sin verificar",
   no_bank_details: "Sin cuenta bancaria aprobada",
+  invalid_bank_details: "La cuenta registrada no es un IBAN válido",
   below_minimum: "Disponible menor al mínimo",
 };
 

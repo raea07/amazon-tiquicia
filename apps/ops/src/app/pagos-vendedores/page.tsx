@@ -44,8 +44,11 @@ export default function SellerPayoutsPage({ searchParams }: PageProps<"/pagos-ve
 
 async function Payouts({ searchParams }: Pick<PageProps<"/pagos-vendedores">, "searchParams">) {
   await requireStaff("/pagos-vendedores", ["finance"]);
-  const asked = (await searchParams).corte;
+  const params = await searchParams;
+  const asked = params.corte;
   const text = Array.isArray(asked) ? asked[0] : asked;
+  const decided =
+    params.resuelta === "aprobada" || params.resuelta === "rechazada" ? params.resuelta : null;
   const cutoff = text && /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 
   const api = await sessionApi();
@@ -63,7 +66,7 @@ async function Payouts({ searchParams }: Pick<PageProps<"/pagos-vendedores">, "s
     api.opsPayoutRuns(),
   ]);
   const waiting = requests.filter((request) => request.status === "pending");
-  const decided = requests.filter((request) => request.status !== "pending").slice(0, 10);
+  const recent = requests.filter((request) => request.status !== "pending").slice(0, 10);
 
   return (
     <div className="flex flex-col gap-12">
@@ -76,6 +79,15 @@ async function Payouts({ searchParams }: Pick<PageProps<"/pagos-vendedores">, "s
           aprobar, llame al teléfono que ya teníamos registrado —nunca a uno que venga en un correo
           o mensaje— y confirme la cuenta nueva dígito por dígito.
         </p>
+        {decided === "aprobada" ? (
+          <Alert tone="success" className="mt-3">
+            Cuenta aprobada. Los próximos pagos de esa tienda van a la cuenta nueva.
+          </Alert>
+        ) : decided === "rechazada" ? (
+          <Alert tone="success" className="mt-3">
+            Solicitud rechazada. El vendedor ve el motivo que usted escribió.
+          </Alert>
+        ) : null}
         {waiting.length === 0 ? (
           <p className="mt-3 text-sm text-ink-muted">No hay cambios de cuenta por resolver.</p>
         ) : (
@@ -85,13 +97,13 @@ async function Payouts({ searchParams }: Pick<PageProps<"/pagos-vendedores">, "s
             ))}
           </ul>
         )}
-        {decided.length > 0 ? (
+        {recent.length > 0 ? (
           <details className="mt-4 text-sm">
             <summary className="cursor-pointer py-3 font-semibold text-link">
-              Resueltas recientemente ({decided.length})
+              Resueltas recientemente ({recent.length})
             </summary>
             <ul className="mt-2 flex flex-col gap-2">
-              {decided.map((request) => {
+              {recent.map((request) => {
                 const status = REQUEST_STATUS[request.status];
                 return (
                   <li key={request.id} className="rounded-md border border-border bg-surface p-3">
@@ -216,6 +228,13 @@ function RequestCard({ request }: { request: PayoutDetailRequest }) {
       </dl>
 
       <div className="mt-4 flex flex-col gap-2">
+        {signals.contact_changed_recently ? (
+          <Alert tone="warning" title="El teléfono o el correo cambiaron hace poco">
+            Los datos de contacto de esta tienda cambiaron en los 30 días antes de la solicitud. No
+            confirme la cuenta con ese teléfono: verifique con el vendedor por otro medio que ya
+            conozca, o rechace la solicitud.
+          </Alert>
+        ) : null}
         {signals.holder_differs ? (
           <Alert tone="warning">
             El titular de la cuenta no coincide con el nombre legal de la tienda. Pregunte por qué.

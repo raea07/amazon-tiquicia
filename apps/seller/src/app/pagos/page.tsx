@@ -261,6 +261,16 @@ function Notices({ money }: { money: SellerPayouts }) {
           .
         </Alert>
       ) : null}
+      {blocked.has("invalid_bank_details") ? (
+        <Alert tone="warning" title="Su cuenta bancaria no es válida">
+          La cuenta IBAN que tenemos registrada no pasa la revisión de sus dígitos, así que no
+          podemos transferirle.{" "}
+          <Link href="/cuenta" className="font-semibold underline">
+            Solicite el cambio de cuenta en Cuenta
+          </Link>{" "}
+          con la cuenta correcta.
+        </Alert>
+      ) : null}
       {blocked.has("shop_suspended") ? (
         <Alert tone="warning" title="Sus pagos están retenidos">
           Su tienda está suspendida o todavía en verificación. Su saldo se conserva y se paga cuando

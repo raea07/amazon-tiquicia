@@ -114,7 +114,9 @@ export function DataTable({
   children: ReactNode;
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+    // `relative` keeps absolutely positioned content (such as screen-reader-only
+    // text) inside the scroller instead of widening the page.
+    <div className="relative overflow-x-auto rounded-lg border border-border bg-surface">
       <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead>

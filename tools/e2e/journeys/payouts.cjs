@@ -174,7 +174,14 @@ async function rpcAs(email, fn, args = {}) {
   await card.locator('textarea[name="note"]').fill("");
   await card.locator('button:has-text("Aprobar la cuenta nueva")').click();
   await ops.waitForSelector("main:visible >> text=No hay cambios de cuenta por resolver");
-  log("approved: the queue is empty");
+  // The card is gone with its form, so the page itself confirms the decision.
+  const confirmation = ops.locator(
+    'main:visible section[aria-labelledby="cuentas"] [role="status"]',
+  );
+  await confirmation.first().waitFor();
+  const confirmed = await text(confirmation.first());
+  log("approved: the queue is empty;", confirmed);
+  expect(confirmed.includes("Cuenta aprobada"), "finance is told the account was approved");
 
   // 4. Preview: an earlier cut-off pays less; today's pays three shops
   const preview = ops.locator('main:visible section[aria-labelledby="corte"]');
@@ -384,7 +391,9 @@ async function rpcAs(email, fn, args = {}) {
     for (const path of paths) {
       await m.goto(base + path, { waitUntil: "networkidle" });
       const overflow = await m.evaluate(
-        () => document.documentElement.scrollWidth - window.innerWidth,
+        // Against the phone's width itself: with isMobile the layout viewport
+        // grows to fit wide content, so innerWidth would hide the overflow.
+        () => document.documentElement.scrollWidth - 390,
       );
       log(`mobile ${name} ${path.slice(0, 30)} overflow px:`, overflow);
       expect(overflow <= 0, `${name} ${path} fits a 390 px screen`);

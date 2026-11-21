@@ -226,16 +226,15 @@ export async function decidePayoutDetails(
       values: typed(formData, "note"),
     };
   }
-  return staffAction(
-    "/pagos-vendedores",
-    async (api) => {
-      await api.opsDecidePayoutDetails(requestId.data, approve, note || null);
-      return approve
-        ? "Cuenta aprobada. Los próximos pagos de esta tienda van a la cuenta nueva."
-        : "Solicitud rechazada; el vendedor ve el motivo.";
-    },
-    typed(formData, "note"),
-  );
+  if (!(await currentStaff())) redirectTo(signInPath("/pagos-vendedores"));
+  try {
+    await (await sessionApi()).opsDecidePayoutDetails(requestId.data, approve, note || null);
+  } catch (error) {
+    return { error: messageOf(error), values: typed(formData, "note") };
+  }
+  // The card that held the form is gone once the request is decided, so the
+  // confirmation is shown by the page itself.
+  redirectTo(`/pagos-vendedores?resuelta=${approve ? "aprobada" : "rechazada"}`);
 }
 
 // ── Payouts ─────────────────────────────────────────────────────────────────

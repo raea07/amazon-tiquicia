@@ -307,7 +307,9 @@ async function rpcAs(email, fn, args = {}) {
   for (const path of ["/personal", "/repartidores", "/bodegas"]) {
     await m.goto(BASE + path, { waitUntil: "networkidle" });
     const overflow = await m.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
+      // Against the phone's width itself: with isMobile the layout viewport
+      // grows to fit wide content, so innerWidth would hide the overflow.
+      () => document.documentElement.scrollWidth - 390,
     );
     log(`mobile ${path} overflow px:`, overflow);
     expect(overflow <= 0, `${path} fits a 390 px screen`);
