@@ -206,6 +206,7 @@ export default function NewListingScreen() {
           disabled={sending !== null}
           loadingLabel="Guardando…"
           onPress={() => void send(true)}
+          testID="listing-draft"
         >
           Guardar como borrador
         </Button>

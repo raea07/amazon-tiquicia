@@ -379,6 +379,54 @@ function colones(text) {
     "the new shop opens, in review, with a welcome",
   );
   await p.screenshot({ path: `${SHOTS}/native-seller-15-registered.png` });
+
+  // The new shop saves a draft it will ship itself, then registers where we collect
+  await p
+    .getByRole("tab", { name: /^Productos/ })
+    .first()
+    .click();
+  await by("new-listing").click();
+  await by("listing-title").fill("Taza de cerámica pintada a mano 350 ml");
+  await by("category").click();
+  await p.getByTestId("category-filter").filter({ visible: true }).first().fill("cocina y");
+  await p.getByTestId("category-option-cocina").filter({ visible: true }).first().click();
+  await by("listing-price").fill("6 500");
+  await by("listing-fulfillment-seller").click();
+  await by("package-weightGrams").fill("450");
+  await by("package-lengthCm").fill("12");
+  await by("package-widthCm").fill("12");
+  await by("package-heightCm").fill("12");
+  await by("listing-draft").click();
+  await by("created-message").waitFor();
+  check(/Borrador guardado/.test(await by("created-message").innerText()), "a draft is saved");
+  await p
+    .getByRole("tab", { name: /^Inventario/ })
+    .first()
+    .click();
+  await by("add-location").click();
+  await by("location-name").fill("Taller Orosi");
+  await by("province").click();
+  await by("province-option-3").click();
+  await by("canton").click();
+  await by("canton-option-302").click();
+  await by("district").click();
+  await by("district-option-30203").click();
+  await by("location-address").fill("Orosi centro, 200 m norte de la iglesia, portón verde");
+  await by("location-save").click();
+  await by("location-result").waitFor();
+  check(
+    /código Plus/.test(await by("location-result").innerText()),
+    "without the exact point it asks for the Plus Code",
+  );
+  await by("location-plus-code").fill("66XRQ4XR+RH");
+  await by("location-plus-apply").click();
+  await p.getByText("Punto marcado").first().waitFor();
+  await p.waitForTimeout(500); // the district sheet slides away
+  await p.screenshot({ path: `${SHOTS}/native-seller-16-pickup-place.png` });
+  await by("location-save").click();
+  await p.getByText("Taller Orosi").filter({ visible: true }).first().waitFor();
+  check(true, "the pickup place is saved and the inventory lists it, ready for a stock count");
+  await p.screenshot({ path: `${SHOTS}/native-seller-17-inventory-new-place.png` });
   await newcomer.context.close();
 
   log("\nERRORS:", errors.length ? errors : "none");
