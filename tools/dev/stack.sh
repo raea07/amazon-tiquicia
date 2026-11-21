@@ -3,7 +3,9 @@
 # numbered "lane", so several checkouts (git worktrees, CI jobs, two people on
 # one machine) can each have their own without colliding.
 #
-#   tools/dev/stack.sh up [lane]              database + API + build + start the apps
+#   tools/dev/stack.sh up [lane]              database + API + build + start the apps,
+#                                             plus the notification worker against the local fake providers
+#   tools/dev/stack.sh notify [lane]          (re)start only the notification worker and the fake providers
 #   tools/dev/stack.sh api [lane]             database + API only (enough for most tests)
 #   tools/dev/stack.sh env [lane]             print the lane's settings as `export` lines
 #   tools/dev/stack.sh e2e [lane] [journey…]  run browser journeys against the lane
@@ -12,7 +14,8 @@
 #
 # Lane 0 (the default) is the usual setup: database yuntera_local, API on
 # :54321, apps on :3000–:3003. Lane N (1–9) uses database yuntera_lane<N>, API
-# on :544<N>0 and apps on :3<N>00–:3<N>03.
+# on :544<N>0 and apps on :3<N>00–:3<N>03. The notification
+# functions listen on the API port + 1, the fake providers on the API port + 2.
 #
 # The apps read the API address when they are BUILT, so each lane builds its own
 # copy; `up` writes apps/*/.env.local for the lane before building.
@@ -31,6 +34,7 @@ fi
 ADMIN_URL="${PG_ADMIN_URL:-postgres://postgres:postgres@127.0.0.1:5432/postgres}"
 DB_URL="${ADMIN_URL%/*}/${DB_NAME}"
 API_URL="http://127.0.0.1:${API_PORT}"
+FUNCTIONS_PORT=$((API_PORT + 1)); FAKE_PORT=$((API_PORT + 2))
 API_KEY="sb_publishable_local_development_only"
 STATE="$ROOT/.lane/$LANE"
 APPS=(web seller ops field)
@@ -58,6 +62,10 @@ export WEB_URL=http://127.0.0.1:$(app_port web)
 export SELLER_URL=http://127.0.0.1:$(app_port seller)
 export OPS_URL=http://127.0.0.1:$(app_port ops)
 export FIELD_URL=http://127.0.0.1:$(app_port field)
+export DEV_FUNCTIONS_PORT=$FUNCTIONS_PORT
+export DEV_FAKE_PROVIDERS_PORT=$FAKE_PORT
+export FUNCTIONS_URL=http://127.0.0.1:$FUNCTIONS_PORT
+export FAKE_PROVIDERS_URL=http://127.0.0.1:$FAKE_PORT
 ENV
 }
 
@@ -100,6 +108,20 @@ start_api() {
   echo "lane $LANE: database $DB_NAME, API $API_URL"
 }
 
+# The notification worker (served as the Edge Functions would be) and the fake
+# providers it sends to. Nothing here can reach a real provider.
+start_notify() {
+  eval "$(print_env)"
+  for name in fake functions; do
+    [ -e "$STATE/$name.pid" ] && { kill -- "-$(cat "$STATE/$name.pid")" 2>/dev/null || true; rm -f "$STATE/$name.pid"; }
+  done
+  start fake "$ROOT/tools/dev-notify" pnpm exec tsx src/fake-providers.ts
+  start functions "$ROOT/tools/dev-notify" pnpm exec tsx src/functions-host.ts
+  wait_for "$FAKE_PROVIDERS_URL/_fake/messages" 40
+  wait_for "$FUNCTIONS_URL/health" 40
+  echo "lane $LANE: notifications $FUNCTIONS_URL, fake providers $FAKE_PROVIDERS_URL"
+}
+
 case "$COMMAND" in
   env)
     print_env
@@ -134,6 +156,12 @@ case "$COMMAND" in
       wait_for "http://127.0.0.1:$(app_port "$app")/ingresar" 60
       echo "lane $LANE: $app on http://127.0.0.1:$(app_port "$app")"
     done
+    start_notify
+    ;;
+
+  notify)
+    mkdir -p "$STATE"
+    start_notify
     ;;
 
   e2e)
@@ -157,7 +185,7 @@ case "$COMMAND" in
     ;;
 
   *)
-    sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac
