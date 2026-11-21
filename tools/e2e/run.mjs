@@ -8,12 +8,16 @@
 // next to this file has the exact commands.
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const all = ["web", "seller", "ops", "field"];
+// Every script in journeys/ is a journey; adding a file is all it takes.
+const all = readdirSync(`${here}journeys`)
+  .filter((file) => file.endsWith(".cjs"))
+  .map((file) => file.slice(0, -4))
+  .sort();
 const chosen = process.argv.slice(2).filter((name) => all.includes(name));
 const journeys = chosen.length > 0 ? chosen : all;
 
