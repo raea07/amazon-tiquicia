@@ -39,3 +39,6 @@ tools/dev-api/.keys
 .DS_Store
 *.pem
 *.log
+
+# Browser journey screenshots
+tools/e2e/screenshots/

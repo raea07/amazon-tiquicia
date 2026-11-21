@@ -1,0 +1,20 @@
+# Weekly updates for the workspace's packages and for the CI actions, grouped
+# so they arrive as a few reviewable pull requests rather than dozens.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      framework:
+        patterns: ["next", "react", "react-dom", "@types/react*"]
+      supabase:
+        patterns: ["@supabase/*"]
+      tooling:
+        patterns: ["@biomejs/*", "typescript", "vitest", "turbo", "tailwindcss", "@tailwindcss/*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -35,6 +35,14 @@ const ACCESS_TOKEN_SECONDS = 3600;
 
 const pool = new pg.Pool({ connectionString: DATABASE_URL, max: 10 });
 
+// A pooled connection can be closed from the database's side while it sits
+// idle — for example when the test database is dropped and recreated. Without
+// a listener that is an unhandled error and the whole process exits. The pool
+// already discards the dead connection and opens a new one on the next request.
+pool.on("error", (error) => {
+  console.warn(`database connection dropped (${error.message}); it will be reopened on demand`);
+});
+
 // ── Signing key ─────────────────────────────────────────────────────────────
 // Asymmetric (ES256) with a published JWKS, like Supabase's current signing
 // keys, so server-side token verification in the apps follows the same path it

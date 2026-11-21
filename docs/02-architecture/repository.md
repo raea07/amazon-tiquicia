@@ -188,7 +188,7 @@ production.
 | Parity tests    | `packages/core/src/cr/compliance.test.ts`, `packages/db/src/errors.test.ts`          | `pnpm test`                                     | The constants and rules written in SQL are the same ones written in TypeScript; every error code has a message                                                                                                                                                                                                                                                                                       | That the SQL arithmetic is right (the next layer does)         |
 | SQL suites      | `supabase/tests/010`–`070`                                                           | `pnpm db:local:test`                            | Run as real API roles with real claims: who can reach what (`020_access`), pricing, idempotency, reservation, cancellation and expiry (`030_checkout`), fees to the céntimo and a balanced ledger (`040_money`), pick, pack, route, PIN, cash and failures (`050_fulfillment`), accents, synonyms, typos and ranking (`060_search`), each screen function for the right and wrong caller (`070_api`) | Behaviour on the real Supabase platform                        |
 | Contract tests  | `packages/db/src/contract.test.ts`                                                   | `DATABASE_URL=… pnpm --filter @yuntera/db test` | Real function responses match the client's schemas, per role                                                                                                                                                                                                                                                                                                                                         | UI behaviour                                                   |
-| Browser journey | Run by hand with Playwright during development; not yet committed as a test          | —                                               | The storefront's purchase journey works in a real browser: search with a typo, product, cart, sign-in with return path, checkout, SINPE Móvil order, simulated payment, delivery PIN, order list, another shopper's order hidden, no horizontal overflow at phone width                                                                                                                              | Nothing automatically, until it is committed and wired into CI |
+| Browser journeys | `tools/e2e` (Playwright), four scripts: shopper, seller, staff, driver and warehouse | `pnpm e2e` | The apps, the API and the database work together in a real browser, each from a freshly seeded database: purchase with SINPE Móvil and delivery code; seller registration, listing, stock and packing; payment confirmation, review, dispatch, refund; delivery with a wrong then right code, picking with a wrong then right scan | Anything on a real Supabase project; real payments; real phones |
 
 Each SQL suite runs inside a transaction that is rolled back, so the suites do
 not affect each other or the seed data.
@@ -198,10 +198,15 @@ The local shim deliberately copies Supabase's permissive defaults — `anon` and
 access tests prove the migrations' own revokes and policies are what protect
 the data, rather than a stricter local setup hiding a mistake.
 
-**Continuous integration is not set up yet.** The `.github/workflows` directory
-is empty. The intended pipeline is `pnpm ci`, then a PostgreSQL service with
-`db:local:reset` and `db:local:test`, then the contract tests, then the browser
-journey.
+**Continuous integration** is defined in `.github/workflows/ci.yml` and runs on
+every pull request and every push to `main`, in two jobs. The first lints,
+typechecks, runs the unit tests, builds the database from scratch on a
+PostgreSQL service, and runs the database tests and the API contract tests.
+The second builds every app, starts them against the local API stand-in and
+runs the four browser journeys in `tools/e2e`, keeping screenshots and logs
+when one fails. The workflow was written and its steps were run by hand
+locally; it has not yet run on GitHub itself, so expect to adjust it on the
+first pull request.
 
 ## Conventions
 

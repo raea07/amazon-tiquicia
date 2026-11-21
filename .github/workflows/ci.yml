@@ -1,0 +1,129 @@
+name: CI
+
+# Every push to main and every pull request gets the same checks a developer
+# runs locally: lint, types, unit tests, the database built from scratch with
+# its own tests, the API contract tests, production builds of every app, and
+# the browser journeys.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Public, local-only values: the stand-in API that the tests and builds talk to.
+  NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_local_development_only
+  PG_ADMIN_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+  DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/yuntera_local
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  checks:
+    name: Lint, types, tests, database
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint and format
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build the database from scratch
+        run: pnpm db:local:reset
+      - name: Database tests
+        run: pnpm db:local:test
+      - name: API contract tests
+        run: pnpm --filter @yuntera/db test
+
+  journeys:
+    name: Build and browser journeys
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Database and local API
+        run: |
+          pnpm db:local:reset
+          nohup pnpm --filter @yuntera/dev-api start > dev-api.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -sf http://127.0.0.1:54321/auth/v1/.well-known/jwks.json > /dev/null && break
+            sleep 1
+          done
+
+      - name: Build every app
+        run: pnpm build
+
+      - name: Start the apps
+        run: |
+          for app in web seller ops field; do
+            nohup pnpm --filter "@yuntera/$app" start > "$app.log" 2>&1 &
+          done
+          for port in 3000 3001 3002 3003; do
+            for attempt in $(seq 1 30); do
+              curl -sf -o /dev/null "http://127.0.0.1:$port/ingresar" && break
+              sleep 1
+            done
+          done
+
+      - name: Install the browser
+        run: pnpm --filter @yuntera/e2e exec playwright install --with-deps chromium
+
+      - name: Browser journeys
+        run: pnpm --filter @yuntera/e2e journeys
+
+      - name: Keep screenshots and logs when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journeys
+          path: |
+            tools/e2e/screenshots
+            *.log
+          retention-days: 7

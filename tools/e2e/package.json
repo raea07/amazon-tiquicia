@@ -1,0 +1,12 @@
+{
+  "name": "@yuntera/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "journeys": "node run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
