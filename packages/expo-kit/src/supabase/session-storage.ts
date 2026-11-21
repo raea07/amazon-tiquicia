@@ -14,8 +14,11 @@ import { createEncryptedStorage, type SessionStorage } from "./encrypted-storage
 // Readable after the phone has been unlocked once since it started, so a
 // background task (the drivers' location updates) can still call the API
 // while the screen is locked. The default would be "only while unlocked".
+// THIS_DEVICE_ONLY keeps the key out of encrypted iCloud and computer
+// backups: a restored or new iPhone has the ciphertext but not the key, so
+// it starts signed out instead of carrying the old refresh token over.
 const keyOptions: SecureStore.SecureStoreOptions = {
-  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
 };
 
 export const sessionStorage: SessionStorage = createEncryptedStorage({

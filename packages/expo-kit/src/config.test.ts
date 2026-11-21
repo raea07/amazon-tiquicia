@@ -39,7 +39,16 @@ describe("defineAppConfig", () => {
     expect(cleartext("development")).toBe(true);
     expect(cleartext("preview")).toBe(false);
     expect(cleartext()).toBe(false);
-    expect(configFor().ios?.infoPlist).toBeUndefined();
+    const ats = (variant?: string) => configFor(variant).ios?.infoPlist?.NSAppTransportSecurity;
+    expect(ats("development")).toEqual({
+      NSAllowsArbitraryLoads: false,
+      NSAllowsLocalNetworking: true,
+    });
+    expect(ats("preview")).toEqual({
+      NSAllowsArbitraryLoads: false,
+      NSAllowsLocalNetworking: false,
+    });
+    expect(ats()).toEqual({ NSAllowsArbitraryLoads: false, NSAllowsLocalNetworking: false });
   });
 
   it("treats anything unknown as the store build", () => {

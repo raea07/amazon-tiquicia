@@ -22,6 +22,15 @@
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
     },
+    "@yuntera/expo-kit#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/*-native/app.config.ts",
+        "$TURBO_ROOT$/apps/*-native/package.json"
+      ],
+      "outputs": ["coverage/**"]
+    },
     "dev": {
       "cache": false,
       "persistent": true

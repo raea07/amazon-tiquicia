@@ -26,6 +26,9 @@ export default (): ExpoConfig =>
           // permission. See docs/research/expo-native-apps.md §4a and §8.
           locationWhenInUsePermission:
             "Yuntera Ruta usa su ubicación mientras usted tiene una ruta iniciada, para mostrar su avance a Central y a los clientes que esperan su entrega.",
+          locationFullAccuracyPermission:
+            "Yuntera Ruta necesita su ubicación exacta mientras tiene una ruta iniciada, para llegar a cada punto de entrega.",
+          motionUsagePermission: false,
           locationAlwaysAndWhenInUsePermission: false,
           locationAlwaysPermission: false,
           isIosBackgroundLocationEnabled: true,
@@ -54,5 +57,12 @@ export default (): ExpoConfig =>
         },
       ],
     ],
-    blockedPermissions: ["android.permission.ACCESS_BACKGROUND_LOCATION"],
+    blockedPermissions: [
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
+    ],
+    // expo-task-manager's plugin, applied by Expo automatically, adds "fetch";
+    // route tracking needs only the "location" background mode.
+    removeBackgroundModes: ["fetch"],
   });
