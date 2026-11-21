@@ -19,6 +19,10 @@ apps/
   ops/         Yuntera Central   internal console, on its own origin
   field/       Yuntera Ruta      drivers' routes and deliveries   (/ruta)
                Yuntera Bodega    warehouse picking and receiving  (/bodega)
+  shop-native/       Yuntera         shopper app for iOS and Android (Expo)
+  seller-native/     Yuntera Vende   seller app (skeleton: sign-in and role-gated home)
+  driver-native/     Yuntera Ruta    drivers' app (skeleton)
+  warehouse-native/  Yuntera Bodega  warehouse app (skeleton)
 packages/
   brand/       name, app family, design tokens, logo — the only place the brand is defined
   core/        domain logic: money and IVA, fees, offer selection, search ranking,
@@ -26,17 +30,19 @@ packages/
   db/          typed client for the database's API, payload schemas, error messages
   ui/          shared React components
   next-kit/    what every web app shares: session, security headers, forms, shell
+  expo-kit/    what every native app shares: config, encrypted session, API, theme, components
 supabase/      migrations, row-level security, seed data, database tests
 tools/
   dev-api/     local stand-in for the Supabase API, for development and tests
   e2e/         browser journeys for the four apps
+  native-e2e/  browser journeys through the web export of the native apps
 docs/          strategy, product, architecture, data, algorithms, security,
                operations, deployment, brand
 ```
 
-All four apps are Next.js. The drivers' and warehouse app is an installable web
-app rather than a native one; [`docs/02-architecture/decisions.md`](docs/02-architecture/decisions.md)
-says why and what that costs.
+The four web apps are Next.js. The native apps (`apps/*-native`) are Expo SDK 58
+apps that call the same database functions through `packages/db`; the research
+behind them is [`docs/research/expo-native-apps.md`](docs/research/expo-native-apps.md).
 
 ## Getting started
 
@@ -90,6 +96,60 @@ The demo accounts and their password exist only in the local seed data.
 | `pnpm db:local:reset`       | Rebuild the local database from migrations and seed data        |
 | `pnpm db:local:test`        | Run the database tests, including the access-control checks     |
 | `pnpm e2e`                  | Browser journeys for all four apps ([how](tools/e2e/README.md)) |
+
+## Running a native app during development
+
+The native apps depend on native configuration that Expo Go cannot provide
+(fonts embedded in the binary, the permission texts, background location for
+drivers), so a phone runs a **development build**:
+an installable copy of the app with Expo's developer menu, built once by EAS
+(`eas build --profile development` in the app's directory, which needs the
+owner's Expo account) and then fed JavaScript by your computer:
+
+```bash
+cp apps/shop-native/.env.example apps/shop-native/.env.local
+```
+
+```bash
+pnpm --filter @yuntera/shop-native start
+```
+
+Scan the QR code with the development build installed on the phone.
+
+**A phone cannot reach `127.0.0.1`.** On the phone, `127.0.0.1` is the phone
+itself, not your computer, so the local API at `http://127.0.0.1:54321` is out
+of reach. In `.env.local`, set `EXPO_PUBLIC_SUPABASE_URL` to your computer's
+LAN address (for example `http://192.168.1.20:54321`, with the phone on the
+same Wi-Fi) or to an HTTPS tunnel to the API. The local API listens on loopback
+only, so a LAN address needs a tunnel or a port forward on your computer.
+Only the development variant allows plain HTTP; preview and store builds
+require HTTPS.
+
+| Variable                               | What it is                                                       |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| `EXPO_PUBLIC_SUPABASE_URL`             | The API address (see above)                                      |
+| `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | The publishable key; public by design, checked by the database   |
+| `EXPO_PUBLIC_SHOP_URL`                 | Shop app only: the website that serves product pictures and help |
+| `APP_VARIANT`                          | `development` or `preview` for those builds; unset for the store |
+
+Everything with the `EXPO_PUBLIC_` prefix is written into the app and readable
+by anyone: never put a secret there.
+
+Without a phone, the apps can be checked in a browser through their web export,
+which is what the native journeys do:
+
+```bash
+tools/dev/stack.sh native 1
+```
+
+```bash
+tools/dev/stack.sh native-e2e 1
+```
+
+The web export proves the screens, navigation, forms and API calls. It does
+not exercise the native modules (secure store, location, camera), the fonts
+embedded in the binary, or whether the binaries start; that needs an EAS build
+and a phone.
 
 ## Where to read next
 

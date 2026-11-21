@@ -14,6 +14,18 @@ updates:
         patterns: ["@supabase/*"]
       tooling:
         patterns: ["@biomejs/*", "typescript", "vitest", "turbo", "tailwindcss", "@tailwindcss/*"]
+    # The native apps take the versions Expo tested with their SDK. Those move
+    # together, on an SDK upgrade done by hand (`pnpm expo install --fix`), not
+    # one package at a time. CI's `expo install --check` refuses a stray bump,
+    # including a React version the web apps move to.
+    ignore:
+      - dependency-name: "expo"
+      - dependency-name: "expo-*"
+      - dependency-name: "@expo/*"
+      - dependency-name: "@expo-google-fonts/*"
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
+      - dependency-name: "@react-native-async-storage/*"
   - package-ecosystem: github-actions
     directory: /
     schedule:

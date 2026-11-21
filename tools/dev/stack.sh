@@ -9,6 +9,8 @@
 #   tools/dev/stack.sh e2e [lane] [journey…]  run browser journeys against the lane
 #   tools/dev/stack.sh down [lane]            stop what `up`/`api` started
 #   tools/dev/stack.sh status [lane]
+#   tools/dev/stack.sh native [lane] [app…]          web export of the native apps, served
+#   tools/dev/stack.sh native-e2e [lane] [journey…]  run the native journeys against them
 #
 # Lane 0 (the default) is the usual setup: database yuntera_local, API on
 # :54321, apps on :3000–:3003. Lane N (1–9) uses database yuntera_lane<N>, API
@@ -16,6 +18,14 @@
 #
 # The apps read the API address when they are BUILT, so each lane builds its own
 # copy; `up` writes apps/*/.env.local for the lane before building.
+#
+# `native` builds the WEB EXPORT of the native apps (apps/*-native) for the
+# lane, into .lane/<lane>/native/<app>, and serves each on :3<N>10 and up (shop
+# :3<N>10, seller :3<N>11, driver :3<N>12, warehouse :3<N>13; lane 0: :3010…).
+# It starts the database and the API first if the lane's API is not answering
+# (which resets that lane's database), and leaves them alone if it is.
+# `native-e2e` runs tools/native-e2e/journeys against those exports. `down`
+# stops them with everything else.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -34,12 +44,28 @@ API_URL="http://127.0.0.1:${API_PORT}"
 API_KEY="sb_publishable_local_development_only"
 STATE="$ROOT/.lane/$LANE"
 APPS=(web seller ops field)
+NATIVE_APPS=(shop seller driver warehouse)
+if [ "$LANE" = "0" ]; then NATIVE_BASE=3010; else NATIVE_BASE="3${LANE}10"; fi
 
 app_port() { # app name → port
   local index=0
   for app in "${APPS[@]}"; do
     [ "$app" = "$1" ] && { echo $((APP_BASE + index)); return; }
     index=$((index + 1))
+  done
+}
+
+native_port() { # native app name → port
+  local index=0
+  for app in "${NATIVE_APPS[@]}"; do
+    [ "$app" = "$1" ] && { echo $((NATIVE_BASE + index)); return; }
+    index=$((index + 1))
+  done
+}
+
+print_native_env() {
+  for app in "${NATIVE_APPS[@]}"; do
+    echo "export NATIVE_$(echo "$app" | tr '[:lower:]' '[:upper:]')_URL=http://127.0.0.1:$(native_port "$app")"
   done
 }
 
@@ -142,6 +168,40 @@ case "$COMMAND" in
     ( cd "$ROOT" && pnpm --filter @yuntera/e2e journeys "$@" )
     ;;
 
+  native)
+    shift; [ $# -gt 0 ] && shift
+    chosen=("$@"); [ ${#chosen[@]} -gt 0 ] || chosen=("${NATIVE_APPS[@]}")
+    mkdir -p "$STATE/native"
+    eval "$(print_env)"
+    curl -sf -o /dev/null "$API_URL/health" || start_api
+    for app in "${chosen[@]}"; do
+      [ -n "$(native_port "$app")" ] && [ -d "$ROOT/apps/$app-native" ] || {
+        echo "No native app called \"$app\" (choose from: ${NATIVE_APPS[*]})." >&2; exit 2; }
+      if [ -e "$STATE/native-$app.pid" ]; then
+        kill -- "-$(cat "$STATE/native-$app.pid")" 2>/dev/null || true
+        rm -f "$STATE/native-$app.pid"
+      fi
+      echo "lane $LANE: exporting $app-native for the web (log: $STATE/native-$app-export.log)"
+      # EXPO_PUBLIC_SHOP_URL is left empty: product pictures then come from
+      # the same origin, where the server below reads them from apps/web/public.
+      ( cd "$ROOT/apps/$app-native" && CI=1 EXPO_PUBLIC_SUPABASE_URL="$API_URL" \
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$API_KEY" EXPO_PUBLIC_SHOP_URL="" \
+          pnpm exec expo export --platform web --clear --output-dir "$STATE/native/$app" \
+          > "$STATE/native-$app-export.log" 2>&1 ) || { tail -40 "$STATE/native-$app-export.log" >&2; exit 1; }
+      start "native-$app" "$ROOT" node tools/native-e2e/serve.mjs "$STATE/native/$app" "$(native_port "$app")"
+      wait_for "http://127.0.0.1:$(native_port "$app")/" 20
+      echo "lane $LANE: $app-native (web export) on http://127.0.0.1:$(native_port "$app")"
+    done
+    ;;
+
+  native-e2e)
+    shift; [ $# -gt 0 ] && shift
+    eval "$(print_env)"
+    eval "$(print_native_env)"
+    export NATIVE_SHOTS="${NATIVE_SHOTS:-$ROOT/tools/native-e2e/screenshots}"
+    ( cd "$ROOT" && pnpm --filter @yuntera/native-e2e journeys "$@" )
+    ;;
+
   down)
     stop_all
     echo "lane $LANE: stopped"
@@ -157,7 +217,7 @@ case "$COMMAND" in
     ;;
 
   *)
-    sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac
