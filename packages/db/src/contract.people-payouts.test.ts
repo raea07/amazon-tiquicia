@@ -158,7 +158,7 @@ describe.skipIf(!db.enabled)("people and payouts contract (against a seeded data
 
       const requestId = await api.sellerRequestPayoutDetails({
         sellerId: ferreteria,
-        iban: "CR86 0151 0002 0019 6886 37",
+        iban: "CR61 0151 0002 0019 6886 99",
         holderName: "Roberto Jiménez Arce",
         sinpeNumber: "+50685550303",
       });
@@ -168,7 +168,7 @@ describe.skipIf(!db.enabled)("people and payouts contract (against a seeded data
       expect(after.request).toMatchObject({
         id: requestId,
         status: "pending",
-        iban_masked: "CR•• •••• •••• •••• 8637",
+        iban_masked: "CR•• •••• •••• •••• 8699",
         note: null,
       });
       expect(JSON.stringify(after)).not.toMatch(FULL_IBAN);
@@ -179,9 +179,14 @@ describe.skipIf(!db.enabled)("people and payouts contract (against a seeded data
       const request = queue.find((item) => item.seller.id === ferreteria);
       expect(request).toMatchObject({
         status: "pending",
-        requested: { iban: "CR86015100020019688637", holder_name: "Roberto Jiménez Arce" },
+        requested: { iban: "CR61015100020019688699", holder_name: "Roberto Jiménez Arce" },
         seller: { trade_name: "Ferretería El Higuerón", contact_phone: "+50622610303" },
-        signals: { first_account: false, holder_differs: false, used_by_other_shop: false },
+        signals: {
+          first_account: false,
+          holder_differs: false,
+          used_by_other_shop: false,
+          contact_changed_recently: false,
+        },
       });
       expect(request?.current.iban_masked).toMatch(/^CR•• /);
       expect(JSON.stringify(request?.current)).not.toMatch(FULL_IBAN);
@@ -191,7 +196,7 @@ describe.skipIf(!db.enabled)("people and payouts contract (against a seeded data
       await expect(
         db.as(SELLER).sellerRequestPayoutDetails({
           sellerId: ferreteria,
-          iban: "CR86015100020019688638",
+          iban: "CR61015100020019688698",
           holderName: "Roberto Jiménez Arce",
         }),
       ).rejects.toMatchObject({ code: "invalid_iban" });
@@ -264,7 +269,7 @@ describe.skipIf(!db.enabled)("people and payouts contract (against a seeded data
       expect(payout).toMatchObject({
         status: "scheduled",
         trade_name: "TecnoCasa",
-        iban: "CR21010200009123456789",
+        iban: "CR26010200009123456789",
         holder_name: "TecnoCasa de Costa Rica S.A.",
       });
       expect(payout?.reference).toMatch(/^YUNTERA PV-\d{8}-\d{3}$/);

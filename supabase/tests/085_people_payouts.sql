@@ -582,6 +582,9 @@ begin
     ('update public.seller_private set payout_iban = ''CR23015108410026012345'''),
     ('update public.seller_private set payout_holder_name = ''Otra Persona'''),
     ('update public.seller_private set sinpe_movil_number = ''+50688887777'''),
+    -- Nor the phone and e-mail finance calls to confirm a change of account.
+    ('update public.seller_private set contact_phone = ''+50687654321'''),
+    ('update public.seller_private set contact_email = ''otra@example.com'''),
     ('select payout_iban from public.seller_private'),
     ('select * from public.seller_private'),
     ('select 1 from public.payout_detail_requests'),
@@ -601,8 +604,10 @@ begin
   -- The rest of their own record is still theirs to read and to keep current.
   assert (select count(*) from public.seller_private where legal_name is not null) = 2,
     'the other columns are still readable';
-  update public.seller_private set contact_phone = '+50622340203'
+  update public.seller_private set postal_code = '11802'
   where seller_id = current_setting('t.tecnocasa')::uuid;
+  assert (select postal_code from public.seller_private
+          where seller_id = current_setting('t.tecnocasa')::uuid) = '11802', 'and writable';
 end
 $$;
 reset role;
@@ -680,7 +685,7 @@ begin
     format('the open request, masked: %s', d);
   assert d #>> '{current,iban_masked}' = 'CR•• •••• •••• •••• 6789', 'nothing has changed yet';
   assert probe.value(format('select payout_iban from public.seller_private where seller_id = %L', v_seller))
-         = 'CR21010200009123456789', 'the account on file is untouched until finance approves';
+         = 'CR26010200009123456789', 'the account on file is untouched until finance approves';
 
   -- A newer request replaces the open one; the old one stays on record.
   v_second := public.seller_request_payout_details(
@@ -807,7 +812,7 @@ declare
 begin
   assert jsonb_array_length(q) = 1, 'one request waits; the replaced one is not shown';
   assert q #>> '{0,seller,trade_name}' = 'TecnoCasa'
-     and q #>> '{0,seller,contact_phone}' = '+50622340203'
+     and q #>> '{0,seller,contact_phone}' = '+50622340202'
      and q #>> '{0,current,iban_masked}' = 'CR•• •••• •••• •••• 6789'
      and q #>> '{0,requested,iban}' = 'CR82010200009000000001'
      and q #>> '{0,requested,holder_name}' = 'TecnoCasa de Costa Rica S.A.'
@@ -816,7 +821,8 @@ begin
   assert position('010200009123456789' in q::text) = 0, 'the current account is masked even for finance';
   assert not (q #>> '{0,signals,holder_differs}')::boolean
      and not (q #>> '{0,signals,first_account}')::boolean
-     and not (q #>> '{0,signals,used_by_other_shop}')::boolean, 'nothing unusual about this one';
+     and not (q #>> '{0,signals,used_by_other_shop}')::boolean
+     and not (q #>> '{0,signals,contact_changed_recently}')::boolean, 'nothing unusual about this one';
 
   begin
     perform public.ops_decide_payout_details(v_request, false, 'no');
@@ -834,7 +840,7 @@ begin
   perform public.ops_decide_payout_details(
     v_request, false, 'No pudimos confirmar el cambio por teléfono. Llámenos al 4000-0000.');
   assert probe.value(format('select payout_iban from public.seller_private where seller_id = %L', v_seller))
-         = 'CR21010200009123456789', 'a rejection changes nothing';
+         = 'CR26010200009123456789', 'a rejection changes nothing';
   assert jsonb_array_length(public.ops_payout_detail_requests()) = 0, 'the queue is empty again';
   q := public.ops_payout_detail_requests('rejected');
   assert jsonb_array_length(q) = 1 and q #>> '{0,requested,iban}' is null
@@ -943,6 +949,58 @@ reset role;
 delete from public.staff_members
 where user_id = (select id from auth.users where email = 'vendedor@yuntera.example');
 
+-- Nor does anyone who belongs to the shop: a colleague could ask on their behalf.
+savepoint own_shop;
+insert into public.seller_members (seller_id, user_id, role)
+select current_setting('t.cafetal')::uuid, id, 'admin' from auth.users where email = 'central@yuntera.example';
+select pg_temp.login('cafetal@yuntera.example');
+select set_config('t.colleague_request', public.seller_request_payout_details(
+  current_setting('t.cafetal')::uuid, 'CR23015108410026012345', 'Cafetal Los Santos S.R.L.', null)::text, true);
+reset role;
+select pg_temp.login('central@yuntera.example');
+do $$
+begin
+  perform public.ops_decide_payout_details(current_setting('t.colleague_request')::uuid, true);
+  raise exception 'approved a change for a shop they belong to';
+exception when others then
+  if sqlerrm <> 'cannot_decide_own_shop' then raise; end if;
+end
+$$;
+reset role;
+do $$
+begin
+  assert probe.value(format('select payout_iban from public.seller_private where seller_id = %L',
+                            current_setting('t.cafetal'))) = 'CR05015202001026284066', 'the account did not change';
+end
+$$;
+rollback to savepoint own_shop;
+
+-- A contact phone or e-mail changed shortly before the request is pointed out:
+-- the number finance would call may not be the shop's. (Sellers cannot change
+-- it any more, as tested above; staff and the database owner still can.)
+savepoint contact_changed;
+update public.seller_private set contact_phone = '+50687654321', contact_email = 'otra@example.com'
+where seller_id = current_setting('t.sendero')::uuid;
+select pg_temp.login('sendero@yuntera.example');
+select public.seller_request_payout_details(
+  current_setting('t.sendero')::uuid, 'CR23015108410026012345', 'Sendero Outdoor S.R.L.', null);
+reset role;
+select pg_temp.login('central@yuntera.example');
+do $$
+declare
+  q jsonb := public.ops_payout_detail_requests();
+  r jsonb;
+begin
+  r := (select x from jsonb_array_elements(q) x where x #>> '{seller,trade_name}' = 'Tienda Sendero');
+  assert (r #>> '{signals,contact_changed_recently}')::boolean, format('the recent change is flagged: %s', r);
+  assert not (select bool_or((x #>> '{signals,contact_changed_recently}')::boolean)
+              from jsonb_array_elements(q) x where x #>> '{seller,trade_name}' <> 'Tienda Sendero'),
+    'and no other shop is';
+end
+$$;
+reset role;
+rollback to savepoint contact_changed;
+
 select pg_temp.check_balances('after bank details');
 
 -- ═══ Payouts ═══════════════════════════════════════════════════════════════
@@ -954,6 +1012,119 @@ begin
   assert private.payout_hold_days() = 10 and private.payout_minimum_minor() = 500000, 'as numbers';
 end
 $$;
+
+-- An order where one parcel was delivered and another came back never becomes
+-- "delivered" as a whole. The seller whose goods were delivered must still be
+-- paid once the hold is over, and the hold on the goods that came back counts
+-- from their return. (YT-100012 has one item from Tienda Sendero and one from
+-- TecnoCasa in one parcel; here TecnoCasa's goes into a second parcel that comes back.)
+savepoint split_order;
+select pg_temp.remember('split_order', (select id::text from public.orders where order_number = 'YT-100012'));
+select pg_temp.remember('split_sendero', (
+  select (-sum(e.amount_minor))::text from public.ledger_entries e
+  join public.ledger_accounts a on a.id = e.account_id
+  join public.ledger_transactions t on t.id = e.transaction_id
+  where t.order_id = current_setting('t.split_order')::uuid and a.seller_id = current_setting('t.sendero')::uuid));
+select pg_temp.remember('split_tecnocasa', (
+  select (-sum(e.amount_minor))::text from public.ledger_entries e
+  join public.ledger_accounts a on a.id = e.account_id
+  join public.ledger_transactions t on t.id = e.transaction_id
+  where t.order_id = current_setting('t.split_order')::uuid and a.seller_id = current_setting('t.tecnocasa')::uuid));
+create temp table split_before on commit drop as
+select * from private.seller_balances(private.cr_local(now())::date, 10);
+do $$
+declare
+  v_order uuid := current_setting('t.split_order')::uuid;
+  v_first uuid := (select id from public.shipments where order_id = v_order);
+  v_second uuid;
+begin
+  assert current_setting('t.split_sendero')::bigint > 0 and current_setting('t.split_tecnocasa')::bigint > 0,
+    'both shops earned on the order';
+  insert into public.shipments (order_id, tracking_code, origin_warehouse_id, status, promise_latest)
+  select order_id, 'YT599012', origin_warehouse_id, 'returned', promise_latest
+  from public.shipments where id = v_first
+  returning id into v_second;
+  update public.shipment_items set shipment_id = v_second
+  where shipment_id = v_first
+    and order_item_id in (select id from public.order_items
+                          where order_id = v_order and seller_id = current_setting('t.tecnocasa')::uuid);
+  update public.shipments set status = 'delivered', delivered_at = now() - interval '20 days'
+  where id = v_first;
+  perform private.sync_order_status(v_order);
+  assert (select delivered_at is null and status <> 'delivered' from public.orders where id = v_order),
+    'the order as a whole is not delivered';
+end
+$$;
+do $$
+declare
+  v_today date := current_setting('t.today')::date;
+  a record;
+  b record;
+begin
+  select * into b from split_before where seller_id = current_setting('t.sendero')::uuid;
+  select * into a from private.seller_balances(v_today, 10, current_setting('t.sendero')::uuid);
+  assert a.pending_minor = b.pending_minor - current_setting('t.split_sendero')::bigint
+     and a.available_minor = b.available_minor + current_setting('t.split_sendero')::bigint,
+    format('Sendero''s share, delivered 20 days ago, is available: %s then %s', row_to_json(b), row_to_json(a));
+  -- TecnoCasa's share came back today: still pending, and it says until when.
+  select * into b from split_before where seller_id = current_setting('t.tecnocasa')::uuid;
+  select * into a from private.seller_balances(v_today, 10, current_setting('t.tecnocasa')::uuid);
+  assert a.pending_minor = b.pending_minor and a.available_minor = b.available_minor,
+    'TecnoCasa''s share, returned today, stays pending';
+end
+$$;
+select pg_temp.login('vendedor@yuntera.example');
+do $$
+declare
+  v jsonb := public.seller_payouts(current_setting('t.tecnocasa')::uuid);
+begin
+  assert exists (select 1 from jsonb_array_elements(v -> 'releases') x
+                 where (x ->> 'on')::date = current_setting('t.today')::date + 10
+                   and (x ->> 'amount_minor')::bigint >= current_setting('t.split_tecnocasa')::bigint),
+    format('with a release day ten days after the return: %s', v -> 'releases');
+  assert (select coalesce(sum((x ->> 'amount_minor')::bigint), 0) from jsonb_array_elements(v -> 'releases') x)
+         + (v ->> 'awaiting_delivery_minor')::bigint = (v ->> 'pending_minor')::bigint,
+    'releases + undelivered = pending';
+end
+$$;
+reset role;
+select pg_temp.login('sendero@yuntera.example');
+do $$
+declare
+  v jsonb := public.seller_payouts(current_setting('t.sendero')::uuid);
+begin
+  assert (select coalesce(sum((x ->> 'amount_minor')::bigint), 0) from jsonb_array_elements(v -> 'releases') x)
+         + (v ->> 'awaiting_delivery_minor')::bigint = (v ->> 'pending_minor')::bigint,
+    'Sendero: releases + undelivered = pending';
+end
+$$;
+reset role;
+select pg_temp.check_balances('split order, one parcel returned');
+rollback to savepoint split_order;
+
+-- An account kept from before requests existed that fails the IBAN check is
+-- not paid; the seller is told to ask for the account again.
+savepoint invalid_account;
+update public.seller_private set payout_iban = 'CR21010200009123456789'
+where seller_id = current_setting('t.tecnocasa')::uuid;
+select pg_temp.login('central@yuntera.example');
+do $$
+declare
+  s jsonb := (select x from jsonb_array_elements(public.ops_payout_preview() -> 'sellers') x
+              where (x ->> 'seller_id')::uuid = current_setting('t.tecnocasa')::uuid);
+  r jsonb;
+begin
+  assert s -> 'reasons' = '["invalid_bank_details"]'::jsonb and not (s ->> 'will_pay')::boolean,
+    format('an account that fails the check is not paid: %s', s);
+  r := public.ops_create_payout_run(current_setting('t.today')::date);
+  assert probe.value(format('select count(*) from public.payouts where seller_id = %L',
+                            current_setting('t.tecnocasa'))) = '0', 'and the run leaves it out';
+  assert (public.seller_payouts(current_setting('t.tecnocasa')::uuid) -> 'blocked_by')
+         ? 'invalid_bank_details', 'the seller''s screen says why';
+end
+$$;
+reset role;
+rollback to savepoint invalid_account;
 
 -- What the seed's history should give, worked out from the orders themselves:
 -- per seller, what was earned on orders delivered at least ten days ago.
@@ -1281,6 +1452,46 @@ $$;
 reset role;
 
 select pg_temp.check_balances('after paying');
+
+-- Money that becomes available after a shop was paid in a run is paid by the
+-- same run when it is called again, as the preview says: a second payout for
+-- that shop, with its own reference. (Here a credit not tied to any order.)
+savepoint second_in_run;
+do $$
+declare
+  v_tx uuid;
+begin
+  insert into public.ledger_transactions (kind, memo) values ('adjustment', 'Ajuste de prueba')
+  returning id into v_tx;
+  insert into public.ledger_entries (transaction_id, account_id, amount_minor)
+  select v_tx, id, -(600000 + current_setting('t.debit')::bigint)
+  from public.ledger_accounts where seller_id = current_setting('t.tecnocasa')::uuid;
+  insert into public.ledger_entries (transaction_id, account_id, amount_minor)
+  select v_tx, id, 600000 + current_setting('t.debit')::bigint
+  from public.ledger_accounts where code = 'cash_over_short';
+end
+$$;
+select pg_temp.login('central@yuntera.example');
+do $$
+declare
+  v_tecnocasa uuid := current_setting('t.tecnocasa')::uuid;
+  s jsonb := (select x from jsonb_array_elements(public.ops_payout_preview() -> 'sellers') x
+              where (x ->> 'seller_id')::uuid = current_setting('t.tecnocasa')::uuid);
+  r jsonb;
+begin
+  assert (s ->> 'will_pay')::boolean and (s ->> 'available_minor')::bigint = 600000,
+    format('the preview offers to pay it: %s', s);
+  r := public.ops_create_payout_run(current_setting('t.today')::date);
+  assert r ->> 'run_id' = current_setting('t.run') and (r ->> 'created')::integer = 1
+     and (r ->> 'total_minor')::bigint = 600000, format('and the run does: %s', r);
+  assert probe.value(format(
+           'select count(*) || ''|'' || count(distinct reference) from public.payouts where run_id = %L and seller_id = %L',
+           current_setting('t.run'), v_tecnocasa)) = '2|2', 'two payouts for the shop, each with its reference';
+end
+$$;
+reset role;
+select pg_temp.check_balances('a second payout in the same run');
+rollback to savepoint second_in_run;
 
 -- The seller sees it.
 select pg_temp.login('vendedor@yuntera.example');

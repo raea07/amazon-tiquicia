@@ -477,6 +477,12 @@ $$;
 -- sellers see it masked, finance sees it in full through the functions below.
 revoke update (payout_iban, payout_holder_name, sinpe_movil_number)
   on public.seller_private from authenticated;
+-- The contact phone and e-mail go with them. Finance confirms a new account by
+-- calling the number on file; if the seller could rewrite that number just
+-- before asking, whoever took over a shop admin's session would answer the call.
+-- No app writes these columns directly (the shop's details are set when the
+-- shop is created), so nothing else loses a path.
+revoke update (contact_email, contact_phone) on public.seller_private from authenticated;
 revoke select on public.seller_private from authenticated;
 grant select (seller_id, legal_name, id_type, id_number, tax_regime, economic_activity_code,
               contact_email, contact_phone, fiscal_address, postal_code, payout_holder_name,
@@ -651,7 +657,16 @@ begin
             'holder_differs', private.fold(r.payout_holder_name) <> private.fold(sp.legal_name),
             'used_by_other_shop', exists (
               select 1 from public.seller_private o
-              where o.payout_iban = r.payout_iban and o.seller_id <> r.seller_id)),
+              where o.payout_iban = r.payout_iban and o.seller_id <> r.seller_id),
+            -- The number finance calls is only worth calling if it has not just
+            -- changed: sellers cannot change it themselves, but staff can.
+            'contact_changed_recently', exists (
+              select 1 from private.audit_log l
+              where l.table_name = 'seller_private' and l.action = 'UPDATE'
+                and l.row_key = r.seller_id::text
+                and l.at > r.requested_at - interval '30 days'
+                and ((l.old_row ->> 'contact_phone') is distinct from (l.new_row ->> 'contact_phone')
+                     or (l.old_row ->> 'contact_email') is distinct from (l.new_row ->> 'contact_email')))),
           'decided_at', r.decided_at,
           'decided_by_name', (select p.full_name from public.profiles p where p.id = r.decided_by),
           'note', r.decision_note
@@ -694,9 +709,13 @@ begin
   if v_request.status <> 'pending' then
     perform private.fail('payout_request_not_pending', v_request.status);
   end if;
-  -- Nobody approves a change they asked for themselves.
+  -- Nobody approves a change they asked for themselves, nor one for a shop
+  -- they belong to: a colleague in the shop could ask on their behalf.
   if v_request.requested_by = (select auth.uid()) then
     perform private.fail('cannot_decide_own_request');
+  end if;
+  if private.is_seller_member(v_request.seller_id) then
+    perform private.fail('cannot_decide_own_shop');
   end if;
   if not coalesce(p_approve, false) and coalesce(char_length(v_note), 0) < 10 then
     perform private.fail('reason_required');
@@ -761,9 +780,12 @@ alter table public.payouts
 
 create index payouts_seller_idx on public.payouts (seller_id, created_at desc);
 create index payouts_scheduled_idx on public.payouts (seller_id) where status = 'scheduled';
--- A seller has one live payout per run; a failed one may be tried again.
-create unique index payouts_one_live_per_run_idx
-  on public.payouts (run_id, seller_id) where status <> 'failed';
+-- A seller usually has one payout per run, but not always: calling the run
+-- again for its cut-off schedules whatever has become available since (a
+-- failed payout, or money credited later), as the preview says it will.
+-- Each payout has its own reference; the advisory lock in ops_create_payout_run
+-- keeps two calls from scheduling the same money.
+create index payouts_run_idx on public.payouts (run_id, seller_id);
 -- One bank transfer settles one payout.
 create unique index payouts_bank_reference_idx
   on public.payouts (bank_reference) where bank_reference is not null;
@@ -785,8 +807,35 @@ drop policy "finance manages payouts" on public.payouts;
 --
 -- So the three parts add up to the ledger balance by construction. Refunds and
 -- returns carry their order's id, so they reduce the same part as the sale did;
--- paid payouts are already out of the ledger balance. The hold counts from the
--- day the whole order was delivered, in Costa Rican time.
+-- paid payouts are already out of the ledger balance. The hold counts from
+-- private.seller_order_settled_at, in Costa Rican time.
+--
+-- When the hold on a seller's share of an order starts. Normally the day the
+-- whole order was delivered. But an order where one parcel was delivered and
+-- another came back is never "delivered" as a whole, and the seller would
+-- wait for ever: so, failing that, the hold starts once none of the parcels
+-- carrying this seller's goods is still moving, from the last of them to
+-- arrive (delivered) or to come back (returned). The hold then also covers the
+-- refund of what came back. Null while something of theirs is on its way.
+create or replace function private.seller_order_settled_at(p_order_id uuid, p_seller_id uuid)
+returns timestamptz
+language sql stable security definer
+set search_path = ''
+as $$
+  with parcels as (
+    select distinct sh.id, sh.status, coalesce(sh.delivered_at, sh.updated_at) as ended_at
+    from public.shipments sh
+    join public.shipment_items si on si.shipment_id = sh.id
+    join public.order_items i on i.id = si.order_item_id
+    where sh.order_id = p_order_id and i.seller_id = p_seller_id
+  )
+  select coalesce(
+    (select o.delivered_at from public.orders o where o.id = p_order_id),
+    (select max(p.ended_at) filter (where p.status in ('delivered', 'returned'))
+     from parcels p
+     having count(*) filter (where p.status not in ('delivered', 'returned', 'cancelled')) = 0));
+$$;
+
 create or replace function private.seller_balances(
   p_as_of date,
   p_hold_days integer,
@@ -798,20 +847,24 @@ create or replace function private.seller_balances(
 language sql stable security definer
 set search_path = ''
 as $$
-  with ledger as (
-    select a.seller_id,
-           coalesce(-sum(e.amount_minor), 0)::bigint as payable,
-           coalesce(-sum(e.amount_minor) filter (
-             where o.id is not null
-               and (o.delivered_at is null
-                    or private.cr_local(o.delivered_at)::date + p_hold_days > p_as_of)
-           ), 0)::bigint as pending
+  with entries as (
+    select a.seller_id, e.amount_minor, t.order_id,
+           case when t.order_id is not null
+                then private.seller_order_settled_at(t.order_id, a.seller_id) end as settled_at
     from public.ledger_accounts a
     join public.ledger_entries e on e.account_id = a.id
     join public.ledger_transactions t on t.id = e.transaction_id
-    left join public.orders o on o.id = t.order_id
     where a.seller_id is not null and (p_seller_id is null or a.seller_id = p_seller_id)
-    group by a.seller_id
+  ), ledger as (
+    select x.seller_id,
+           coalesce(-sum(x.amount_minor), 0)::bigint as payable,
+           coalesce(-sum(x.amount_minor) filter (
+             where x.order_id is not null
+               and (x.settled_at is null
+                    or private.cr_local(x.settled_at)::date + p_hold_days > p_as_of)
+           ), 0)::bigint as pending
+    from entries x
+    group by x.seller_id
   ), scheduled as (
     select p.seller_id, sum(p.amount_minor)::bigint as in_transit
     from public.payouts p
@@ -834,6 +887,8 @@ $$;
 --   shop_suspended   the shop is suspended or not verified; a closed shop is
 --                    still paid what it is owed
 --   no_bank_details  no payout account has been approved
+--   invalid_bank_details  the account on file fails the IBAN check (one kept
+--                    from before requests existed); the seller must ask again
 --   below_minimum    less is available than is worth a transfer (or nothing)
 create or replace function private.payout_candidates(
   p_cutoff date,
@@ -853,6 +908,9 @@ as $$
          array_remove(array[
            case when s.status in ('suspended', 'pending') then 'shop_suspended' end,
            case when sp.payout_iban is null or sp.payout_holder_name is null then 'no_bank_details' end,
+           -- An account on file from before requests existed, never checked.
+           case when sp.payout_iban is not null and not private.is_valid_cr_iban(sp.payout_iban)
+                then 'invalid_bank_details' end,
            case when b.available_minor < greatest(p_minimum_minor, 1) then 'below_minimum' end
          ], null)
   from private.seller_balances(p_cutoff, p_hold_days) b
@@ -914,7 +972,8 @@ $$;
 -- paid, with the amount and the destination frozen. Nothing reaches the ledger
 -- until a payout is marked paid. Safe to call again for the same cut-off: a
 -- seller already scheduled has nothing left available, so nothing is added —
--- except for a seller whose payout failed or who became payable since.
+-- except for a seller whose payout failed or who has more available since,
+-- who gets another payout in the same run.
 create or replace function public.ops_create_payout_run(p_cutoff date) returns jsonb
 language plpgsql security definer
 set search_path = ''
@@ -1185,29 +1244,34 @@ begin
       select jsonb_agg(jsonb_build_object('on', x.release_on, 'amount_minor', x.amount)
                        order by x.release_on)
       from (
-        select private.cr_local(o.delivered_at)::date + v_hold as release_on,
-               -sum(e.amount_minor)::bigint as amount
-        from public.ledger_accounts a
-        join public.ledger_entries e on e.account_id = a.id
-        join public.ledger_transactions t on t.id = e.transaction_id
-        join public.orders o on o.id = t.order_id
-        where a.seller_id = p_seller_id and o.delivered_at is not null
-          and private.cr_local(o.delivered_at)::date + v_hold > v_today
+        select private.cr_local(y.settled_at)::date + v_hold as release_on,
+               -sum(y.amount_minor)::bigint as amount
+        from (
+          select e.amount_minor, private.seller_order_settled_at(t.order_id, a.seller_id) as settled_at
+          from public.ledger_accounts a
+          join public.ledger_entries e on e.account_id = a.id
+          join public.ledger_transactions t on t.id = e.transaction_id
+          where a.seller_id = p_seller_id and t.order_id is not null
+        ) y
+        where y.settled_at is not null
+          and private.cr_local(y.settled_at)::date + v_hold > v_today
         group by 1
-        having sum(e.amount_minor) <> 0
+        having sum(y.amount_minor) <> 0
       ) x), '[]'::jsonb),
-    -- … and the part that has no day yet because the order is still on its way.
+    -- … and the part that has no day yet because the goods are still on their way.
     'awaiting_delivery_minor', coalesce((
       select -sum(e.amount_minor)::bigint
       from public.ledger_accounts a
       join public.ledger_entries e on e.account_id = a.id
       join public.ledger_transactions t on t.id = e.transaction_id
-      join public.orders o on o.id = t.order_id
-      where a.seller_id = p_seller_id and o.delivered_at is null), 0),
+      where a.seller_id = p_seller_id and t.order_id is not null
+        and private.seller_order_settled_at(t.order_id, a.seller_id) is null), 0),
     'blocked_by', (
       select to_jsonb(array_remove(array[
         case when s.status in ('suspended', 'pending') then 'shop_suspended' end,
         case when sp.payout_iban is null or sp.payout_holder_name is null then 'no_bank_details' end,
+        case when sp.payout_iban is not null and not private.is_valid_cr_iban(sp.payout_iban)
+             then 'invalid_bank_details' end,
         case when b.available_minor < greatest(v_minimum, 1) then 'below_minimum' end
       ], null))
       from public.sellers s join public.seller_private sp on sp.seller_id = s.id

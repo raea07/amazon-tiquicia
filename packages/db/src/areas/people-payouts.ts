@@ -152,6 +152,8 @@ export const payoutDetailRequest = z.object({
     first_account: z.boolean(),
     holder_differs: z.boolean(),
     used_by_other_shop: z.boolean(),
+    /** The shop's contact phone or e-mail changed in the 30 days before the request. */
+    contact_changed_recently: z.boolean(),
   }),
   decided_at: timestamp.nullable(),
   decided_by_name: z.string().nullable(),
@@ -162,7 +164,12 @@ export type PayoutDetailRequest = z.infer<typeof payoutDetailRequest>;
 // ── Payouts ─────────────────────────────────────────────────────────────────
 
 /** Why a shop with money available is not paid in a run. */
-export const payoutBlock = z.enum(["shop_suspended", "no_bank_details", "below_minimum"]);
+export const payoutBlock = z.enum([
+  "shop_suspended",
+  "no_bank_details",
+  "invalid_bank_details",
+  "below_minimum",
+]);
 export type PayoutBlock = z.infer<typeof payoutBlock>;
 
 export const payoutStatus = z.enum(["scheduled", "paid", "failed"]);
@@ -379,6 +386,11 @@ export const errors = {
     "es-CR":
       "No puede resolver una solicitud hecha por usted. Debe revisarla otra persona de finanzas.",
     en: "You cannot decide a request you made yourself. Someone else in finance must review it.",
+  },
+  cannot_decide_own_shop: {
+    "es-CR":
+      "No puede resolver un cambio de cuenta de una tienda de la que usted forma parte. Debe revisarlo otra persona de finanzas.",
+    en: "You cannot decide an account change for a shop you belong to. Someone else in finance must review it.",
   },
   invalid_cutoff: {
     "es-CR": "La fecha de corte no puede ser posterior a hoy.",

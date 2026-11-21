@@ -128,14 +128,14 @@ A summary; the migration is authoritative.
 
 ### Seller member
 
-| Can                                                                                                                 | Cannot                                                                                                            |
-| ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Read their seller's private details, members, listings, offers, stock, statements and payouts                       | Read another seller's                                                                                             |
-| Create listings as draft or pending review; edit their content; set price, handling time and status of their offers | Publish a listing; write ranking, rating or summary columns                                                       |
-| See the order lines they sold and each line's progress, with the shopper's first name, district and cantón          | See the shopper's full name, phone, e-mail, address or map pin — Yuntera delivers, so the seller never needs them |
-| Set stock at their own location; announce stock sent to a warehouse; mark their own parcels packed                  | Change stock held in a Yuntera warehouse                                                                          |
-| Reply to a review of their product                                                                                  | Remove or edit a review                                                                                           |
-| Admins and owners: edit the shop front, manage members, request a change of payout account (finance approves it)    | Change the payout account themselves, or read any account number in full; create, alter or remove an owner        |
+| Can                                                                                                                 | Cannot                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Read their seller's private details, members, listings, offers, stock, statements and payouts                       | Read another seller's                                                                                                   |
+| Create listings as draft or pending review; edit their content; set price, handling time and status of their offers | Publish a listing; write ranking, rating or summary columns                                                             |
+| See the order lines they sold and each line's progress, with the shopper's first name, district and cantón          | See the shopper's full name, phone, e-mail, address or map pin — Yuntera delivers, so the seller never needs them       |
+| Set stock at their own location; announce stock sent to a warehouse; mark their own parcels packed                  | Change stock held in a Yuntera warehouse                                                                                |
+| Reply to a review of their product                                                                                  | Remove or edit a review                                                                                                 |
+| Admins and owners: edit the shop front, manage members, request a change of payout account (finance approves it)    | Change the payout account or contact phone and e-mail; read an account number in full; create, alter or remove an owner |
 
 ### Warehouse associate
 
@@ -177,7 +177,11 @@ with `seller_request_payout_details`, finance decides with
 `ops_decide_payout_details`, and `payouts`, `payout_runs` and
 `payout_detail_requests` have no grant to any API role at all. The full account
 number is readable only through two finance functions (a request awaiting a
-decision, and a run's transfer list).
+decision, and a run's transfer list). Finance confirms a change by calling the
+shop's phone on file, so sellers cannot change that phone or the contact e-mail
+directly either, and a request made within 30 days of a change to them is
+flagged. Nobody in finance decides a request they made, or one for a shop they
+belong to.
 
 ## Rules for `security definer` functions
 
