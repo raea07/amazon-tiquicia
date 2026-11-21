@@ -125,7 +125,7 @@ async function rpcAs(email, calls) {
   const focusedId = () =>
     page.evaluate(() => document.activeElement?.getAttribute("data-testid") ?? null);
   const shot = (name) =>
-    page.screenshot({ path: `${SHOTS}/native-warehouse-${name}.png`, fullPage: true });
+    page.screenshot({ path: `${SHOTS}/native-warehouse-flow-${name}.png`, fullPage: true });
 
   // ── Sign in and the board ──
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
