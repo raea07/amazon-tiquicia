@@ -475,6 +475,14 @@ as $$
   end;
 $$;
 
+-- The check that a ledger transaction balances is a deferred constraint
+-- trigger: it runs at COMMIT, after the function that wrote the entries has
+-- returned, so with the rights of whoever is then current, the API role. It
+-- reads ledger_entries, which that role can no longer read, so it must run
+-- with its owner's rights like everything else. (It takes nothing from the
+-- caller: only the transaction id of the row that was written.)
+alter function private.assert_ledger_balanced() security definer;
+
 -- ═══ 2. Owner's-rights helpers for the policies ═════════════════════════════
 --
 -- A policy that reads another table directly needs a privilege on that table,

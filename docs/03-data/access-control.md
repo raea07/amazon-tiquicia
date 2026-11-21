@@ -90,8 +90,15 @@ any staff role read every delivery code. So the rule is now absolute:
 table, view or sequence; a function in `public` that is not owner's-rights
 with an empty search path; a function executable by a role the list does not
 name; a table without row-level security; a policy that reads another table
-directly; a default that would grant new objects. It is what keeps the door
-closed when later migrations are merged.
+directly; a default that would grant new objects; a deferred trigger without
+its owner's rights. It is what keeps the door closed when later migrations are
+merged.
+
+That last one was found the hard way. The ledger's balance check is a deferred
+trigger: it runs at commit, after the function that wrote the entries has
+returned, so with the API role's rights, which can read nothing. The SQL suites
+never saw it fail, because each rolls back instead of committing; the browser
+journeys, which commit, did. It now runs with its owner's rights.
 
 A consequence: **a legitimate action exists only if a function does it.**
 Some writes that used to be possible directly have no function yet: editing a

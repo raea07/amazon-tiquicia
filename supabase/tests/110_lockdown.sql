@@ -166,6 +166,21 @@ begin
 end
 $$;
 
+-- A deferred trigger runs at COMMIT, after the owner's-rights function that
+-- caused it has returned, with the API role's rights. Those can read nothing,
+-- so such a trigger must run with its owner's rights. (The suites roll back,
+-- so without this check they would never see it fail; the apps commit.)
+do $$
+declare
+  found_ text;
+begin
+  select string_agg(format('%s on %s', t.tgname, t.tgrelid::regclass), ', ') into found_
+  from pg_trigger t join pg_proc p on p.oid = t.tgfoid
+  where not t.tgisinternal and t.tgdeferrable and not p.prosecdef;
+  assert found_ is null, format('deferred triggers without owner''s rights: %s', found_);
+end
+$$;
+
 -- Row-level security is on for every table, in both schemas.
 do $$
 declare
