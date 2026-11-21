@@ -17,7 +17,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { cancelOrder, confirmPayment } from "@/app/actions";
+import { confirmPayment } from "@/app/actions";
+import { staffCancelOrder } from "@/app/integrity-actions";
+import { DeliveryCodePanel, ReturnedParcelForm } from "@/components/integrity-forms";
 import { NotificationLine } from "@/components/notification-list";
 import { PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
 import { canSee, requireStaff } from "@/lib/staff";
@@ -52,6 +54,8 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
     throw error;
   });
   const payment = order.payment ? PAYMENT_STATUS[order.payment.status] : null;
+  const canHandleParcels = canSee(staff.staff_role, ["ops", "support"]);
+  const deliveryCode = canHandleParcels ? await api.opsDeliveryCode(order.id) : null;
   const awaitingTransfer =
     (order.status === "pending_payment" || order.status === "payment_review") &&
     (order.payment_method === "sinpe_movil" || order.payment_method === "bank_transfer");
@@ -123,6 +127,14 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                     </span>
                   </span>
                   <ShipmentStatusBadge status={shipment.status} />
+                  {shipment.status === "returning" && canSee(staff.staff_role, ["ops"]) ? (
+                    <div className="w-full border-t border-border pt-3">
+                      <ReturnedParcelForm
+                        shipmentId={shipment.id}
+                        orderNumber={order.order_number}
+                      />
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -225,6 +237,14 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
             El código de entrega solo lo ve el cliente. Nadie de Yuntera debe pedírselo por teléfono
             ni por mensaje.
           </Alert>
+          {deliveryCode ? (
+            <DeliveryCodePanel
+              state={deliveryCode}
+              orderId={order.id}
+              orderNumber={order.order_number}
+              canRelease={canHandleParcels}
+            />
+          ) : null}
         </section>
 
         {order.can_cancel && canSee(staff.staff_role, ["ops", "support"]) ? (
@@ -234,13 +254,14 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
               Libera las existencias y, si ya estaba pagado, lo marca para reembolso.
             </p>
             <ActionForm
-              action={cancelOrder}
+              action={staffCancelOrder}
               submit="Cancelar pedido"
               variant="danger"
               pendingLabel="Cancelando…"
               hideOnSuccess
             >
               <input type="hidden" name="orderId" value={order.id} />
+              <input type="hidden" name="orderNumber" value={order.order_number} />
               <TextAreaField
                 label="Motivo"
                 name="note"
@@ -248,6 +269,16 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                 hint="El cliente lo ve en su pedido."
               />
             </ActionForm>
+          </section>
+        ) : canSee(staff.staff_role, ["ops", "support"]) &&
+          ["confirmed", "processing", "partially_shipped", "shipped"].includes(order.status) ? (
+          <section className="rounded-lg border border-border bg-surface p-5 text-sm">
+            <h2 className="text-lg font-bold">Cancelar el pedido</h2>
+            <p className="mt-1 text-ink-muted">
+              Ya no se puede cancelar: hay un paquete empacado o en camino. Si el cliente no lo
+              quiere, que lo rechace en la entrega; al volver a bodega se recibe como devuelto y se
+              le reembolsa.
+            </p>
           </section>
         ) : null}
       </aside>

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_FEE_SCHEDULE, splitFixedPaymentFee } from "../fees";
@@ -8,7 +8,7 @@ import {
   SHIPMENT_STATUSES,
   SHIPMENT_TRANSITIONS,
 } from "../lifecycle";
-import { DEFAULT_RANKING, TEXT_RELEVANCE } from "../search";
+import { boundSearchText, DEFAULT_RANKING, SEARCH_INPUT_LIMITS, TEXT_RELEVANCE } from "../search";
 import {
   addBusinessDays,
   CONSUMER_LAW,
@@ -17,11 +17,19 @@ import {
   withdrawalDeadline,
 } from "./compliance";
 
-const migration = (name: string) =>
-  readFileSync(
-    fileURLToPath(new URL(`../../../../supabase/migrations/${name}`, import.meta.url)),
-    "utf8",
-  );
+const migrationsDir = fileURLToPath(new URL("../../../../supabase/migrations/", import.meta.url));
+const migration = (name: string) => readFileSync(`${migrationsDir}${name}`, "utf8");
+
+/** The newest migration that (re)defines a marked block: the rule in force. */
+const latestWith = (block: string) => {
+  const name = readdirSync(migrationsDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort()
+    .filter((file) => migration(file).includes(`-- BEGIN ${block}`))
+    .at(-1);
+  expect(name, `no migration defines ${block}`).toBeDefined();
+  return migration(name ?? "");
+};
 
 describe("business days", () => {
   it("skips weekends", () => {
@@ -84,15 +92,18 @@ const tsPairs = (table: Readonly<Record<string, readonly string[]>>) =>
     .sort();
 
 describe("lifecycle rules match the database", () => {
-  const orders = migration("20261121080600_orders.sql");
   const foundation = migration("20261121080000_foundation.sql");
 
   it("allows exactly the same order transitions", () => {
-    expect(sqlPairs(orders, "order_transitions")).toEqual(tsPairs(ORDER_TRANSITIONS));
+    expect(sqlPairs(latestWith("order_transitions"), "order_transitions")).toEqual(
+      tsPairs(ORDER_TRANSITIONS),
+    );
   });
 
   it("allows exactly the same shipment transitions", () => {
-    expect(sqlPairs(orders, "shipment_transitions")).toEqual(tsPairs(SHIPMENT_TRANSITIONS));
+    expect(sqlPairs(latestWith("shipment_transitions"), "shipment_transitions")).toEqual(
+      tsPairs(SHIPMENT_TRANSITIONS),
+    );
   });
 
   it("declares the same statuses in the same order", () => {
@@ -204,5 +215,20 @@ describe("search ranking matches the database", () => {
     expect(search).toContain(`else ${DEFAULT_RANKING.outOfStockPenalty} end`);
     expect(search).toContain(`then ${DEFAULT_RANKING.newListingBoost} else 1 end`);
     expect(search).toContain(`interval '${DEFAULT_RANKING.newListingDays} days'`);
+  });
+
+  it("bounds what a search box sends the same way", () => {
+    const limits = migration("20261121083000_limits.sql");
+    const { maxChars, maxWords } = SEARCH_INPUT_LIMITS;
+    expect(limits).toContain(
+      `(regexp_split_to_array(trim(left(p_text, ${maxChars})), '\\s+'))[1:${maxWords}]`,
+    );
+    expect(limits).toContain(`search input limits ${maxChars} characters, ${maxWords} words`);
+    expect(boundSearchText("a".repeat(500))).toBe("a".repeat(maxChars));
+    expect(
+      boundSearchText("uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece"),
+    ).toBe("uno dos tres cuatro cinco seis siete ocho nueve diez once doce");
+    expect(boundSearchText("  licuadora   de  vaso ")).toBe("licuadora de vaso");
+    expect(boundSearchText("   ")).toBe("");
   });
 });

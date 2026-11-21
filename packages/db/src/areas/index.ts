@@ -13,15 +13,18 @@
  */
 
 import * as account from "./account";
+import { integrityApi, integrityErrors } from "./integrity";
+import { limitsApi, limitsErrors } from "./limits";
 import { listingsApi, listingsErrors } from "./listings";
 import * as notifications from "./notifications";
 import * as peoplePayouts from "./people-payouts";
 import { photosApi, photosErrors } from "./photos";
 import type { Caller, Messages } from "./types";
 
-// The listings area names its exports uniquely, so it is star-exported. The
-// other areas export `errors` and `api`, which would clash with each other,
-// so their schemas and types are re-exported by name.
+// The listings, integrity and limits areas name their exports uniquely, so
+// they are star-exported. The other areas export `errors` and `api`, which
+// would clash with each other, so their schemas and types are re-exported by
+// name.
 export {
   type AccountSecurity,
   type AuthErrorCode,
@@ -45,6 +48,8 @@ export {
   staffSecurityRow,
   waitText,
 } from "./account";
+export * from "./integrity";
+export * from "./limits";
 export * from "./listings";
 export {
   type ChannelChoicesInput,
@@ -81,6 +86,8 @@ export const areaErrors = {
   ...account.errors,
   ...notifications.errors,
   ...photosErrors,
+  ...integrityErrors,
+  ...limitsErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -89,4 +96,6 @@ export const areaApi = (caller: Caller) => ({
   ...account.api(caller),
   ...notifications.api(caller),
   ...photosApi(caller),
+  ...integrityApi(caller),
+  ...limitsApi(caller),
 });

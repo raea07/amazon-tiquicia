@@ -6,6 +6,9 @@
 
 begin;
 \ir _helpers.sql
+-- Reads below check what functions left behind (see _helpers.sql); access
+-- itself is tested in 020_access and 110_lockdown.
+select pg_temp.allow_inspection();
 
 -- A second member of staff (support), with a verified factor and one open
 -- session, for the administrator to recover.
@@ -129,12 +132,24 @@ declare v_rows integer;
 begin
   assert not exists (select 1 from private.my_seller_ids()), 'no shops at aal1';
   -- The payout account itself is never written directly (082300: only an
-  -- approved request changes it); the columns a seller admin may still write
-  -- are refused at aal1 too.
-  update public.seller_private set fiscal_address = 'Dirección cambiada a aal1'
-  where seller_id = current_setting('t.shop')::uuid;
-  get diagnostics v_rows = row_count;
-  assert v_rows = 0, 'the shop''s fiscal details cannot be changed at aal1';
+  -- approved request changes it). Since the lockdown (082800) no column of the
+  -- table is writable directly, and the fiscal details change only through a
+  -- request (seller_request_shop_change, 083000), which is refused at aal1 too.
+  begin
+    update public.seller_private set fiscal_address = 'Dirección cambiada a aal1'
+    where seller_id = current_setting('t.shop')::uuid;
+    get diagnostics v_rows = row_count;
+    assert v_rows = 0, 'the shop''s fiscal details cannot be changed at aal1';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.seller_request_shop_change(current_setting('t.shop')::uuid, 'fiscal',
+      p_fiscal_address => 'Dirección cambiada a aal1');
+    raise exception 'a fiscal change was requested at aal1';
+  exception when others then
+    if sqlerrm <> 'forbidden' then raise; end if;
+  end;
   begin
     update public.seller_private set payout_iban = 'CR99999999999999999999'
     where seller_id = current_setting('t.shop')::uuid;
@@ -716,6 +731,63 @@ begin
     'the commercial consent is on record';
 end
 $$;
+-- The person has also used what the hardening added (082900, 083000): a
+-- return of a damaged product, recorded back and refunded through the refund
+-- register, its reason giving their name; two invitations to join a shop, to
+-- their address, one declined and one still waiting; and a report. A driver
+-- typed a wrong delivery code at their door once (written directly here: the
+-- route steps that produce it are tested in 115_integrity).
+select pg_temp.remember('gone_item', (
+  select i.id::text from public.order_items i join public.orders o on o.id = i.order_id
+  where o.user_id = current_setting('t.gone')::uuid and private.delivered_units(i.id) > 0
+    and not exists (select 1 from public.return_requests r where r.order_item_id = i.id)
+  order by i.id limit 1));
+select pg_temp.remember('gone_name', (select full_name from public.profiles where id = current_setting('t.gone')::uuid));
+select pg_temp.remember('gone_shop_a', (select id::text from public.sellers where slug = 'tecnocasa'));
+select pg_temp.remember('gone_shop_b', (select id::text from public.sellers where slug = 'tienda-sendero'));
+select pg_temp.remember('gone_report_target', (select id::text from public.products where slug = 'parlante-bluetooth-nimbo-ola'));
+select pg_temp.login('comprador2@yuntera.example', 'aal2');
+select set_config('t.gone_return', public.request_return(current_setting('t.gone_item')::uuid, 'damaged', 1,
+  'Llegó roto; lo recibió ' || current_setting('t.gone_name') || ' en la puerta.')::text, true);
+select public.report_content('product', current_setting('t.gone_report_target')::uuid,
+  'misleading', 'La foto no coincide con el producto.');
+reset role;
+select pg_temp.login('central@yuntera.example', 'aal2');
+select public.ops_decide_return(current_setting('t.gone_return')::uuid, true, 'Foto recibida.');
+select public.ops_receive_return(current_setting('t.gone_return')::uuid, false, 'Llegó golpeado.');
+select public.ops_complete_return(current_setting('t.gone_return')::uuid, 'Reembolso enviado.');
+reset role;
+select pg_temp.login('vendedor@yuntera.example');
+select set_config('t.gone_invitation', public.seller_invite_member(
+  current_setting('t.gone_shop_a')::uuid, 'comprador2@yuntera.example', 'staff')::text, true);
+reset role;
+select pg_temp.login('sendero@yuntera.example');
+select public.seller_invite_member(
+  current_setting('t.gone_shop_b')::uuid, 'comprador2@yuntera.example', 'staff');
+reset role;
+select pg_temp.login('comprador2@yuntera.example', 'aal2');
+select public.seller_answer_invitation(current_setting('t.gone_invitation')::uuid, false);
+reset role;
+insert into private.delivery_code_attempts (order_id, driver_id)
+select o.id, (select d.id from public.drivers d order by d.id limit 1)
+from public.orders o where o.user_id = current_setting('t.gone')::uuid order by o.placed_at limit 1;
+do $$
+begin
+  assert exists (select 1 from private.refunds f join public.return_requests r on r.id = f.source_id
+                 where f.reason = 'return' and r.id = current_setting('t.gone_return')::uuid),
+    'the refund is in the register';
+  assert (select count(*) from public.seller_invitations i
+          where i.invitee_id = current_setting('t.gone')::uuid) = 2, 'two invitations to the person';
+  assert exists (select 1 from private.delivery_codes c join public.orders o on o.id = c.order_id
+                 where o.user_id = current_setting('t.gone')::uuid), 'their orders have delivery codes';
+end
+$$;
+select pg_temp.remember('gone_refunds', (
+  select count(*) || ':' || sum(f.amount_minor) from private.refunds f
+  join public.orders o on o.id = f.order_id where o.user_id = current_setting('t.gone')::uuid));
+select pg_temp.remember('gone_attempts', (
+  select count(*)::text from private.delivery_code_attempts a
+  join public.orders o on o.id = a.order_id where o.user_id = current_setting('t.gone')::uuid));
 -- What identifies the person, to search for afterwards in every table.
 select pg_temp.remember('needles', (
   select jsonb_build_array(u.email, p.full_name, a.phone, a.senas, a.recipient_name,
@@ -798,6 +870,21 @@ begin
   assert (select count(*)::text from public.reviews where user_id = v_user)
          = current_setting('t.reviews_before'), 'reviews stay published';
 
+  -- What the hardening added (082900, 083000).
+  assert not exists (select 1 from public.seller_invitations i
+                     where i.invitee_id = v_user or i.email = 'comprador2@yuntera.example'),
+    'invitations to the person';
+  assert not exists (select 1 from private.delivery_codes c join public.orders o on o.id = c.order_id
+                     where o.user_id = v_user), 'the delivery codes of their orders';
+  assert (select count(*)::text from private.delivery_code_attempts a
+          join public.orders o on o.id = a.order_id where o.user_id = v_user)
+         = current_setting('t.gone_attempts'), 'the log of wrong codes, which names drivers, stays';
+  assert (select count(*) || ':' || sum(f.amount_minor) from private.refunds f
+          join public.orders o on o.id = f.order_id where o.user_id = v_user)
+         = current_setting('t.gone_refunds'), 'every refund stays in the register, amounts unchanged';
+  assert (select reason is null and status = 'refunded' from public.return_requests
+          where id = current_setting('t.gone_return')::uuid), 'the return stays refunded, without its reason';
+
   -- Kept records still add up.
   assert (select count(*) || ':' || sum(total_minor) from public.orders where user_id = v_user)
          = current_setting('t.orders_before'), 'order count and totals unchanged';
@@ -871,7 +958,8 @@ select pg_temp.remember('driver_needles', (
   where u.email = 'repartidor2@yuntera.example'));
 select pg_temp.remember('driver_user', (select id::text from auth.users where email = 'repartidor2@yuntera.example'));
 select pg_temp.login('central@yuntera.example', 'aal2');
-update public.drivers set status = 'offboarded' where user_id = current_setting('t.driver_user')::uuid;
+select public.ops_set_driver_status(
+  (select d.id from public.drivers d where d.user_id = current_setting('t.driver_user')::uuid), 'offboarded');
 reset role;
 select pg_temp.login('repartidor2@yuntera.example');
 do $$
@@ -901,8 +989,16 @@ select pg_temp.remember('bazar_shop', (
   where u.email = 'bazar@yuntera.example'));
 select pg_temp.remember('bazar_needles', (
   select jsonb_build_array(sp.legal_name, sp.id_number, sp.contact_phone, sp.fiscal_address,
-                           'bazar@yuntera.example', 'Laura sonriendo en su puesto del bazar')::text
+                           'bazar@yuntera.example', 'Laura sonriendo en su puesto del bazar',
+                           'laura.bazar@correo.example', '+50688112233', 'socia.bazar@correo.example')::text
   from public.seller_private sp where sp.seller_id = current_setting('t.bazar_shop')::uuid));
+-- She also invited a partner to the team and asked to change the shop's
+-- contact to her own address and phone (20261121083000_limits.sql).
+select pg_temp.login('bazar@yuntera.example');
+select public.seller_invite_member(current_setting('t.bazar_shop')::uuid, 'socia.bazar@correo.example', 'staff');
+select public.seller_request_shop_change(current_setting('t.bazar_shop')::uuid, 'contact',
+  p_contact_email => 'laura.bazar@correo.example', p_contact_phone => '+506 8811 2233');
+reset role;
 -- Before that she uploaded a photo for a draft listing, described with her own
 -- name (20261121082700_product_photos.sql): it waits for review.
 select pg_temp.login('bazar@yuntera.example');
@@ -962,6 +1058,10 @@ begin
     'the shop left with nobody in charge is closed';
   assert not exists (select 1 from public.seller_members where seller_id = current_setting('t.bazar_shop')::uuid),
     'and has no members';
+  assert not exists (select 1 from public.seller_invitations where seller_id = current_setting('t.bazar_shop')::uuid),
+    'nor invitations';
+  assert not exists (select 1 from public.seller_change_requests where seller_id = current_setting('t.bazar_shop')::uuid),
+    'nor change requests';
   -- Her photo leaves the review queue and the shop; its files are now
   -- disposable for the console's next clean-up.
   assert (select state from public.product_photos where id = current_setting('t.bazar_photo')::uuid) = 'removed',
@@ -1085,7 +1185,19 @@ begin
       'private.commercial_consent_log.actor_id', 'private.notification_deliveries.retried_by',
       -- who uploaded or decided a shop's photo (082700): the photo is the
       -- shop's, and closing a shop with nobody in charge removes its photos
-      'product_photos.created_by', 'product_photos.decided_by');
+      'product_photos.created_by', 'product_photos.decided_by',
+      -- the hardening (082900, 083000): invitations to the person are erased
+      -- by delete_my_account, and close_abandoned_shop removes a closed
+      -- shop's invitations and change requests
+      'seller_invitations.invitee_id',
+      -- kept as a bare id: who recorded a return back, released a locked
+      -- delivery code, booked a refund, sent or answered an invitation, asked
+      -- for or decided a shop change, or approved a payout account. The
+      -- person's own requests that never took effect are emptied.
+      'return_requests.received_by', 'private.delivery_codes.released_by', 'private.refunds.created_by',
+      'seller_invitations.invited_by', 'seller_invitations.answered_by',
+      'seller_change_requests.requested_by', 'seller_change_requests.decided_by',
+      'seller_private.payout_approved_by');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end
 $$;

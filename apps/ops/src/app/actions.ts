@@ -92,7 +92,7 @@ export async function decideReturn(
     async (api) => {
       await api.opsDecideReturn(returnId.data, approve, note(formData) || null);
       return approve
-        ? "Devolución aprobada. El reembolso vence en 8 días."
+        ? "Reclamo aprobado. Coordine la recolección; el reembolso se registra cuando el producto llegue."
         : "Devolución rechazada; el cliente ve el motivo.";
     },
     typed(formData, "note"),
@@ -171,27 +171,6 @@ export async function confirmPayment(
       return "Pago confirmado. El pedido pasó a preparación.";
     },
     values,
-  );
-}
-
-export async function cancelOrder(
-  _previous: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const orderId = uuid(formData, "orderId");
-  const reason = note(formData);
-  if (!orderId.success) return { error: GENERIC_ERROR };
-  if (reason.length < 5)
-    return { error: "Escriba el motivo de la cancelación.", values: typed(formData, "note") };
-  return staffAction(
-    "/pedidos",
-    async (api) => {
-      const result = await api.cancelOrder(orderId.data, reason);
-      return result.status === "refunded"
-        ? "Pedido cancelado y marcado para reembolso."
-        : "Pedido cancelado. No se había cobrado.";
-    },
-    typed(formData, "note"),
   );
 }
 

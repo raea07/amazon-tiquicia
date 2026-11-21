@@ -21,6 +21,8 @@ select pg_temp.remember('pick_shipment',
 
 -- ── Visitor ────────────────────────────────────────────────────────────────
 
+-- Read as the owner: a visitor reads no table (082800).
+select pg_temp.remember('speaker', (select id::text from public.products where slug = 'parlante-bluetooth-nimbo-ola'));
 select pg_temp.login_anon();
 
 do $$
@@ -118,7 +120,9 @@ $$;
 -- A visitor can report a listing, with a contact address.
 do $$
 begin
-  perform public.report_content('product', gen_random_uuid(), 'unsafe', 'Se calienta demasiado.', 'ana@correo.example');
+  -- About a listing that exists and is public (120_limits.sql covers the rest).
+  perform public.report_content('product', current_setting('t.speaker')::uuid,
+                                'unsafe', 'Se calienta demasiado.', 'ana@correo.example');
   begin
     perform public.report_content('product', gen_random_uuid(), 'unsafe');
     raise exception 'anonymous report without contact';
@@ -474,20 +478,7 @@ end
 $$;
 reset role;
 
--- No function in the API is left without an explicit decision about visitors.
-do $$
-declare
-  open_to_visitors text;
-begin
-  select string_agg(p.proname, ', ' order by p.proname) into open_to_visitors
-  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute');
-  assert open_to_visitors =
-    -- check_request runs before every Data API request, visitors' included.
-    'cart_lines, check_request, checkout_quote, delivery_estimate, get_product, list_categories, list_districts, '
-    || 'report_content, reviewer_display_name, search_products, shop_path_exists, suggest_products',
-    format('functions open to visitors changed: %s', open_to_visitors);
-end
-$$;
+-- Which functions a visitor may execute is checked, against the list in
+-- docs/03-data/access-control.md, by 110_lockdown.sql.
 
 rollback;

@@ -252,11 +252,18 @@ describe("order lifecycle", () => {
     }
   });
 
-  it("forbids skipping payment, un-delivering, or cancelling after dispatch", () => {
+  it("forbids skipping payment, un-delivering, or cancelling after delivery", () => {
     expect(canOrderTransition("pending_payment", "shipped")).toBe(false);
     expect(canOrderTransition("delivered", "processing")).toBe(false);
-    expect(canOrderTransition("shipped", "cancelled")).toBe(false);
+    expect(canOrderTransition("delivered", "cancelled")).toBe(false);
     expect(canOrderTransition("refunded", "confirmed")).toBe(false);
+  });
+
+  it("cancels an order on its way only because its parcels came back", () => {
+    // The database does this when the last parcel is checked in undelivered;
+    // cancel_order itself refuses once anything is packed.
+    expect(canOrderTransition("shipped", "cancelled")).toBe(true);
+    expect(canOrderTransition("partially_shipped", "cancelled")).toBe(true);
   });
 
   it("defines transitions and labels for every status, pointing only at real statuses", () => {

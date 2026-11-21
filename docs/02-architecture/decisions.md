@@ -28,10 +28,12 @@ its own entry, not something that happens by drift.
 | 19  | [A darker field outline in the native apps than on the web](#19-a-darker-field-outline-in-the-native-apps-than-on-the-web)                          | Built                                    |
 | 20  | [The native apps' store identifiers use com.yuntera](#20-the-native-apps-store-identifiers-use-comyuntera)                                          | Decided by the owner                     |
 | 21  | [The brand package does not declare React](#21-the-brand-package-does-not-declare-react)                                                            | Built                                    |
-| 22  | [Notifications run outside the apps, with their own key](#22-notifications-run-outside-the-apps-with-their-own-key)                                 | Built; no provider set up                |
-| 23  | [A per-request check, and the second factor in the database](#23-a-per-request-check-and-the-second-factor-in-the-database)                         | Built; hosted project untested           |
-| 24  | [Deleting an account anonymises; the sign-in record stays](#24-deleting-an-account-anonymises-the-sign-in-record-stays)                             | Built                                    |
-| 25  | [Photos in two buckets, published by re-encoding](#25-photos-in-two-buckets-published-by-re-encoding)                                               | Built; Vercel runtime untested           |
+| 22  | [Notifications run outside the apps, with their own key](#22-notifications-run-outside-the-apps-with-their-own-key)                                 | Built; not deployed                      |
+| 23  | [A per-request check, and the second factor in the database](#23-a-per-request-check-and-the-second-factor-in-the-database)                         | Built; applied to the preview            |
+| 24  | [Deleting an account anonymises; the sign-in record stays](#24-deleting-an-account-anonymises-the-sign-in-record-stays)                             | Built; applied to the preview            |
+| 25  | [Photos in two buckets, published by re-encoding](#25-photos-in-two-buckets-published-by-re-encoding)                                               | Built; applied to the preview            |
+| 26  | [One register for every refund](#26-one-register-for-every-refund)                                                                                  | Built; not on the preview yet            |
+| 27  | [Limits are per account and per target, never per address](#27-limits-are-per-account-and-per-target-never-per-address)                             | Built; not on the preview yet            |
 
 ---
 
@@ -47,9 +49,10 @@ missing policy exposes data.
 an action. One function returns one screen's payload as JSON
 (`get_product`, `my_orders`, `seller_overview`, `wms_board`, `driver_today`,
 `ops_dispatch_board`); one function performs one business action
-(`place_order`, `wms_pack_shipment`, `driver_complete_stop`). Tables keep
-row-level security underneath as a second lock, and table privileges are
-granted explicitly and narrowly.
+(`place_order`, `wms_pack_shipment`, `driver_complete_stop`). Since
+21 November 2026 this is enforced, not only followed: signed-in users and
+visitors hold no privilege on any table, view or sequence, so the functions
+are the only door. Tables keep row-level security underneath as a second lock.
 
 **Consequences.**
 
@@ -59,11 +62,16 @@ granted explicitly and narrowly.
   payload holds. A contract test checks that it does.
 - One round trip per screen, which matters on mobile data.
 - More SQL to write and maintain, and a new screen usually needs a migration.
-- Read functions run with the caller's rights where the caller's own row access
-  is exactly what the screen should show; functions that must combine data
-  across that boundary are `security definer` and check the caller themselves.
-  Getting that check wrong is the main risk of this design, which is why
-  [access control](../03-data/access-control.md) has a checklist for it.
+- Every function runs with its owner's rights (`security definer`) and checks
+  the caller itself; read functions write their visibility rules into their own
+  queries. Getting that check wrong is the main risk of this design, which is
+  why [access control](../03-data/access-control.md) has a checklist for it and
+  `supabase/tests/110_lockdown.sql` fails on any table privilege or unlisted
+  function a later migration adds.
+- An action that no function performs cannot be done through the API at all,
+  even by staff. The security review of November 2026 showed that the
+  alternative (narrow column grants plus policies) left holes that no single
+  reviewer saw; the price is writing a function for each new action.
 
 ## 2. No privileged key in any app; staff are ordinary users
 
@@ -191,8 +199,14 @@ present.
 
 **Decision.** The PIN is checked only by the server. `driver_today` never
 returns it; `driver_complete_stop` receives what the driver typed and compares
-it in the database. After five wrong attempts the stop is locked. There is no
-offline verification.
+it in the database. There is no offline verification. Since the security
+review of 21 November 2026 the code is kept in its own private table
+(`private.delivery_codes`), which no app role can read; the shopper reads it
+through `get_order` only, and nobody on the platform's side can. Wrong
+attempts are counted per order, across all its parcels, stops and routes, and
+each is logged with the driver who typed it. After five the order locks;
+staff release it with `ops_release_delivery_code`, which issues a new code the
+shopper reads on their order page.
 
 **Consequences.**
 
@@ -308,7 +322,9 @@ column that was incremented by code nobody remembers.
 `ledger_entries` that sum to zero (debits positive, credits negative). A
 deferred constraint trigger refuses to commit an unbalanced transaction, and
 entries can never be updated or deleted. Balances are derived by summing
-entries; none is stored. A refund is the original capture's entries, negated.
+entries; none is stored. A refund is the original capture's entries, negated,
+or for part of an order the goods' entries reversed; since 21 November 2026
+every refund also has a row in one register (decision 26).
 
 **Consequences.**
 
@@ -728,3 +744,61 @@ the public bucket.
   first deploy.
 - Files that are no longer needed are deleted only when a seller or catalogue
   staff act; there is no scheduled clean-up.
+
+## 26. One register for every refund
+
+**Context.** The security review of 21 November 2026 found that the same money
+could move twice: two returns of the last unit of a line approved at once, a
+refunded return set back to approved, a cancellation refunded while a return
+of the same order was refunded too. Each refund path checked its own rules,
+and nothing checked them together.
+
+**Decision.** Every refund goes through `private.refunds` and
+`private.refund_units`, which name what is refunded (a cancelled order, one
+return, one parcel that came back) and refuse the same thing twice, more units
+than were bought and more money than was collected. A deferred trigger refuses
+at commit any refund transaction in the ledger that is not in the register.
+Returns follow a state machine (requested, approved, received, refunded, or
+rejected) enforced by a trigger, and are refunded only after the goods are
+recorded back. Every function that moves an order's money takes the order's
+row lock first, so two such calls on one order queue up. The rules are in
+[returns and refunds](../04-algorithms/returns-and-refunds.md).
+
+**Consequences.**
+
+- A refund amount can be traced to what it refunded, and no path can exceed
+  what was paid.
+- A return waits for the goods; staff close an approved return whose goods
+  never came back.
+- Cash on delivery is collected once, at the first parcel handed over, for the
+  total less the goods already on their way back. A parcel that comes back
+  after the cash was taken is refunded by transfer, because the gateway has no
+  partial capture.
+- Shipping is not refunded when a parcel comes back undelivered. That is a
+  policy choice for the owner to confirm.
+
+## 27. Limits are per account and per target, never per address
+
+**Context.** The same review found that one account or one visitor could fill
+queues (listings for review, inbound shipments, reports, invitations), take a
+product off sale with unpaid orders, or send inputs large enough to slow the
+database. A rate limit by network address does not work behind the apps'
+servers, which make every call.
+
+**Decision.** Limits are of four kinds: the target must exist and be public;
+a repeat is counted once; each account has a cap on what it has open; inputs
+are bounded before any work is done. Each limit is a setting in
+`app_settings` with a documented fallback, or a named constant. Visitor
+reports share one safety valve per hour across the platform, but the first
+report about something not yet reported always gets through. Changes that
+could mislead shoppers or redirect money (a shop's name, fiscal details,
+contact phone) are requests staff approve, never direct writes.
+
+**Consequences.**
+
+- Nothing here stops one person using many free accounts; that needs the
+  gateway's fraud tools and identity checks.
+- There is still no limit per minute or on request size at the edge; that is
+  configured on the hosting platform before launch.
+- The numbers are first guesses above what an honest shopper or seller does;
+  they are settings so that they can change without a migration.

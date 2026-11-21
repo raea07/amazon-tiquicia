@@ -1,5 +1,5 @@
 import { SignUpForm } from "@yuntera/next-kit/client";
-import { getRoles, getViewer } from "@yuntera/next-kit/server";
+import { getRoles, getViewer, sessionApi } from "@yuntera/next-kit/server";
 import { Alert, buttonClass, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -65,9 +65,24 @@ async function Step() {
     );
   }
 
-  const roles = await getRoles();
+  const [roles, invitations] = await Promise.all([
+    getRoles(),
+    sessionApi().then((api) => api.myInvitations()),
+  ]);
   return (
     <section className="rounded-lg border border-border bg-surface p-6">
+      {invitations.length > 0 ? (
+        <Alert tone="info" className="mb-5" title="Le invitaron a una tienda">
+          {invitations.length === 1
+            ? `${invitations[0]?.shop.trade_name} le invitó a su equipo.`
+            : `${invitations.length} tiendas le invitaron a su equipo.`}{" "}
+          Si va a trabajar en una tienda que ya existe, no la registre de nuevo:{" "}
+          <Link href="/invitaciones" className="font-semibold underline">
+            vea la invitación
+          </Link>
+          .
+        </Alert>
+      ) : null}
       {roles && roles.sellers.length > 0 ? (
         <Alert tone="info" className="mb-5" title="Ya tiene una tienda registrada">
           Puede registrar otra con una identificación distinta, o{" "}

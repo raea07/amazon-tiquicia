@@ -2,13 +2,21 @@
 
 Who can reach what, and how that is enforced. The short version: every request
 arrives at the database as one of two unprivileged roles, with the signed-in
-user's identity attached; three independent layers then decide what it may do;
-and no app holds a key that skips them.
+user's identity attached; those roles can touch **no table, view or sequence
+at all**, only execute functions; each function checks its caller; row-level
+security sits underneath as a second lock; and no app holds a key that skips
+any of it.
 
-Source: `supabase/migrations/20261121081400_access_control.sql` for grants and
-policies, `…080100_identity.sql` for the role helpers, and the checks inside
-each function. Tested by `supabase/tests/020_access.sql` and `070_api.sql`,
-which run as real API roles with real claims.
+Source: `supabase/migrations/20261121082800_lockdown.sql` for privileges and
+the current policies (it supersedes the grants of `…081400_access_control.sql`),
+`…080100_identity.sql` for the role helpers, `…082900_integrity.sql` and
+`…083000_limits.sql` for the rules on money, returns, the delivery code and
+the limits, `…083100_merge.sql` for account deletion, and the checks inside
+each function. Tested by `supabase/tests/020_access.sql` (each kind of user, through
+the functions they call), `070_api.sql` (each screen function, right and wrong
+caller) and `110_lockdown.sql` (a guard over the whole catalogue, plus every
+finding of the November 2026 security review replayed), all of which run as
+real API roles with real claims.
 
 ## The roles a request can have
 
@@ -68,44 +76,73 @@ need about a photo comes from definer helpers.
 
 ```mermaid
 flowchart TD
-  r["Request as anon or authenticated"] --> g{"GRANT<br/>May this role attempt<br/>this operation at all?"}
-  g -- no --> x1[permission denied]
+  r["Request as anon or authenticated"] --> g{"Privileges<br/>Is it a function this<br/>role may execute?"}
+  g -- "no: any table, view or<br/>sequence; an unlisted function" --> x1[permission denied]
   g -- yes --> f{"Function check<br/>Is this caller allowed<br/>to do this business action?"}
   f -- no --> x2["error code: forbidden,<br/>not_authenticated, …"]
-  f -- yes --> p{"Row-level security<br/>Which rows may this<br/>caller see or touch?"}
-  p --> ok[Result]
+  f -- yes --> ok["Result, built by the function<br/>with the owner's rights"]
+  m["Privilege granted by mistake"] -.-> p{"Row-level security<br/>second lock: which rows<br/>a direct read could see"}
 ```
 
-### 1. Grants: least privilege, stated explicitly
+### 1. Privileges: the functions are the only door
 
-The migrations start by revoking everything from `anon` and `authenticated` —
-tables, sequences, functions — and from `public` on functions, and they switch
-off the default privileges that would grant new objects automatically. Nothing
-is reachable until a later statement grants it on purpose.
+On Supabase, every table, view and sequence that `anon` or `authenticated`
+holds any privilege on is reachable over HTTP (`/rest/v1/<table>`), whether or
+not an app uses it. The security review of 21 November 2026 found most of its
+holes there: column grants that let a seller attach an offer to a competitor's
+listing or set a listing's tax rate, support staff re-open a refunded return,
+any staff role read every delivery code. So the rule is now absolute:
 
-What is then granted:
+- **Tables, views, sequences: nothing.** `anon`, `authenticated` and PUBLIC
+  hold no privilege — no `select`, `insert`, `update` or `delete`, no column
+  privilege, no sequence `usage` — on anything in `public` or `private`. The
+  lockdown migration revokes them by sweeping the catalogue rather than naming
+  tables, so it also covers tables added by migrations that ran before it.
+- **Nothing granted by default.** The default privileges of `postgres` (the
+  role the migrations run as) give the API roles and PUBLIC nothing on new
+  tables, sequences or functions, in any schema and globally (a default set
+  for one schema is not cancelled by a revoke for another, so the migration
+  sweeps every default `postgres` holds, except in the platform's `auth` and
+  `storage` schemas). A hosted Supabase project ships with defaults
+  that grant `anon`, `authenticated` and `service_role` everything new in
+  `public`; the local shim copies that, and the migrations switch the API
+  roles' part off on both. `service_role`'s defaults are the platform's and
+  are left alone; no app holds that key.
+- **Functions: a named list.** Every function in `public` runs with its
+  owner's rights (`security definer`) and `search_path = ''`, and checks its
+  caller first. Visitors may execute only the functions listed
+  [below](#what-each-role-may-execute). Signed-in users may execute every
+  function in `public` except the internal ones listed there. PUBLIC may
+  execute nothing in `public` or `private`.
 
-- **Functions.** `EXECUTE` on a named list. Visitors get the browsing
-  functions only. Signed-in users get the rest; each of those checks its caller.
-- **Tables, read.** `SELECT` where a policy can sensibly scope it.
-- **Tables, write.** Rare, and by column. A shopper may update four columns of
-  their own profile, not `phone_verified_at`. A seller may write listing
-  content columns of `products` and `skus`, not the ranking and summary
-  columns, and only while the listing is not published: a trigger refuses
-  content changes to a published listing, and new variants on it, unless the
-  caller is catalogue staff. Edits to a published listing go through
-  `seller_update_listing` and wait for review (`product_change_requests`
-  is readable by the listing's seller and catalogue staff, and written only by
-  those functions). `product_images` has no write grant any more: photos are
-  written only by the photo functions, which mirror the published ones into
-  it. Orders,
-  payments, shipments, stock, ledger, routes and stops have **no** write grant
-  at all: they change only inside functions.
+`110_lockdown.sql` fails when any of this stops being true: a privilege on a
+table, view or sequence; a function in `public` that is not owner's-rights
+with an empty search path; a function executable by a role the list does not
+name; a table without row-level security; a policy that reads another table of
+`public` or `private` directly, or calls a function that runs with the
+caller's rights; a policy other than `for select` on our tables; a default
+that would grant new objects; a deferred trigger without
+its owner's rights. It is what keeps the door closed when later migrations are
+merged.
 
-Supabase's own guidance is the same two-layer model — grants decide whether a
-role can touch an object, policies decide which rows — and the platform is
+That last one was found the hard way. The ledger's balance check is a deferred
+trigger: it runs at commit, after the function that wrote the entries has
+returned, so with the API role's rights, which can read nothing. The SQL suites
+never saw it fail, because each rolls back instead of committing; the browser
+journeys, which commit, did. It now runs with its owner's rights.
+
+A consequence: **a legitimate action exists only if a function does it.**
+Some writes that used to be possible directly have no function yet: editing a
+shop's name, description, logo or fiscal details; managing a shop's members;
+withdrawing a consent; moderating a review; editing categories, brands,
+synonyms, fees, delivery zones or the calendar; changing a listing's photos or
+switching a variant off. None of them was used by an app; each needs a
+function before it can be done again through the API.
+
+Supabase's own guidance is the same model — privileges decide whether a role
+can touch an object at all, policies decide which rows — and the platform is
 moving its defaults toward revoking automatic grants. The migrations do not
-depend on which default a project has: they revoke first either way.
+depend on which default a project has: they revoke either way.
 
 ### 2. Function checks
 
@@ -115,23 +152,39 @@ caller. Every one of them does, in its first lines, and refuses with a stable
 error code (`not_authenticated`, `forbidden`, or a "not found" that does not
 reveal whether the thing exists).
 
-Read functions run with the **caller's** rights (`security invoker`) wherever
-the caller's own row access is exactly what the screen should show —
-`search_products`, `get_product`, `my_orders`, `list_categories`. Those cannot
-return more than the policies allow, whatever the function body says.
+The browsing functions (`search_products`, `get_product`, `cart_lines`,
+`list_categories`, `my_orders` and the like) used to run with the caller's
+rights and let the policies filter what they read. They now run with the
+owner's rights and write the same visibility rules into their own `where`
+clauses: active listings in active categories for everyone, plus drafts and
+switched-off categories for staff, and a seller's own listings for that
+seller. Their results did not change.
 
-### 3. Row-level security
+### 3. Row-level security: the second lock
 
-Enabled on every table in `public` and `private`. A table with no matching
-policy returns nothing.
+Enabled on every table in `public` and `private`. No API role can read a
+table directly any more, so the policies no longer decide what a screen shows;
+they are there so that a privilege granted by mistake still exposes only the
+rows its policy allows. Only **read** policies remain on the tables in `public`
+and `private`: the lockdown migration drops every other policy it finds
+(including `for all`), and `110_lockdown.sql` fails if one is added later, so
+even a mistaken `insert`, `update` or `delete` grant is refused by row-level
+security. Two read policies were narrowed after the review: customer profiles
+are readable by support (not every staff role), and driver records by ops (not
+support). `110_lockdown.sql` tests the policies themselves too: it grants the
+mistaken privilege inside its own rolled-back transaction and checks what each
+kind of user would then see.
 
 Policy style, which matters for both correctness and speed:
 
 - Role checks are wrapped in a sub-select — `(select private.is_staff())` — so
   Postgres evaluates them once per statement, not once per row.
-- Checks that need another table go through the `security definer` helpers in
-  `private`, so a policy on table A can consult table B without recursing into
-  B's own policies.
+- **A policy never reads another table directly.** It asks an owner's-rights
+  helper in `private` (`private.can_see_order(order_id)`,
+  `private.can_see_product(product_id)`, …). A policy that read
+  `public.orders` itself would fail for lack of a privilege, and would recurse
+  into that table's own policies. This holds for policies in any schema,
+  including those on storage objects; the guard test checks it.
 - In a sub-query inside a policy, **every reference to the outer table's column
   is qualified with the table name.** The reason is the bug described
   [below](#a-real-bug-and-what-it-taught).
@@ -142,12 +195,20 @@ A summary; the migration is authoritative.
 
 ### Visitor (`anon`)
 
-| Can                                                                           | Cannot                                                                        |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Search and browse active products from active sellers; read published reviews | See drafts, rejected listings, or anything from a pending or suspended seller |
-| Read categories, districts, zones, holidays, the fee schedule                 | Read any profile, address, order, stock level or seller's private details     |
-| Get a delivery estimate and a checkout quote                                  | Place an order                                                                |
-| Report a listing, review or seller, giving an e-mail address                  | Read the report queue                                                         |
+| Can                                                                           | Cannot                                                                                                  |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Search and browse active products from active sellers; read published reviews | See drafts or rejected listings, or find a pending or suspended seller's products in search (see below) |
+| List categories and districts                                                 | Read any table: no profile, address, order, stock level or seller's private details                     |
+| See delivery fees and dates in a quote                                        | Read the fee schedule, zones or calendar themselves                                                     |
+| Get a delivery estimate and a checkout quote                                  | Place an order                                                                                          |
+| Report a listing, review or shop that is public, giving an e-mail address     | Read the report queue; report something that does not exist or is not public                            |
+
+Everything in this table is what the ten functions [listed
+below](#what-each-role-may-execute) return; a visitor can reach nothing else.
+One gap: `get_product` and `shop_path_exists` still open the product page of a
+listing created by a seller who has since been suspended, if a visitor has its
+address. Search no longer lists it, and the direct read the review used is
+closed, but that rule of the two functions is not yet changed.
 
 ### Shopper (any signed-in user)
 
@@ -157,20 +218,20 @@ A summary; the migration is authoritative.
 | Add, edit and soft-delete their own addresses                                         | See anyone else's                                                                         |
 | Place, pay (in sandbox), cancel and read their own orders, including the delivery PIN | Read another person's order — it answers "not found", the same as one that does not exist |
 | Review a product they received; request a return; file a complaint                    | Review something they did not buy, or twice                                               |
-| Record and withdraw their own consents                                                |                                                                                           |
+| Record and withdraw their own consents, dated by the database                         | Back-date a consent, change one, or undo a withdrawal                                     |
 
 ### Seller member
 
-| Can                                                                                                                            | Cannot                                                                                                                  |
-| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| Read their seller's private details, members, listings, offers, stock, statements and payouts                                  | Read another seller's                                                                                                   |
-| Create listings as draft or pending review; edit their content; set price, handling time and status of their offers            | Publish a listing; change a published listing except through a reviewed edit; write ranking, rating or summary columns  |
-| See the order lines they sold and each line's progress, with the shopper's first name, district and cantón                     | See the shopper's full name, phone, e-mail, address or map pin — Yuntera delivers, so the seller never needs them       |
-| Set stock at their own location; announce stock sent to a warehouse; mark their own parcels packed                             | Change stock held in a Yuntera warehouse                                                                                |
-| Reply to a review of their product                                                                                             | Remove or edit a review                                                                                                 |
-| Admins and owners: edit the shop front, manage members, request a change of payout account (finance approves it)               | Change the payout account or contact phone and e-mail; read an account number in full; create, alter or remove an owner |
-| Add photos to their listings through the photo functions and upload the reserved files; download their own photos under review | Sign a link to a photo that is not approved, overwrite or move a file, publish a photo, read another shop's files       |
-| Admins and owners: choose the shop's WhatsApp and push channels and its commercial consent                                     | Switch off the shop's e-mail, or switch on a number that opted out                                                      |
+| Can                                                                                                                                                               | Cannot                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Read their seller's private details, members, listings, offers, stock, statements and payouts                                                                     | Read another seller's                                                                                                                                                                                                             |
+| Create listings as draft or pending review; edit their content; set price, handling time and status of their offers                                               | Publish a listing; change a published listing except through a reviewed edit; write ranking, rating or summary columns                                                                                                            |
+| See the order lines they sold and each line's progress, with the shopper's first name, district and cantón                                                        | See the shopper's full name, phone, e-mail, address or map pin — Yuntera delivers, so the seller never needs them                                                                                                                 |
+| Set stock at their own location; announce stock sent to a warehouse; mark their own parcels packed                                                                | Change stock held in a Yuntera warehouse                                                                                                                                                                                          |
+| Reply to a review of their product                                                                                                                                | Remove or edit a review                                                                                                                                                                                                           |
+| Admins and owners: invite members (they must accept), remove staff, ask for a change of payout account, shop name, fiscal details or contact (staff approve each) | Add anyone without their acceptance; change the payout account, name, fiscal details or contact directly; read an account number in full; create, alter or remove an owner; edit the shop's description or logo (no function yet) |
+| Add photos to their listings through the photo functions and upload the reserved files; download their own photos under review                                    | Sign a link to a photo that is not approved, overwrite or move a file, publish a photo, read another shop's files                                                                                                                 |
+| Admins and owners: choose the shop's WhatsApp and push channels and its commercial consent                                                                        | Switch off the shop's e-mail, or switch on a number that opted out                                                                                                                                                                |
 
 ### Warehouse associate
 
@@ -189,15 +250,17 @@ A summary; the migration is authoritative.
 
 ### Staff
 
-Admin implies every role below.
+Admin implies every role below. "Reach" is what the `ops_*` and other staff
+functions return to that role; the read policies name the same roles, but only
+as the second lock.
 
-| Role      | Reach                                                                                                                                                                                                                                                       |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, zones and calendar, dispatch board, routes, settlements, returns; approve or suspend sellers                                                                                   |
-| `support` | Orders and timelines, profiles, addresses, consents, sellers' private details, stock levels, returns, complaints, content reports; cancel an order for a shopper; see which messages an order produced (never their text or address) and resend a stuck one |
-| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs                                                                                                |
-| `catalog` | Categories, brands, synonyms, all listings; approve or reject a listing and its photos; take down any photo; moderate reviews and content reports                                                                                                           |
-| `admin`   | All of the above, plus staff membership, settings, the audit log, and resetting a colleague's second factor (never their own)                                                                                                                               |
+| Role      | Reach                                                                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, the dispatch board, routes, settlements, returns; approve or suspend sellers; zones and calendar have no function yet                        |
+| `support` | Orders and timelines (with the shopper's contact and address), sellers' private details, returns, complaints, content reports; cancel an order for a shopper; see which messages an order produced and resend a stuck one |
+| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs                                                              |
+| `catalog` | All listings; approve or reject a listing, a listing edit and its photos; take down any photo; resolve content reports. Categories, brands, synonyms and review moderation have no function yet                           |
+| `admin`   | All of the above, plus staff membership, the audit log and resetting a colleague's second factor (never their own); settings have no function yet                                                                         |
 
 Sensitive changes by staff — to staff membership, seller status and private
 details, drivers, warehouse assignments, settings, fees, payouts — are written
@@ -221,6 +284,84 @@ directly either, and a request made within 30 days of a change to them is
 flagged. Nobody in finance decides a request they made, or one for a shop they
 belong to.
 
+## Access that ends at once
+
+Every check reads the row that grants the access, on every call, so taking
+the row away ends the access with the next request. What each kind of
+account keeps, tested function by function in `supabase/tests/120_limits.sql`
+(each prefix is called with every argument it takes, and every call must
+refuse):
+
+| Account                                 | What happens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Driver suspended, offboarded or pending | `driver_today` returns their own record and no routes (it is a gate in front of whatever body the function had, moved to `private.driver_today_active`); every other driver function refuses, also when given the driver's own route and stop ids. Their routes go back to dispatch at once (a trigger on `drivers`, whatever path changed the status): a route not started becomes a draft without driver; of a route being driven, the stops still to do move to a new draft route and the old one closes with its cash count for the driver who collected the money. `ops_released_routes` lists them on the dispatch screen, with the parcels still in that driver's hands. |
+| Staff member switched off               | Every `ops_*` function and the audit trail refuse (`forbidden`): `has_staff_role` reads `active`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Warehouse worker removed from a site    | Every `wms_*` function refuses for that site.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Member removed from a shop              | Every `seller_*` function refuses for that shop, also when given the ids of its listings, offers, reviews and parcels; nothing of it stays readable. Invitations they sent as an administrator are withdrawn, and an invitation whose sender is no longer allowed to send it cannot be accepted.                                                                                                                                                                                                                                                                                                                                                                                |
+| Shop pending (not yet verified)         | Reads its data, keeps drafts, invites its team, asks for changes. Cannot send a listing for review, edit a published one or announce stock to a warehouse (`shop_not_approved`). A listing it sent earlier cannot be published until the shop is verified (`listing_shop_not_active`, a trigger on `products`, so it holds whatever version of `ops_review_product` is in place).                                                                                                                                                                                                                                                                                               |
+| Shop suspended                          | As pending, and also cannot put an offer back on sale or reply publicly to a review. It can still pause offers, count stock, pack what it already sold and be paid what it is owed later.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Shop closed                             | Reads only: no pickup points, no stock counts (`shop_closed`), no listings, offers, inbound shipments, invitations or change requests. It may still ask for its payout account to be changed, so that it can be paid what it is owed; finance decides that request as any other.                                                                                                                                                                                                                                                                                                                                                                                                |
+
+## Limits against abuse
+
+The database cannot trust a caller's network address: the apps call it from
+their own servers, and anyone with the publishable key can call it directly
+and claim any address. So no limit below depends on one. They are of four
+kinds: the thing acted on must exist and be public; a repeat is the same
+thing, not a second one; one account can have only so much open at a time;
+and what a visitor can send is bounded before any work is done. Each is a
+setting in `app_settings` (an administrator changes it without a migration)
+or a named constant in the function, and each is tested at its edge.
+
+| Limit                                        | Value                                                               | Where                                                                                                                      | Why this number                                                                                                                                                                                                                                  |
+| -------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Shops waiting for verification per account   | 1 (`max_pending_shops_per_account`)                                 | `create_seller`                                                                                                            | Nobody honest needs two at once; the second can be registered as soon as the first is decided.                                                                                                                                                   |
+| Listings in review per shop                  | 50 (`max_listings_in_review_per_seller`)                            | `seller_create_listing`, `seller_update_listing`                                                                           | New listings and edits of published ones together. Enough for a shop's first catalogue upload; more waits as drafts.                                                                                                                             |
+| Drafts per shop                              | 200 (`max_draft_listings_per_seller`)                               | `seller_create_listing`                                                                                                    | Drafts are never reviewed; this only stops a table from filling up.                                                                                                                                                                              |
+| Open inbound shipments per shop              | 10 (`max_open_inbounds_per_seller`)                                 | `seller_create_inbound`                                                                                                    | Each is an expected delivery on the dock's board; ten covers a week of daily deliveries.                                                                                                                                                         |
+| Lines per inbound shipment; units per line   | 100; 100 000                                                        | `seller_create_inbound`                                                                                                    | A shipment is a truckload, not the catalogue. A repeated product is refused (`invalid_lines`).                                                                                                                                                   |
+| Open reports per signed-in account           | 20 (`max_open_reports_per_account`)                                 | `report_content`                                                                                                           | Someone reporting genuinely rarely has more waiting; a repeat of an open report (same target and reason) returns the same report.                                                                                                                |
+| Visitor reports per hour, whole platform     | 300 (`visitor_reports_per_hour`)                                    | `report_content`                                                                                                           | A safety valve, about ten times the expected volume. Above it a visitor is asked to write to support, except about something nobody has reported yet: that first report always gets in, so a flood cannot silence the reports about one listing. |
+| Open complaints per account                  | 5 (`max_open_complaints_per_account`)                               | `file_complaint`                                                                                                           | The same complaint again (same order, category and text) returns the first.                                                                                                                                                                      |
+| Invitations waiting per shop; team size      | 20; 50 (`max_pending_invitations_per_shop`, `max_members_per_shop`) | `seller_invite_member`                                                                                                     | A small business's team, with room.                                                                                                                                                                                                              |
+| Search text                                  | 200 characters, 12 words                                            | `search_products`, `suggest_products`                                                                                      | Longer input is cut, not refused. The unbounded bodies are private and reachable only through these wrappers. The same numbers are `SEARCH_INPUT_LIMITS` in `packages/core/src/search.ts`, kept equal by a unit test.                            |
+| Lines in a checkout quote                    | `max_lines_per_order` (40)                                          | `checkout_quote`                                                                                                           | Counted before any pricing work; malformed lines are answered as an issue.                                                                                                                                                                       |
+| Lines in an order                            | `max_lines_per_order` (40)                                          | `place_order`                                                                                                              | Counted before anything is locked or priced, as in a quote.                                                                                                                                                                                      |
+| Unpaid orders per account                    | 3 (`max_unpaid_orders_per_account`)                                 | `place_order`                                                                                                              | A product cannot be taken off sale with orders nobody pays.                                                                                                                                                                                      |
+| Units held in other unpaid orders            | 30 (`max_held_units_per_account`)                                   | `place_order`                                                                                                              | One order on its own is held only to the per-order limits.                                                                                                                                                                                       |
+| Units of one offer held unpaid               | `max_units_per_line` (10)                                           | `place_order` (`offer_held_limit`)                                                                                         | Across all the account's unpaid orders.                                                                                                                                                                                                          |
+| Open cash orders, account never delivered to | 2 (`max_open_cod_orders_new_account`)                               | `place_order` (`cod_limit_reached`)                                                                                        | Cash on delivery from an untried account.                                                                                                                                                                                                        |
+| Wrong delivery codes per order               | 5 (`private.delivery_code_max_attempts`)                            | `driver_complete_stop`                                                                                                     | Across all parcels, stops and routes; then the order locks until staff release it.                                                                                                                                                               |
+| Staff queues                                 | 100 per page, oldest first                                          | `ops_care_queues` (with totals), `ops_listings_for_review`, `wms_board` (with `inbound_total`), `ops_shop_change_requests` | The payload no longer grows with whatever was filed.                                                                                                                                                                                             |
+| Report details; complaint text               | 2 000; 10–4 000 characters                                          | `report_content`, `file_complaint`                                                                                         | What a person writes about one problem.                                                                                                                                                                                                          |
+
+Reports must be about a listing, review or shop a shopper can see. The
+e-mail a visitor types is recorded only as a contact detail staff may use by
+hand: nothing sends a message to it, and the event the report emits does not
+carry it. Where the notifications tables exist (migration 082600), a trigger
+drops any delivery planned for a visitor's typed address (`report:<id>`)
+before it is stored. The same rule holds for invitations to a shop: the event names the
+invited account (whose address its owner proved), never the address typed.
+
+Shop registration accepts an identification number another shop uses, with
+the same answer as any other registration, so it reveals nothing; staff see
+the clash (`ops_seller_id_clashes`) and only one shop can ever be verified with
+a number (a partial unique index). A name that contains "yuntera" (ignoring
+spaces and punctuation), sounds like the platform speaking (soporte, ayuda,
+oficial…), uses another alphabet, or reads the same as another active shop's
+name is refused, at registration and when a change of name is requested.
+
+## Changes only a function makes
+
+| Change                                   | How                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Joining a shop                           | `seller_invite_member` (owner or admin; only the owner offers "admin"), then the invited account's `seller_answer_invitation`. The invitation is bound to the account that had the address when it was sent; if none had it, the account that later signs up with that address and confirms it (proving it owns the mailbox) can answer, and one whose address is not confirmed cannot. It expires after 14 days, can be accepted only while whoever sent it may still send it, and the owner (or an admin, for staff) can revoke it. `seller_remove_member` and `seller_set_member_role` replace direct writes; nobody changes the owner.                                                                                                                                                                                                                                                                                      |
+| The shop's name, fiscal details, contact | `seller_request_shop_change`, decided with `ops_decide_shop_change`: ops decide names and fiscal details, finance decides the contact (it is the phone finance calls to confirm a new payout account). A change of contact and a change of payout account never wait at the same time: whichever is sent first holds the other back (`payout_request_open`, `contact_request_open`), and finance cannot approve a contact change while a payout-account request waits (`contact_change_waits_for_payout`; rejecting stays possible), so the phone finance calls to confirm a new account is never one that is itself being changed. An approved contact change flags the next payout-account request. A fiscal-details request keeps every field the seller leaves blank as it is on file, so changing the address never clears the postal or activity code. Nobody decides their own request or one for a shop they belong to. |
+| Consents                                 | `record_consent` (only the policy version in force, in `app_settings.policy_versions`; agreeing again adds nothing) and `withdraw_consent`. A trigger dates every consent and withdrawal with the database's clock and refuses any other change, whoever makes it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Fees                                     | **Not through the API at all.** Commission rates, warehouse and payment fees and shipping prices change in a migration, where the parity test with `packages/core/src/fees.ts` keeps both sides equal. No API role has a write grant on the fee tables, `categories` or `delivery_zones`, and every change to them (and to holidays and zone closures) is in the audit log.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Payout account approval                  | Approving a request stamps `payout_approved_at`. An account on file that finance never approved is not paid (it counts as no approved account, in finance's run and on the seller's own money screen, `seller_payouts.blocked_by`), and `seller_payout_details.current.approved` lets the account screen ask the seller to send it for approval.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Packages sent to a warehouse             | Triggers on `offers` and `skus` refuse a warehouse offer whose package exceeds the largest fee tier (30 kg, 120 cm a side), whatever path tries. No listing at all may weigh more than 30 kg or measure more than 200 cm a side (`package_over_limit`): Yuntera carries no such package with any kind of delivery.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+
 ## Rules for `security definer` functions
 
 These functions are the most powerful code in the system. The rules they follow:
@@ -243,14 +384,114 @@ These functions are the most powerful code in the system. The rules they follow:
 6. **Granted explicitly.** `EXECUTE` is revoked from `public` and granted only
    to the role that should call it.
 
-The `private` schema is not exposed by the API at all. `anon` and
-`authenticated` have `USAGE` on it only so that policies and invoker-rights
-functions can call the handful of helpers they are granted
-(`is_staff`, `has_staff_role`, `is_seller_member`, `is_seller_admin`,
-`my_seller_ids`, `my_driver_id`, `my_warehouse_ids`, `works_at`,
-`drives_route`, `fold`, `like_escape`, `category_descendants`, `fail`).
-Everything else in `private` — the audit log, the outbox, the functions that
-capture payments and post to the ledger — is unreachable from outside.
+The `private` schema is not exposed by the Data API at all (a hosted project
+exposes `public` and `graphql_public` only). `anon` and `authenticated` have
+`USAGE` on it only so that row-level-security policies can call the yes-or-no
+helpers listed below. Everything else in `private` — its tables, the audit
+log, the outbox, the functions that capture payments and post to the ledger —
+is readable or executable by no API role.
+
+## What each role may execute
+
+This is the list `110_lockdown.sql` checks against; a unit test in
+`packages/db` keeps the two equal. Adding a function to a list is a decision:
+name it here and in the test, and say why in the pull request.
+
+**Visitors (`anon`)** may execute only these functions in `public`:
+
+<!-- BEGIN visitor functions -->
+
+- `cart_lines`
+- `check_request` (the Data API runs it before every request, a visitor's
+  included; for a visitor it returns at once)
+- `checkout_quote`
+- `delivery_estimate`
+- `get_product`
+- `list_categories`
+- `list_districts`
+- `report_content`
+- `search_products`
+- `shop_path_exists`
+- `suggest_products`
+
+<!-- END visitor functions -->
+
+**Signed-in users (`authenticated`)** may execute every function in `public`
+that is not a trigger function and not one of these internal ones, which no
+API role may execute:
+
+<!-- BEGIN internal functions -->
+
+- `reviewer_display_name` (turns an account id into a display name; only
+  `get_product` calls it)
+
+<!-- END internal functions -->
+
+**Policy helpers.** Both `anon` and `authenticated` may execute these
+functions in `private`, which row-level-security policies call. Each answers
+yes or no (or "which ids") about the caller's own relationship to a row, from
+the token:
+
+<!-- BEGIN policy helpers -->
+
+- `can_see_inbound`
+- `can_see_order`
+- `can_see_product`
+- `can_see_shipment`
+- `drives_route`
+- `has_staff_role`
+- `is_seller_admin`
+- `is_seller_member`
+- `is_staff`
+- `my_driver_id`
+- `my_seller_ids`
+- `my_warehouse_ids`
+- `owns_order`
+- `route_open_to_driver`
+- `sells_order_item`
+- `seller_is_active`
+- `works_at`
+- `works_at_location`
+
+<!-- END policy helpers -->
+
+**Storage policy helpers.** Only `authenticated` may execute these functions
+in `private`, which the rules on `storage.objects` for product photos call
+(the storage service runs each file operation as the signed-in caller). Each
+runs with its owner's rights and answers yes or no:
+
+<!-- BEGIN storage policy helpers -->
+
+- `photo_object_deletable`
+- `photo_object_insertable`
+- `photo_object_readable`
+
+<!-- END storage policy helpers -->
+
+**Server-side functions.** No API role may execute these functions in
+`public`; only a platform role does. The notification worker calls the
+`worker_*` functions with the server-side key (`service_role`), and Auth
+calls the hook (`supabase_auth_admin`):
+
+<!-- BEGIN server-side functions -->
+
+- `hook_mfa_verification_attempt` (Auth)
+- `worker_notify_apply_update`
+- `worker_notify_claim`
+- `worker_notify_defer`
+- `worker_notify_fail`
+- `worker_notify_freeze`
+- `worker_notify_plan`
+- `worker_notify_sent`
+- `worker_notify_skip`
+- `worker_push_disable`
+- `worker_push_receipts_due`
+
+<!-- END server-side functions -->
+
+**PUBLIC** may execute nothing in `public` or `private`. Beyond the
+server-side functions above, `service_role` is the platform's own role and is
+not managed here.
 
 ## Checklist: adding a function safely
 
@@ -258,11 +499,12 @@ Before the migration is merged, answer each of these in the pull request.
 
 - [ ] **Who may call it?** Name the role or relationship. If the answer is
       "anyone signed in", say what stops them acting on someone else's data.
-- [ ] **Invoker or definer?** Use invoker rights if the caller's own row access
-      is exactly what should be returned. Use definer only when the function
-      must cross that boundary, and then:
+- [ ] **Owner's rights.** Every function is `security definer`; an invoker
+      function can read nothing, because the API roles hold no table
+      privilege. Then:
   - [ ] `set search_path = ''` and schema-qualify everything.
-  - [ ] First statement checks the caller and fails with a code.
+  - [ ] First statement checks the caller and fails with a code; a function
+        visitors call writes its visibility rules into its `where` clause.
   - [ ] No argument can name another user to act as.
 - [ ] **What does it return to the wrong caller?** "Not found" for things that
       belong to someone else; never a different error that confirms existence.
@@ -270,21 +512,21 @@ Before the migration is merged, answer each of these in the pull request.
       by this audience. A seller does not need a shopper's phone; a driver does
       not need the order's contents.
 - [ ] **Does it write?** Lock rows first; make it safe to call twice.
-- [ ] **Grant.** `grant execute … to authenticated` (or `anon, authenticated`
-      for browsing). Nothing is callable without it.
-- [ ] **Errors.** Every `private.fail('code')` has a message in
-      `packages/db/src/errors.ts`. A unit test enforces this.
-- [ ] **Client.** A method in `packages/db/src/api.ts` and a schema in
-      `schemas.ts`.
-- [ ] **Tests.** In `supabase/tests/070_api.sql`: one block proving the right
+- [ ] **Grant.** `grant execute … to authenticated`, and never a privilege on
+      a table, view or sequence. A function visitors must call also gets
+      `anon`, and goes on [the list](#what-each-role-may-execute) and in
+      `110_lockdown.sql`.
+- [ ] **Errors.** Every `private.fail('code')` has a message (in an area file
+      under `packages/db/src/areas/`). A unit test enforces this.
+- [ ] **Client.** A method and a schema in an area file.
+- [ ] **Tests.** A suite in `supabase/tests/`: one block proving the right
       caller gets the payload, and one proving each wrong caller is refused or
-      gets nothing. In `contract.test.ts`: the response matches the schema.
+      gets nothing. A contract test: the response matches the schema.
 
-Adding a table has a shorter list: enable row-level security (the
-access-control migration does it for every table present when it runs — a
-later migration must do it itself), grant the minimum, write a policy for each
-operation granted, qualify outer columns, and add a block to
-`020_access.sql`.
+Adding a table has a shorter list: enable row-level security, grant the API
+roles **nothing** (`110_lockdown.sql` fails otherwise), write a read policy
+whose checks on other tables go through helpers in `private`, qualify outer
+columns, and reach the table only through functions.
 
 ## A real bug, and what it taught
 
@@ -326,26 +568,39 @@ visible and what must not.
 
 ## What is not in place yet
 
-- **Rate limiting.** Nothing limits sign-in attempts or function calls beyond
-  the platform's defaults. The PIN check is the one place with its own counter.
+- **Rate limiting by time.** The limits above cap what one account can have
+  open and bound what a visitor can send; nothing counts calls per minute, and
+  sign-in attempts are limited only by the platform. Supabase Auth counts the
+  app server's address, not the visitor's, because sign-in runs on the
+  server. A request body size limit at the API gateway is also not set here.
 - **Row-level security is enabled, not forced.** Table owners acting directly
   in the database are not subject to it. API roles are, which is what matters
   for requests; it means SQL run by an administrator in the dashboard sees
   everything.
-- **Direct table privileges.** Apps still hold some direct table grants under
-  row-level security (the column grants listed above and read grants such as
-  `product_change_requests` and `product_photos`). Removing all of them is
-  planned separately; nothing added in November 2026 writes a table directly.
-- **The per-request check and the storage rules are verified locally only.**
-  Whether the hosted project accepts `pgrst.db_pre_request` for the
-  `authenticator` role, and creates the buckets and storage rules from a
-  migration, is checked when migrations 20261121082500 to 20261121082700 are
-  first applied there.
+- **Actions that only ever existed as direct writes** have no function now
+  that no role may write a table: a seller offering on another shop's existing
+  listing, switching a variant off or taking a live listing back to draft,
+  editing the shop's description or logo, moderating reviews, editing
+  categories, brands, synonyms, fees, delivery zones, holidays, zone closures,
+  districts and settings, and ops creating warehouse locations. Each needs a
+  function before it can be done again through the API.
+- **The storage rules after the lockdown.** They call only owner's-rights
+  helpers, so the lockdown does not change what they allow; that was checked
+  locally (`105_product_photos.sql`, the photos journey) and is to be checked
+  on the hosted project once `082800` is applied there.
 - **Secret-key workers.** The notification worker is the first. Payment
   webhooks will be the next; each should get its own key and narrowly scoped
   functions, as the worker has.
 - **Multi-factor enforcement is off** until `require_staff_mfa` is set to true.
-- **Verified on local PostgreSQL only**, with a shim that copies Supabase's
-  roles and permissive defaults. Re-run the access tests against the real
-  project before trusting it with real data
-  ([runbook](../07-deployment/runbook-first-deploy.md)).
+- **The lockdown, and migrations 082800 to 083100 as a whole, are verified on
+  local PostgreSQL only**, with a shim that copies Supabase's roles and
+  permissive defaults. Run `020_access.sql` and
+  `110_lockdown.sql` against the hosted project after applying it
+  ([runbook](../07-deployment/runbook-first-deploy.md)). One difference the
+  migrations cannot remove: on a hosted project, objects that the platform's
+  own `supabase_admin` role creates in `public` are granted to the API roles by
+  that role's default privileges, which `postgres` cannot change. The
+  migrations create nothing as that role, and the guard test would catch such
+  an object.
+- **Photos of a published listing** can no longer be changed directly, but no
+  function changes them either; the photo upload work is to add one.

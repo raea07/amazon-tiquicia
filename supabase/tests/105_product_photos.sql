@@ -13,6 +13,9 @@
 
 begin;
 \ir _helpers.sql
+-- Reads below check what functions left behind (see _helpers.sql); access
+-- itself is tested in 020_access and 110_lockdown.
+select pg_temp.allow_inspection();
 
 -- On a hosted project, storage.objects has a trigger (storage.protect_delete)
 -- that refuses any DELETE unless storage.allow_delete_query is 'true', which
@@ -656,10 +659,12 @@ select pg_temp.denied(format($q$select pg_temp.put('product-photos', %L)$q$,
 reset role; select pg_temp.logout();
 
 -- The shop shows both photos, in the seller's order, with their text.
+-- (The slug is read as the owner first: a visitor can read no table.)
+select pg_temp.remember('draft_slug', (select slug from public.products where id = current_setting('t.draft')::uuid));
 select pg_temp.login_anon();
 do $$
 declare
-  images jsonb := public.get_product((select slug from public.products where id = current_setting('t.draft')::uuid)) -> 'images';
+  images jsonb := public.get_product(current_setting('t.draft_slug')) -> 'images';
 begin
   assert jsonb_array_length(images) = 2, format('two images: %s', images);
   assert images -> 0 ->> 'alt' = 'Cafetera con la jarra servida', 'first photo first, with its text';

@@ -53,12 +53,44 @@ async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParam
   // Anything that is not a real day of the calendar means "today".
   const date = requested && isCalendarDate(requested) ? requested : todayInCostaRica();
 
-  const board = await (await sessionApi()).opsDispatchBoard(date);
+  const api = await sessionApi();
+  const [board, released] = await Promise.all([
+    api.opsDispatchBoard(date),
+    api.opsReleasedRoutes(7),
+  ]);
+  // Routes a driver who stopped being active left behind, still without a driver.
+  const orphaned = released.filter((route) => route.status === "draft");
   const failed = board.ready.filter((shipment) => shipment.status === "delivery_failed");
   const freeDrivers = board.drivers.filter((driver) => driver.active_routes === 0);
 
   return (
     <div className="flex flex-col gap-10">
+      {orphaned.length > 0 ? (
+        <Alert tone="warning" title="Rutas que volvieron a despacho">
+          <p>
+            Estas rutas quedaron sin repartidor porque se suspendió o se dio de baja a quien las
+            tenía. Asígnelas abajo a otro repartidor.
+          </p>
+          <ul className="mt-2 list-disc pl-5">
+            {orphaned.map((route) => (
+              <li key={route.route_id}>
+                <span className="font-semibold">{route.code}</span>: {route.stops}{" "}
+                {route.stops === 1 ? "parada" : "paradas"}, antes de {route.from_driver_name}
+                {route.from_route_code
+                  ? ` (lo que faltaba de la ruta ${route.from_route_code})`
+                  : ""}
+                .
+                {route.parcels_out > 0
+                  ? ` ${route.parcels_out} ${
+                      route.parcels_out === 1 ? "paquete sigue" : "paquetes siguen"
+                    } en manos de esa persona: recupérelos antes de que salga la ruta.`
+                  : ""}
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      ) : null}
+
       <form action="/despacho" className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
           <label htmlFor="fecha" className="text-sm font-semibold">

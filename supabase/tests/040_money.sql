@@ -40,7 +40,13 @@ $$;
 
 select pg_temp.remember('home_seller', pg_temp.fixture('HOME1', 'hogar', 20000, 'seller', 800, 30)::text);
 select pg_temp.remember('home_platform', pg_temp.fixture('HOME2', 'hogar', 20000, 'platform', 800, 30)::text);
+-- Since 21 November 2026 the price floor (20261121082900_integrity.sql)
+-- refuses a ₡500 offer: sold alone and paid in cash, its fees would exceed it.
+-- The fee arithmetic for small amounts is still specified, so this one fixture
+-- is written past the floor; 115_integrity.sql tests the floor itself.
+alter table public.offers disable trigger offers_price_covers_fees;
 select pg_temp.remember('cheap', pg_temp.fixture('CHEAP', 'hogar', 500, 'seller', 100, 10)::text);
+alter table public.offers enable trigger offers_price_covers_fees;
 select pg_temp.remember('electronics', pg_temp.fixture('ELEC', 'audio', 20000, 'seller', 300, 20)::text);
 
 -- Places and pays an order for one fixture as the demo shopper. The checkout
@@ -144,10 +150,19 @@ begin
        = (select payout_minor from public.seller_order_fees where order_id = v_order),
     'seller payable equals the statement';
 
-  -- Capturing again changes nothing.
-  perform private.capture_payment(v_order, 'test:again', false);
+  -- The same confirmation again changes nothing. A different one for a paid
+  -- order is a second payment, and is refused rather than silently dropped
+  -- (since 21 November 2026; see 115_integrity.sql, INT-7).
+  perform private.capture_payment(v_order,
+    (select provider_reference from public.payments where order_id = v_order), false);
   assert (select count(*) from public.ledger_transactions
           where order_id = v_order and kind = 'order_capture') = 1, 'capture is idempotent';
+  begin
+    perform private.capture_payment(v_order, 'test:again', false);
+    raise exception 'a second payment was accepted';
+  exception when others then
+    if sqlerrm <> 'order_not_payable' then raise; end if;
+  end;
 end
 $$;
 

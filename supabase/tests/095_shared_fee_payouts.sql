@@ -9,6 +9,7 @@
 
 begin;
 \ir _helpers.sql
+select pg_temp.allow_inspection();
 
 -- Steps that are not about access run as the test's superuser with a caller's
 -- identity in the claims, the way the seed does.
@@ -176,10 +177,10 @@ begin
   perform pg_temp.act_as('repartidor@yuntera.example');
   perform public.driver_start_route(v_route);
   for s in
-    select rs.id, rs.recipient_name, rs.cod_amount_minor, o.delivery_pin
+    select rs.id, rs.recipient_name, rs.cod_amount_minor, c.code as delivery_pin
     from public.route_stops rs
     join public.shipments sh on sh.id = rs.shipment_id
-    join public.orders o on o.id = sh.order_id
+    join private.delivery_codes c on c.order_id = sh.order_id
     where rs.route_id = v_route order by rs.sequence
   loop
     v_result := public.driver_complete_stop(s.id, s.delivery_pin, s.recipient_name, s.cod_amount_minor);

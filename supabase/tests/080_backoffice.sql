@@ -4,6 +4,7 @@
 
 begin;
 \ir _helpers.sql
+select pg_temp.allow_inspection();
 
 select pg_temp.remember('tecnocasa', (select id::text from public.sellers where slug = 'tecnocasa'));
 select pg_temp.remember('depot', (select id::text from public.warehouses where code = 'SJO1'));
@@ -186,6 +187,14 @@ begin
   from public.ledger_entries e join public.ledger_accounts a on a.id = e.account_id
   where a.seller_id = v_item.seller_id;
 
+  -- The money goes back once the goods are back (since 21 November 2026).
+  begin
+    perform public.ops_complete_return(v_return);
+    raise exception 'refunded a return before the goods came back';
+  exception when others then
+    if sqlerrm <> 'return_not_received' then raise; end if;
+  end;
+  perform public.ops_receive_return(v_return, true, 'Llegó a bodega.');
   v_result := public.ops_complete_return(v_return, 'Reembolso enviado por SINPE.');
 
   v_expected_commission :=

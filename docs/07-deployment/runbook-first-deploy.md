@@ -249,6 +249,86 @@ sweep does nothing and succeeds (60 runs in the first half hour, about 15 ms
 each, no HTTP request queued). It writes a row of job history every 30
 seconds; the weekly clean-up keeps a week of them.
 
+### Migrations 20261121082800 to 20261121083100
+
+The fixes from the internal security review: the lockdown (`082800`), the
+integrity of money and returns (`082900`), limits (`083000`) and the merge
+with the features before them (`083100`). **Not applied to the preview yet.**
+They were applied locally, in order, on top of a database built to `082700`
+with the old demo data and some activity (an order placed, paid, delivered
+after one wrong code, a withdrawal opened on it, a duplicate withdrawal
+planted, a wrong code on an order still on its way): all four went in, and
+the checks below gave the expected answers. Do this in order.
+
+1. **Before `082900`, read-only:** no order has two `order_capture` or two
+   `order_refund` ledger transactions, and no order has two cash stops in
+   `pending`, `arrived` or `delivered`. Otherwise the unique indexes fail and
+   the migration rolls back.
+
+   ```sql
+   select order_id, kind, count(*) from public.ledger_transactions
+   where kind in ('order_capture', 'order_refund') group by 1, 2 having count(*) > 1;
+   select s.order_id, count(*) from public.route_stops rs
+   join public.shipments s on s.id = rs.shipment_id
+   where rs.cod_amount_minor > 0 and rs.status in ('pending', 'arrived', 'delivered')
+   group by 1 having count(*) > 1;
+   ```
+
+2. **Apply** with `remote-db.sh push`; `status` should list 29 files.
+3. **Default privileges for new tables.** The platform's own defaults (for
+   `supabase_admin`) cannot be changed by `postgres`; those of `postgres` must
+   give the API roles nothing, globally and in every schema except `auth` and
+   `storage`:
+
+   ```sql
+   select defaclrole::regrole, defaclnamespace::regnamespace, defaclobjtype, defaclacl
+   from pg_default_acl where defaclrole = 'postgres'::regrole;
+   ```
+
+   No entry may name `anon`, `authenticated` or PUBLIC. Then
+   `remote-db.sh test` with `020_access.sql` and `110_lockdown.sql` must pass;
+   110 fails on any table privilege, unlisted function or write policy.
+4. **No write policy and no readable table:**
+
+   ```sql
+   select count(*) from pg_policy p join pg_class c on c.oid = p.polrelid
+   join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname in ('public', 'private') and p.polcmd <> 'r';   -- 0
+   select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname in ('public', 'private') and c.relkind in ('r', 'v', 'm', 'S')
+     and (has_table_privilege('anon', c.oid, 'select')
+          or has_table_privilege('authenticated', c.oid, 'select'));  -- 0
+   ```
+
+5. **The storage rules after the lockdown.** They call only owner's-rights
+   helpers, so nothing should change; repeat the storage checks of the
+   previous section (a seller uploads into a reserved path, another shop is
+   refused, a visitor reads only the public bucket) and run
+   `105_product_photos.sql`.
+6. **The data repairs.** Every order has a delivery code; wrong attempts on
+   stops of open orders were carried to their order; open returns that
+   repeated units, had no delivered goods or sat on an unpaid or cancelled
+   order are closed with a note; every cash stop names its order:
+
+   ```sql
+   select (select count(*) from public.orders) as orders,
+          (select count(*) from private.delivery_codes) as codes;
+   select status, resolution_note, count(*) from public.return_requests group by 1, 2;
+   select count(*) filter (where cod_order_id is null) from public.route_stops
+   where cod_amount_minor > 0;   -- 0
+   ```
+
+7. **Payout accounts.** After `083000` an account finance never approved is
+   not paid, and the preview's were loaded before approvals existed:
+   `select count(*) filter (where payout_approved_at is not null) from public.seller_private`
+   is 0 there. Until finance approves them again (the seller sends the same
+   account), payout runs answer `nothing_to_pay`, and `085`, `095_shared_fee_payouts`
+   and `115` fail there for that reason only (locally, with the accounts
+   approved, they pass). Stamping them by SQL is a deliberate decision for
+   the owner.
+8. **The suites.** `remote-db.sh test` for all 17 files, after step 7.
+9. **Redeploy the four web apps**; all four changed.
+
 ## 4. Confirm the database is what the migrations say
 
 Write these to a file and run it with `remote-db.sh sql <project-reference>

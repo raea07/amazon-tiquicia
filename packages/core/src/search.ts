@@ -27,6 +27,22 @@ export function normalizeQuery(input: string): string {
 }
 
 /**
+ * The most a search box may send. Longer input is cut, not refused, so a
+ * pasted paragraph still searches its start. The database applies the same
+ * bound before searching (private.bounded_search_text, in the limits
+ * migration), so a request made without the app costs no more than one made
+ * with it; a unit test keeps the two equal.
+ */
+export const SEARCH_INPUT_LIMITS = { maxChars: 200, maxWords: 12 } as const;
+
+/** Cuts a query to the first 200 characters, then to its first 12 words. */
+export function boundSearchText(input: string): string {
+  const chars = Array.from(input).slice(0, SEARCH_INPUT_LIMITS.maxChars).join("").trim();
+  if (chars === "") return "";
+  return chars.split(/\s+/).slice(0, SEARCH_INPUT_LIMITS.maxWords).join(" ");
+}
+
+/**
  * Everyday Costa Rican words mapped to the catalogue's vocabulary. The live
  * list is a database table curated from zero-result searches; this seed covers
  * the obvious ones so day-one search does not feel foreign.
