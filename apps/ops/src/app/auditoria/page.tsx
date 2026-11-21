@@ -16,6 +16,7 @@ const TABLES: Record<string, string> = {
   app_settings: "Ajustes de la plataforma",
   warehouse_staff: "Personal de bodega",
   drivers: "Repartidores",
+  notification_deliveries: "Mensajes reenviados",
 };
 const ACTIONS: Record<string, string> = { INSERT: "Creó", UPDATE: "Cambió", DELETE: "Eliminó" };
 

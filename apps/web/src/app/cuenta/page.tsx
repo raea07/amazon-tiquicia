@@ -44,13 +44,15 @@ async function Account() {
           <ProfileForm
             fullName={profile?.full_name ?? ""}
             phone={profile?.phone?.replace("+506", "") ?? ""}
-            marketingOptIn={profile?.marketing_opt_in ?? false}
           />
         </section>
 
         <section className="flex flex-wrap gap-3">
           <Link href="/pedidos" className={buttonClass({ variant: "secondary" })}>
             Ver sus pedidos
+          </Link>
+          <Link href="/cuenta/notificaciones" className={buttonClass({ variant: "secondary" })}>
+            Notificaciones
           </Link>
           <form action={signOut}>
             <button type="submit" className={buttonClass({ variant: "ghost" })}>

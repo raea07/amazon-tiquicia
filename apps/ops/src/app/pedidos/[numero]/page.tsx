@@ -18,6 +18,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { cancelOrder, confirmPayment } from "@/app/actions";
+import { NotificationLine } from "@/components/notification-list";
 import { PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
 import { canSee, requireStaff } from "@/lib/staff";
 
@@ -128,6 +129,21 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
           )}
         </section>
 
+        {canSee(staff.staff_role, ["support"]) ? (
+          <section aria-labelledby="mensajes">
+            <h2 id="mensajes" className="text-xl font-bold">
+              Mensajes
+            </h2>
+            <p className="mt-1 text-sm text-ink-muted">
+              Lo que le avisamos al cliente y a las tiendas, por qué canal y si llegó. El contenido
+              no se muestra aquí.
+            </p>
+            <Suspense fallback={<Skeleton className="mt-3 h-24" />}>
+              <OrderMessages orderNumber={order.order_number} />
+            </Suspense>
+          </section>
+        ) : null}
+
         <section aria-labelledby="historial">
           <h2 id="historial" className="text-xl font-bold">
             Historial
@@ -236,5 +252,21 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
         ) : null}
       </aside>
     </div>
+  );
+}
+
+async function OrderMessages({ orderNumber }: { orderNumber: string }) {
+  const rows = await (await sessionApi()).opsOrderNotifications(orderNumber);
+  if (rows.length === 0) {
+    return <p className="mt-3 text-sm text-ink-muted">Todavía no se ha enviado ningún mensaje.</p>;
+  }
+  return (
+    <ul className="mt-3 flex flex-col gap-2">
+      {rows.map((row) => (
+        <li key={row.id} className="rounded-lg border border-border bg-surface p-4 text-sm">
+          <NotificationLine row={row} />
+        </li>
+      ))}
+    </ul>
   );
 }
