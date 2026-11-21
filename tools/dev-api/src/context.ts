@@ -61,6 +61,7 @@ export class HttpError extends Error {
   constructor(
     public readonly status: number,
     public readonly body: Record<string, unknown>,
+    public readonly headers: Record<string, string> = {},
   ) {
     super(String(body.message ?? body.msg ?? status));
   }
@@ -74,9 +75,14 @@ const CORS = {
   "access-control-max-age": "600",
 };
 
-export function send(res: ServerResponse, status: number, body?: unknown) {
+export function send(
+  res: ServerResponse,
+  status: number,
+  body?: unknown,
+  headers: Record<string, string> = {},
+) {
   const payload = body === undefined ? "" : JSON.stringify(body);
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8", ...CORS });
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8", ...CORS, ...headers });
   res.end(payload);
 }
 

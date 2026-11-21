@@ -316,6 +316,9 @@ importers:
       '@yuntera/ui':
         specifier: workspace:*
         version: link:../ui
+      qrcode-generator:
+        specifier: 1.5.2
+        version: 1.5.2
       server-only:
         specifier: 0.0.1
         version: 0.0.1
@@ -378,6 +381,9 @@ importers:
       pg:
         specifier: 8.23.1
         version: 8.23.1
+      qrcode-generator:
+        specifier: 1.5.2
+        version: 1.5.2
     devDependencies:
       '@types/node':
         specifier: ^22
@@ -391,6 +397,9 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+      vitest:
+        specifier: 5.1.1
+        version: 5.1.1(@types/node@22.20.5)(@vitest/coverage-v8@5.1.1)(vite@8.3.8(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
   tools/e2e:
     devDependencies:
@@ -1457,6 +1466,9 @@ packages:
     resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
     engines: {node: '>=0.10.0'}
 
+  qrcode-generator@1.5.2:
+    resolution: {integrity: sha512-pItrW0Z9HnDBnFmgiNrY1uxRdri32Uh9EjNYLPVC2zZ3ZRIIEqBoDgm4DkvDwNNDHTK7FNkmr8zAa77BYc9xNw==}
+
   react-dom@19.3.1:
     resolution: {integrity: sha512-Y0bARz53lhEC1NMCASs0/j+faB/zqt3R8hpvg1e8+61ZVJ4UL0UdC4cBbXfZMcIuhrfgeILTLe+ZeBCavQPtKQ==}
     peerDependencies:
@@ -2456,6 +2468,8 @@ snapshots:
   postgres-interval@1.2.0:
     dependencies:
       xtend: 4.0.2
+
+  qrcode-generator@1.5.2: {}
 
   react-dom@19.3.1(react@19.3.1):
     dependencies:

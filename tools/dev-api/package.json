@@ -9,16 +9,19 @@
   },
   "scripts": {
     "start": "tsx src/server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "jose": "6.2.18",
-    "pg": "8.23.1"
+    "pg": "8.23.1",
+    "qrcode-generator": "1.5.2"
   },
   "devDependencies": {
     "@types/node": "^22",
     "@types/pg": "8.23.1",
     "tsx": "4.23.15",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "5.1.1"
   }
 }

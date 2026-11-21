@@ -6,6 +6,7 @@
 
 import type { Routes } from "../context.ts";
 import { authRoutes } from "./auth.ts";
+import { devRoutes } from "./dev.ts";
 import { restRoutes } from "./rest.ts";
 
-export const routes: Routes[] = [restRoutes, authRoutes];
+export const routes: Routes[] = [restRoutes, authRoutes, devRoutes];
