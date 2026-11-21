@@ -4,8 +4,12 @@
  * Every operation on a file is decided the way the real storage service
  * decides it: by running the matching statement on storage.objects inside a
  * transaction, as the caller's role (`anon` or `authenticated`) with their
- * claims, so the rules written in the migrations really are what allows or
- * refuses it. Bucket limits (size, declared type) come from storage.buckets.
+ * claims, the operation's name in `storage.operation` and the request's
+ * headers in `request.headers` (as the service's scope.ts sets them), so the
+ * rules written in the migrations really are what allows or refuses it. A
+ * signed upload address asked for with `x-upsert: true` is probed with an
+ * upsert, as the real service does. Bucket limits (size, declared type) come
+ * from storage.buckets.
  * The bytes are kept on local disk, one folder per database (so per lane),
  * and written only after the row operation succeeded.
  *
@@ -276,8 +280,16 @@ function metadataFor(upload: Upload) {
  * transaction once the rows are settled, to write or delete the bytes: if it
  * fails, the row change is rolled back too.
  */
+/** What the real service tells the rules about a request. */
+interface Scope {
+  /** Its operation name (supabase/storage, src/http/routes/operations.ts). */
+  operation: string;
+  req: IncomingMessage;
+}
+
 async function asCaller<T>(
   claims: Claims | null,
+  scope: Scope,
   work: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
   const client = await pool.connect();
@@ -285,9 +297,18 @@ async function asCaller<T>(
     await client.query("begin");
     try {
       await client.query(`set local role ${claims ? "authenticated" : "anon"}`);
-      await client.query("select set_config('request.jwt.claims', $1, true)", [
-        claims ? JSON.stringify(claims) : "",
-      ]);
+      await client.query(
+        `select set_config('request.jwt.claims', $1, true),
+                set_config('request.headers', $2, true),
+                set_config('request.method', $3, true),
+                set_config('storage.operation', $4, true)`,
+        [
+          claims ? JSON.stringify(claims) : "",
+          JSON.stringify(scope.req.headers),
+          scope.req.method ?? "",
+          scope.operation,
+        ],
+      );
       const result = await work(client);
       await client.query("commit");
       return result;
@@ -453,16 +474,22 @@ export const storageRoutes: Routes = async ({ req, res, url }) => {
 
     if (method === "POST") {
       const claims = await caller(req);
-      // The real service probes the upload as the caller when the URL is made.
-      await asCaller(claims, async (client) => {
-        await client.query("savepoint probe");
-        await client.query(
-          `insert into storage.objects (bucket_id, name, owner, owner_id, metadata)
-           values ($1, $2, $3::uuid, $3::text, '{}')`,
-          [bucket.id, name, claims?.sub ?? null],
-        );
-        await client.query("rollback to savepoint probe");
-      });
+      // The real service probes the upload as the caller when the URL is made:
+      // an insert, or an upsert when the address may replace an existing file.
+      await asCaller(
+        claims,
+        { operation: "storage.object.sign_upload_url", req },
+        async (client) => {
+          await client.query("savepoint probe");
+          await client.query(
+            `insert into storage.objects (bucket_id, name, owner, owner_id, metadata, version)
+           values ($1, $2, $3::uuid, $3::text, '{}', $4)
+           ${upsert ? "on conflict (bucket_id, name) do update set metadata = excluded.metadata, version = excluded.version" : ""}`,
+            [bucket.id, name, claims?.sub ?? null, randomUUID()],
+          );
+          await client.query("rollback to savepoint probe");
+        },
+      );
       const token = await signToken(
         { url: `${bucket.id}/${name}`, owner: claims?.sub, upsert, scope: "upload" },
         SIGNED_UPLOAD_SECONDS,
@@ -527,18 +554,24 @@ export const storageRoutes: Routes = async ({ req, res, url }) => {
       };
       if (path.length > 0) {
         const name = path.join("/");
-        await asCaller(claims, (client) => readVisible(client, bucketId, name));
+        await asCaller(claims, { operation: "storage.object.sign", req }, (client) =>
+          readVisible(client, bucketId, name),
+        );
         send(res, 200, { signedURL: await sign(name) });
         return true;
       }
       const names = Array.isArray(body?.paths) ? body.paths.map(String) : [];
-      const visible = await asCaller(claims, async (client) => {
-        const { rows } = await client.query<{ name: string }>(
-          "select name from storage.objects where bucket_id = $1 and name = any($2)",
-          [bucketId, names],
-        );
-        return new Set(rows.map((r) => r.name));
-      });
+      const visible = await asCaller(
+        claims,
+        { operation: "storage.object.sign_many", req },
+        async (client) => {
+          const { rows } = await client.query<{ name: string }>(
+            "select name from storage.objects where bucket_id = $1 and name = any($2)",
+            [bucketId, names],
+          );
+          return new Set(rows.map((r) => r.name));
+        },
+      );
       send(
         res,
         200,
@@ -571,7 +604,7 @@ export const storageRoutes: Routes = async ({ req, res, url }) => {
     checkKey(sourceKey);
     checkKey(targetKey);
     await bucketById(sourceBucket);
-    const id = await asCaller(claims, async (client) => {
+    const id = await asCaller(claims, { operation: "storage.object.copy", req }, async (client) => {
       const source = await readVisible(client, sourceBucket, sourceKey);
       const meta = source.metadata ?? {};
       checkFile(targetBucket, Number(meta.size ?? 0), String(meta.mimetype ?? ""));
@@ -601,7 +634,11 @@ export const storageRoutes: Routes = async ({ req, res, url }) => {
   if (first === "info" && method === "GET") {
     const [bucketId = "", ...path] = rest;
     const claims = await caller(req);
-    const row = await asCaller(claims, (client) => readVisible(client, bucketId, path.join("/")));
+    const row = await asCaller(
+      claims,
+      { operation: "object.get_authenticated_info", req },
+      (client) => readVisible(client, bucketId, path.join("/")),
+    );
     const meta = row.metadata ?? {};
     send(res, 200, {
       id: row.id,
@@ -627,14 +664,18 @@ export const storageRoutes: Routes = async ({ req, res, url }) => {
     await bucketById(first);
     const body = safeJson((await readBody(req)).toString("utf8")) as { prefixes?: string[] } | null;
     const names = Array.isArray(body?.prefixes) ? body.prefixes.map(String) : [];
-    const removed = await asCaller(claims, async (client) => {
-      const { rows } = await client.query<ObjectRow>(
-        `delete from storage.objects where bucket_id = $1 and name = any($2) returning ${OBJECT_COLUMNS}`,
-        [first, names],
-      );
-      for (const row of rows) await rm(filePath(row.bucket_id, row.name), { force: true });
-      return rows;
-    });
+    const removed = await asCaller(
+      claims,
+      { operation: "storage.object.delete_many", req },
+      async (client) => {
+        const { rows } = await client.query<ObjectRow>(
+          `delete from storage.objects where bucket_id = $1 and name = any($2) returning ${OBJECT_COLUMNS}`,
+          [first, names],
+        );
+        for (const row of rows) await rm(filePath(row.bucket_id, row.name), { force: true });
+        return rows;
+      },
+    );
     send(res, 200, removed);
     return true;
   }
@@ -647,7 +688,11 @@ export const storageRoutes: Routes = async ({ req, res, url }) => {
 
   if (method === "GET") {
     const claims = await caller(req);
-    const row = await asCaller(claims, (client) => readVisible(client, bucketId, name));
+    const row = await asCaller(
+      claims,
+      { operation: "storage.object.get_authenticated", req },
+      (client) => readVisible(client, bucketId, name),
+    );
     await sendObject(res, row);
     return true;
   }
@@ -658,7 +703,8 @@ export const storageRoutes: Routes = async ({ req, res, url }) => {
     const bucket = await bucketById(bucketId);
     const upload = await readUpload(req, bucket);
     checkFile(bucket, upload.bytes.length, upload.contentType);
-    const result = await asCaller(claims, async (client) => {
+    const operation = method === "PUT" ? "storage.object.upload_update" : "storage.object.upload";
+    const result = await asCaller(claims, { operation, req }, async (client) => {
       if (method === "PUT") {
         // Replacing needs the row to exist and the UPDATE rule to allow it.
         const updated = await client.query(
