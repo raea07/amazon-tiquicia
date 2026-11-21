@@ -120,3 +120,70 @@ export function SignInForm({ action, returnTo }: { action: FormAction; returnTo:
     </form>
   );
 }
+
+/**
+ * Creates an account. `legalBase` is the address of the shop, where the terms
+ * and the privacy policy live (empty when this form is on the shop itself).
+ */
+export function SignUpForm({
+  action,
+  returnTo,
+  legalBase = "",
+}: {
+  action: FormAction;
+  returnTo: string;
+  legalBase?: string;
+}) {
+  const [state, formAction] = useActionState(action, initial);
+  return (
+    <form action={formAction} className="flex flex-col gap-4">
+      <input type="hidden" name="siguiente" value={returnTo} />
+      <TextField
+        label="Nombre completo"
+        name="fullName"
+        autoComplete="name"
+        defaultValue={state.values?.fullName}
+      />
+      <TextField
+        label="Correo electrónico"
+        name="email"
+        type="email"
+        autoComplete="email"
+        inputMode="email"
+        defaultValue={state.values?.email}
+      />
+      <TextField
+        label="Contraseña"
+        name="password"
+        type="password"
+        autoComplete="new-password"
+        minLength={8}
+        hint="Al menos 8 caracteres."
+      />
+      {/* Unticked by default: consent has to be something the person does. */}
+      <label className="flex items-start gap-3 text-sm">
+        <input
+          type="checkbox"
+          name="acepta"
+          required
+          className="mt-0.5 size-5 accent-(--color-brand)"
+        />
+        <span>
+          Acepto los{" "}
+          <a href={`${legalBase}/ayuda#terminos`} className="text-link underline">
+            términos y condiciones
+          </a>{" "}
+          y la{" "}
+          <a href={`${legalBase}/ayuda#privacidad`} className="text-link underline">
+            política de privacidad
+          </a>
+          .
+        </span>
+      </label>
+      <FormMessage state={state} />
+      <SubmitButton block size="lg" pendingLabel="Creando su cuenta…">
+        Crear cuenta
+      </SubmitButton>
+    </form>
+  );
+}

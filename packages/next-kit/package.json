@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@yuntera/brand": "workspace:*",
+    "@yuntera/core": "workspace:*",
     "@yuntera/db": "workspace:*",
     "@yuntera/ui": "workspace:*",
     "server-only": "0.0.1"

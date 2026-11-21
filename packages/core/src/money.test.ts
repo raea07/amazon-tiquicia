@@ -8,6 +8,7 @@ import {
   IVA,
   money,
   multiply,
+  parseColones,
   percentage,
   splitTaxInclusive,
   subtract,
@@ -136,4 +137,29 @@ describe("format", () => {
     expect(format(fromMajor(1234.5, "USD"))).toBe("$1 234.50");
     expect(format(fromMajor(-500))).toBe("−₡500");
   });
+});
+
+describe("parseColones", () => {
+  it.each([
+    ["12500", 1_250_000],
+    ["12 500", 1_250_000],
+    ["12.500", 1_250_000],
+    ["12,500", 1_250_000],
+    ["₡12 500", 1_250_000],
+    ["1.250.000", 125_000_000],
+    ["12500,50", 1_250_050],
+    ["12 500,5", 1_250_050],
+    ["12.500,75", 1_250_075],
+    ["950", 95_000],
+    ["0", 0],
+  ])("reads %s", (text, expected) => {
+    expect(parseColones(text)).toBe(expected);
+  });
+
+  it.each(["", "abc", "-500", "12,5,0", "1.2.3", "12.5000", "1e5", "₡", "12 500 colones"])(
+    "refuses %s",
+    (text) => {
+      expect(parseColones(text)).toBeNull();
+    },
+  );
 });

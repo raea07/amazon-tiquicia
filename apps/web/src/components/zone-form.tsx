@@ -1,10 +1,9 @@
 "use client";
 
 import type { District } from "@yuntera/db";
-import type { ActionState } from "@yuntera/next-kit/client";
+import { type ActionState, DistrictPicker } from "@yuntera/next-kit/client";
 import { useActionState } from "react";
 import { setLocation } from "@/app/actions";
-import { DistrictPicker } from "./district-picker";
 import { FormMessage, SubmitButton } from "./forms";
 
 const initial: ActionState = {};

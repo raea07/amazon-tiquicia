@@ -6,7 +6,9 @@ export {
   GENERIC_ERROR,
   isRedirect,
   messageOf,
+  POLICY_VERSION,
   passwordSignIn,
+  passwordSignUp,
   typed,
 } from "./actions";
 export {

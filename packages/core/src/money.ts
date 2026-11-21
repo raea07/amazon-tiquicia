@@ -168,3 +168,25 @@ export function format(m: Money, opts: { showMinor?: "auto" | "always" | "never"
       : `${SYMBOL.CRC}${wholeText}${minorText}`;
   return negative ? `−${body}` : body;
 }
+
+/**
+ * Reads an amount of colones the way people type it and returns céntimos, or
+ * null when it is not an amount. Accepts "12500", "12 500", "12.500",
+ * "₡12 500", "12500,50" and "12 500,50".
+ *
+ * A dot or comma followed by exactly three digits is a thousands separator
+ * (nobody prices in thousandths); followed by one or two digits it is the
+ * decimal mark. Negative amounts and anything ambiguous are refused rather
+ * than guessed: a wrong price is worse than asking again.
+ */
+export function parseColones(input: string): number | null {
+  const text = input.replace(/[\s  ₡]/g, "");
+  if (!/^\d[\d.,]*$/.test(text)) return null;
+
+  const match = /^(\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,](\d{1,2}))?$/.exec(text);
+  if (!match) return null;
+  const whole = Number((match[1] ?? "").replace(/[.,]/g, ""));
+  const minor = Number((match[2] ?? "").padEnd(2, "0") || "0");
+  const amount = whole * 100 + minor;
+  return Number.isSafeInteger(amount) ? amount : null;
+}

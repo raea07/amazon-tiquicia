@@ -16,6 +16,7 @@ import {
   isRedirect,
   messageOf,
   passwordSignIn,
+  passwordSignUp,
   typed,
 } from "@yuntera/next-kit/server";
 import type { Route } from "next";
@@ -93,60 +94,12 @@ export async function setLocation(
 
 // ── Session ─────────────────────────────────────────────────────────────────
 
-const credentials = z.object({
-  email: z.email("Escriba un correo válido."),
-  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres."),
-});
-
 export async function signIn(_previous: ActionState, formData: FormData): Promise<ActionState> {
   return passwordSignIn(formData);
 }
 
 export async function signUp(_previous: ActionState, formData: FormData): Promise<ActionState> {
-  const parsed = credentials
-    .extend({ fullName: z.string().trim().min(3, "Escriba su nombre completo.").max(120) })
-    .safeParse({
-      email: String(formData.get("email") ?? "").trim(),
-      password: String(formData.get("password") ?? ""),
-      fullName: String(formData.get("fullName") ?? ""),
-    });
-  const values = typed(formData, "email", "fullName");
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? GENERIC, values };
-  // Consent must be express: an unticked box stops the sign-up.
-  if (formData.get("acepta") !== "on") {
-    return {
-      error: "Para crear la cuenta debe aceptar los términos y la política de privacidad.",
-      values,
-    };
-  }
-
-  const supabase = await sessionClient();
-  const { data, error } = await supabase.auth.signUp({
-    email: parsed.data.email,
-    password: parsed.data.password,
-    options: { data: { full_name: parsed.data.fullName } },
-  });
-  if (error) {
-    return {
-      error:
-        error.code === "user_already_exists"
-          ? "Ya existe una cuenta con ese correo. Inicie sesión."
-          : "No pudimos crear la cuenta. Revise los datos e inténtelo de nuevo.",
-      values,
-    };
-  }
-  if (!data.session) {
-    return { ok: "Le enviamos un correo para confirmar su cuenta. Ábralo para continuar." };
-  }
-
-  try {
-    const api = await sessionApi();
-    await api.recordConsent("terms", "2026-11");
-    await api.recordConsent("privacy", "2026-11");
-  } catch (cause) {
-    console.error(cause);
-  }
-  redirect(safeReturnPath(String(formData.get("siguiente") ?? "/")) as Route);
+  return passwordSignUp(formData);
 }
 
 export async function signOut(): Promise<void> {
