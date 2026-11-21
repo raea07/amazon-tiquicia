@@ -4,7 +4,7 @@ import { defineAppConfig } from "@yuntera/expo-kit/config";
 import type { ExpoConfig } from "expo/config";
 
 /**
- * The drivers' app, "Yuntera Ruta" (cr.yuntera.ruta). Location while a route
+ * The drivers' app, "Yuntera Ruta" (com.yuntera.ruta). Location while a route
  * is running (foreground service on Android, background mode on iOS, never
  * the "Always" permission), camera for parcel labels.
  *

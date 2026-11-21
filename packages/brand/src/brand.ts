@@ -82,7 +82,7 @@ export const apps: Record<AppId, AppIdentity> = {
     audience: "Compradores",
     host: `www.${brand.domains.primary}`,
     accent: "celeste",
-    bundleId: "cr.yuntera.shop",
+    bundleId: "com.yuntera.shop",
   },
   seller: {
     id: "seller",
@@ -93,7 +93,7 @@ export const apps: Record<AppId, AppIdentity> = {
     accent: "guaria",
     // Chosen 21 November 2026 for the native seller app, after the descriptor
     // like the other apps (ruta, bodega). Cannot change once published.
-    bundleId: "cr.yuntera.vende",
+    bundleId: "com.yuntera.vende",
   },
   driver: {
     id: "driver",
@@ -102,7 +102,7 @@ export const apps: Record<AppId, AppIdentity> = {
     audience: "Repartidores",
     host: `ruta.${brand.domains.primary}`,
     accent: "selva",
-    bundleId: "cr.yuntera.ruta",
+    bundleId: "com.yuntera.ruta",
   },
   warehouse: {
     id: "warehouse",
@@ -111,7 +111,7 @@ export const apps: Record<AppId, AppIdentity> = {
     audience: "Personal de bodega",
     host: `bodega.${brand.domains.primary}`,
     accent: "maiz",
-    bundleId: "cr.yuntera.bodega",
+    bundleId: "com.yuntera.bodega",
   },
   ops: {
     id: "ops",

@@ -26,9 +26,9 @@ describe("defineAppConfig", () => {
   it("gives each variant its own identifier, name and scheme", () => {
     const dev = configFor("development");
     const preview = configFor("preview");
-    expect(dev.ios?.bundleIdentifier).toBe("cr.yuntera.ruta.dev");
+    expect(dev.ios?.bundleIdentifier).toBe("com.yuntera.ruta.dev");
     expect(dev.name).toBe("Yuntera Ruta (Dev)");
-    expect(preview.android?.package).toBe("cr.yuntera.ruta.preview");
+    expect(preview.android?.package).toBe("com.yuntera.ruta.preview");
     expect(preview.name).toBe("Yuntera Ruta (Prueba)");
     expect(new Set([dev.scheme, preview.scheme, configFor().scheme]).size).toBe(3);
   });
@@ -64,10 +64,19 @@ describe("defineAppConfig", () => {
 
   it("has an identifier for every native app, the seller app included", () => {
     for (const app of ["shop", "seller", "driver", "warehouse"] as const) {
-      expect(apps[app].bundleId).toMatch(/^cr\.yuntera\.[a-z]+$/);
+      expect(apps[app].bundleId).toMatch(/^com\.yuntera\.[a-z]+$/);
       expect(() => defineAppConfig(app, { slug: `yuntera-${app}` })).not.toThrow();
     }
-    expect(apps.seller.bundleId).toBe("cr.yuntera.vende");
+    expect(apps.seller.bundleId).toBe("com.yuntera.vende");
+    expect(apps.driver.bundleId).toBe("com.yuntera.ruta");
+    expect(apps.warehouse.bundleId).toBe("com.yuntera.bodega");
+  });
+
+  it("gives the shopper store build the package name registered in Google Play", () => {
+    delete process.env.APP_VARIANT;
+    const shop = defineAppConfig("shop", { slug: "yuntera" });
+    expect(shop.android?.package).toBe("com.yuntera.shop");
+    expect(shop.ios?.bundleIdentifier).toBe("com.yuntera.shop");
   });
 
   it("carries no secret and no placeholder permission text", () => {
