@@ -152,9 +152,14 @@ function ListingState({ listing }: { listing: SellerListingDetail }) {
     return (
       <section className="flex flex-col gap-4">
         <Alert tone="warning" title="Publicado; sus cambios están en revisión">
-          Los enviamos a revisión el {formatDateTime(listing.pending.submitted_at)}. Hasta que los
-          aprobemos, los compradores siguen viendo la publicación como está ahora. Si envía otro
-          cambio, reemplaza a este.
+          {/* The date ends in "p. m.", so no full stop follows it. */}
+          <span className="block">
+            Enviados a revisión el {formatDateTime(listing.pending.submitted_at)}
+          </span>
+          <span className="mt-1 block">
+            Hasta que los aprobemos, los compradores siguen viendo la publicación como está ahora.
+            Si envía otro cambio, reemplaza a este.
+          </span>
         </Alert>
         <ListingChanges
           before={listing.content}
