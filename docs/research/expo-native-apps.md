@@ -1698,7 +1698,7 @@ verified — summary"): everything that needs an install, build or device
 `String.prototype.normalize`, barcode detection in headless Chromium, variable
 font named instances); `NSAllowsLocalNetworking` and LAN IP addresses; whether
 `false` instead of Spanish "Always" strings triggers an upload warning; the
-`aes-js` export-compliance answer; staff-created accounts and deletion rules;
+`aes-js` export-compliance answer (since moot: `aes-js` was removed, see §3); staff-created accounts and deletion rules;
 idempotency of the driver and warehouse functions; the `runtimeVersion`
 policy; Uniwind's maturity; map libraries; whether the connected Expo account
 is on a paid plan. The 19.3.1 release notes [R19], the Supabase quotes [SB1]

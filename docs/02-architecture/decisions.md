@@ -28,6 +28,10 @@ its own entry, not something that happens by drift.
 | 19  | [A darker field outline in the native apps than on the web](#19-a-darker-field-outline-in-the-native-apps-than-on-the-web)                          | Built                                    |
 | 20  | [The native apps' store identifiers use com.yuntera](#20-the-native-apps-store-identifiers-use-comyuntera)                                          | Decided by the owner                     |
 | 21  | [The brand package does not declare React](#21-the-brand-package-does-not-declare-react)                                                            | Built                                    |
+| 22  | [Notifications run outside the apps, with their own key](#22-notifications-run-outside-the-apps-with-their-own-key)                                 | Built; no provider set up                |
+| 23  | [A per-request check, and the second factor in the database](#23-a-per-request-check-and-the-second-factor-in-the-database)                         | Built; hosted project untested           |
+| 24  | [Deleting an account anonymises; the sign-in record stays](#24-deleting-an-account-anonymises-the-sign-in-record-stays)                             | Built                                    |
+| 25  | [Photos in two buckets, published by re-encoding](#25-photos-in-two-buckets-published-by-re-encoding)                                               | Built; Vercel runtime untested           |
 
 ---
 
@@ -567,7 +571,11 @@ model for a public website.
   stop at every write of an update and of a sign-out. A sign-out that could
   not make the stored session unreadable (the secure store failing every
   call) is reported as failed rather than as done, so the person stays
-  visibly signed in and can try again.
+  visibly signed in and can try again. Every way the apps sign out goes
+  through `signOutDevice` (`packages/expo-kit/src/auth/sign-out.ts`): the
+  button, a session the database says has ended (decision 23), and a
+  password-only sign-in to an account with a second factor, which the apps
+  do not keep.
 
 ## 19. A darker field outline in the native apps than on the web
 

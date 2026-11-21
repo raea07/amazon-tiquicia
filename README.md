@@ -30,7 +30,7 @@ packages/
   db/          typed client for the database's API, payload schemas, error messages
   ui/          shared React components
   next-kit/    what every web app shares: session, security headers, forms, shell
-  expo-kit/    what every native app shares: config, encrypted session, API, theme, components
+  expo-kit/    what every native app shares: config, session in the phone's secure store, API, theme, components
 supabase/      migrations, row-level security, seed data, database tests
 tools/
   dev-api/     local stand-in for the Supabase API, for development and tests

@@ -115,10 +115,17 @@ In the order that unblocks the most.
       `com.yuntera.shop`, `com.yuntera.vende`, `com.yuntera.ruta` and
       `com.yuntera.bodega`, with `.dev` and `.preview` for test builds. The
       shopper app is registered under its identifier in Google Play Console.
-   2. Answer Apple's export-compliance question, still open. The apps encrypt
-      the saved session with AES (`aes-js`), so whether that is exempt needs
-      your or an adviser's answer; the setting (`usesNonExemptEncryption`) is
-      left unset.
+   2. Apple's export-compliance question is answered in the apps. They ship
+      no encryption of their own: the saved session is kept only in the
+      phone's Keychain or Keystore-backed secure store, and all four apps
+      declare that they use no non-exempt encryption
+      (`usesNonExemptEncryption: false`). A guard test on dependencies and
+      source, and a scan of every exported bundle (`stack.sh native` and CI),
+      keep that true. People signed in to an earlier test build sign in once
+      more. Unverified until a build is on a phone: the real size limits per
+      stored value, behaviour after a restore to a new device, reading the
+      session while the phone is locked, and App Store Connect actually
+      skipping the question.
    3. The first Android build asked for the fingerprint and biometric
       permissions (`USE_BIOMETRIC`, `USE_FINGERPRINT`), which the secure-storage
       library brings in and no app uses. They are now removed in all four
