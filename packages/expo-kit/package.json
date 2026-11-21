@@ -12,7 +12,8 @@
     "./api": "./src/api.ts",
     "./data": "./src/data/index.ts",
     "./ui": "./src/ui/index.ts",
-    "./paths": "./src/paths.ts"
+    "./paths": "./src/paths.ts",
+    "./offline": "./src/offline/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
