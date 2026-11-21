@@ -1,8 +1,9 @@
 # Status
 
-Updated 21 November 2026, after people management, seller payouts and the
-fixes to known limitations were added. This is the honest state of the
-project: what exists, how far it was checked, and what only the owner can do.
+Updated 21 November 2026, after people management, seller payouts, the fixes
+to known limitations and the native apps were added. This is the honest state
+of the project: what exists, how far it was checked, and what only the owner
+can do.
 
 ## In one paragraph
 
@@ -18,8 +19,11 @@ organisation, with all 22 migrations applied and the demo data loaded. The
 four web apps are deployed as a preview on Vercel at
 `yuntera-web`, `yuntera-vende`, `yuntera-central` and `yuntera-campo` (each
 `.vercel.app`); every address is behind a Vercel login, and the projects are
-not connected to the Git repository. Payments, messages and invoices are still
-simulated or missing (see "Not built").
+not connected to the Git repository. A shopper app for iOS and Android exists
+with every shopping flow of the website, and the seller, driver and warehouse
+apps exist as skeletons; none has been built into an installable app or run on
+a phone yet. Payments, messages and invoices are still simulated or missing
+(see "Not built").
 
 ## What needs you
 
@@ -63,20 +67,37 @@ In the order that unblocks the most.
    mailboxes the screens mention (`ayuda@yuntera.cr` does not exist yet).
 5. **Know what the preview costs.** The Vercel projects are on your Pro plan,
    which bills by use. The Supabase project is in the free organisation.
+6. **Before the native apps go to a store:**
+   1. Confirm the four store identifiers before the first upload, because they
+      can never change afterwards: `cr.yuntera.shop`, `cr.yuntera.vende`
+      (newly chosen for the seller app), `cr.yuntera.ruta` and
+      `cr.yuntera.bodega`, with `.dev` and `.preview` for test builds.
+   2. Answer Apple's export-compliance question. The apps encrypt the saved
+      session with AES (`aes-js`), so whether that is exempt needs your or an
+      adviser's answer; the setting (`usesNonExemptEncryption`) is left unset.
+   3. Publish a privacy policy at a public address, and an account-deletion
+      page plus a way to delete the account in each app. Both stores require
+      them at the first submission; neither exists yet.
+   4. Decide whether the four apps keep one shared icon, as the brand book
+      says today, or get icons that tell them apart in the store.
+   5. An Apple Developer Program membership (US$99 a year) for any iOS build on
+      a phone, TestFlight or the App Store, and a Google Play Console account
+      (US$25). Demo accounts on the hosted project for the stores' reviewers.
 
 ## What is built
 
-| Part                 | Where                             | What it does                                                                                                                                                                                                                                                                                                |
-| -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shop                 | `apps/web`                        | Home, search with typo tolerance, categories, product pages with competing offers and a delivery date, cart, checkout with SINPE Móvil, card or cash on delivery, orders with tracking and delivery code, returns, reviews, account, help. An unknown product or category address answers "not found" (404) |
-| Seller centre        | `apps/seller`                     | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, and a request to change the payout account      |
-| Internal console     | `apps/ops`                        | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail         |
-| Routes and warehouse | `apps/field`                      | Driver: the day's route, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with scan check, packing, receiving, stock lookup                                                                                                         |
-| Database             | `supabase/`                       | 22 migrations, 61 tables, 101 API functions, row-level security on every table, double-entry ledger, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                           |
-| Domain logic         | `packages/core`                   | Money and IVA, fees, featured-offer choice, search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                          |
-| Shared code          | `packages/{brand,ui,db,next-kit}` | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session, security headers, forms)                                                                                                                                                          |
-| Documentation        | `docs/`                           | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase                                                                |
-| Brand                | `docs/brand/`, `packages/brand/`  | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files                                                                                                                          |
+| Part                 | Where                                | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shop                 | `apps/web`                           | Home, search with typo tolerance, categories, product pages with competing offers and a delivery date, cart, checkout with SINPE Móvil, card or cash on delivery, orders with tracking and delivery code, returns, reviews, account, help. An unknown product or category address answers "not found" (404)                                                                                                                                                                                                                                                          |
+| Seller centre        | `apps/seller`                        | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, and a request to change the payout account                                                                                                                                                                                                                                                               |
+| Internal console     | `apps/ops`                           | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail                                                                                                                                                                                                                                                                  |
+| Routes and warehouse | `apps/field`                         | Driver: the day's route, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with scan check, packing, receiving, stock lookup                                                                                                                                                                                                                                                                                                                                                                  |
+| Database             | `supabase/`                          | 22 migrations, 61 tables, 101 API functions, row-level security on every table, double-entry ledger, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                                                                                                                                    |
+| Domain logic         | `packages/core`                      | Money and IVA, fees, featured-offer choice, search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                                                                                                                                                                                                                                                                                   |
+| Native apps          | `apps/*-native`, `packages/expo-kit` | Expo SDK 58. The shopper app (`apps/shop-native`) has every shopper flow of the website laid out for a phone: browse, search, product, cart, sign-in, checkout, payment (simulated), delivery code, orders, cancellation, returns, reviews, addresses, account, help. The seller, driver and warehouse apps are skeletons: sign-in, a screen for an account without access, and a home screen gated by role that reads real data. `packages/expo-kit` is what all four share: configuration, the session encrypted on the phone, the typed API, theme and components |
+| Shared code          | `packages/{brand,ui,db,next-kit}`    | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session, security headers, forms)                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Documentation        | `docs/`                              | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase                                                                                                                                                                                                                                                                                                                         |
+| Brand                | `docs/brand/`, `packages/brand/`     | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files                                                                                                                                                                                                                                                                                                                                                                                   |
 
 How the new parts work, in short:
 
@@ -101,13 +122,15 @@ How the new parts work, in short:
 On a development machine, on one freshly seeded database, after the last
 change:
 
-| Check              | Result                                                                                                                                                                                                                        |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit tests         | 286 pass (core 239, brand 21, API client 14, shared web code 12)                                                                                                                                                              |
-| Database tests     | 11 files pass on PostgreSQL 16: access control per role, checkout, money, fulfilment, search, delivery promise, the API, the back office, people and payouts, the fixes, and one order from three sellers paid out end to end |
-| API contract tests | 32 pass: every screen's payload, called as each role, matches the types the apps use                                                                                                                                          |
-| Browser journeys   | 8 pass in Chromium on a freshly seeded database: shopper, seller, staff, driver and warehouse, people, payouts, listing edits, and the shop's 404 answers (`pnpm e2e`)                                                        |
-| Lint and types     | Clean across the workspace                                                                                                                                                                                                    |
+| Check                | Result                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit tests           | 430 pass (core 239, brand 21, API client 14, shared web code 22, native kit 123, shopper app 11)                                                                                                                                                                                                                                                                                                      |
+| Database tests       | 11 files pass on PostgreSQL 16: access control per role, checkout, money, fulfilment, search, delivery promise, the API, the back office, people and payouts, the fixes, and one order from three sellers paid out end to end                                                                                                                                                                         |
+| API contract tests   | 32 pass: every screen's payload, called as each role, matches the types the apps use                                                                                                                                                                                                                                                                                                                  |
+| Browser journeys     | 8 pass in Chromium on a freshly seeded database: shopper, seller, staff, driver and warehouse, people, payouts, listing edits, and the shop's 404 answers (`pnpm e2e`)                                                                                                                                                                                                                                |
+| Native journeys      | 2 pass (48 checks) through the web export of the native apps, in Chromium at phone size on a freshly seeded database: the shopper app from a product opened by link, through search, cart, sign-in, SINPE Móvil and the delivery code, to signing out; the seller, driver and warehouse apps for a visitor, an account without access and the right account, including signing out with no connection |
+| Native configuration | For each of the four apps: Expo's configuration resolves, package versions match Expo SDK 58, `expo-doctor` passes 20 of 20 checks, and the iOS and Android bundles build with only React 19.3.0 in them. The resolved iOS settings were checked in the development, preview and store variants: every permission text in Spanish, no microphone or motion permission, plain HTTP only in development |
+| Lint and types       | No lint errors (warnings only) and no type errors across the workspace                                                                                                                                                                                                                                                                                                                                |
 
 On the hosted preview (before today's two migrations): sign-in, sign-up and
 the 8 database test files that existed then passed on the real Supabase
@@ -129,6 +152,15 @@ What these checks do **not** cover, stated plainly:
   any bank's upload format.
 - **No real phones.** The drivers' app was tested in a phone-sized desktop
   browser with a simulated location.
+- **The native apps have never been built or run on a phone.** Their web
+  export proves the screens, the navigation, the Spanish text and the API
+  calls, including a full purchase in the shopper app. It does **not** prove
+  that the iOS and Android apps start, nor the secure storage of the session,
+  the embedded fonts, the permission prompts, location, the camera, or the
+  gestures, keyboard and safe areas of a real phone. That stays unknown until
+  a cloud build is installed on a phone or a simulator. The iOS settings
+  (permission texts, no plain HTTP outside development builds) were read from
+  Expo's resolved configuration, not from a built app.
 - **No load testing**, no security review by a third party.
 
 ## Not built
@@ -151,11 +183,28 @@ These are missing, not hidden. The first group blocks a public launch.
 - A bank connection for payouts. Transfers are made by hand and recorded in
   the console.
 
+**Native apps** (the shopper app is complete; the rest is missing)
+
+- The screens of the seller, driver and warehouse apps beyond sign-in and a
+  home screen. Until then sellers, drivers and the warehouse use the web apps.
+- Push notifications. The package is installed but switched off, and its
+  permission and entitlement are removed on purpose until that work starts.
+- Taking or uploading photos from the phone.
+- Password reset and account deletion in the apps. Both stores require account
+  deletion before the first submission; there is no database function for it
+  yet.
+- An offline queue for drivers, so a delivery confirmed without signal is sent
+  later.
+- Universal links (opening a yuntera.cr address in the app). No domain serves
+  the files the phones check; the apps answer only addresses in their own
+  schemes (`yuntera://`, `yuntera-ruta://` and so on), and those were not
+  tested.
+
 **Later**
 
 - English. The interface is Spanish only; error messages already exist in both.
-- Native apps, background location and offline use for drivers; camera barcode
-  scanning (a hand scanner works).
+- Background location for drivers and camera barcode scanning (a hand scanner
+  works in the web app).
 - Sponsored listings, promotions and coupons, a map on the dispatch screen,
   bulk listing upload.
 
@@ -171,7 +220,12 @@ ones worth knowing about:
   the document says what would make this the wrong choice and when.
 - **A web app for drivers and the warehouse instead of native apps.** It works
   on any phone today and I could verify it; native builds I could not. The cost
-  is no background location and no offline mode.
+  is no background location and no offline mode. Native driver and warehouse
+  apps now exist as skeletons; the web app stays what they use until those
+  apps have screens and have run on a phone.
+- **Native apps share one kit and the web's API.** The shopper app and the
+  three skeletons use Expo, call the same database functions through the same
+  typed client, and keep the session encrypted on the phone.
 - **Own drivers and a delivery code.** The customer's 4-digit code is checked
   on the server and is never shown to the driver or to staff.
 - **Fees are assumptions.** Commission by category, warehouse fee by size and
