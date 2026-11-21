@@ -16,6 +16,7 @@ import * as account from "./account";
 import { listingsApi, listingsErrors } from "./listings";
 import * as notifications from "./notifications";
 import * as peoplePayouts from "./people-payouts";
+import { photosApi, photosErrors } from "./photos";
 import type { Caller, Messages } from "./types";
 
 // The listings area names its exports uniquely, so it is star-exported. The
@@ -71,6 +72,7 @@ export type {
   SellerPayouts,
   WarehouseRole,
 } from "./people-payouts";
+export * from "./photos";
 export type { Caller, Messages } from "./types";
 
 export const areaErrors = {
@@ -78,6 +80,7 @@ export const areaErrors = {
   ...listingsErrors,
   ...account.errors,
   ...notifications.errors,
+  ...photosErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -85,4 +88,5 @@ export const areaApi = (caller: Caller) => ({
   ...listingsApi(caller),
   ...account.api(caller),
   ...notifications.api(caller),
+  ...photosApi(caller),
 });

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Local stand-in for the Supabase API (function calls and sign-in), for development and tests without Docker. Never deployed.",
+  "description": "Local stand-in for the Supabase API (function calls, sign-in and file storage), for development and tests without Docker. Never deployed.",
   "exports": {
     "./rpc": "./src/rpc.ts"
   },

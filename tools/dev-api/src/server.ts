@@ -2,20 +2,36 @@
  * Local stand-in for the Supabase API.
  *
  * WHAT IT IS  A small HTTP server that answers what the apps ask of Supabase:
- *             database function calls (`/rest/v1/rpc/*`) and Auth (`/auth/v1/*`):
+ *             database function calls (`/rest/v1/rpc/*`); Auth (`/auth/v1/*`):
  *             sign-in and sign-up, sessions and refresh tokens, e-mail
  *             confirmation and password recovery by link or 6-digit code, and
- *             time-based second factors. It lets the apps run end to end
- *             against a plain local PostgreSQL, with no Docker. E-mails land in
- *             a local mailbox (GET /dev/mail), never in a real inbox.
+ *             time-based second factors; and the file storage calls storage-js
+ *             makes (`/storage/v1/*`, listed in src/routes/storage.ts). It lets
+ *             the apps run end to end against a plain local PostgreSQL, with
+ *             no Docker. E-mails land in a local mailbox (GET /dev/mail), never
+ *             in a real inbox. Storage decisions are made by the same rules on
+ *             storage.objects that the migrations create, evaluated by
+ *             PostgreSQL as the caller; the files sit on local disk.
+ *
+ *             Every request is identified the same way (`authenticate` in
+ *             src/context.ts): no token or the publishable key is a visitor
+ *             (`anon`), a signed session token is `authenticated`, and the
+ *             local secret key alone is the server-side caller
+ *             (`service_role`, used by the notification worker). Database
+ *             calls then run as that role with PostgREST's pre-request check
+ *             (`public.check_request`); storage, like the real service, does
+ *             not run that check, so its rules carry the same checks.
  *
  * WHAT IT IS NOT  Supabase. It is never deployed and must never be exposed to a
  *             network: it has no per-IP rate limits, no CAPTCHA, no leaked-
- *             password check and no phone or OAuth sign-in. Production uses
- *             Supabase's own services. The Auth requests and answers follow
- *             docs/research/supabase-auth-storage-wire-format.md, and what is
- *             imitated and what is not is listed at the top of
- *             src/routes/auth.ts — but the first run against real Supabase is
+ *             password check and no phone or OAuth sign-in. Its storage has no
+ *             CDN, no image transformation, no listing or moving of files and
+ *             none of the storage service's own database triggers. Production
+ *             uses Supabase's own services. The Auth and Storage requests and
+ *             answers follow docs/research/supabase-auth-storage-wire-format.md,
+ *             and what is imitated and what is not is listed at the top of
+ *             src/routes/auth.ts and src/routes/storage.ts — but the first run
+ *             against real Supabase is
  *             still a real test.
  *
  * Start:  pnpm --filter @yuntera/dev-api start

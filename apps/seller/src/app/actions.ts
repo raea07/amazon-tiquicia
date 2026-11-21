@@ -219,9 +219,12 @@ export async function createListing(
   if (bulletPoints.length > 8) return { error: "Use como máximo 8 características.", values };
 
   const draft = formData.get("intent") === "draft";
+  // With photos chosen, the listing is saved as a draft first: the browser
+  // uploads the photos to it and only then sends it to review (or not).
+  const withPhotos = formData.get("fotos") === "1";
   try {
     const api = await sessionApi();
-    await api.sellerCreateListing({
+    const created = await api.sellerCreateListing({
       sellerId: shop.id,
       title: parsed.data.title,
       categorySlug: parsed.data.categorySlug,
@@ -234,8 +237,14 @@ export async function createListing(
       lengthCm: parsed.data.lengthCm,
       widthCm: parsed.data.widthCm,
       heightCm: parsed.data.heightCm,
-      submit: !draft,
+      submit: !draft && !withPhotos,
     });
+    if (withPhotos) {
+      return {
+        ok: "Producto guardado. Subiendo las fotos…",
+        values: { ...values, productId: created.product_id, intent: draft ? "draft" : "submit" },
+      };
+    }
   } catch (error) {
     return { error: messageOf(error), values };
   }

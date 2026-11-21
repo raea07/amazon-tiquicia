@@ -1,12 +1,14 @@
 import { DecisionForm } from "@yuntera/next-kit/client";
 import { ListingChanges } from "@yuntera/next-kit/listing-changes";
-import { sessionApi } from "@yuntera/next-kit/server";
+import { photoPreviews, sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Badge, EmptyState, formatDateTime, formatPrice, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
-import { reviewProduct } from "@/app/actions";
 import { reviewListingEdit } from "@/app/listing-actions";
+import { reviewNewListing } from "@/app/photo-actions";
+import { PhotoChangeReview, PhotoPublishRetry, PhotoStrip } from "@/components/photo-review";
 import { SELLER_STATUS } from "@/lib/labels";
 import { requireStaff } from "@/lib/staff";
 
@@ -20,6 +22,14 @@ export default function CatalogPage() {
         legal venderlo, que la descripción sea veraz y que no copie una marca ajena. Un precio alto
         o bajo no es motivo de rechazo.
       </PageHeader>
+      <p className="mt-2 text-sm">
+        <Link
+          href="/catalogo/fotos"
+          className="inline-flex min-h-11 items-center text-link underline"
+        >
+          Retirar una foto que ya está en la tienda
+        </Link>
+      </p>
       <div className="mt-6">
         <Suspense fallback={<Skeleton className="h-96" />}>
           <Review />
@@ -32,10 +42,19 @@ export default function CatalogPage() {
 async function Review() {
   await requireStaff("/catalogo", ["catalog"]);
   const api = await sessionApi();
-  const [listings, edits] = await Promise.all([
+  const [listings, edits, photoQueue] = await Promise.all([
     api.opsListingsForReview(),
     api.opsListingEditsForReview(),
+    api.opsPhotosForReview(),
   ]);
+  const photosOf = new Map(photoQueue.map((item) => [item.product_id, item]));
+  const photoChanges = photoQueue.filter((item) => item.kind === "change");
+  const toPublish = photoQueue.filter((item) => item.kind === "publish");
+  // Staff look at the largest copy: it is the one the public sizes are made from.
+  const previews = await photoPreviews(
+    photoQueue.flatMap((item) => [...item.before, ...item.after]),
+    { size: 1600 },
+  );
 
   return (
     <div className="flex flex-col gap-10">
@@ -79,6 +98,14 @@ async function Review() {
                     {listing.description ? (
                       <p className="mt-2 text-ink-muted">{listing.description}</p>
                     ) : null}
+                    <div className="mt-4">
+                      <PhotoStrip
+                        photos={photosOf.get(listing.product_id)?.after ?? []}
+                        previews={previews}
+                        label="Fotos"
+                        rejectable
+                      />
+                    </div>
                     {listing.seller_status === "pending" ? (
                       <p className="mt-3 text-warning">
                         El vendedor aún no está verificado: aunque apruebe el producto, no se
@@ -87,9 +114,9 @@ async function Review() {
                     ) : null}
                     <div className="mt-4 border-t border-border pt-4">
                       <DecisionForm
-                        action={reviewProduct}
+                        action={reviewNewListing}
                         noteLabel="Motivo"
-                        noteHint="Obligatorio si lo rechaza. El vendedor lo lee tal cual: diga qué debe corregir."
+                        noteHint="Obligatorio si lo rechaza. El vendedor lo lee tal cual: diga qué debe corregir. Publicar aprueba también las fotos que no haya rechazado."
                         yes="Publicar"
                         no="Rechazar"
                       >
@@ -100,6 +127,33 @@ async function Review() {
                 );
               })}
             </ul>
+          )}
+        </div>
+      </section>
+
+      <section aria-labelledby="fotos">
+        <h2 id="fotos" className="text-xl font-bold">
+          Fotos de productos publicados
+        </h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          Fotos nuevas, quitadas o reordenadas. La tienda sigue mostrando las fotos aprobadas hasta
+          que usted decida. Revise que muestren el producto que se vende, sin logotipos ajenos ni
+          datos personales, y que el texto alternativo describa la foto.
+        </p>
+        <div className="mt-4">
+          {photoChanges.length === 0 && toPublish.length === 0 ? (
+            <p className="rounded-lg border border-border bg-surface p-5 text-sm text-ink-muted">
+              No hay fotos por revisar.
+            </p>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {toPublish.map((item) => (
+                <PhotoPublishRetry key={item.product_id} item={item} />
+              ))}
+              {photoChanges.map((item) => (
+                <PhotoChangeReview key={item.product_id} item={item} previews={previews} />
+              ))}
+            </div>
           )}
         </div>
       </section>

@@ -16,7 +16,8 @@
     "./shell": "./src/shell.tsx",
     "./listing-changes": "./src/listing-changes.tsx",
     "./account": "./src/account/pages.tsx",
-    "./auth-rules": "./src/auth-rules.ts"
+    "./auth-rules": "./src/auth-rules.ts",
+    "./product-image": "./src/product-image.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

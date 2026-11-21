@@ -35,6 +35,9 @@ supabase/.branches
 # signing key of the local API stand-in (generated per machine)
 tools/dev-api/.keys
 
+# files uploaded to the local API stand-in's storage (one folder per database)
+tools/dev-api/.storage
+
 # misc
 .DS_Store
 *.pem
