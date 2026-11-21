@@ -1,0 +1,32 @@
+{
+  "name": "@yuntera/field",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3003",
+    "build": "next build",
+    "start": "next start --port 3003",
+    "typecheck": "next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.119.2",
+    "@yuntera/brand": "workspace:*",
+    "@yuntera/core": "workspace:*",
+    "@yuntera/db": "workspace:*",
+    "@yuntera/next-kit": "workspace:*",
+    "@yuntera/ui": "workspace:*",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "4.3.5",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "4.3.5",
+    "typescript": "5.9.3"
+  }
+}
