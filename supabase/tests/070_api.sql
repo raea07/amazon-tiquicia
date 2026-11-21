@@ -278,6 +278,15 @@ reset role;
 
 -- ── Seller ─────────────────────────────────────────────────────────────────
 
+-- What TecnoCasa has, read from the tables as the owner: the seed's nine
+-- offers and stock rows, plus whatever a shared preview has gained since
+-- (the hosted one has a tenth listing, added in its photo test).
+select pg_temp.remember('tecnocasa_offers',
+  (select count(*)::text from public.offers
+   where seller_id = current_setting('t.tecnocasa')::uuid and status <> 'archived'));
+select pg_temp.remember('tecnocasa_stock',
+  (select count(*)::text from public.stock_levels where seller_id = current_setting('t.tecnocasa')::uuid));
+
 select pg_temp.login('vendedor@yuntera.example');
 
 do $$
@@ -296,10 +305,14 @@ begin
   assert (v ->> 'payable_minor')::bigint > 0, 'amount owed comes from the ledger';
   assert (v #>> '{sales_30d,orders}')::integer > 0, 'recent sales';
 
-  assert (select count(*) from public.seller_listings(current_setting('t.tecnocasa')::uuid)) = 9, 'their nine offers';
+  assert current_setting('t.tecnocasa_offers')::integer >= 9 and current_setting('t.tecnocasa_stock')::integer >= 9,
+    'the seed''s nine offers and stock rows are there';
+  assert (select count(*) from public.seller_listings(current_setting('t.tecnocasa')::uuid))
+         = current_setting('t.tecnocasa_offers')::integer, 'all their offers that are not archived';
   assert (select bool_or(competing_offers > 0) from public.seller_listings(current_setting('t.tecnocasa')::uuid)),
     'they are told when another seller offers the same product';
-  assert (select count(*) from public.seller_stock(current_setting('t.tecnocasa')::uuid)) = 9, 'their stock';
+  assert (select count(*) from public.seller_stock(current_setting('t.tecnocasa')::uuid))
+         = current_setting('t.tecnocasa_stock')::integer, 'their stock';
   assert (select count(*) from public.seller_statements(current_setting('t.tecnocasa')::uuid)) > 0, 'their statements';
 
   -- The other seller they own ships from its own shop: one parcel to prepare.
