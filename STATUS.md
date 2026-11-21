@@ -29,8 +29,9 @@ four web apps are deployed as a preview on Vercel at
 `.vercel.app`); every address is behind a Vercel login, and the projects are
 not connected to the Git repository. A shopper app for iOS and Android exists
 with every shopping flow of the website, and the seller, driver and warehouse
-apps exist as skeletons. The shopper app was built in the cloud once for each
-platform, but neither build has run on a phone or simulator yet. Payments and
+apps exist as skeletons. The shopper app's first store build for Android
+exists and waits for your Google key to go to Play's internal testing; no
+build has run on a phone or simulator yet. Payments and
 invoices are still simulated or missing, and no message is sent for real (see
 "Not built").
 
@@ -259,12 +260,18 @@ What these checks do **not** cover, stated plainly:
 - **No real phones.** The drivers' app was tested in a phone-sized desktop
   browser with a simulated location.
 - **The native apps have not run on a phone.** On 21 November 2026 the
-  shopper app was built in the cloud once for each platform, an Android APK
-  and an iOS Simulator build, both successful at the first try (2 of the free
-  plan's 30 builds a month). Neither has been started on a phone or a
-  simulator: cloud simulators need a paid Expo plan, so the first real look
-  will be you installing the Android file on a phone. Those two builds predate
-  the Spanish-language setting for iOS and everything merged since. While the
+  shopper app was built in the cloud three times, all successful at the first
+  try: a preview Android file and an iOS Simulator build in your personal Expo
+  account (now unused), and the first Android **store** build (`.aab`, version
+  0.1.0, build 2, identifier `com.yuntera.shop`) in the project `yuntera` of
+  your Expo team account, where your company's Apple certificate and App Store
+  Connect key also live. The store build has not been sent to Google Play: that
+  waits for your Google service-account key on Expo's website
+  ([`docs/07-deployment/store-testing.md`](docs/07-deployment/store-testing.md)
+  has the steps for both stores). No iPhone store build exists yet. Nothing has
+  been started on a phone or a simulator: cloud simulators need a paid Expo
+  plan, so the first real look will be a tester's phone. Store-testing builds
+  talk to the hosted preview with demo data. While the
   shop is behind the Vercel login, product pictures cannot load in the app; it
   shows a placeholder instead. The web export proves the screens, navigation,
   Spanish text and API calls; it does **not** prove the secure storage of the
