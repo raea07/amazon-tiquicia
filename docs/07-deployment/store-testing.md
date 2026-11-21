@@ -14,10 +14,11 @@ Expo **team** account (the team account that already holds the company's
 Apple credentials), not in the personal account. The project in the personal
 account is an earlier one and is no longer used for store builds.
 
-**Where things stand (21 November 2026).** The team-account project has not
-been created yet and no store build has been made from it, so the Expo
-upload slot in Part 1, step 5 does not exist yet. The developer side tells
-the owner when it does.
+**Where things stand (21 November 2026).** The team-account project exists
+and the first Android store build was started from it. That build created
+the Android upload key for `com.yuntera.shop` on Expo's servers, so the
+Expo upload slot in Part 1, step 5 now exists. Nothing has been uploaded to
+Google Play yet: that waits for the owner's service account key.
 
 ## Part 1: Android (Google Play internal testing)
 
@@ -74,8 +75,9 @@ In Play Console, **Users and permissions** > **Invite new users**:
 
 ### 5. Upload the key on Expo's website
 
-Only possible once the first Android store build exists in the team
-account's project (it creates the Android credentials the slot belongs to).
+The slot belongs to the Android credentials the first store build created in
+the team account's project. Make sure the page shows the team account and
+the project **yuntera**, not the personal account and not any other project.
 
 1. Sign in at [expo.dev](https://expo.dev).
 2. In the account menu at the top left, switch to the **team** account.
