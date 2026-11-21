@@ -38,10 +38,13 @@ end;
 $$;
 
 -- Calls every function of the API whose name starts with a prefix, as the
--- current role, with `p_seller_id` (when it has one) set to the given shop and
--- every other argument null. Each must refuse with one of the allowed codes:
--- for an account that lost its access, nothing may come back.
-create function pg_temp.all_refused(p_prefix text, p_seller uuid, p_allowed text[], p_except text[] default '{}')
+-- current role, with `p_seller_id` (when it has one) set to the given shop,
+-- every argument named in `p_ids` set to that value (real ids of things the
+-- account used to reach, so that "not found" proves the access check, not a
+-- missing row), and every other argument null. Each must refuse with one of
+-- the allowed codes: for an account that lost its access, nothing may come back.
+create function pg_temp.all_refused(p_prefix text, p_seller uuid, p_allowed text[], p_except text[] default '{}',
+                                    p_ids jsonb default '{}')
 returns integer
 language plpgsql as $$
 declare
@@ -60,6 +63,8 @@ begin
     select string_agg(
       case when f.proargnames[i + 1] = 'p_seller_id' and p_seller is not null
            then format('%L::uuid', p_seller)
+           when p_ids ? f.proargnames[i + 1]
+           then format('%L::%s', p_ids ->> f.proargnames[i + 1], format_type(f.proargtypes[i], null))
            else format('null::%s', format_type(f.proargtypes[i], null)) end, ', ' order by i)
     into v_args
     from generate_series(0, f.pronargs - 1) i;
@@ -86,7 +91,7 @@ begin
 end
 $$;
 grant execute on function pg_temp.refused(text, text), pg_temp.denied(text),
-  pg_temp.all_refused(text, uuid, text[], text[]), pg_temp.remember(text, text), pg_temp.offer(text, text)
+  pg_temp.all_refused(text, uuid, text[], text[], jsonb), pg_temp.remember(text, text), pg_temp.offer(text, text)
   to authenticated, anon;
 
 -- Sets a limit for the rest of this transaction.
@@ -126,6 +131,10 @@ reset role; select pg_temp.logout();
 
 update public.drivers set status = 'suspended'
 where user_id = current_setting('t.uid_repartidor')::uuid;
+select pg_temp.remember('carlos_ids', (
+  select jsonb_build_object('p_route_id', r.id, 'p_stop_id', s.id)::text
+  from public.routes r join public.route_stops s on s.route_id = r.id
+  where r.code = 'R-1001' order by s.sequence limit 1));
 
 select pg_temp.login('repartidor@yuntera.example');
 do $$
@@ -137,9 +146,11 @@ begin
   assert d -> 'routes' = '[]'::jsonb, format('FA-4: a suspended driver gets no routes: %s', d -> 'routes');
   assert position('María' in d::text) = 0 and position('+5068888' in d::text) = 0,
     'and no recipient''s name or phone anywhere in the answer';
-  -- Every other driver function refuses.
+  -- Every other driver function refuses, also when given the driver's own
+  -- route and stop (R-1001, which they completed earlier).
   n := pg_temp.all_refused('driver_', null,
-         array['route_not_found', 'stop_not_found', 'forbidden', 'not_a_driver'], array['driver_today']);
+         array['route_not_found', 'stop_not_found', 'forbidden', 'not_a_driver'], array['driver_today'],
+         current_setting('t.carlos_ids')::jsonb);
   assert n >= 5, format('the driver functions were tried (%s)', n);
   assert (select count(*) from public.route_stops) = 0, 'and the table shows nothing either';
 end
@@ -300,7 +311,18 @@ end
 $$;
 reset role; select pg_temp.logout();
 
--- A warehouse worker removed from the warehouse.
+-- A warehouse worker removed from the warehouse. Real ids from their
+-- warehouse are passed, so a refusal is the access check, not a missing row.
+select pg_temp.remember('depot_ids', jsonb_build_object(
+  'p_warehouse_id', current_setting('t.depot'),
+  'p_shipment_id', (select id from public.shipments where origin_warehouse_id = current_setting('t.depot')::uuid
+                    order by created_at limit 1),
+  'p_task_id', (select t.id from public.pick_tasks t join public.shipments sh on sh.id = t.shipment_id
+                where sh.origin_warehouse_id = current_setting('t.depot')::uuid limit 1),
+  'p_location_id', (select id from public.warehouse_locations
+                    where warehouse_id = current_setting('t.depot')::uuid limit 1),
+  'p_sku_id', (select sku_id from public.stock_levels
+               where warehouse_id = current_setting('t.depot')::uuid limit 1))::text);
 select pg_temp.login('bodega@yuntera.example');
 do $$ begin assert public.wms_board(current_setting('t.depot')::uuid) is not null, 'at work'; end $$;
 reset role; select pg_temp.logout();
@@ -312,7 +334,7 @@ do $$
 declare
   n integer := pg_temp.all_refused('wms_', null,
                  array['forbidden', 'shipment_not_found', 'task_not_found', 'location_not_found',
-                       'inbound_line_not_found']);
+                       'inbound_line_not_found'], '{}', current_setting('t.depot_ids')::jsonb);
 begin
   assert n >= 6, format('every warehouse function refuses (%s tried)', n);
   perform pg_temp.refused(format('select public.wms_board(%L)', current_setting('t.depot')), 'forbidden');
@@ -322,7 +344,23 @@ end
 $$;
 reset role; select pg_temp.logout();
 
--- A shop member who is removed. (Joining is by invitation; see DTA-6.)
+-- A shop member who is removed. (Joining is by invitation; see DTA-6.) Real
+-- ids of the shop's listings, offers, reviews, parcels and warehouse are passed.
+select pg_temp.remember('tecnocasa_ids', (
+  select jsonb_build_object(
+    'p_product_id', o_product, 'p_offer_id', o_id, 'p_sku_id', o_sku,
+    'p_review_id', (select r.id from public.reviews r where r.product_id = o_product limit 1),
+    'p_shipment_id', (select sh.id from public.shipments sh
+                      join public.shipment_items si on si.shipment_id = sh.id
+                      join public.order_items i on i.id = si.order_item_id
+                      where i.seller_id = current_setting('t.tecnocasa')::uuid limit 1),
+    'p_warehouse_id', (select w.id from public.warehouses w
+                       where w.seller_id = current_setting('t.tecnocasa')::uuid limit 1),
+    'p_user_id', current_setting('t.uid_comprador'))::text
+  from (select o.id as o_id, o.sku_id as o_sku, k.product_id as o_product
+        from public.offers o join public.skus k on k.id = o.sku_id
+        where o.seller_id = current_setting('t.tecnocasa')::uuid
+        order by o.created_at limit 1) x));
 select pg_temp.login('vendedor@yuntera.example');
 select pg_temp.remember('inv_member', public.seller_invite_member(
   current_setting('t.tecnocasa')::uuid, 'comprador3@yuntera.example', 'staff')::text);
@@ -343,8 +381,11 @@ declare
   n integer := pg_temp.all_refused('seller_', current_setting('t.tecnocasa')::uuid,
                  array['forbidden', 'offer_not_found', 'listing_not_found', 'review_not_found',
                        'shipment_not_found', 'edit_not_found', 'invitation_not_found',
-                       'shop_change_not_found', 'owner_only', 'member_not_found', 'not_authenticated'],
-                 array['seller_answer_invitation']);
+                       'shop_change_not_found', 'owner_only', 'member_not_found', 'not_authenticated',
+                       -- Codes of functions that product photos (082700) and
+                       -- notifications (082600) add, once merged.
+                       'photo_not_found', 'seller_not_found'],
+                 array['seller_answer_invitation'], current_setting('t.tecnocasa_ids')::jsonb);
 begin
   assert n >= 25, format('every seller function refuses a removed member (%s tried)', n);
   assert (select count(*) from public.seller_private) = 0, 'and the shop''s private details are gone';
@@ -502,10 +543,10 @@ declare
 begin
   perform pg_temp.refused(format(
     'select public.seller_create_listing(%L, ''Jarrón de cerámica azul'', ''hogar'', null, null, 1200000, ''seller'', 2::smallint, 900, 30, 20, 20, true)',
-    v_seller), 'shop_not_active');
+    v_seller), 'shop_not_approved');
   perform pg_temp.refused(format(
     'select public.seller_create_inbound(%L, %L, ''[{"sku_id": "00000000-0000-4000-8000-000000000001", "quantity": 100000}]''::jsonb)',
-    current_setting('t.depot'), v_seller), 'shop_not_active');
+    current_setting('t.depot'), v_seller), 'shop_not_approved');
   -- Drafts stay possible, so the shop is ready the day it is approved.
   assert public.seller_create_listing(v_seller, 'Jarrón de cerámica azul', 'hogar', null, null, 1200000,
            'seller', 2::smallint, 900, 30, 20, 20, false) ->> 'product_id' is not null,
@@ -642,9 +683,24 @@ begin
   perform pg_temp.refused(format(
     'select public.seller_update_listing(%L, ''Escalera de aluminio de 130 cm'', ''hogar'', null, null, 6000, 130, 40, 10, null, false)',
     current_setting('t.big_listing')), 'too_large_for_warehouse');
-  -- And the general limits hold on creation as on editing.
+  -- And the general limits hold on creation as on editing: no kind of
+  -- delivery carries more than 200 cm a side or 30 kg, and the seller is told
+  -- so plainly (package_over_limit), at the edge.
+  assert public.seller_create_listing(v_seller, 'Mueble de 200 cm', 'hogar', null, null, 4500000,
+           'seller', 2::smallint, 30000, 200, 40, 10, false) ->> 'offer_id' is not null,
+    'a seller-shipped package of 200 cm and 30 kg is the largest accepted';
   perform pg_temp.refused(format(
     'select public.seller_create_listing(%L, ''Mueble enorme'', ''hogar'', null, null, 4500000, ''seller'', 2::smallint, 6000, 201, 40, 10, false)',
+    v_seller), 'package_over_limit');
+  perform pg_temp.refused(format(
+    'select public.seller_create_listing(%L, ''Mueble pesado'', ''hogar'', null, null, 4500000, ''seller'', 2::smallint, 30001, 100, 40, 10, false)',
+    v_seller), 'package_over_limit');
+  perform pg_temp.refused(format(
+    'select public.seller_update_listing(%L, ''Escalera de aluminio pesada'', ''hogar'', null, null, 30001, 100, 40, 10, null, false)',
+    current_setting('t.big_listing')), 'package_over_limit');
+  -- Other mistakes in a listing are still a form error.
+  perform pg_temp.refused(format(
+    'select public.seller_create_listing(%L, ''Mesa'', ''hogar'', null, null, 4500000, ''seller'', 2::smallint, 6000, 100, 40, 10, false)',
     v_seller), 'invalid_listing');
 end
 $$;
@@ -804,9 +860,6 @@ begin
          is not distinct from (select array_agg(slug order by slug) from public.search_products(repeat('licuadora ', 12))),
     'it searches what the first 12 words find';
   assert (select count(*) from public.suggest_products(v_long)) >= 0, 'nor a huge prefix';
-  assert private.bounded_search_text(repeat('a', 500)) = repeat('a', 200), 'at most 200 characters';
-  assert private.bounded_search_text('uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece')
-         = 'uno dos tres cuatro cinco seis siete ocho nueve diez once doce', 'at most 12 words';
   assert (select count(*) from public.search_products('licuadora')) >= 1, 'ordinary searches still work';
 
   -- A cart is checked for size before anything is priced.
@@ -827,6 +880,13 @@ begin
 end
 $$;
 reset role; select pg_temp.logout();
+
+-- What the wrappers cut the text to (the helper runs only inside them).
+do $$ begin
+  assert private.bounded_search_text(repeat('a', 500)) = repeat('a', 200), 'at most 200 characters';
+  assert private.bounded_search_text('uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece')
+         = 'uno dos tres cuatro cinco seis siete ocho nueve diez once doce', 'at most 12 words';
+end $$;
 
 -- ═══ FA-9: reviewer names only for reviewers ═══════════════════════════════
 
@@ -1236,6 +1296,354 @@ select pg_temp.refused(format(
   'select public.seller_request_payout_details(%L, ''CR26010200009123456789'', ''TecnoCasa de Costa Rica S.A.'', ''+50684440202'')',
   current_setting('t.tecnocasa')), 'payout_details_unchanged');
 reset role; select pg_temp.logout();
+
+-- ═══ Review: a contact change and a payout request never overlap ══════════
+
+-- Whichever comes first holds the other back, so the phone finance calls to
+-- confirm a new payout account is never one that is itself being changed.
+select pg_temp.remember('cafetal', (select id::text from public.sellers where slug = 'cafetal-los-santos'));
+insert into public.staff_members (user_id, role)
+select id, 'finance' from auth.users where email = 'comprador3@yuntera.example'
+on conflict (user_id) do update set role = 'finance', active = true;
+
+-- Contact first: the payout request is refused while it waits.
+select pg_temp.login('cafetal@yuntera.example');
+do $$
+declare
+  v_seller uuid := current_setting('t.cafetal')::uuid;
+begin
+  perform set_config('t.cafetal_contact', public.seller_request_shop_change(v_seller, 'contact',
+    p_contact_email => 'otro@cafetal.example', p_contact_phone => '+50688887777')::text, true);
+  perform pg_temp.refused(format(
+    'select public.seller_request_payout_details(%L, ''CR23015108410026012345'', ''Cafetal Los Santos S.A.'')',
+    v_seller), 'contact_request_open');
+end
+$$;
+reset role; select pg_temp.logout();
+
+-- A payout request already waiting (sent before this rule, say) holds back
+-- approving the contact change; rejecting it stays possible.
+insert into public.payout_detail_requests (seller_id, payout_iban, payout_holder_name, requested_by)
+values (current_setting('t.cafetal')::uuid, 'CR23015108410026012345', 'Cafetal Los Santos S.A.',
+        (select id from auth.users where email = 'cafetal@yuntera.example'));
+select pg_temp.login('comprador3@yuntera.example');
+do $$
+begin
+  perform pg_temp.refused(format('select public.ops_decide_shop_change(%L, true)', current_setting('t.cafetal_contact')),
+    'contact_change_waits_for_payout');
+  assert (select contact_phone from public.seller_private where seller_id = current_setting('t.cafetal')::uuid)
+         = '+50625460101', 'the phone on file is unchanged';
+  perform public.ops_decide_shop_change(current_setting('t.cafetal_contact')::uuid, false,
+    'Primero resolvemos el cambio de cuenta bancaria.');
+end
+$$;
+reset role; select pg_temp.logout();
+delete from public.payout_detail_requests where seller_id = current_setting('t.cafetal')::uuid;
+
+-- With nothing else waiting, the honest path works in both directions.
+select pg_temp.login('cafetal@yuntera.example');
+select pg_temp.remember('cafetal_contact2', public.seller_request_shop_change(
+  current_setting('t.cafetal')::uuid, 'contact',
+  p_contact_email => 'ventas@cafetal.example', p_contact_phone => '+50625460199')::text);
+reset role; select pg_temp.logout();
+select pg_temp.login('comprador3@yuntera.example');
+select public.ops_decide_shop_change(current_setting('t.cafetal_contact2')::uuid, true);
+reset role; select pg_temp.logout();
+select pg_temp.login('cafetal@yuntera.example');
+do $$
+begin
+  assert public.seller_request_payout_details(current_setting('t.cafetal')::uuid,
+           'CR23015108410026012345', 'Cafetal Los Santos S.A.') is not null,
+    'once the contact change is decided, the payout request goes in';
+end
+$$;
+reset role; select pg_temp.logout();
+delete from public.staff_members where user_id = current_setting('t.uid_comprador3')::uuid;
+
+-- ═══ Review: a seller sees that an unapproved account blocks the payout ═══
+
+update public.seller_private set payout_approved_at = null, payout_approved_by = null
+where seller_id = current_setting('t.tecnocasa')::uuid;
+select pg_temp.login('vendedor@yuntera.example');
+do $$
+declare
+  v_seller uuid := current_setting('t.tecnocasa')::uuid;
+begin
+  assert public.seller_payouts(v_seller) -> 'blocked_by' ? 'no_bank_details',
+    format('the money screen names what blocks the payout: %s', public.seller_payouts(v_seller) -> 'blocked_by');
+  assert (public.seller_payout_details(v_seller) #>> '{current,approved}')::boolean = false,
+    'and the account screen says the account is not approved';
+end
+$$;
+reset role; select pg_temp.logout();
+update public.seller_private set payout_approved_at = now()
+where seller_id = current_setting('t.tecnocasa')::uuid;
+select pg_temp.login('vendedor@yuntera.example');
+do $$
+declare
+  v_seller uuid := current_setting('t.tecnocasa')::uuid;
+begin
+  assert not public.seller_payouts(v_seller) -> 'blocked_by' ? 'no_bank_details', 'an approved account blocks nothing';
+  assert (public.seller_payout_details(v_seller) #>> '{current,approved}')::boolean, 'and is shown as approved';
+end
+$$;
+reset role; select pg_temp.logout();
+
+-- ═══ Review: a fiscal change keeps the fields the seller did not send ═════
+
+-- What the DTA-12 section above leaves on file (set here too, so this section
+-- can run alone).
+update public.seller_private
+set tax_regime = 'simplificado', postal_code = '10203', economic_activity_code = '523101'
+where seller_id = current_setting('t.sendero')::uuid;
+
+select pg_temp.login('sendero@yuntera.example');
+do $$
+declare
+  v_seller uuid := current_setting('t.sendero')::uuid;
+  c jsonb := public.seller_shop_changes(v_seller);
+begin
+  assert c #>> '{current,fiscal,postal_code}' = '10203'
+     and c #>> '{current,fiscal,economic_activity_code}' = '523101',
+    format('the form starts from what is on file: %s', c -> 'current');
+  -- Only the address, as the form sends it when nothing else is touched.
+  perform set_config('t.fiscal_partial', public.seller_request_shop_change(v_seller, 'fiscal',
+    p_fiscal_address => 'Escazú, San Rafael, Plaza Colonial local 5, segundo piso')::text, true);
+end
+$$;
+reset role; select pg_temp.logout();
+select pg_temp.login('central@yuntera.example');
+select public.ops_decide_shop_change(current_setting('t.fiscal_partial')::uuid, true, 'Revisado en Hacienda.');
+reset role; select pg_temp.logout();
+do $$
+begin
+  assert (select postal_code = '10203' and economic_activity_code = '523101' and tax_regime = 'simplificado'
+                 and fiscal_address like '%segundo piso'
+          from public.seller_private where seller_id = current_setting('t.sendero')::uuid),
+    'approving a change of address leaves the postal code, activity code and regime as they were';
+end
+$$;
+-- A staff member of the shop does not get the details on file.
+insert into public.seller_members (seller_id, user_id, role)
+values (current_setting('t.sendero')::uuid, current_setting('t.uid_comprador')::uuid, 'staff');
+select pg_temp.login('comprador@yuntera.example');
+do $$ begin
+  assert public.seller_shop_changes(current_setting('t.sendero')::uuid) -> 'current' = 'null'::jsonb,
+    'staff do not get the fiscal details';
+end $$;
+reset role; select pg_temp.logout();
+delete from public.seller_members
+where seller_id = current_setting('t.sendero')::uuid and user_id = current_setting('t.uid_comprador')::uuid;
+
+-- ═══ Review: inviting someone who registers afterwards ═══════════════════
+
+select pg_temp.login('sendero@yuntera.example');
+select pg_temp.remember('inv_new_hire', public.seller_invite_member(
+  current_setting('t.sendero')::uuid, 'nueva.persona@correo.example', 'staff')::text);
+reset role; select pg_temp.logout();
+-- They sign up with that address, but have not confirmed it yet: nothing.
+insert into auth.users (id, email) values (gen_random_uuid(), 'nueva.persona@correo.example');
+select pg_temp.login('nueva.persona@correo.example');
+do $$
+begin
+  assert public.my_invitations() = '[]'::jsonb, 'an unconfirmed address proves nothing';
+  perform pg_temp.refused(format('select public.seller_answer_invitation(%L, true)', current_setting('t.inv_new_hire')),
+    'invitation_not_found');
+end
+$$;
+reset role; select pg_temp.logout();
+update auth.users set email_confirmed_at = now() where email = 'nueva.persona@correo.example';
+select pg_temp.login('nueva.persona@correo.example');
+do $$
+declare
+  i jsonb := public.my_invitations();
+begin
+  assert jsonb_array_length(i) = 1 and i #>> '{0,shop,trade_name}' = 'Tienda Sendero',
+    format('once confirmed, the invitation is there: %s', i);
+  assert public.seller_answer_invitation(current_setting('t.inv_new_hire')::uuid, true)
+         = current_setting('t.sendero')::uuid, 'and they accept it';
+  assert private.is_seller_member(current_setting('t.sendero')::uuid), 'and are on the team';
+end
+$$;
+reset role; select pg_temp.logout();
+do $$ begin
+  assert (select invitee_id = (select id from auth.users where email = 'nueva.persona@correo.example')
+          from public.seller_invitations where id = current_setting('t.inv_new_hire')::uuid),
+    'the invitation now names the account that took it';
+end $$;
+select pg_temp.remember('uid_new_hire', (select id::text from auth.users where email = 'nueva.persona@correo.example'));
+select pg_temp.login('sendero@yuntera.example');
+select public.seller_remove_member(current_setting('t.sendero')::uuid, current_setting('t.uid_new_hire')::uuid);
+reset role; select pg_temp.logout();
+
+-- ═══ Review: a removed administrator's invitations end with them ═════════
+
+select pg_temp.login('sendero@yuntera.example');
+select pg_temp.remember('inv_admin2', public.seller_invite_member(
+  current_setting('t.sendero')::uuid, 'comprador2@yuntera.example', 'admin')::text);
+reset role; select pg_temp.logout();
+select pg_temp.login('comprador2@yuntera.example');
+select public.seller_answer_invitation(current_setting('t.inv_admin2')::uuid, true);
+select pg_temp.remember('inv_by_admin', public.seller_invite_member(
+  current_setting('t.sendero')::uuid, 'comprador3@yuntera.example', 'staff')::text);
+select pg_temp.remember('inv_by_admin2', public.seller_invite_member(
+  current_setting('t.sendero')::uuid, 'comprador@yuntera.example', 'staff')::text);
+reset role; select pg_temp.logout();
+-- Demoted to staff, and then they leave on their own.
+select pg_temp.login('sendero@yuntera.example');
+select public.seller_set_member_role(current_setting('t.sendero')::uuid,
+  current_setting('t.uid_comprador2')::uuid, 'staff');
+do $$ begin
+  assert not exists (select 1 from jsonb_array_elements(public.seller_team(current_setting('t.sendero')::uuid)
+                                                        -> 'invitations') i
+                     where (i ->> 'id')::uuid in (current_setting('t.inv_by_admin')::uuid,
+                                                   current_setting('t.inv_by_admin2')::uuid)),
+    'the owner no longer sees what the former administrator sent';
+end $$;
+reset role; select pg_temp.logout();
+select pg_temp.login('comprador3@yuntera.example');
+do $$ begin
+  assert public.my_invitations() = '[]'::jsonb, 'the person invited no longer sees it';
+  perform pg_temp.refused(format('select public.seller_answer_invitation(%L, true)', current_setting('t.inv_by_admin')),
+    'invitation_not_found');
+  assert not private.is_seller_member(current_setting('t.sendero')::uuid), 'and cannot join';
+end $$;
+reset role; select pg_temp.logout();
+do $$ begin
+  assert (select bool_and(status = 'revoked') from public.seller_invitations
+          where id in (current_setting('t.inv_by_admin')::uuid, current_setting('t.inv_by_admin2')::uuid)),
+    'both invitations are marked withdrawn';
+end $$;
+-- Even if one were left pending, an inviter who is gone backs nothing.
+update public.seller_invitations set status = 'pending', answered_at = null, answered_by = null
+where id = current_setting('t.inv_by_admin')::uuid;
+select pg_temp.login('comprador2@yuntera.example');
+select public.seller_remove_member(current_setting('t.sendero')::uuid, current_setting('t.uid_comprador2')::uuid);
+reset role; select pg_temp.logout();
+select pg_temp.login('comprador3@yuntera.example');
+select pg_temp.refused(format('select public.seller_answer_invitation(%L, true)', current_setting('t.inv_by_admin')),
+  'invitation_not_found');
+reset role; select pg_temp.logout();
+
+-- ═══ Review: an unapproved shop's listing cannot go on sale ══════════════
+
+update public.sellers set status = 'pending' where id = current_setting('t.bazar')::uuid;
+select pg_temp.remember('bazar_listing', (select id::text from public.products where slug = 'lampara-mesa-bambu'));
+update public.products set status = 'pending_review' where id = current_setting('t.bazar_listing')::uuid;
+select pg_temp.login('central@yuntera.example');
+do $$
+declare
+  v_row record;
+begin
+  select * into v_row from public.ops_listings_for_review() l
+  where l.product_id = current_setting('t.bazar_listing')::uuid;
+  assert v_row.seller_status = 'pending', 'the queue says the shop is not verified';
+  perform pg_temp.refused(format('select public.ops_review_product(%L, true)', current_setting('t.bazar_listing')),
+    'listing_shop_not_active');
+end
+$$;
+reset role; select pg_temp.logout();
+select pg_temp.login_anon();
+do $$ begin
+  assert not exists (select 1 from public.search_products('lampara') s where s.slug = 'lampara-mesa-bambu'),
+    'and shoppers do not find it';
+end $$;
+reset role; select pg_temp.logout();
+-- Any other path is held too, not only the console's function.
+do $$
+begin
+  update public.products set status = 'active' where id = current_setting('t.bazar_listing')::uuid;
+  raise exception 'a pending shop''s listing went on sale';
+exception when others then
+  if sqlerrm <> 'listing_shop_not_active' then raise; end if;
+end
+$$;
+update public.sellers set status = 'active' where id = current_setting('t.bazar')::uuid;
+select pg_temp.login('central@yuntera.example');
+select public.ops_review_product(current_setting('t.bazar_listing')::uuid, true);
+reset role; select pg_temp.logout();
+do $$ begin
+  assert (select status from public.products where id = current_setting('t.bazar_listing')::uuid) = 'active',
+    'once the shop is verified the listing is published';
+end $$;
+update public.sellers set status = 'pending' where id = current_setting('t.bazar')::uuid;
+
+-- ═══ Review: a closed shop only reads ════════════════════════════════════
+
+update public.sellers set status = 'closed' where id = current_setting('t.sendero')::uuid;
+select pg_temp.login('sendero@yuntera.example');
+do $$
+declare
+  v_seller uuid := current_setting('t.sendero')::uuid;
+begin
+  assert public.seller_overview(v_seller) is not null, 'a closed shop reads its data';
+  perform pg_temp.refused(format(
+    'select public.seller_save_location(%L, ''Bodega nueva'', ''San José, Escazú, 200 m norte de la iglesia'', ''10201'', 9.92, -84.14)',
+    v_seller), 'shop_closed');
+  perform pg_temp.refused(format('select public.seller_set_stock(%L, %L, 3)',
+    (select id from public.warehouses where seller_id = v_seller limit 1),
+    (select sku_id from public.offers where seller_id = v_seller limit 1)), 'shop_closed');
+  -- It may still ask for its payout account to be changed, to be paid what it is owed.
+  assert public.seller_request_payout_details(v_seller, 'CR05015202001026284066', 'Sendero Outdoor S.R.L.')
+         is not null, 'a closed shop can still be paid';
+end
+$$;
+reset role; select pg_temp.logout();
+update public.sellers set status = 'active' where id = current_setting('t.sendero')::uuid;
+
+-- ═══ Review: driver_today keeps whatever body it had, behind the gate ════
+
+do $$
+begin
+  assert (select prosecdef from pg_proc where oid = 'public.driver_today()'::regprocedure), 'the gate is definer';
+  assert not has_function_privilege('authenticated', 'private.driver_today_active()', 'execute')
+     and not has_function_privilege('anon', 'private.driver_today_active()', 'execute'),
+    'the body is reachable only through the gate';
+  assert has_function_privilege('authenticated', 'public.driver_today()', 'execute')
+     and not has_function_privilege('anon', 'public.driver_today()', 'execute'), 'signed-in only';
+end
+$$;
+update public.drivers set status = 'active' where user_id = current_setting('t.uid_repartidor')::uuid;
+select set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('t.uid_repartidor'), 'role', 'authenticated')::text, true);
+do $$ begin
+  assert public.driver_today() = private.driver_today_active(), 'an active driver gets the body''s answer unchanged';
+end $$;
+select pg_temp.logout();
+
+-- ═══ Review: the search wrappers are definer; their bodies are private ═══
+
+do $$
+begin
+  assert (select bool_and(prosecdef) from pg_proc
+          where oid in ('public.search_products(text, text, bigint, bigint, boolean, boolean, text, integer, integer)'::regprocedure,
+                        'public.suggest_products(text, integer)'::regprocedure)), 'both wrappers are definer';
+  assert not has_function_privilege('anon',
+           'private.search_products_unbounded(text, text, bigint, bigint, boolean, boolean, text, integer, integer)', 'execute')
+     and not has_function_privilege('authenticated', 'private.suggest_products_unbounded(text, integer)', 'execute'),
+    'and the unbounded bodies cannot be called by the API roles';
+end
+$$;
+select pg_temp.login_anon();
+do $$ begin
+  assert (select count(*) from public.search_products('licuadora')) >= 1, 'a visitor still searches';
+  assert (select count(*) from public.suggest_products('licua')) >= 1, 'and gets suggestions';
+end $$;
+reset role; select pg_temp.logout();
+
+-- ═══ Review (FA-7): nothing is planned for an address a visitor typed ════
+
+-- The notifications tables are not in this branch; a table of the same shape
+-- for the recipient shows what the trigger on them does.
+create temp table deliveries_probe (recipient text not null, channel text not null);
+create trigger probe_no_typed_address before insert on deliveries_probe
+  for each row execute function private.drop_typed_address_deliveries();
+insert into deliveries_probe values ('report:00000000-0000-4000-8000-000000000001', 'email'),
+                                    ('user:00000000-0000-4000-8000-000000000002', 'email');
+do $$ begin
+  assert (select array_agg(recipient) from deliveries_probe) = array['user:00000000-0000-4000-8000-000000000002'],
+    'a delivery to a visitor''s typed address is dropped; one to an account is kept';
+end $$;
 
 -- ═══ Identification numbers: the same cases as packages/core ═══════════════
 

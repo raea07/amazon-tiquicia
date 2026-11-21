@@ -8,7 +8,7 @@
  */
 
 import { z } from "zod";
-import { sellerStatus } from "../schemas";
+import { careQueues, sellerStatus, wmsBoard } from "../schemas";
 import type { Caller, Messages } from "./types";
 
 const id = z.uuid();
@@ -132,6 +132,8 @@ export const sellerShopChanges = z.object({
   can_request: z.boolean(),
   /** A change of payout account is waiting, which holds back a change of contact. */
   payout_request_open: z.boolean(),
+  /** What is on file, for the forms to start from; null for members who may not ask. */
+  current: z.object({ fiscal: shopDetails, contact: shopDetails }).nullable().optional(),
   /** The latest request of each kind. */
   requests: z.array(shopChange),
 });
@@ -176,6 +178,23 @@ export type ShopChangeInput =
     }
   | { sellerId: string; kind: "contact"; contactEmail: string; contactPhone: string };
 
+/** The care queues with how many items each has in all (each list is a page). */
+export const careQueuesPaged = careQueues.extend({
+  totals: z.object({
+    complaints: z.number().int(),
+    returns: z.number().int(),
+    reports: z.number().int(),
+  }),
+});
+export type CareQueuesPaged = z.infer<typeof careQueuesPaged>;
+
+/** The warehouse board with how many inbound shipments are open in all. */
+export const wmsBoardPaged = wmsBoard.extend({ inbound_total: z.number().int() });
+export type WmsBoardPaged = z.infer<typeof wmsBoardPaged>;
+
+/** How many items a staff list shows at most; the rest follow as these are decided. */
+export const STAFF_QUEUE_PAGE = 100;
+
 export type ConsentPurpose =
   | "terms"
   | "privacy"
@@ -194,6 +213,20 @@ export const limitsErrors = {
     "es-CR":
       "Su tienda no está activa, así que esto no se puede hacer por ahora. Puede seguir preparando borradores; si cree que es un error, escríbanos.",
     en: "Your shop is not active, so this cannot be done for now. You can keep preparing drafts; if you think this is a mistake, write to us.",
+  },
+  shop_not_approved: {
+    "es-CR":
+      "Su tienda todavía no está verificada. Podrá hacer esto cuando la aprobemos; mientras tanto puede preparar borradores.",
+    en: "Your shop has not been verified yet. You can do this once we approve it; meanwhile you can prepare drafts.",
+  },
+  shop_closed: {
+    "es-CR": `Su tienda está cerrada: puede consultar sus datos, pero no cambiarlos. Si quiere reabrirla, escríbanos a ${SUPPORT}.`,
+    en: `Your shop is closed: you can read its data but not change it. To reopen it, write to ${SUPPORT}.`,
+  },
+  listing_shop_not_active: {
+    "es-CR":
+      "La tienda que creó este producto todavía no está verificada o no está activa, así que no se puede publicar. Verifique la tienda primero, o rechace el producto.",
+    en: "The shop that created this listing is not verified or not active, so it cannot be published. Verify the shop first, or reject the listing.",
   },
   // Registration and names
   shop_registration_pending: {
@@ -239,8 +272,13 @@ export const limitsErrors = {
   // Listings and stock sent to the warehouse
   too_large_for_warehouse: {
     "es-CR":
-      "Ese paquete es más grande de lo que recibe la bodega de Yuntera (30 kg y 120 cm por lado). Puede venderlo con envío por su cuenta.",
-    en: "That package is larger than the Yuntera warehouse takes (30 kg and 120 cm a side). You can sell it shipped by yourself.",
+      "Ese paquete mide más de 120 cm por lado, más de lo que recibe la bodega de Yuntera. Puede venderlo con envío por su cuenta.",
+    en: "That package is over 120 cm a side, more than the Yuntera warehouse takes. You can sell it shipped by yourself.",
+  },
+  package_over_limit: {
+    "es-CR":
+      "Yuntera no transporta paquetes de más de 30 kg ni de más de 200 cm por lado, con ninguna forma de envío. Revise el peso y las medidas.",
+    en: "Yuntera does not carry packages over 30 kg or over 200 cm a side, with any kind of delivery. Check the weight and measurements.",
   },
   too_many_listings_in_review: {
     "es-CR":
@@ -253,8 +291,8 @@ export const limitsErrors = {
   },
   too_many_open_inbounds: {
     "es-CR":
-      "Ya tiene muchos envíos a bodega sin recibir. Espere a que lleguen los que anunció antes de anunciar otro.",
-    en: "You already have many shipments to the warehouse not yet received. Wait for those to arrive before announcing another.",
+      "Ya tiene muchos envíos a bodega sin recibir. Podrá anunciar otro en cuanto recibamos alguno de los que ya anunció.",
+    en: "You already have many shipments to the warehouse not yet received. You can announce another as soon as we receive one of those.",
   },
   invalid_expected_date: {
     "es-CR": "La fecha de llegada debe ser de hoy en adelante, dentro de los próximos seis meses.",
@@ -281,8 +319,8 @@ export const limitsErrors = {
     en: "You have many reports waiting for an answer. We will let you know when we review them; then you can send more.",
   },
   reports_paused: {
-    "es-CR": `En este momento no podemos recibir más reportes por aquí. Escríbanos a ${SUPPORT} y lo atendemos.`,
-    en: `We cannot take more reports here right now. Write to ${SUPPORT} and we will look into it.`,
+    "es-CR": `En este momento no podemos recibir más reportes por aquí. Intente de nuevo en una hora, o escríbanos ahora a ${SUPPORT} y lo atendemos.`,
+    en: `We cannot take more reports here right now. Try again in an hour, or write to ${SUPPORT} now and we will look into it.`,
   },
   too_many_open_complaints: {
     "es-CR":
@@ -343,6 +381,16 @@ export const limitsErrors = {
       "Hay un cambio de cuenta bancaria en revisión. Para cambiar el teléfono o el correo, espere a que lo resolvamos.",
     en: "A change of bank account is being reviewed. To change the phone or e-mail, wait until we decide it.",
   },
+  contact_change_waits_for_payout: {
+    "es-CR":
+      "Esta tienda tiene un cambio de cuenta bancaria en revisión. Resuelva primero ese cambio, llamando al teléfono actual, y luego este.",
+    en: "This shop has a change of bank account under review. Decide that first, calling the current phone, and then this one.",
+  },
+  contact_request_open: {
+    "es-CR":
+      "Hay un cambio de teléfono o correo de la tienda en revisión. Para cambiar la cuenta bancaria, espere a que lo resolvamos o retire esa solicitud.",
+    en: "A change of the shop's phone or e-mail is under review. To change the bank account, wait until we decide it or withdraw that request.",
+  },
   shop_change_unchanged: {
     "es-CR": "Eso es lo que ya tenemos registrado. Cambie algún dato antes de enviar.",
     en: "That is what we already have on file. Change something before sending.",
@@ -372,6 +420,11 @@ export const limitsApi = ({ call, run }: Caller) => ({
   /** Routes that went back to dispatch because their driver left (last `days`, default 7). */
   opsReleasedRoutes: (days?: number) =>
     call("ops_released_routes", { p_days: days }, z.array(releasedRoute)),
+  /** The care queues, a page of each, with the totals. */
+  opsCareQueuesPaged: () => call("ops_care_queues", {}, careQueuesPaged),
+  /** The warehouse board, a page of inbound shipments, with how many there are. */
+  wmsBoardPaged: (warehouseId: string) =>
+    call("wms_board", { p_warehouse_id: warehouseId }, wmsBoardPaged),
   /** Shops that share an identification number with another shop. */
   opsSellerIdClashes: () => call("ops_seller_id_clashes", {}, z.array(sellerIdClash)),
 

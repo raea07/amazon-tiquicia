@@ -23,6 +23,16 @@
 --   6. Smaller things: reviewer names only for reviewers (FA-9), codes instead
 --      of raw constraint errors (FA-M3), packages too big for the warehouse,
 --      payout accounts finance never approved.
+--   7. From the review of this work: a contact change and a payout-account
+--      request never wait at the same time, in either order; a seller sees
+--      that an unapproved payout account blocks the payout; a fiscal request
+--      keeps the fields it does not send; an invitation can be taken by the
+--      account that later confirms the address; an administrator's invitations
+--      end with their role; a listing goes on sale only for a shop that may
+--      trade; a closed shop only reads; nothing is planned for an address a
+--      visitor typed. driver_today and the search functions are gates in front
+--      of whatever body they had, so this file never undoes another
+--      migration's changes to them.
 --
 -- Every limit is a setting in app_settings (an administrator can change it
 -- without a migration) or a named constant in the function that uses it, and
@@ -106,9 +116,29 @@ create or replace function private.require_trading_shop(p_seller_id uuid) return
 language plpgsql stable security definer
 set search_path = ''
 as $$
+declare
+  v_status public.seller_status;
 begin
-  if not exists (select 1 from public.sellers s where s.id = p_seller_id and s.status = 'active') then
+  select s.status into v_status from public.sellers s where s.id = p_seller_id;
+  -- A shop waiting for verification is told so, apart from a suspended one.
+  if v_status = 'pending' then
+    perform private.fail('shop_not_approved');
+  elsif v_status is distinct from 'active' then
     perform private.fail('shop_not_active');
+  end if;
+end;
+$$;
+
+-- A shop that is not closed. A closed shop only reads: it adds no pickup
+-- point and counts no stock. (It may still ask for its payout account to be
+-- changed, so that it can be paid what it is owed; finance decides.)
+create or replace function private.require_open_shop(p_seller_id uuid) returns void
+language plpgsql stable security definer
+set search_path = ''
+as $$
+begin
+  if not exists (select 1 from public.sellers s where s.id = p_seller_id and s.status <> 'closed') then
+    perform private.fail('shop_closed');
   end if;
 end;
 $$;
@@ -211,9 +241,18 @@ $$;
 create trigger drivers_release_on_leave after update of status on public.drivers
   for each row execute function private.drivers_release_on_leave();
 
--- Replaces the version in api_operations: a driver who is not active sees
--- their own record and no routes, so no recipient's name, phone or address.
-create or replace function public.driver_today() returns jsonb
+-- A driver who is not active sees their own record and no routes, so no
+-- recipient's name, phone or address. The body of driver_today is not
+-- rewritten here: whatever version is in place when this migration runs (the
+-- one in api_operations, or a later one such as the integrity workstream's,
+-- which counts delivery-code attempts) moves to the private schema unchanged,
+-- and the public name becomes a gate in front of it. So this migration never
+-- undoes another one's changes to what an active driver sees.
+alter function public.driver_today() rename to driver_today_active;
+alter function public.driver_today_active() set schema private;
+revoke all on function private.driver_today_active() from public, anon, authenticated;
+
+create function public.driver_today() returns jsonb
 language plpgsql stable security definer
 set search_path = ''
 as $$
@@ -224,39 +263,14 @@ begin
   if not found then
     perform private.fail('not_a_driver');
   end if;
-
-  return jsonb_build_object(
-    'driver', jsonb_build_object(
-      'id', d.id, 'full_name', d.full_name, 'status', d.status, 'vehicle_type', d.vehicle_type,
-      'plate', d.plate),
-    'routes', case when d.status <> 'active' then '[]'::jsonb else coalesce((
-      select jsonb_agg(jsonb_build_object(
-        'route_id', r.id, 'code', r.code, 'status', r.status, 'service_date', r.service_date,
-        'planned_km', r.planned_km, 'planned_minutes', r.planned_minutes,
-        'started_at', r.started_at, 'completed_at', r.completed_at,
-        'depot', (select jsonb_build_object('name', w.name, 'address', w.address, 'lat', w.lat, 'lng', w.lng)
-                  from public.warehouses w where w.id = r.depot_warehouse_id),
-        'cash_to_hand_in_minor', (select coalesce(sum(rs.cod_collected_minor), 0)
-                                  from public.route_stops rs where rs.route_id = r.id),
-        'stops', coalesce((
-          select jsonb_agg(jsonb_build_object(
-            'stop_id', rs.id, 'sequence', rs.sequence, 'status', rs.status,
-            'eta_minute', rs.eta_minute, 'recipient_name', rs.recipient_name, 'phone', rs.phone,
-            'senas', rs.senas, 'lat', rs.lat, 'lng', rs.lng, 'plus_code', rs.plus_code,
-            'package_count', rs.package_count, 'cod_amount_minor', rs.cod_amount_minor,
-            'cod_collected_minor', rs.cod_collected_minor, 'failure_reason', rs.failure_reason,
-            'pin_attempts_left', greatest(0, 5 - rs.pin_attempts),
-            'tracking_code', sh.tracking_code, 'completed_at', rs.completed_at
-          ) order by rs.sequence)
-          from public.route_stops rs join public.shipments sh on sh.id = rs.shipment_id
-          where rs.route_id = r.id), '[]'::jsonb)
-      ) order by (r.status = 'in_progress') desc, (r.status = 'assigned') desc, r.service_date desc, r.code)
-      from public.routes r
-      where r.driver_id = d.id
-        and (r.status in ('assigned', 'in_progress')
-             or (r.status = 'completed' and r.completed_at > now() - interval '24 hours'))
-    ), '[]'::jsonb) end
-  );
+  if d.status <> 'active' then
+    return jsonb_build_object(
+      'driver', jsonb_build_object(
+        'id', d.id, 'full_name', d.full_name, 'status', d.status, 'vehicle_type', d.vehicle_type,
+        'plate', d.plate),
+      'routes', '[]'::jsonb);
+  end if;
+  return private.driver_today_active();
 end;
 $$;
 
@@ -657,7 +671,9 @@ as $$
 $$;
 
 -- The limits of a listing's content and package, on the values that will be
--- stored. The same as the seller app's form and seller_update_listing.
+-- stored. The same as the seller app's form and seller_update_listing. A
+-- package over 30 kg or 200 cm a side is carried by no kind of delivery
+-- (package_over_limit), which is said plainly rather than as a form error.
 create or replace function private.listing_problem(
   p_title text, p_description text, p_bullets text[], p_weight_grams integer,
   p_length_cm numeric, p_width_cm numeric, p_height_cm numeric
@@ -666,6 +682,8 @@ language sql immutable
 set search_path = ''
 as $$
   select case
+    when p_weight_grams > 30000 or p_length_cm > 200 or p_width_cm > 200 or p_height_cm > 200
+      then 'package_over_limit'
     when coalesce(char_length(trim(p_title)), 0) not between 5 and 200
       or coalesce(char_length(trim(p_description)), 0) > 10000
       or coalesce(cardinality(p_bullets), 0) > 8
@@ -717,12 +735,17 @@ begin
   end if;
   -- One listing at a time per shop, so the counts below hold.
   select status into v_status from public.sellers where id = p_seller_id for update;
-  if v_status = 'closed' or (coalesce(p_submit, false) and v_status <> 'active') then
+  if coalesce(p_submit, false) and v_status = 'pending' then
+    perform private.fail('shop_not_approved');
+  elsif v_status = 'closed' or (coalesce(p_submit, false) and v_status <> 'active') then
     perform private.fail('shop_not_active');
   end if;
 
   v_problem := private.listing_problem(p_title, p_description, p_bullet_points, p_weight_grams,
                                        p_length_cm, p_width_cm, p_height_cm);
+  if v_problem = 'package_over_limit' then
+    perform private.fail('package_over_limit');
+  end if;
   if v_problem is not null or p_price_minor is null or p_price_minor <= 0
      or p_price_minor > c_max_price_minor or p_fulfillment is null then
     perform private.fail('invalid_listing');
@@ -823,6 +846,7 @@ declare
   v_proposed jsonb;
   v_status public.product_status;
   v_request uuid;
+  v_problem text;
 begin
   select * into p from public.products where id = p_product_id for update;
   if not found or p.created_by_seller_id is null
@@ -833,7 +857,9 @@ begin
     perform private.fail('listing_not_editable');
   end if;
   select status into v_shop from public.sellers where id = p.created_by_seller_id for update;
-  if v_shop = 'closed' or ((p.status = 'active' or coalesce(p_submit, false)) and v_shop <> 'active') then
+  if (p.status = 'active' or coalesce(p_submit, false)) and v_shop = 'pending' then
+    perform private.fail('shop_not_approved');
+  elsif v_shop = 'closed' or ((p.status = 'active' or coalesce(p_submit, false)) and v_shop <> 'active') then
     perform private.fail('shop_not_active');
   end if;
 
@@ -849,8 +875,11 @@ begin
     perform private.fail('category_not_found');
   end if;
 
-  if private.listing_problem(v_title, v_description, v_bullets, p_weight_grams,
-                             p_length_cm, p_width_cm, p_height_cm) is not null then
+  v_problem := private.listing_problem(v_title, v_description, v_bullets, p_weight_grams,
+                                       p_length_cm, p_width_cm, p_height_cm);
+  if v_problem = 'package_over_limit' then
+    perform private.fail('package_over_limit');
+  elsif v_problem is not null then
     perform private.fail('invalid_listing');
   end if;
   v_bullets := array(select trim(b) from unnest(v_bullets) b);
@@ -1082,9 +1111,33 @@ begin
 end;
 $$;
 
+-- A listing goes on sale only if the shop that created it may trade. This is
+-- on the table, not in ops_review_product, so it holds whichever version of
+-- that function is in place (product photos redefines it) and on any other
+-- path. A listing a shop sent before it was suspended waits until the shop is
+-- active again, or staff reject it.
+create or replace function private.products_need_trading_shop() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  if new.status = 'active' and old.status is distinct from 'active'
+     and new.created_by_seller_id is not null
+     and not exists (select 1 from public.sellers s
+                     where s.id = new.created_by_seller_id and s.status = 'active') then
+    perform private.fail('listing_shop_not_active');
+  end if;
+  return new;
+end;
+$$;
+
+create trigger products_need_trading_shop before update of status on public.products
+  for each row execute function private.products_need_trading_shop();
+
 -- Replaces the version in api_operations: the oldest listings waiting, a page
 -- at a time, so a flood cannot make the screen unusable. The rest follow as
--- these are decided.
+-- these are decided. Each row says the shop's status: a listing of a shop
+-- that may not trade cannot be approved (see above), and the console says so.
 create or replace function public.ops_listings_for_review()
 returns table (
   product_id uuid, slug text, title text, description text, bullet_points text[],
@@ -1201,6 +1254,38 @@ $$;
 
 comment on column public.content_reports.reporter_email is
   'A contact detail the reporter typed, never verified. Staff may write to it by hand; nothing may send automatic messages to it, because anyone can type anyone''s address.';
+
+-- Nothing is planned for that address either. The notifications migration
+-- (082600) plans a "report resolved" e-mail to a visitor's typed address,
+-- under the recipient 'report:<id>'. Where that table exists, a trigger drops
+-- any such delivery before it is stored, and any already planned is skipped:
+-- a visitor must not be able to make Yuntera write to somebody else. Without
+-- notifications this does nothing; a reporter with an account is still told
+-- about the outcome through their account.
+create or replace function private.drop_typed_address_deliveries() returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.recipient like 'report:%' then
+    return null;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function private.drop_typed_address_deliveries() from public;
+
+do $$
+begin
+  if to_regclass('private.notification_deliveries') is not null then
+    execute 'create trigger notification_deliveries_no_typed_address
+               before insert on private.notification_deliveries
+               for each row execute function private.drop_typed_address_deliveries()';
+    execute $sql$update private.notification_deliveries set status = 'skipped'
+                 where recipient like 'report:%' and status = 'pending'$sql$;
+  end if;
+end
+$$;
 
 create index content_reports_visitor_recent_idx on public.content_reports (created_at)
   where reporter_id is null;
@@ -1442,7 +1527,10 @@ $$;
 
 -- The search functions keep their bodies (search.sql, whose constants a unit
 -- test checks) under a private name; the public names become thin wrappers
--- that bound the text first. Both run with the caller's rights, as before.
+-- that bound the text first. The wrappers are security definer, like every
+-- API function, and the bodies are reachable only through them: nobody can
+-- call a body with unbounded text. The bodies read only what a visitor may
+-- see (active products), as their own filters say.
 alter function public.search_products(text, text, bigint, bigint, boolean, boolean, text, integer, integer)
   rename to search_products_unbounded;
 alter function public.search_products_unbounded(text, text, bigint, bigint, boolean, boolean, text, integer, integer)
@@ -1486,6 +1574,8 @@ as $$
     p_max_price_minor, p_in_stock_only, p_made_in_cr, left(p_sort, 20), p_limit,
     least(greatest(coalesce(p_offset, 0), 0), 10000));
 $$;
+alter function public.search_products(text, text, bigint, bigint, boolean, boolean, text, integer, integer)
+  security definer;
 
 create function public.suggest_products(p_prefix text, p_limit integer default 8)
 returns table (title text, slug text)
@@ -1494,6 +1584,7 @@ set search_path = ''
 as $$
   select * from private.suggest_products_unbounded(private.bounded_search_text(p_prefix), p_limit);
 $$;
+alter function public.suggest_products(text, integer) security definer;
 
 -- Replaces the version in api_shopper. The number of lines is checked before
 -- any pricing work, and a line that is not an object with an offer id and a
@@ -1610,9 +1701,10 @@ create table public.seller_invitations (
   -- As the inviter typed it (lower case). Shown only to the shop's administrators.
   email text not null check (char_length(email) <= 254),
   -- The account with that address when the invitation was sent, or null when
-  -- there was none. Only that account can answer; one created later with the
-  -- same address cannot, so typing an address never hands a seat to whoever
-  -- registers it next.
+  -- there was none. Only that account can answer. When there was none, the
+  -- account that later signs up with the address and confirms it (proving it
+  -- owns the mailbox) can: inviting someone before they register is the
+  -- common case. An account whose address is not confirmed never can.
   invitee_id uuid references auth.users (id) on delete cascade,
   role public.seller_member_role not null check (role in ('admin', 'staff')),
   status text not null default 'pending'
@@ -1629,6 +1721,8 @@ create unique index seller_invitations_open_idx
   on public.seller_invitations (seller_id, email) where status = 'pending';
 create index seller_invitations_invitee_idx
   on public.seller_invitations (invitee_id) where status = 'pending';
+create index seller_invitations_unbound_idx
+  on public.seller_invitations (email) where status = 'pending' and invitee_id is null;
 
 alter table public.seller_invitations enable row level security;
 revoke all on public.seller_invitations from anon, authenticated;
@@ -1639,6 +1733,46 @@ language sql stable
 set search_path = ''
 as $$
   select p.status = 'pending' and p.expires_at > now();
+$$;
+
+-- An invitation that can still be accepted: open, and whoever sent it is still
+-- allowed to (the owner, or an administrator for a staff seat). An
+-- administrator who leaves or is removed takes their invitations with them.
+create or replace function private.invitation_valid(p public.seller_invitations) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select private.invitation_open(p) and exists (
+    select 1 from public.seller_members m
+    where m.seller_id = p.seller_id and m.user_id = p.invited_by
+      and (m.role = 'owner' or (m.role = 'admin' and p.role = 'staff')));
+$$;
+
+-- Whether the signed-in person may answer an invitation: it names their
+-- account, or it named nobody and was sent to the address they confirmed.
+create or replace function private.invitation_for_me(p public.seller_invitations) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select case
+    when p.invitee_id is not null then p.invitee_id = (select auth.uid())
+    else exists (select 1 from auth.users u
+                 where u.id = (select auth.uid()) and u.email_confirmed_at is not null
+                   and lower(u.email) = p.email)
+  end;
+$$;
+
+-- Withdraws what someone sent for a shop when they stop being allowed to send
+-- it (they left, were removed or became staff), so the owner's list is true.
+create or replace function private.revoke_invitations_sent_by(p_seller_id uuid, p_user_id uuid)
+returns void
+language sql security definer
+set search_path = ''
+as $$
+  update public.seller_invitations i
+  set status = 'revoked', answered_at = now(), answered_by = (select auth.uid())
+  where i.seller_id = p_seller_id and i.invited_by = p_user_id and i.status = 'pending'
+    and not private.invitation_valid(i);
 $$;
 
 -- The shop's team, for any member. Administrators also see the e-mail of each
@@ -1678,7 +1812,7 @@ begin
         'invited_by_name', (select p.full_name from public.profiles p where p.id = i.invited_by)
       ) order by i.created_at)
       from public.seller_invitations i
-      where i.seller_id = p_seller_id and private.invitation_open(i)), '[]'::jsonb) end
+      where i.seller_id = p_seller_id and private.invitation_valid(i)), '[]'::jsonb) end
   );
 end;
 $$;
@@ -1792,7 +1926,7 @@ begin
     ) order by i.created_at)
     from public.seller_invitations i
     join public.sellers s on s.id = i.seller_id
-    where i.invitee_id = v_me and private.invitation_open(i) and s.status <> 'closed'
+    where private.invitation_for_me(i) and private.invitation_valid(i) and s.status <> 'closed'
   ), '[]'::jsonb);
 end;
 $$;
@@ -1813,7 +1947,7 @@ begin
     perform private.fail('not_authenticated');
   end if;
   select * into v from public.seller_invitations where id = p_invitation_id for update;
-  if not found or v.invitee_id is distinct from v_me or not private.invitation_open(v) then
+  if not found or not private.invitation_for_me(v) or not private.invitation_valid(v) then
     perform private.fail('invitation_not_found');
   end if;
   if p_accept is null then
@@ -1829,7 +1963,7 @@ begin
   end if;
   update public.seller_invitations
   set status = case when p_accept then 'accepted' else 'declined' end,
-      answered_at = now(), answered_by = v_me
+      answered_at = now(), answered_by = v_me, invitee_id = v_me
   where id = v.id;
   perform private.emit('seller.invitation_answered',
     jsonb_build_object('invitation_id', v.id, 'seller_id', v.seller_id, 'accepted', p_accept));
@@ -1890,6 +2024,7 @@ begin
     perform private.fail('owner_only');
   end if;
   delete from public.seller_members where seller_id = p_seller_id and user_id = p_user_id;
+  perform private.revoke_invitations_sent_by(p_seller_id, p_user_id);
 end;
 $$;
 
@@ -1915,6 +2050,7 @@ begin
   if not found then
     perform private.fail('member_not_found');
   end if;
+  perform private.revoke_invitations_sent_by(p_seller_id, p_user_id);
 end;
 $$;
 
@@ -2011,6 +2147,7 @@ set search_path = ''
 as $$
 declare
   v_proposed jsonb;
+  v_current jsonb;
   v_phone text := regexp_replace(coalesce(p_contact_phone, ''), '[\s-]', '', 'g');
   v_id uuid;
 begin
@@ -2030,12 +2167,18 @@ begin
     v_proposed := jsonb_build_object('trade_name', private.clean_text(p_trade_name));
     perform private.check_shop_name(v_proposed ->> 'trade_name', p_seller_id);
   elsif p_kind = 'fiscal' then
+    -- A field left out (null or blank) keeps what is on file: a seller fixing
+    -- the address must not wipe the postal or activity code Hacienda verified.
+    -- So a request never clears a field; staff do that if it is ever needed.
+    v_current := private.shop_details(p_seller_id, 'fiscal');
     v_proposed := jsonb_build_object(
-      'tax_regime', p_tax_regime,
-      'fiscal_address', private.clean_text(p_fiscal_address),
-      'postal_code', nullif(trim(coalesce(p_postal_code, '')), ''),
-      'economic_activity_code', nullif(regexp_replace(coalesce(p_economic_activity_code, ''), '[\s.]', '', 'g'), ''));
-    if p_tax_regime is null or p_tax_regime not in ('general', 'simplificado')
+      'tax_regime', coalesce(nullif(trim(coalesce(p_tax_regime, '')), ''), v_current ->> 'tax_regime'),
+      'fiscal_address', coalesce(private.clean_text(p_fiscal_address), v_current ->> 'fiscal_address'),
+      'postal_code', coalesce(nullif(trim(coalesce(p_postal_code, '')), ''), v_current ->> 'postal_code'),
+      'economic_activity_code', coalesce(
+        nullif(regexp_replace(coalesce(p_economic_activity_code, ''), '[\s.]', '', 'g'), ''),
+        v_current ->> 'economic_activity_code'));
+    if (v_proposed ->> 'tax_regime') is null or (v_proposed ->> 'tax_regime') not in ('general', 'simplificado')
        or coalesce(char_length(v_proposed ->> 'fiscal_address'), 0) not between 10 and 500
        or (v_proposed ->> 'postal_code' is not null
            and not exists (select 1 from public.districts d where d.postal_code = v_proposed ->> 'postal_code'))
@@ -2101,6 +2244,11 @@ begin
                    and exists (select 1 from public.sellers s where s.id = p_seller_id and s.status <> 'closed'),
     'payout_request_open', exists (select 1 from public.payout_detail_requests r
                                    where r.seller_id = p_seller_id and r.status = 'pending'),
+    -- What is on file, for the forms to start from, so a field the seller does
+    -- not touch is sent as it is. Only for those who may ask for a change.
+    'current', case when private.is_seller_admin(p_seller_id) then jsonb_build_object(
+      'fiscal', private.shop_details(p_seller_id, 'fiscal'),
+      'contact', private.shop_details(p_seller_id, 'contact')) end,
     'requests', coalesce((
       select jsonb_agg(private.shop_change_item(x.request) order by x.kind)
       from (
@@ -2228,8 +2376,20 @@ begin
     perform private.fail('reason_required');
   end if;
 
+  -- The shop's row first: a payout-account request sent at the same moment
+  -- waits for this decision, and this one sees it if it came first.
+  perform 1 from public.seller_private where seller_id = r.seller_id for update;
+  -- Finance confirms a payout-account change by calling the phone on file. A
+  -- contact change approved while such a request waits would let whoever sent
+  -- both answer that call: the payout request is decided first.
+  if p_approve and r.kind = 'contact' and exists (
+    select 1 from public.payout_detail_requests q
+    where q.seller_id = r.seller_id and q.status = 'pending'
+  ) then
+    perform private.fail('contact_change_waits_for_payout');
+  end if;
+
   if p_approve then
-    perform 1 from public.seller_private where seller_id = r.seller_id for update;
     if r.kind = 'shop_name' then
       perform private.check_shop_name(r.proposed ->> 'trade_name', r.seller_id);
       update public.sellers set trade_name = r.proposed ->> 'trade_name' where id = r.seller_id;
@@ -2456,9 +2616,10 @@ begin
 end;
 $$;
 
--- Replaces the version in people_payouts. The one change: asking again for the
+-- Replaces the version in people_payouts. What changed: asking again for the
 -- account already on file is allowed while finance has never approved it, so
--- a seller whose account predates approvals can have it approved.
+-- a seller whose account predates approvals can have it approved; and it is
+-- refused while a change of the shop's contact waits (contact_request_open).
 create or replace function public.seller_request_payout_details(
   p_seller_id uuid,
   p_iban text,
@@ -2493,6 +2654,13 @@ begin
   select * into v_current from public.seller_private where seller_id = p_seller_id for update;
   if not found then
     perform private.fail('seller_not_found');
+  end if;
+  -- A change of contact waiting for finance holds this back, for the same
+  -- reason a payout request holds back a contact change: the confirmation call
+  -- must go to a number that is not itself being changed.
+  if exists (select 1 from public.seller_change_requests c
+             where c.seller_id = p_seller_id and c.kind = 'contact' and c.status = 'pending') then
+    perform private.fail('contact_request_open');
   end if;
   if v_current.payout_approved_at is not null
      and v_current.payout_iban = v_iban and v_current.payout_holder_name = v_holder
@@ -2548,6 +2716,238 @@ as $$
   where b.payable_minor <> 0 or b.in_transit_minor <> 0 or b.available_minor <> 0;
 $$;
 
+-- Replaces the version in people_payouts. The one change: `current.approved`
+-- says whether finance approved the account on file, so the seller's screen
+-- can ask for an account that was never approved to be sent for approval.
+create or replace function public.seller_payout_details(p_seller_id uuid) returns jsonb
+language plpgsql stable security definer
+set search_path = ''
+as $$
+begin
+  if not (private.is_seller_member(p_seller_id) or private.has_staff_role('finance', 'support')) then
+    perform private.fail('forbidden');
+  end if;
+  if not exists (select 1 from public.seller_private sp where sp.seller_id = p_seller_id) then
+    perform private.fail('seller_not_found');
+  end if;
+  return jsonb_build_object(
+    'can_request', private.is_seller_admin(p_seller_id),
+    'current', (
+      select jsonb_build_object(
+        'iban_masked', private.mask_iban(sp.payout_iban),
+        'holder_name', sp.payout_holder_name,
+        'sinpe_number', sp.sinpe_movil_number,
+        -- Whether finance approved the account on file. One entered before
+        -- approvals existed is not, and is not paid until it is.
+        'approved', sp.payout_iban is not null and sp.payout_approved_at is not null)
+      from public.seller_private sp where sp.seller_id = p_seller_id),
+    'request', (
+      select jsonb_build_object(
+        'id', r.id, 'status', r.status,
+        'iban_masked', private.mask_iban(r.payout_iban),
+        'holder_name', r.payout_holder_name,
+        'sinpe_number', r.sinpe_movil_number,
+        'requested_at', r.requested_at,
+        'requested_by_name', (select p.full_name from public.profiles p where p.id = r.requested_by),
+        'decided_at', r.decided_at,
+        'note', r.decision_note)
+      from public.payout_detail_requests r
+      where r.seller_id = p_seller_id and r.status <> 'replaced'
+      order by r.requested_at desc limit 1)
+  );
+end;
+$$;
+
+-- Replaces the version in people_payouts. The one change: what stands in the
+-- way of a payout follows the same rule as finance's run (payout_candidates):
+-- an account finance never approved counts as no approved account.
+create or replace function public.seller_payouts(p_seller_id uuid) returns jsonb
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  v_today date := private.cr_local(now())::date;
+  v_hold integer := private.payout_hold_days();
+  v_minimum bigint := private.payout_minimum_minor();
+  b record;
+begin
+  if not (private.is_seller_member(p_seller_id) or private.has_staff_role('finance')) then
+    perform private.fail('forbidden');
+  end if;
+  select * into b from private.seller_balances(v_today, v_hold, p_seller_id);
+  if not found then
+    perform private.fail('seller_not_found');
+  end if;
+
+  return jsonb_build_object(
+    'as_of', v_today, 'hold_days', v_hold, 'minimum_minor', v_minimum,
+    'payable_minor', b.payable_minor, 'available_minor', b.available_minor,
+    'pending_minor', b.pending_minor, 'in_transit_minor', b.in_transit_minor,
+    -- Sales delivered up to this day are out of their hold today.
+    'delivered_through', v_today - v_hold,
+    -- The pending part, by the day it becomes available …
+    'releases', coalesce((
+      select jsonb_agg(jsonb_build_object('on', x.release_on, 'amount_minor', x.amount)
+                       order by x.release_on)
+      from (
+        select private.cr_local(y.settled_at)::date + v_hold as release_on,
+               -sum(y.amount_minor)::bigint as amount
+        from (
+          select e.amount_minor, private.seller_order_settled_at(t.order_id, a.seller_id) as settled_at
+          from public.ledger_accounts a
+          join public.ledger_entries e on e.account_id = a.id
+          join public.ledger_transactions t on t.id = e.transaction_id
+          where a.seller_id = p_seller_id and t.order_id is not null
+        ) y
+        where y.settled_at is not null
+          and private.cr_local(y.settled_at)::date + v_hold > v_today
+        group by 1
+        having sum(y.amount_minor) <> 0
+      ) x), '[]'::jsonb),
+    -- … and the part that has no day yet because the goods are still on their way.
+    'awaiting_delivery_minor', coalesce((
+      select -sum(e.amount_minor)::bigint
+      from public.ledger_accounts a
+      join public.ledger_entries e on e.account_id = a.id
+      join public.ledger_transactions t on t.id = e.transaction_id
+      where a.seller_id = p_seller_id and t.order_id is not null
+        and private.seller_order_settled_at(t.order_id, a.seller_id) is null), 0),
+    'blocked_by', (
+      select to_jsonb(array_remove(array[
+        case when s.status in ('suspended', 'pending') then 'shop_suspended' end,
+        case when sp.payout_iban is null or sp.payout_holder_name is null
+               or sp.payout_approved_at is null then 'no_bank_details' end,
+        case when sp.payout_iban is not null and not private.is_valid_cr_iban(sp.payout_iban)
+             then 'invalid_bank_details' end,
+        case when b.available_minor < greatest(v_minimum, 1) then 'below_minimum' end
+      ], null))
+      from public.sellers s join public.seller_private sp on sp.seller_id = s.id
+      where s.id = p_seller_id),
+    'account', (
+      select jsonb_build_object(
+        'iban_masked', private.mask_iban(sp.payout_iban), 'holder_name', sp.payout_holder_name)
+      from public.seller_private sp where sp.seller_id = p_seller_id),
+    'payouts', coalesce((
+      select jsonb_agg(x.item order by x.created_at desc)
+      from (
+        select p.created_at, jsonb_build_object(
+          'id', p.id, 'reference', p.reference, 'status', p.status,
+          'amount_minor', p.amount_minor, 'cutoff_on', r.cutoff_on,
+          'scheduled_at', p.created_at, 'paid_at', p.paid_at,
+          'bank_reference', p.bank_reference, 'failed_at', p.failed_at,
+          'failure_reason', p.failure_reason,
+          'iban_masked', private.mask_iban(p.payout_iban)) as item
+        from public.payouts p
+        left join public.payout_runs r on r.id = p.run_id
+        where p.seller_id = p_seller_id
+        order by p.created_at desc
+        limit 100
+      ) x), '[]'::jsonb)
+  );
+end;
+$$;
+
+-- ═══ 12b. A closed shop only reads ══════════════════════════════════════════
+
+-- Replaces the version in api_backoffice. The one change: a closed shop adds
+-- no pickup point (shop_closed).
+create or replace function public.seller_save_location(
+  p_seller_id uuid,
+  p_name text,
+  p_address text,
+  p_postal_code text,
+  p_lat double precision,
+  p_lng double precision
+) returns uuid
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_id uuid;
+begin
+  if not private.is_seller_admin(p_seller_id) then
+    perform private.fail('forbidden');
+  end if;
+  perform private.require_open_shop(p_seller_id);
+  if coalesce(char_length(trim(p_name)), 0) not between 3 and 80
+     or coalesce(char_length(trim(p_address)), 0) not between 15 and 500
+     or p_lat is null or p_lng is null then
+    perform private.fail('invalid_location');
+  end if;
+  -- Our drivers collect from this point, so it has to be where they work.
+  if not exists (
+    select 1
+    from public.districts d
+    join public.cantons c on c.code = d.canton_code
+    join public.delivery_zones z on z.id = coalesce(d.zone_id, c.zone_id)
+    where d.postal_code = p_postal_code and z.active
+  ) then
+    perform private.fail('zone_not_served');
+  end if;
+  if (select count(*) from public.warehouses w where w.seller_id = p_seller_id) >= 5 then
+    perform private.fail('too_many_locations');
+  end if;
+
+  insert into public.warehouses (code, name, kind, seller_id, address, postal_code, lat, lng)
+  values ('V' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 9)),
+          trim(p_name), 'seller', p_seller_id, trim(p_address), p_postal_code, p_lat, p_lng)
+  returning id into v_id;
+  return v_id;
+exception
+  when check_violation then
+    -- The point is outside Costa Rica.
+    perform private.fail('invalid_location');
+end;
+$$;
+
+-- Replaces the version in inventory. The one change: a closed shop counts no
+-- stock (shop_closed). A suspended shop still counts what it holds.
+create or replace function public.seller_set_stock(
+  p_warehouse_id uuid,
+  p_sku_id uuid,
+  p_quantity integer
+) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_seller uuid;
+  v_current integer;
+  v_reserved integer;
+begin
+  select w.seller_id into v_seller
+  from public.warehouses w
+  where w.id = p_warehouse_id and w.kind = 'seller' and w.active;
+
+  if v_seller is null or not private.is_seller_member(v_seller) then
+    perform private.fail('forbidden');
+  end if;
+  perform private.require_open_shop(v_seller);
+  if p_quantity < 0 or p_quantity > 100000 then
+    perform private.fail('invalid_quantity');
+  end if;
+  if not exists (
+    select 1 from public.offers o where o.sku_id = p_sku_id and o.seller_id = v_seller
+  ) then
+    perform private.fail('offer_not_found');
+  end if;
+
+  select l.on_hand, l.reserved into v_current, v_reserved
+  from public.stock_levels l
+  where l.warehouse_id = p_warehouse_id and l.sku_id = p_sku_id and l.seller_id = v_seller
+  for update;
+
+  if p_quantity < coalesce(v_reserved, 0) then
+    -- Units already promised to shoppers cannot be counted away.
+    perform private.fail('below_reserved', coalesce(v_reserved, 0)::text);
+  end if;
+
+  perform private.apply_stock_change(
+    p_warehouse_id, p_sku_id, v_seller, p_quantity - coalesce(v_current, 0), 'adjust',
+    null, 'seller_count', null, 'Conteo del vendedor');
+end;
+$$;
+
 -- ═══ 13. Grants ════════════════════════════════════════════════════════════
 
 revoke all on function
@@ -2555,6 +2955,7 @@ revoke all on function
   private.clean_text(text),
   private.is_email(text),
   private.require_trading_shop(uuid),
+  private.require_open_shop(uuid),
   private.release_driver_routes(uuid, text),
   private.drivers_release_on_leave(),
   private.is_valid_identification(public.identification_type, text),
@@ -2564,9 +2965,13 @@ revoke all on function
   private.offers_warehouse_size(),
   private.skus_warehouse_size(),
   private.listings_in_review(uuid, uuid),
+  private.products_need_trading_shop(),
   private.listing_problem(text, text, text[], integer, numeric, numeric, numeric),
   private.is_public_target(text, uuid),
   private.invitation_open(public.seller_invitations),
+  private.invitation_valid(public.seller_invitations),
+  private.invitation_for_me(public.seller_invitations),
+  private.revoke_invitations_sent_by(uuid, uuid),
   private.may_decide_shop_change(text),
   private.shop_details(uuid, text),
   private.shop_change_item(public.seller_change_requests),
@@ -2591,16 +2996,18 @@ revoke all on function
   public.ops_decide_shop_change(uuid, boolean, text),
   public.withdraw_consent(text),
   public.search_products(text, text, bigint, bigint, boolean, boolean, text, integer, integer),
-  public.suggest_products(text, integer)
+  public.suggest_products(text, integer),
+  public.driver_today()
 from public;
 
--- The wrappers call the bodies with the caller's rights, so visitors need to
--- be able to run the bodies too. The private schema is not exposed by the
--- API: they are reachable only through the wrappers.
-grant execute on function
+-- The search bodies run only through their wrappers.
+revoke all on function
   private.bounded_search_text(text),
   private.search_products_unbounded(text, text, bigint, bigint, boolean, boolean, text, integer, integer),
-  private.suggest_products_unbounded(text, integer),
+  private.suggest_products_unbounded(text, integer)
+from public, anon, authenticated;
+
+grant execute on function
   public.search_products(text, text, bigint, bigint, boolean, boolean, text, integer, integer),
   public.suggest_products(text, integer)
 to anon, authenticated;
@@ -2620,5 +3027,6 @@ grant execute on function
   public.seller_withdraw_shop_change(uuid),
   public.ops_shop_change_requests(text),
   public.ops_decide_shop_change(uuid, boolean, text),
-  public.withdraw_consent(text)
+  public.withdraw_consent(text),
+  public.driver_today()
 to authenticated;

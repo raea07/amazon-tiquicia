@@ -120,6 +120,31 @@ describe.skipIf(!db.enabled)("limits contract (against a seeded database)", () =
     }
   });
 
+  it("gives an admin the shop's details on file, so a form keeps what is not changed", async () => {
+    const mine = await db.as("sendero@yuntera.example").sellerShopChanges(sendero);
+    expect(mine.current?.fiscal).toMatchObject({ postal_code: "10203", tax_regime: "general" });
+    expect(mine.current?.contact).toMatchObject({ contact_phone: "+50622890404" });
+  });
+
+  it("says whether finance approved the payout account on file", async () => {
+    const details = await db.as("vendedor@yuntera.example").sellerPayoutDetails(tecnocasa);
+    expect(details.current.approved).toBe(true);
+    const money = await db.as("vendedor@yuntera.example").sellerPayouts(tecnocasa);
+    expect(money.blocked_by).not.toContain("no_bank_details");
+  });
+
+  it("pages the staff queues and says how many there are in all", async () => {
+    const queues = await staff().opsCareQueuesPaged();
+    expect(queues.totals.reports).toBeGreaterThanOrEqual(queues.reports.length);
+    expect(queues.totals.complaints).toBeGreaterThanOrEqual(queues.complaints.length);
+    const { rows } = await db.query<{ id: string }>(
+      "select id from public.warehouses where code = 'SJO1'",
+    );
+    const board = await db.as("bodega@yuntera.example").wmsBoardPaged(rows[0]?.id ?? "");
+    expect(board.inbound_total).toBeGreaterThanOrEqual(board.inbound.length);
+    await expect(shopper().opsCareQueuesPaged()).rejects.toMatchObject({ code: "forbidden" });
+  });
+
   it("withdraws a consent and says how many records it closed", async () => {
     expect(await shopper().withdrawConsent("location")).toBe(0);
   });
