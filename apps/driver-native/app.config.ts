@@ -6,11 +6,12 @@ import type { ExpoConfig } from "expo/config";
 /**
  * The drivers' app, "Yuntera Ruta" (cr.yuntera.ruta). Location while a route
  * is running (foreground service on Android, background mode on iOS, never
- * the "Always" permission), and nothing else: camera scanning and delivery
- * photos are not built, so the camera is not declared and its Android
- * permission (added by the installed expo-camera and expo-image-picker
- * libraries) is removed. The workstream that adds photos or scanning puts
- * their plugins and Spanish texts back.
+ * the "Always" permission), and nothing else. Camera scanning and delivery
+ * photos are not built, but expo-camera and expo-image-picker are installed,
+ * and Expo applies their plugins on its own with English permission texts.
+ * They are listed below with every permission set to `false`, which removes
+ * those texts, and the Android camera permission is blocked. The workstream
+ * that adds photos or scanning gives them Spanish texts instead.
  *
  * What all four apps share is in packages/expo-kit/src/config.ts. Permission
  * texts are in Spanish and say why, as both stores require. `easProjectId`
@@ -39,6 +40,19 @@ export default (): ExpoConfig =>
           isAndroidForegroundServiceEnabled: true,
           isAndroidBackgroundLocationEnabled: false,
         },
+      ],
+      [
+        "expo-camera",
+        {
+          cameraPermission: false,
+          microphonePermission: false,
+          recordAudioAndroid: false,
+          barcodeScannerEnabled: false,
+        },
+      ],
+      [
+        "expo-image-picker",
+        { cameraPermission: false, photosPermission: false, microphonePermission: false },
       ],
     ],
     blockedPermissions: [
