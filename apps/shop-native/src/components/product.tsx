@@ -1,7 +1,8 @@
 import { colors, radius, space } from "@yuntera/expo-kit/theme";
-import { Badge, Money, Text } from "@yuntera/expo-kit/ui";
+import { Badge, Money, PackageIcon, Text } from "@yuntera/expo-kit/ui";
 import { Image } from "expo-image";
 import { Link } from "expo-router";
+import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { imageUrl } from "@/lib/env";
@@ -21,6 +22,11 @@ export interface CardProduct {
   brand_name?: string | null;
 }
 
+/**
+ * A product picture. With no picture, or one that fails to load (the shop's
+ * address can answer with a login page instead of an image), it shows a local
+ * placeholder drawn in the app rather than an empty box.
+ */
 export function ProductImage({
   path,
   size,
@@ -31,6 +37,9 @@ export function ProductImage({
   label?: string;
 }) {
   const uri = imageUrl(path);
+  // Remembers which address failed, so a new address is tried again.
+  const [failedUri, setFailedUri] = useState<string | null>(null);
+  const showImage = uri !== null && failedUri !== uri;
   return (
     <View
       style={[
@@ -38,7 +47,7 @@ export function ProductImage({
         size ? { width: size, height: size } : { aspectRatio: 1, width: "100%" },
       ]}
     >
-      {uri ? (
+      {showImage ? (
         <Image
           source={{ uri }}
           style={StyleSheet.absoluteFill}
@@ -46,8 +55,13 @@ export function ProductImage({
           accessibilityLabel={label}
           accessible={Boolean(label)}
           transition={120}
+          onError={() => setFailedUri(uri)}
         />
-      ) : null}
+      ) : (
+        <View style={styles.placeholder} aria-hidden>
+          <PackageIcon size={size ? Math.round(size * 0.4) : 40} color={colors.palette.anil[400]} />
+        </View>
+      )}
     </View>
   );
 }
@@ -177,6 +191,7 @@ export function ProductGrid({
 
 const styles = StyleSheet.create({
   image: { backgroundColor: colors.palette.arena[100], overflow: "hidden" },
+  placeholder: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
   card: {
     flex: 1,
     backgroundColor: colors.surface,
