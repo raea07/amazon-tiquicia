@@ -123,8 +123,9 @@ Three properties follow.
    to a message in Spanish and English, and a test fails if a code is raised
    without a message or a message exists for a code nothing raises.
 3. **The apps hold no privileged key.** Each app has only the project's
-   publishable key. What a caller may do is decided in the database by grants,
-   row-level security and the checks inside each function. See
+   publishable key. What a caller may do is decided in the database: the API
+   roles may execute functions and touch no table, view or sequence directly;
+   each function checks its caller; row-level security is the second lock. See
    [`03-data/access-control.md`](../03-data/access-control.md).
 
 `packages/db` is the typed client: `createApi(transport)` exposes one method
