@@ -31,18 +31,18 @@ annually unless it formally opts into the under-EUR-1-million exclusion.
 
 ## Source keys
 
-| Key   | Document                                                                                                      | How it was read                                                         |
-| ----- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| ANX   | "Anexos y Estructuras v4.4", DGT, 99 pages, PDF last-modified 13 May 2026, "Bitácora de Ajustes al 22/04/2026" | Downloaded, full text extracted; page numbers below are "Página N de 99" |
-| XSD   | The v4.4 XSD files on `www.hacienda.go.cr/docs/` (last-modified 22 Apr 2026)                                   | Downloaded, parsed, sample XML validated with `xmllint`                 |
-| RCE   | Decreto 44739-H, Reglamento de Comprobantes Electrónicos (signed 2 Oct 2024; RES27 cites it as "del 08 de noviembre del 2024", presumably the publication date) | Downloaded, full text read                                              |
-| RES27 | MH-DGT-RES-0027-2024, technical resolution (13 Nov 2024). This PDF is also the XAdES signature policy         | Downloaded from the CDN, full text read                                 |
-| API   | "Comprobantes Electrónicos API version v1" (HTML reference)                                                   | Downloaded, full text read                                              |
-| IDP   | "Guía de uso para IdP Comprobantes Electrónicos" (PDF, 2018)                                                  | Downloaded, full text read                                              |
-| RES25 | MH-DGT-RES-0025-2024, platform seller reporting, La Gaceta Alcance 179, 6 Nov 2024                            | Official Gazette PDF downloaded, articles 1–13 read                     |
-| HAPI  | `https://api.hacienda.go.cr/docs/` and live calls to that API                                                 | Fetched and called today                                                |
-| COM26 | Hacienda communiqué "Actualización de los Anexos y Estructuras versión 4.4 y validación de comprobantes electrónicos", `https://www.hacienda.go.cr/docs/ActualizacionAnexosyEstructurasVersion4.4CEv2.pdf` (Last-Modified 21 Apr 2026) | Downloaded in the fact-check, full text read                            |
-| RES43 | Hacienda's questions-and-answers PDF on MH-DGT-RES-0043-2025 (TRIBU-CR start), `https://www.hacienda.go.cr/docs/ResolucionMH-DGT-RES-0043-2025.pdf` | Downloaded in the fact-check, read                                      |
+| Key   | Document                                                                                                                                                                                                                               | How it was read                                                          |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| ANX   | "Anexos y Estructuras v4.4", DGT, 99 pages, PDF last-modified 13 May 2026, "Bitácora de Ajustes al 22/04/2026"                                                                                                                         | Downloaded, full text extracted; page numbers below are "Página N de 99" |
+| XSD   | The v4.4 XSD files on `www.hacienda.go.cr/docs/` (last-modified 22 Apr 2026)                                                                                                                                                           | Downloaded, parsed, sample XML validated with `xmllint`                  |
+| RCE   | Decreto 44739-H, Reglamento de Comprobantes Electrónicos (signed 2 Oct 2024; RES27 cites it as "del 08 de noviembre del 2024", presumably the publication date)                                                                        | Downloaded, full text read                                               |
+| RES27 | MH-DGT-RES-0027-2024, technical resolution (13 Nov 2024). This PDF is also the XAdES signature policy                                                                                                                                  | Downloaded from the CDN, full text read                                  |
+| API   | "Comprobantes Electrónicos API version v1" (HTML reference)                                                                                                                                                                            | Downloaded, full text read                                               |
+| IDP   | "Guía de uso para IdP Comprobantes Electrónicos" (PDF, 2018)                                                                                                                                                                           | Downloaded, full text read                                               |
+| RES25 | MH-DGT-RES-0025-2024, platform seller reporting, La Gaceta Alcance 179, 6 Nov 2024                                                                                                                                                     | Official Gazette PDF downloaded, articles 1–13 read                      |
+| HAPI  | `https://api.hacienda.go.cr/docs/` and live calls to that API                                                                                                                                                                          | Fetched and called today                                                 |
+| COM26 | Hacienda communiqué "Actualización de los Anexos y Estructuras versión 4.4 y validación de comprobantes electrónicos", `https://www.hacienda.go.cr/docs/ActualizacionAnexosyEstructurasVersion4.4CEv2.pdf` (Last-Modified 21 Apr 2026) | Downloaded in the fact-check, full text read                             |
+| RES43 | Hacienda's questions-and-answers PDF on MH-DGT-RES-0043-2025 (TRIBU-CR start), `https://www.hacienda.go.cr/docs/ResolucionMH-DGT-RES-0043-2025.pdf`                                                                                    | Downloaded in the fact-check, read                                       |
 
 Confidence: statements citing these keys are **primary**. Statements citing
 press, law firms or vendors are **secondary** and say so.
@@ -51,25 +51,25 @@ press, law firms or vendors are **secondary** and say so.
 
 All checked with `curl` on 21 Nov 2026. Nothing was saved in the repository.
 
-| File                                             | URL                                                                                                                                                                             | HTTP | Bytes   | Last-Modified | SHA-256                                                            |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------- | ------------- | ------------------------------------------------------------------ |
-| Annex PDF                                        | `https://www.hacienda.go.cr/docs/ANEXOS_Y_ESTRUCTURAS_V4.4.pdf`                                                                                                                 | 200  | 1243035 | 13 May 2026   | `6e093226b29b38c5c8de825f70c1b1cb8ed81e2f4a6eb0b3ff52708fc1eb2769` |
-| FacturaElectronica XSD                           | `https://www.hacienda.go.cr/docs/FacturaElectronica_V4.4.xsd`                                                                                                                   | 200  | 119689  | 22 Apr 2026   | `926ba81325bc21102755bd8e4e570a63caaca086e680a877c3a6d15d6ee8a62f` |
-| TiqueteElectronico XSD                           | `https://www.hacienda.go.cr/docs/TiqueteElectronico_V4.4.xsd`                                                                                                                   | 200  | 117940  | 22 Apr 2026   | `d7783baf818f316596d0b58b17481be689595982a248d98102d707f72967ae6e` |
-| NotaCreditoElectronica XSD                       | `https://www.hacienda.go.cr/docs/NotaCreditoElectronica_V4.4.xsd`                                                                                                               | 200  | 123011  | 22 Apr 2026   | `b7ed3347c5599e78e5683d9ae83842695ab9497e173df9cd3be8d77c0851f556` |
-| NotaDebitoElectronica XSD                        | `https://www.hacienda.go.cr/docs/NotaDebitoElectronica_V4.4.xsd`                                                                                                                | 200  | 123029  | 22 Apr 2026   | `3709389ccc434fb1ef4571079b1a628654fa04f07c1f3f1044b2416ba12eb7ff` |
-| MensajeReceptor XSD                              | `https://www.hacienda.go.cr/docs/MensajeReceptor_V4.4.xsd`                                                                                                                      | 200  | 6564    | 22 Apr 2026   | `b883e3a9321eadf2ccc1a9dc853d9e3bd483918dcd6e2152d902ddf2f244365f` |
-| MensajeHacienda XSD                              | `https://www.hacienda.go.cr/docs/MensajeHacienda_V4.4.xsd`                                                                                                                      | 200  | 7799    | 22 Apr 2026   | `b2606156042b7aa7b7f7f61945f0ff1323661b43b5a1489ad5eafad1c52fd25e` |
-| ReciboElectronicoPago XSD (new in 4.4)           | `https://www.hacienda.go.cr/docs/ReciboElectronicoPago_V4.4.xsd`                                                                                                                | 200  | 41655   | 22 Apr 2026   | `86e3aa5f0615b757a3b2e9c300973d573ac321f76adba7b4b05e59d854da82b7` |
-| FacturaElectronicaCompra XSD                     | `https://www.hacienda.go.cr/docs/FacturaElectronicaCompra_V4.4.xsd`                                                                                                             | 200  | 97300   | 22 Apr 2026   | `57e4cedb12d5045884670ff2e4795d2027e69b96d45752f60cd1a1930e2768a3` |
-| FacturaElectronicaExportacion XSD                | `https://www.hacienda.go.cr/docs/FacturaElectronicaExportacion_V4.4.xsd`                                                                                                        | 200  | 101881  | 22 Apr 2026   | `e571d8296bb74e86cb9ef7889601844c61ac50bedca90aa8d52badf15198242e` |
+| File                                             | URL                                                                                                                                                                            | HTTP | Bytes   | Last-Modified | SHA-256                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ------- | ------------- | ------------------------------------------------------------------ |
+| Annex PDF                                        | `https://www.hacienda.go.cr/docs/ANEXOS_Y_ESTRUCTURAS_V4.4.pdf`                                                                                                                | 200  | 1243035 | 13 May 2026   | `6e093226b29b38c5c8de825f70c1b1cb8ed81e2f4a6eb0b3ff52708fc1eb2769` |
+| FacturaElectronica XSD                           | `https://www.hacienda.go.cr/docs/FacturaElectronica_V4.4.xsd`                                                                                                                  | 200  | 119689  | 22 Apr 2026   | `926ba81325bc21102755bd8e4e570a63caaca086e680a877c3a6d15d6ee8a62f` |
+| TiqueteElectronico XSD                           | `https://www.hacienda.go.cr/docs/TiqueteElectronico_V4.4.xsd`                                                                                                                  | 200  | 117940  | 22 Apr 2026   | `d7783baf818f316596d0b58b17481be689595982a248d98102d707f72967ae6e` |
+| NotaCreditoElectronica XSD                       | `https://www.hacienda.go.cr/docs/NotaCreditoElectronica_V4.4.xsd`                                                                                                              | 200  | 123011  | 22 Apr 2026   | `b7ed3347c5599e78e5683d9ae83842695ab9497e173df9cd3be8d77c0851f556` |
+| NotaDebitoElectronica XSD                        | `https://www.hacienda.go.cr/docs/NotaDebitoElectronica_V4.4.xsd`                                                                                                               | 200  | 123029  | 22 Apr 2026   | `3709389ccc434fb1ef4571079b1a628654fa04f07c1f3f1044b2416ba12eb7ff` |
+| MensajeReceptor XSD                              | `https://www.hacienda.go.cr/docs/MensajeReceptor_V4.4.xsd`                                                                                                                     | 200  | 6564    | 22 Apr 2026   | `b883e3a9321eadf2ccc1a9dc853d9e3bd483918dcd6e2152d902ddf2f244365f` |
+| MensajeHacienda XSD                              | `https://www.hacienda.go.cr/docs/MensajeHacienda_V4.4.xsd`                                                                                                                     | 200  | 7799    | 22 Apr 2026   | `b2606156042b7aa7b7f7f61945f0ff1323661b43b5a1489ad5eafad1c52fd25e` |
+| ReciboElectronicoPago XSD (new in 4.4)           | `https://www.hacienda.go.cr/docs/ReciboElectronicoPago_V4.4.xsd`                                                                                                               | 200  | 41655   | 22 Apr 2026   | `86e3aa5f0615b757a3b2e9c300973d573ac321f76adba7b4b05e59d854da82b7` |
+| FacturaElectronicaCompra XSD                     | `https://www.hacienda.go.cr/docs/FacturaElectronicaCompra_V4.4.xsd`                                                                                                            | 200  | 97300   | 22 Apr 2026   | `57e4cedb12d5045884670ff2e4795d2027e69b96d45752f60cd1a1930e2768a3` |
+| FacturaElectronicaExportacion XSD                | `https://www.hacienda.go.cr/docs/FacturaElectronicaExportacion_V4.4.xsd`                                                                                                       | 200  | 101881  | 22 Apr 2026   | `e571d8296bb74e86cb9ef7889601844c61ac50bedca90aa8d52badf15198242e` |
 | Signature policy PDF (= RES27)                   | `https://cdn.comprobanteselectronicos.go.cr/xml-schemas/Resoluci%C3%B3n_General_sobre_disposiciones_t%C3%A9cnicas_comprobantes_electr%C3%B3nicos_para_efectos_tributarios.pdf` | 200  | 163479  | 8 Jan 2025    | `0d6c629f5c5639e23c3ae5905dace1e158cb5806822c003de787a6ec3321d21f` |
-| API reference (HTML)                             | `https://www.hacienda.go.cr/docs/ComprobantesElectronicosAPI.html`                                                                                                              | 200  | 52470   | 4 Jul 2025    | `3ad858788952a35bed45c3e45649763ed2abb21be94d961c62bfc41e84cf2b9d` |
-| IdP guide                                        | `https://www.hacienda.go.cr/docs/Guia_IdP.pdf`                                                                                                                                  | 200  | 2405918 | 4 Jul 2025    | `e7a2db0f8c3f0255f74541f0c63dc8e1b199fecb2fa0325e18b0e11f55e1bedc` |
-| Reglamento (RCE)                                 | `https://www.hacienda.go.cr/docs/REGLAMENTO_DE_COMPROBANTES_ELECTRONICOS.pdf`                                                                                                   | 200  | 2581910 | 4 Jul 2025    | `32da4200481b6c21522d4ace59e5255e15aae0624be077594dc65195189fe4fc` |
-| Currency codes                                   | `https://www.hacienda.go.cr/docs/Codigodemoneda_V4.4.pdf`                                                                                                                       | 200  | 160787  | 4 Jul 2025    | not recorded                                                       |
-| Province/cantón/district codes                   | `https://www.hacienda.go.cr/docs/Codificacionubicacion_V4.4.xlsx`                                                                                                               | 200  | 314939  | not recorded  | not recorded                                                       |
-| W3C XMLDSig schema (imported by every XSD above) | `https://www.w3.org/TR/xmldsig-core/xmldsig-core-schema.xsd`                                                                                                                    | 200  | 10292   | —             | not recorded                                                       |
+| API reference (HTML)                             | `https://www.hacienda.go.cr/docs/ComprobantesElectronicosAPI.html`                                                                                                             | 200  | 52470   | 4 Jul 2025    | `3ad858788952a35bed45c3e45649763ed2abb21be94d961c62bfc41e84cf2b9d` |
+| IdP guide                                        | `https://www.hacienda.go.cr/docs/Guia_IdP.pdf`                                                                                                                                 | 200  | 2405918 | 4 Jul 2025    | `e7a2db0f8c3f0255f74541f0c63dc8e1b199fecb2fa0325e18b0e11f55e1bedc` |
+| Reglamento (RCE)                                 | `https://www.hacienda.go.cr/docs/REGLAMENTO_DE_COMPROBANTES_ELECTRONICOS.pdf`                                                                                                  | 200  | 2581910 | 4 Jul 2025    | `32da4200481b6c21522d4ace59e5255e15aae0624be077594dc65195189fe4fc` |
+| Currency codes                                   | `https://www.hacienda.go.cr/docs/Codigodemoneda_V4.4.pdf`                                                                                                                      | 200  | 160787  | 4 Jul 2025    | not recorded                                                       |
+| Province/cantón/district codes                   | `https://www.hacienda.go.cr/docs/Codificacionubicacion_V4.4.xlsx`                                                                                                              | 200  | 314939  | not recorded  | not recorded                                                       |
+| W3C XMLDSig schema (imported by every XSD above) | `https://www.w3.org/TR/xmldsig-core/xmldsig-core-schema.xsd`                                                                                                                   | 200  | 10292   | —             | not recorded                                                       |
 
 Gotchas found while fetching:
 
@@ -147,33 +147,33 @@ XML namespaces (XSD `targetNamespace`, `elementFormDefault="qualified"`):
 
 ### 2.2 Working model for Yuntera
 
-| Flow                                             | Issuer                      | Receiver                  | Document                                                                                                                       | Notes                                                                                                                                                              |
-| ------------------------------------------------ | --------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Goods sold by a general-regime seller            | Seller                      | Shopper                   | `04` tiquete; `01` factura if the shopper gave an identification                                                               | Seller's own system. Payment method on the seller's document when Yuntera collects: `05` fits the annex's wording best; `07` is undefined. **[ACCOUNTANT]**        |
-| Goods sold by a Régimen Simplificado seller      | —                           | Shopper                   | None, unless the seller is "no confirmante" and the shopper asks                                                               | Listing and order must say so before purchase (already a product decision in `compliance-costa-rica.md`). Whether such sellers may sell online: **[ACCOUNTANT]**   |
-| Delivery fee charged to the shopper              | Yuntera                     | Shopper                   | `04` tiquete; `01` factura on request                                                                                          | 13% IVA, CABYS of a delivery service. Alternative allowed by the schema: a "cobro de un tercero" line on the seller's document. **[ACCOUNTANT]**                   |
-| Commission, payment and warehouse fees           | Yuntera                     | Seller                    | `01` factura (receiver identification is mandatory in the FE schema)                                                           | 13% IVA. Per order or one per settlement period: the RCE says "en el acto"; periodic invoicing is common practice but is an **[ACCOUNTANT]** decision              |
-| Refund of delivery / reversal of fees            | Yuntera                     | Same receiver             | `03` nota de crédito referencing the original clave                                                                            | A document accepted by Hacienda can only be undone by NC/ND (RCE art. 10)                                                                                          |
-| Refund of goods                                  | Seller                      | Shopper                   | `03` nota de crédito from the seller's system                                                                                  | Yuntera records its clave like the original                                                                                                                        |
-| Supplier invoices received by Yuntera            | Supplier                    | Yuntera                   | Yuntera answers with a `MensajeReceptor` (`05`/`06`/`07`)                                                                      | Deadline in section 5.7. Out of scope for v1 code; do it in the accountant's tool                                                                                  |
+| Flow                                        | Issuer   | Receiver      | Document                                                             | Notes                                                                                                                                                            |
+| ------------------------------------------- | -------- | ------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Goods sold by a general-regime seller       | Seller   | Shopper       | `04` tiquete; `01` factura if the shopper gave an identification     | Seller's own system. Payment method on the seller's document when Yuntera collects: `05` fits the annex's wording best; `07` is undefined. **[ACCOUNTANT]**      |
+| Goods sold by a Régimen Simplificado seller | —        | Shopper       | None, unless the seller is "no confirmante" and the shopper asks     | Listing and order must say so before purchase (already a product decision in `compliance-costa-rica.md`). Whether such sellers may sell online: **[ACCOUNTANT]** |
+| Delivery fee charged to the shopper         | Yuntera  | Shopper       | `04` tiquete; `01` factura on request                                | 13% IVA, CABYS of a delivery service. Alternative allowed by the schema: a "cobro de un tercero" line on the seller's document. **[ACCOUNTANT]**                 |
+| Commission, payment and warehouse fees      | Yuntera  | Seller        | `01` factura (receiver identification is mandatory in the FE schema) | 13% IVA. Per order or one per settlement period: the RCE says "en el acto"; periodic invoicing is common practice but is an **[ACCOUNTANT]** decision            |
+| Refund of delivery / reversal of fees       | Yuntera  | Same receiver | `03` nota de crédito referencing the original clave                  | A document accepted by Hacienda can only be undone by NC/ND (RCE art. 10)                                                                                        |
+| Refund of goods                             | Seller   | Shopper       | `03` nota de crédito from the seller's system                        | Yuntera records its clave like the original                                                                                                                      |
+| Supplier invoices received by Yuntera       | Supplier | Yuntera       | Yuntera answers with a `MensajeReceptor` (`05`/`06`/`07`)            | Deadline in section 5.7. Out of scope for v1 code; do it in the accountant's tool                                                                                |
 
 ### 2.3 Obligations specific to platforms
 
 **Seller reporting — MH-DGT-RES-0025-2024** (dated 23 Oct 2024; La Gaceta
 Alcance 179, 6 Nov 2024; read in the Gazette PDF):
 
-| Point                 | Text                                                                                                                                                                                                                                                                 |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Scope                 | "Actividad Relevante" = a relevant service (rental of real estate, personal service, rental of a means of transport) **"o la venta de bienes"** (art. 2.C.8). Article 1's summary names only lodging, transport and personal services, but the definitions govern     |
-| Who reports           | A platform operator tax-resident in Costa Rica, or constituted or managed here (art. 2.C.4). Yuntera qualifies                                                                                                                                                       |
-| Excluded operator     | Platform-level consideration in the previous calendar year under **EUR 1 million** *and* the operator notifies the tax administration that it opts to be treated as excluded (art. 2.C.3.a); the request goes signed to `Info-DPI@hacienda.go.cr` (art. 8)            |
-| Excluded seller       | Fewer than **30** sales of goods *and* total consideration not above **EUR 2,000** in the period (art. 2.D.4.d); also government bodies and listed companies                                                                                                         |
-| Data to collect       | Individuals: name, main address, tax ID and issuing jurisdiction, **date of birth**. Entities: name, main address, tax ID, company registration number (art. 4.B)                                                                                                    |
-| Data to report        | Per seller and **per quarter**: total consideration paid or credited, number of relevant activities, and "cualquier tasa, comisión o impuesto retenido o cobrado" by the operator; financial account identifier where available (art. 5)                             |
-| Channel               | SIIF, `https://siif.hacienda.go.cr/siif`, OECD "Sharing and Gig Economy" XML (art. 5.3)                                                                                                                                                                              |
-| Dates                 | Due diligence from 1 Jan 2025; first report (2025 data) by 30 Apr 2026 (Transitorio único); afterwards a calendar-year period reported by 30 April of the following year (art. 5.6). A later resolution, MH-DGT-RES-0004-2026, reportedly moved the first filing window to 6 Apr–6 May 2026 (secondary: EAS Latam; **UNVERIFIED**, the resolution text was not found on hacienda.go.cr or by search). Either way the first window has passed: if Yuntera had sellers in 2025 the report was already due **[ACCOUNTANT]** |
-| Retention             | 5 years (art. 11)                                                                                                                                                                                                                                                    |
-| Penalty               | 2% of the operator's gross income of the previous period, minimum 3 and maximum 100 base salaries; reduced 75% if filed within 3 days (art. 7, CNPT art. 106 quáter)                                                                                                 |
+| Point             | Text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Scope             | "Actividad Relevante" = a relevant service (rental of real estate, personal service, rental of a means of transport) **"o la venta de bienes"** (art. 2.C.8). Article 1's summary names only lodging, transport and personal services, but the definitions govern                                                                                                                                                                                                                                                        |
+| Who reports       | A platform operator tax-resident in Costa Rica, or constituted or managed here (art. 2.C.4). Yuntera qualifies                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Excluded operator | Platform-level consideration in the previous calendar year under **EUR 1 million** _and_ the operator notifies the tax administration that it opts to be treated as excluded (art. 2.C.3.a); the request goes signed to `Info-DPI@hacienda.go.cr` (art. 8)                                                                                                                                                                                                                                                               |
+| Excluded seller   | Fewer than **30** sales of goods _and_ total consideration not above **EUR 2,000** in the period (art. 2.D.4.d); also government bodies and listed companies                                                                                                                                                                                                                                                                                                                                                             |
+| Data to collect   | Individuals: name, main address, tax ID and issuing jurisdiction, **date of birth**. Entities: name, main address, tax ID, company registration number (art. 4.B)                                                                                                                                                                                                                                                                                                                                                        |
+| Data to report    | Per seller and **per quarter**: total consideration paid or credited, number of relevant activities, and "cualquier tasa, comisión o impuesto retenido o cobrado" by the operator; financial account identifier where available (art. 5)                                                                                                                                                                                                                                                                                 |
+| Channel           | SIIF, `https://siif.hacienda.go.cr/siif`, OECD "Sharing and Gig Economy" XML (art. 5.3)                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Dates             | Due diligence from 1 Jan 2025; first report (2025 data) by 30 Apr 2026 (Transitorio único); afterwards a calendar-year period reported by 30 April of the following year (art. 5.6). A later resolution, MH-DGT-RES-0004-2026, reportedly moved the first filing window to 6 Apr–6 May 2026 (secondary: EAS Latam; **UNVERIFIED**, the resolution text was not found on hacienda.go.cr or by search). Either way the first window has passed: if Yuntera had sellers in 2025 the report was already due **[ACCOUNTANT]** |
+| Retention         | 5 years (art. 11)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Penalty           | 2% of the operator's gross income of the previous period, minimum 3 and maximum 100 base salaries; reduced 75% if filed within 3 days (art. 7, CNPT art. 106 quáter)                                                                                                                                                                                                                                                                                                                                                     |
 
 Consequences for the build: seller onboarding must capture **date of birth**
 for individuals and the **registration number** for entities (not captured
@@ -198,13 +198,13 @@ withholdings, SINPE Móvil number registration (Decreto 45953-H).
 
 ### 3.1 Document type codes (ANX nota 3, p. 66)
 
-| Code | Document                                   | Code | Document                           |
-| ---- | ------------------------------------------ | ---- | ---------------------------------- |
-| `01` | Factura electrónica                        | `06` | Receiver: partial acceptance       |
-| `02` | Nota de débito electrónica                 | `07` | Receiver: rejection                |
-| `03` | Nota de crédito electrónica                | `08` | Factura electrónica de compra      |
-| `04` | Tiquete electrónico                        | `09` | Factura electrónica de exportación |
-| `05` | Receiver: acceptance                       | `10` | Recibo electrónico de pago (REP)   |
+| Code | Document                    | Code | Document                           |
+| ---- | --------------------------- | ---- | ---------------------------------- |
+| `01` | Factura electrónica         | `06` | Receiver: partial acceptance       |
+| `02` | Nota de débito electrónica  | `07` | Receiver: rejection                |
+| `03` | Nota de crédito electrónica | `08` | Factura electrónica de compra      |
+| `04` | Tiquete electrónico         | `09` | Factura electrónica de exportación |
+| `05` | Receiver: acceptance        | `10` | Recibo electrónico de pago (REP)   |
 
 The REP is new in 4.4 and only documents payments of credit sales under sale
 conditions `08`/`10` (services to the State, 90-day IVA credit); Yuntera does
@@ -212,12 +212,12 @@ not need it. `MensajeReceptor` existed before 4.4.
 
 ### 3.2 Consecutive number — 20 digits (ANX nota 3, pp. 65–66)
 
-| Positions | Length | Content                                                                              |
-| --------- | ------ | ------------------------------------------------------------------------------------ |
-| 1–3       | 3      | Establishment: `001` = head office, `002`… = branches                                |
-| 4–8       | 5      | Terminal / point of sale: `00001` when there is one terminal or a central server     |
-| 9–10      | 2      | Document type code (3.1)                                                             |
-| 11–20     | 10     | Sequence starting at 1 **per branch/terminal and per document type**; wraps to 1     |
+| Positions | Length | Content                                                                          |
+| --------- | ------ | -------------------------------------------------------------------------------- |
+| 1–3       | 3      | Establishment: `001` = head office, `002`… = branches                            |
+| 4–8       | 5      | Terminal / point of sale: `00001` when there is one terminal or a central server |
+| 9–10      | 2      | Document type code (3.1)                                                         |
+| 11–20     | 10     | Sequence starting at 1 **per branch/terminal and per document type**; wraps to 1 |
 
 Rules: assigned automatically, strictly consecutive, "sin saltos", never
 editable (RCE art. 13.4, 14.3, 14.6). Hacienda checks the sequence (ANX p. 19).
@@ -226,16 +226,16 @@ numbering (ANX p. 65) — ask the company's previous tool for the last numbers.
 
 ### 3.3 Clave — 50 characters (ANX nota 3, pp. 67–68; nota 4.1, p. 69)
 
-| Positions | Length | Content                                                                                               |
-| --------- | ------ | ----------------------------------------------------------------------------------------------------- |
-| 1–3       | 3      | Country code `506`                                                                                    |
-| 4–5       | 2      | Day the document is generated                                                                         |
-| 6–7       | 2      | Month                                                                                                 |
-| 8–9       | 2      | Year (two digits)                                                                                     |
-| 10–21     | 12     | Issuer identification, left-padded with zeros to 12                                                   |
-| 22–41     | 20     | The consecutive number (3.2)                                                                          |
-| 42        | 1      | Situation: `1` normal, `2` contingency (replaces a provisional paper voucher), `3` without internet   |
-| 43–50     | 8      | Security code generated by the issuer's system                                                        |
+| Positions | Length | Content                                                                                             |
+| --------- | ------ | --------------------------------------------------------------------------------------------------- |
+| 1–3       | 3      | Country code `506`                                                                                  |
+| 4–5       | 2      | Day the document is generated                                                                       |
+| 6–7       | 2      | Month                                                                                               |
+| 8–9       | 2      | Year (two digits)                                                                                   |
+| 10–21     | 12     | Issuer identification, left-padded with zeros to 12                                                 |
+| 22–41     | 20     | The consecutive number (3.2)                                                                        |
+| 42        | 1      | Situation: `1` normal, `2` contingency (replaces a provisional paper voucher), `3` without internet |
+| 43–50     | 8      | Security code generated by the issuer's system                                                      |
 
 Padding (nota 4.1): cédula física (9 digits) gets three zeros; cédula jurídica
 (10) two; NITE (10) two; DIMEX of 11 digits gets one, of 12 none.
@@ -265,11 +265,21 @@ function clave(a: {
   seguridad: string; // 8 digits from a CSPRNG
 }) {
   const p = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "America/Costa_Rica", day: "2-digit", month: "2-digit", year: "2-digit",
+    timeZone: "America/Costa_Rica",
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
   }).formatToParts(a.emitidoEn);
   const part = (t: string) => p.find((x) => x.type === t)!.value;
-  const k = "506" + part("day") + part("month") + part("year") +
-    a.identificacion.padStart(12, "0") + a.consecutivo + a.situacion + a.seguridad;
+  const k =
+    "506" +
+    part("day") +
+    part("month") +
+    part("year") +
+    a.identificacion.padStart(12, "0") +
+    a.consecutivo +
+    a.situacion +
+    a.seguridad;
   if (!/^[A-Za-z0-9]{50}$/.test(k)) throw new Error("clave inválida");
   return k;
 }
@@ -305,24 +315,24 @@ File names for storage and e-mail (ANX p. 68): `{clave}.xml`,
 Element order is fixed by `xs:sequence`. Conditions: 1 mandatory, 2 conditional,
 3 optional, 4 must not appear.
 
-| Element                   | Type / size                                  | FE         | TE         | NC         | Notes                                                                                                                                                              |
-| ------------------------- | -------------------------------------------- | ---------- | ---------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Clave`                   | `[a-zA-Z0-9]{50}`                            | 1          | 1          | 1          |                                                                                                                                                                    |
-| `ProveedorSistemas`       | string ≤ 20                                  | 1          | 1          | 1          | Identification of the software provider; **own development = the taxpayer's own identification**. Must be registered in the RUT or a warning is raised              |
-| `CodigoActividadEmisor`   | string, exactly 6                            | 1          | 1          | 2          | Must exist in the taxpayer registry or the document is **rejected**; a code other than the registered one raises a warning                                         |
-| `CodigoActividadReceptor` | string, exactly 6                            | 2          | 4 (absent) | 2          | "Cuando este la requiera"; Hacienda will announce when it becomes mandatory for FE (ANX p. 18 footnote 1)                                                          |
-| `NumeroConsecutivo`       | `\d{20}`                                     | 1          | 1          | 1          |                                                                                                                                                                    |
-| `FechaEmision`            | `xs:dateTime`, RFC 3339                      | 1          | 1          | 1          | `YYYY-MM-DDThh:mm:ss-06:00`. No past or future dates except situation 3                                                                                            |
-| `Emisor/Nombre`           | 5–100                                        | 1          | 1          | 1          |                                                                                                                                                                    |
-| `Emisor/Identificacion`   | `Tipo` (2) + `Numero` (≤ 20)                 | 1          | 1          | 1          | Types: `01` física, `02` jurídica, `03` DIMEX, `04` NITE; `05`/`06` only in purchase invoices                                                                      |
-| `Emisor/NombreComercial`  | 3–80                                         | 3          | 3          | 3          |                                                                                                                                                                    |
-| `Emisor/Ubicacion`        | `Provincia` (1), `Canton` (2), `Distrito` (2), `Barrio` 5–50 optional, `OtrasSenas` 5–250 | 1 | 1 | 2 | Codes from `Codificacionubicacion_V4.4.xlsx`; a location other than the registered one raises a warning                                                            |
-| `Emisor/Telefono`         | `CodigoPais` (≤ 3 digits), `NumTelefono`     | 3          | 3          | 3          |                                                                                                                                                                    |
-| `Emisor/CorreoElectronico`| ≤ 160, 1 to 4 occurrences                    | 1          | 1          | 2          | Regex in ANX p. 22                                                                                                                                                 |
-| `Receptor`                | see 3.5                                      | 1          | **2**      | 2          |                                                                                                                                                                    |
-| `CondicionVenta`          | 2                                            | 1          | 1          | 1          | 3.8                                                                                                                                                                |
-| `CondicionVentaOtros`     | 5–100                                        | 2          | 2          | 2          | Only with `99`                                                                                                                                                     |
-| `PlazoCredito`            | integer ≤ 5 digits, days                     | 2          | 2          | 2          | Mandatory and > 0 with `02` or `10`                                                                                                                                |
+| Element                    | Type / size                                                                               | FE  | TE         | NC  | Notes                                                                                                                                                  |
+| -------------------------- | ----------------------------------------------------------------------------------------- | --- | ---------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Clave`                    | `[a-zA-Z0-9]{50}`                                                                         | 1   | 1          | 1   |                                                                                                                                                        |
+| `ProveedorSistemas`        | string ≤ 20                                                                               | 1   | 1          | 1   | Identification of the software provider; **own development = the taxpayer's own identification**. Must be registered in the RUT or a warning is raised |
+| `CodigoActividadEmisor`    | string, exactly 6                                                                         | 1   | 1          | 2   | Must exist in the taxpayer registry or the document is **rejected**; a code other than the registered one raises a warning                             |
+| `CodigoActividadReceptor`  | string, exactly 6                                                                         | 2   | 4 (absent) | 2   | "Cuando este la requiera"; Hacienda will announce when it becomes mandatory for FE (ANX p. 18 footnote 1)                                              |
+| `NumeroConsecutivo`        | `\d{20}`                                                                                  | 1   | 1          | 1   |                                                                                                                                                        |
+| `FechaEmision`             | `xs:dateTime`, RFC 3339                                                                   | 1   | 1          | 1   | `YYYY-MM-DDThh:mm:ss-06:00`. No past or future dates except situation 3                                                                                |
+| `Emisor/Nombre`            | 5–100                                                                                     | 1   | 1          | 1   |                                                                                                                                                        |
+| `Emisor/Identificacion`    | `Tipo` (2) + `Numero` (≤ 20)                                                              | 1   | 1          | 1   | Types: `01` física, `02` jurídica, `03` DIMEX, `04` NITE; `05`/`06` only in purchase invoices                                                          |
+| `Emisor/NombreComercial`   | 3–80                                                                                      | 3   | 3          | 3   |                                                                                                                                                        |
+| `Emisor/Ubicacion`         | `Provincia` (1), `Canton` (2), `Distrito` (2), `Barrio` 5–50 optional, `OtrasSenas` 5–250 | 1   | 1          | 2   | Codes from `Codificacionubicacion_V4.4.xlsx`; a location other than the registered one raises a warning                                                |
+| `Emisor/Telefono`          | `CodigoPais` (≤ 3 digits), `NumTelefono`                                                  | 3   | 3          | 3   |                                                                                                                                                        |
+| `Emisor/CorreoElectronico` | ≤ 160, 1 to 4 occurrences                                                                 | 1   | 1          | 2   | Regex in ANX p. 22                                                                                                                                     |
+| `Receptor`                 | see 3.5                                                                                   | 1   | **2**      | 2   |                                                                                                                                                        |
+| `CondicionVenta`           | 2                                                                                         | 1   | 1          | 1   | 3.8                                                                                                                                                    |
+| `CondicionVentaOtros`      | 5–100                                                                                     | 2   | 2          | 2   | Only with `99`                                                                                                                                         |
+| `PlazoCredito`             | integer ≤ 5 digits, days                                                                  | 2   | 2          | 2   | Mandatory and > 0 with `02` or `10`                                                                                                                    |
 
 Then `DetalleServicio`, `OtrosCargos` (0–15), `ResumenFactura`,
 `InformacionReferencia` (0–10; 1–10 in NC/ND), `Otros`, `ds:Signature`.
@@ -342,11 +352,11 @@ filled the day it becomes mandatory.
 
 ### 3.5 Receiver rules
 
-| Document | `Receptor` | `Identificacion` | Practical rule                                                                                                           |
-| -------- | ---------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Document | `Receptor` | `Identificacion` | Practical rule                                                                                                                        |
+| -------- | ---------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | FE       | mandatory  | mandatory        | `Nombre` 3–100, `Identificacion/Tipo` + `Numero`; `Ubicacion` if domiciled in the country; `CorreoElectronico` when the customer asks |
-| TE       | optional   | optional         | Omit the whole node for an anonymous final consumer                                                                      |
-| NC / ND  | optional   | optional         | If present it must match the original document                                                                           |
+| TE       | optional   | optional         | Omit the whole node for an anonymous final consumer                                                                                   |
+| NC / ND  | optional   | optional         | If present it must match the original document                                                                                        |
 
 For FE, FEE and TE Hacienda verifies that the receiver's number "sea un dato
 real en los padrones y registros correspondientes" (ANX p. 23): validate it
@@ -359,26 +369,26 @@ una cédula?" before the document is issued.
 
 In schema order, for an ordinary taxed line:
 
-| Element                        | Type                         | Rule                                                                                                                                        |
-| ------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NumeroLinea`                  | 1–1000                       |                                                                                                                                             |
-| `CodigoCABYS`                  | exactly 13 characters        | Mandatory in FE/TE; must be valid in the current catalogue or the document is rejected                                                      |
-| `CodigoComercial` (0–5)        | `Tipo` (nota 12) + `Codigo` ≤ 20 | Optional (seller SKU: `Tipo` `01`); mandatory only for "surtido" CABYS codes                                                            |
-| `Cantidad`                     | decimal 16,3                 | > 0                                                                                                                                         |
-| `UnidadMedida`                 | enumerated (nota 15)         | Goods: `Unid`, `Kg`, `g`, `L`, `mL`, `m`…; services: `Sp`, `Spe`, `St`, `Os` ("otro tipo de servicio"), `Cm` ("comisiones"), `I`, `Al`, `Alc` |
-| `TipoTransaccion`              | nota 22                      | Optional; not in the tiquete schema; `01` = normal sale                                                                                     |
-| `UnidadMedidaComercial`        | ≤ 20                         | Optional                                                                                                                                    |
-| `Detalle`                      | 3–200                        | Mandatory                                                                                                                                   |
-| `PrecioUnitario`               | decimal 18,5                 | > 0, **before IVA**                                                                                                                         |
-| `MontoTotal`                   | 18,5                         | `Cantidad × PrecioUnitario`                                                                                                                 |
-| `Descuento` (0–5)              | `MontoDescuento`, `CodigoDescuento` (nota 20), optional `CodigoDescuentoOTRO`, `NaturalezaDescuento` | `CodigoDescuento` is mandatory with any discount: `06` promotional, `07` commercial, `04` volume, `99` other (then describe it) |
-| `SubTotal`                     | 18,5                         | `MontoTotal − descuentos`                                                                                                                   |
-| `IVACobradoFabrica`            | `01`/`02`                    | Not for Yuntera                                                                                                                             |
-| `BaseImponible`                | 18,5                         | **Mandatory** in 4.4; equals `SubTotal` unless selective/specific taxes apply                                                               |
-| `Impuesto` (1–1000)            | see 3.7                      | **Mandatory on every line**, including exempt ones                                                                                          |
-| `ImpuestoAsumidoEmisorFabrica` | 18,5                         | Mandatory element in FE/TE; `0` when not applicable                                                                                         |
-| `ImpuestoNeto`                 | 18,5                         | `Monto − MontoExoneracion` (or − assumed tax)                                                                                               |
-| `MontoTotalLinea`              | 18,5                         | `SubTotal + ImpuestoNeto`                                                                                                                   |
+| Element                        | Type                                                                                                 | Rule                                                                                                                                          |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NumeroLinea`                  | 1–1000                                                                                               |                                                                                                                                               |
+| `CodigoCABYS`                  | exactly 13 characters                                                                                | Mandatory in FE/TE; must be valid in the current catalogue or the document is rejected                                                        |
+| `CodigoComercial` (0–5)        | `Tipo` (nota 12) + `Codigo` ≤ 20                                                                     | Optional (seller SKU: `Tipo` `01`); mandatory only for "surtido" CABYS codes                                                                  |
+| `Cantidad`                     | decimal 16,3                                                                                         | > 0                                                                                                                                           |
+| `UnidadMedida`                 | enumerated (nota 15)                                                                                 | Goods: `Unid`, `Kg`, `g`, `L`, `mL`, `m`…; services: `Sp`, `Spe`, `St`, `Os` ("otro tipo de servicio"), `Cm` ("comisiones"), `I`, `Al`, `Alc` |
+| `TipoTransaccion`              | nota 22                                                                                              | Optional; not in the tiquete schema; `01` = normal sale                                                                                       |
+| `UnidadMedidaComercial`        | ≤ 20                                                                                                 | Optional                                                                                                                                      |
+| `Detalle`                      | 3–200                                                                                                | Mandatory                                                                                                                                     |
+| `PrecioUnitario`               | decimal 18,5                                                                                         | > 0, **before IVA**                                                                                                                           |
+| `MontoTotal`                   | 18,5                                                                                                 | `Cantidad × PrecioUnitario`                                                                                                                   |
+| `Descuento` (0–5)              | `MontoDescuento`, `CodigoDescuento` (nota 20), optional `CodigoDescuentoOTRO`, `NaturalezaDescuento` | `CodigoDescuento` is mandatory with any discount: `06` promotional, `07` commercial, `04` volume, `99` other (then describe it)               |
+| `SubTotal`                     | 18,5                                                                                                 | `MontoTotal − descuentos`                                                                                                                     |
+| `IVACobradoFabrica`            | `01`/`02`                                                                                            | Not for Yuntera                                                                                                                               |
+| `BaseImponible`                | 18,5                                                                                                 | **Mandatory** in 4.4; equals `SubTotal` unless selective/specific taxes apply                                                                 |
+| `Impuesto` (1–1000)            | see 3.7                                                                                              | **Mandatory on every line**, including exempt ones                                                                                            |
+| `ImpuestoAsumidoEmisorFabrica` | 18,5                                                                                                 | Mandatory element in FE/TE; `0` when not applicable                                                                                           |
+| `ImpuestoNeto`                 | 18,5                                                                                                 | `Monto − MontoExoneracion` (or − assumed tax)                                                                                                 |
+| `MontoTotalLinea`              | 18,5                                                                                                 | `SubTotal + ImpuestoNeto`                                                                                                                     |
 
 ### 3.7 Tax codes
 
@@ -389,19 +399,19 @@ IVA special calculation, `08` IVA used goods (factor), `12` cement, `99` other.
 `Impuesto/CodigoTarifaIVA` (nota 8.1, p. 72), mandatory with codes `01`/`07`;
 `Tarifa` is the percentage as a number (`13`, `4`, `2`, `1`, `0.5`):
 
-| Code | Rate                                   | Use                                                                                             |
-| ---- | -------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `01` | 0% (art. 32.1 RLIVA)                   | Only for sales with full credit right (e.g. to the CCSS, municipalities). **Not** "exempt"       |
-| `02` | 1%                                     | Canasta básica                                                                                  |
-| `03` | 2%                                     | Medicines, private education, personal insurance                                                |
-| `04` | 4%                                     | Private health, air tickets                                                                     |
-| `05` | Transitional 0%                        | Only in credit/debit notes                                                                      |
-| `06` | Transitional 4%                        | Only in credit/debit notes                                                                      |
-| `07` | Transitional 8%                        | Only in credit/debit notes                                                                      |
-| `08` | **13% general**                        |                                                                                                 |
-| `09` | 0.5%                                   |                                                                                                 |
-| `10` | **Exempt** (Ley 9635 art. 8)           | `Monto` must be `0`                                                                             |
-| `11` | 0% without credit right                | Non-subject transactions                                                                        |
+| Code | Rate                         | Use                                                                                        |
+| ---- | ---------------------------- | ------------------------------------------------------------------------------------------ |
+| `01` | 0% (art. 32.1 RLIVA)         | Only for sales with full credit right (e.g. to the CCSS, municipalities). **Not** "exempt" |
+| `02` | 1%                           | Canasta básica                                                                             |
+| `03` | 2%                           | Medicines, private education, personal insurance                                           |
+| `04` | 4%                           | Private health, air tickets                                                                |
+| `05` | Transitional 0%              | Only in credit/debit notes                                                                 |
+| `06` | Transitional 4%              | Only in credit/debit notes                                                                 |
+| `07` | Transitional 8%              | Only in credit/debit notes                                                                 |
+| `08` | **13% general**              |                                                                                            |
+| `09` | 0.5%                         |                                                                                            |
+| `10` | **Exempt** (Ley 9635 art. 8) | `Monto` must be `0`                                                                        |
+| `11` | 0% without credit right      | Non-subject transactions                                                                   |
 
 `Monto` = `Tarifa% × BaseImponible` (ANX p. 42). Hacienda checks that the
 tarifa matches the code. Exemptions granted to a specific buyer use the
@@ -428,15 +438,15 @@ usados no contribuyente (purchase invoice only), `14` arrendamiento operativo,
 `MedioPago/TipoMedioPago` (nota 6, p. 71) — in 4.4 this node lives **inside
 `ResumenFactura`**, repeats up to 4 times and carries an amount:
 
-| Code | Method                              |
-| ---- | ----------------------------------- |
-| `01` | Efectivo                            |
-| `02` | Tarjeta                             |
-| `03` | Cheque                              |
-| `04` | Transferencia – depósito bancario   |
-| `05` | Recaudado por terceros              |
-| `06` | **SINPE Móvil**                     |
-| `07` | Plataforma Digital                  |
+| Code | Method                                        |
+| ---- | --------------------------------------------- |
+| `01` | Efectivo                                      |
+| `02` | Tarjeta                                       |
+| `03` | Cheque                                        |
+| `04` | Transferencia – depósito bancario             |
+| `05` | Recaudado por terceros                        |
+| `06` | **SINPE Móvil**                               |
+| `07` | Plataforma Digital                            |
 | `99` | Otros (`MedioPagoOtros` 3–100 then mandatory) |
 
 `MedioPago` is mandatory except with sale conditions `02`, `08`, `10`.
@@ -457,22 +467,22 @@ prices in colones, so always `CRC` / `1.00000`.
 A CABYS code starting with `0`–`4` is a **good** ("mercancía"); `5`–`9` is a
 **service**. Totals are split on that first digit.
 
-| Element                                                                 | Calculation                                                                                                   |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `TotalServGravados`, `TotalMercanciasGravadas`                          | Sum of `MontoTotal` of taxed service / goods lines                                                            |
-| `TotalServExentos`, `TotalMercanciasExentas`                            | Lines with tarifa code `10`                                                                                   |
-| `TotalServExonerado`, `TotalMercExonerada`                              | Exonerated share (buyer-specific exemptions)                                                                  |
-| `TotalServNoSujeto`, `TotalMercNoSujeta`                                | Lines with tarifa codes `01` and `11`                                                                         |
-| `TotalGravado`, `TotalExento`, `TotalExonerado`, `TotalNoSujeto`        | Services + goods of each class                                                                                |
-| `TotalVenta` (mandatory)                                                | `TotalGravado + TotalExento + TotalExonerado + TotalNoSujeto`                                                 |
-| `TotalDescuentos`                                                       | Sum of all `MontoDescuento`                                                                                   |
-| `TotalVentaNeta` (mandatory)                                            | `TotalVenta − TotalDescuentos`                                                                                |
+| Element                                                                             | Calculation                                                                                         |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `TotalServGravados`, `TotalMercanciasGravadas`                                      | Sum of `MontoTotal` of taxed service / goods lines                                                  |
+| `TotalServExentos`, `TotalMercanciasExentas`                                        | Lines with tarifa code `10`                                                                         |
+| `TotalServExonerado`, `TotalMercExonerada`                                          | Exonerated share (buyer-specific exemptions)                                                        |
+| `TotalServNoSujeto`, `TotalMercNoSujeta`                                            | Lines with tarifa codes `01` and `11`                                                               |
+| `TotalGravado`, `TotalExento`, `TotalExonerado`, `TotalNoSujeto`                    | Services + goods of each class                                                                      |
+| `TotalVenta` (mandatory)                                                            | `TotalGravado + TotalExento + TotalExonerado + TotalNoSujeto`                                       |
+| `TotalDescuentos`                                                                   | Sum of all `MontoDescuento`                                                                         |
+| `TotalVentaNeta` (mandatory)                                                        | `TotalVenta − TotalDescuentos`                                                                      |
 | `TotalDesgloseImpuesto` (0–1000): `Codigo`, `CodigoTarifaIVA`, `TotalMontoImpuesto` | One entry per tax code + tarifa code used in the lines; **new and mandatory when any line has tax** |
-| `TotalImpuesto`                                                         | Sum of `Monto` of lines without exemption plus `ImpuestoNeto` of lines with one                               |
-| `TotalImpAsumEmisorFabrica`, `TotalIVADevuelto`                         | Not for Yuntera (`TotalIVADevuelto` is for health services paid by card)                                      |
-| `TotalOtrosCargos`                                                      | Sum of `OtrosCargos/MontoCargo`                                                                               |
-| `MedioPago` (0–4)                                                       | 3.8                                                                                                           |
-| `TotalComprobante` (mandatory)                                          | `TotalVentaNeta + TotalImpuesto + TotalOtrosCargos − TotalIVADevuelto`                                        |
+| `TotalImpuesto`                                                                     | Sum of `Monto` of lines without exemption plus `ImpuestoNeto` of lines with one                     |
+| `TotalImpAsumEmisorFabrica`, `TotalIVADevuelto`                                     | Not for Yuntera (`TotalIVADevuelto` is for health services paid by card)                            |
+| `TotalOtrosCargos`                                                                  | Sum of `OtrosCargos/MontoCargo`                                                                     |
+| `MedioPago` (0–4)                                                                   | 3.8                                                                                                 |
+| `TotalComprobante` (mandatory)                                                      | `TotalVentaNeta + TotalImpuesto + TotalOtrosCargos − TotalIVADevuelto`                              |
 
 Omit optional totals that do not apply (the three samples in 3.14 validate
 that way).
@@ -525,20 +535,20 @@ Other charges carry no IVA calculation in the document.
 (not older than 10 years), `Codigo` (nota 9), optional `CodigoReferenciaOTRO`,
 `Razon` (3–180).
 
-| `TipoDocIR` | Meaning                              | `Codigo` | Meaning                                                |
-| ----------- | ------------------------------------ | -------- | ------------------------------------------------------ |
-| `01`        | Factura electrónica                  | `01`     | Anula documento de referencia                          |
-| `02`        | Nota de débito                       | `02`     | Corrige monto                                          |
-| `03`        | Nota de crédito                      | `04`     | Referencia a otro documento                            |
-| `04`        | Tiquete electrónico                  | `05`     | Sustituye comprobante provisional por contingencia     |
-| `08`        | Comprobante emitido en contingencia  | `06`     | Devolución de mercancía                                |
-| `10`        | Comprobante rechazado por Hacienda   | `07`     | Sustituye comprobante electrónico                      |
-| `11`        | Sustituye factura rechazada por el receptor | `13` | Anula por error material (new, Nov 2026)            |
-| `13`        | Facturación mes vencido              | `14`     | Corrige monto por error material (new)                 |
-| `19`        | Factura electrónica de exportación (new) | `15` | Sustituye comprobante electrónico por error material (new) |
-| `20`        | Recibo electrónico de pago (new)     | `16`     | Sustituye comprobante electrónico rechazado (new)      |
-| `99`        | Otros                                | `17`     | Pago a comprobante electrónico (new; REP only)         |
-|             |                                      | `99`     | Otros                                                  |
+| `TipoDocIR` | Meaning                                     | `Codigo` | Meaning                                                    |
+| ----------- | ------------------------------------------- | -------- | ---------------------------------------------------------- |
+| `01`        | Factura electrónica                         | `01`     | Anula documento de referencia                              |
+| `02`        | Nota de débito                              | `02`     | Corrige monto                                              |
+| `03`        | Nota de crédito                             | `04`     | Referencia a otro documento                                |
+| `04`        | Tiquete electrónico                         | `05`     | Sustituye comprobante provisional por contingencia         |
+| `08`        | Comprobante emitido en contingencia         | `06`     | Devolución de mercancía                                    |
+| `10`        | Comprobante rechazado por Hacienda          | `07`     | Sustituye comprobante electrónico                          |
+| `11`        | Sustituye factura rechazada por el receptor | `13`     | Anula por error material (new, Nov 2026)                   |
+| `13`        | Facturación mes vencido                     | `14`     | Corrige monto por error material (new)                     |
+| `19`        | Factura electrónica de exportación (new)    | `15`     | Sustituye comprobante electrónico por error material (new) |
+| `20`        | Recibo electrónico de pago (new)            | `16`     | Sustituye comprobante electrónico rechazado (new)          |
+| `99`        | Otros                                       | `17`     | Pago a comprobante electrónico (new; REP only)             |
+|             |                                             | `99`     | Otros                                                      |
 
 Not listed above: `Codigo` `08`–`12` (endorsed invoice, financial credit and
 debit notes, non-domiciled provider, and `12`, reworded in April 2026 as
@@ -683,7 +693,7 @@ Differences for the other two validated samples:
 - **22 Apr 2026 adjustments** (new codes mandatory in issuing systems from
   1 Nov 2026, usable earlier, already live in both STAG and production: COM26,
   primary): alphanumeric legal-entity identifications "cuando este [el Registro
-  Nacional] así lo comunique" (so not yet in use; KPMG gives `3-101-A00001` as
+Nacional] así lo comunique" (so not yet in use; KPMG gives `3-101-A00001` as
   the expected shape, secondary); special short phone numbers; clearer
   `TotalIVADevuelto`; reference codes `13`–`17` and reworded `12`; reference
   document types `19`, `20`. COM26 is a communiqué, not a Gazette resolution
@@ -691,17 +701,17 @@ Differences for the other two validated samples:
 
 ### 3.16 Dates
 
-| Date        | Event                                                                                                         | Source                                    |
-| ----------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| 13 Nov 2024 | RES27 issued; six months from 1 Dec 2024 to implement 4.4; voluntary use from 1 Apr 2025                      | RES27 Transitorio I                       |
-| 11 Feb 2025 | Deadline moved to 1 Sep 2025; the press release says the resolution "está en proceso de publicación"          | Hacienda press release CP-08-2025         |
-| Feb 2025    | That resolution: MH-DGT-RES-0001-2025 (secondary: Siempre al Día; Gazette text not located, **UNVERIFIED**)    | Secondary                                 |
-| 1 Sep 2025  | 4.4 in force, 4.3 repealed (older versions only for notes adjusting documents issued under them)              | ANX p. 3                                  |
-| 6 Oct 2025  | TRIBU-CR starts at 09:00; ATV disabled partly or fully from 23:45 on 25 Sep 2025. MH-DGT-RES-0043-2025 lists RES27 among the resolutions it adapts to TRIBU-CR (what it changed in RES27 was not read) | RES43 (primary)                           |
-| 6 Oct 2025  | Free invoicing tool TICO Factura starts; activity codes on CIIU 4                                             | Secondary (Siempre al Día; fact sheet)    |
-| 22 Apr 2026 | Adjustment log, new XSDs and communiqué published                                                             | ANX p. 3; XSD `Last-Modified`; COM26      |
-| 27 Jul 2026 | New cryptographic keys need a 14-character PIN                                                                | Secondary (KPMG)                          |
-| 1 Nov 2026  | April adjustments mandatory                                                                                   | COM26 (primary); Delfino, 29 Oct 2026     |
+| Date        | Event                                                                                                                                                                                                  | Source                                 |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
+| 13 Nov 2024 | RES27 issued; six months from 1 Dec 2024 to implement 4.4; voluntary use from 1 Apr 2025                                                                                                               | RES27 Transitorio I                    |
+| 11 Feb 2025 | Deadline moved to 1 Sep 2025; the press release says the resolution "está en proceso de publicación"                                                                                                   | Hacienda press release CP-08-2025      |
+| Feb 2025    | That resolution: MH-DGT-RES-0001-2025 (secondary: Siempre al Día; Gazette text not located, **UNVERIFIED**)                                                                                            | Secondary                              |
+| 1 Sep 2025  | 4.4 in force, 4.3 repealed (older versions only for notes adjusting documents issued under them)                                                                                                       | ANX p. 3                               |
+| 6 Oct 2025  | TRIBU-CR starts at 09:00; ATV disabled partly or fully from 23:45 on 25 Sep 2025. MH-DGT-RES-0043-2025 lists RES27 among the resolutions it adapts to TRIBU-CR (what it changed in RES27 was not read) | RES43 (primary)                        |
+| 6 Oct 2025  | Free invoicing tool TICO Factura starts; activity codes on CIIU 4                                                                                                                                      | Secondary (Siempre al Día; fact sheet) |
+| 22 Apr 2026 | Adjustment log, new XSDs and communiqué published                                                                                                                                                      | ANX p. 3; XSD `Last-Modified`; COM26   |
+| 27 Jul 2026 | New cryptographic keys need a 14-character PIN                                                                                                                                                         | Secondary (KPMG)                       |
+| 1 Nov 2026  | April adjustments mandatory                                                                                                                                                                            | COM26 (primary); Delfino, 29 Oct 2026  |
 
 The header of Anexo 2 still says "rige a partir del 01 de junio del 2025"
 (ANX p. 84); that is stale text.
@@ -710,23 +720,23 @@ The header of Anexo 2 still says "rige a partir del 01 de junio del 2025"
 
 ### 4.1 Requirements (ANX Anexo 2, pp. 84–96; p. 60)
 
-| Item                    | Requirement                                                                                                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Format                  | XMLDSig with **XAdES-EPES**, ETSI TS 101 903 **v1.3.2 or higher** (`xmlns:xades="http://uri.etsi.org/01903/v1.3.2#"`)                                                                        |
-| Packaging               | **Enveloped only**; `ds:Signature` at `/{Root}/ds:Signature`, the last child                                                                                                                |
-| Key                     | RSA 2048 or 4096                                                                                                                                                                            |
-| Digest                  | SHA-256 or SHA-512                                                                                                                                                                          |
-| Signature method        | Example: `http://www.w3.org/2001/04/xmldsig-more#rsa-sha256`                                                                                                                                |
-| Canonicalisation        | Example: `http://www.w3.org/2001/10/xml-exc-c14n#` for `SignedInfo` and both references. Anexo 1 (p. 14) says "C14n-20010315" instead: the document contradicts itself. Follow the example  |
-| Reference 1             | `URI=""`, transforms: XPath `not(ancestor-or-self::ds:Signature)` then exc-c14n; digest SHA-256; `Id="r-id-1"`                                                                              |
-| Reference 2             | `Type="http://uri.etsi.org/01903#SignedProperties"`, `URI="#xades-id-…"`, transform exc-c14n, digest SHA-256                                                                                |
-| `KeyInfo`               | `X509Data/X509Certificate` with the signing certificate                                                                                                                                     |
-| `SigningTime`           | Present (example in UTC, `2021-11-27T19:35:06Z`)                                                                                                                                            |
+| Item                    | Requirement                                                                                                                                                                                                                                                                               |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Format                  | XMLDSig with **XAdES-EPES**, ETSI TS 101 903 **v1.3.2 or higher** (`xmlns:xades="http://uri.etsi.org/01903/v1.3.2#"`)                                                                                                                                                                     |
+| Packaging               | **Enveloped only**; `ds:Signature` at `/{Root}/ds:Signature`, the last child                                                                                                                                                                                                              |
+| Key                     | RSA 2048 or 4096                                                                                                                                                                                                                                                                          |
+| Digest                  | SHA-256 or SHA-512                                                                                                                                                                                                                                                                        |
+| Signature method        | Example: `http://www.w3.org/2001/04/xmldsig-more#rsa-sha256`                                                                                                                                                                                                                              |
+| Canonicalisation        | Example: `http://www.w3.org/2001/10/xml-exc-c14n#` for `SignedInfo` and both references. Anexo 1 (p. 14) says "C14n-20010315" instead: the document contradicts itself. Follow the example                                                                                                |
+| Reference 1             | `URI=""`, transforms: XPath `not(ancestor-or-self::ds:Signature)` then exc-c14n; digest SHA-256; `Id="r-id-1"`                                                                                                                                                                            |
+| Reference 2             | `Type="http://uri.etsi.org/01903#SignedProperties"`, `URI="#xades-id-…"`, transform exc-c14n, digest SHA-256                                                                                                                                                                              |
+| `KeyInfo`               | `X509Data/X509Certificate` with the signing certificate                                                                                                                                                                                                                                   |
+| `SigningTime`           | Present (example in UTC, `2021-11-27T19:35:06Z`)                                                                                                                                                                                                                                          |
 | `SigningCertificate`    | `CertDigest` + `IssuerSerial` (the issuer's example digests the certificate with **SHA-1**; the receiver and endorsement counter-signature examples on pp. 89–94 name `xmlenc#sha512` but carry the same 20-byte value, so they prove nothing. Whether SHA-256 is accepted is UNVERIFIED) |
-| Policy identifier       | `SigPolicyId/Identifier` = `https://cdn.comprobanteselectronicos.go.cr/xml-schemas/Resoluci%C3%B3n_General_sobre_disposiciones_t%C3%A9cnicas_comprobantes_electr%C3%B3nicos_para_efectos_tributarios.pdf` |
-| Policy hash             | `SigPolicyHash`: `DigestMethod` `http://www.w3.org/2001/04/xmlenc#sha256`, `DigestValue` **`DWxin1xWOeI8OuWQXazh4VjLWAaCLAA954em7DMh0h8=`**                                                  |
-| `DataObjectFormat`      | `ObjectReference="#r-id-1"`, `MimeType` `application/octet-stream`                                                                                                                          |
-| One mechanism at a time | Either a BCCR digital signature or Hacienda's cryptographic key                                                                                                                             |
+| Policy identifier       | `SigPolicyId/Identifier` = `https://cdn.comprobanteselectronicos.go.cr/xml-schemas/Resoluci%C3%B3n_General_sobre_disposiciones_t%C3%A9cnicas_comprobantes_electr%C3%B3nicos_para_efectos_tributarios.pdf`                                                                                 |
+| Policy hash             | `SigPolicyHash`: `DigestMethod` `http://www.w3.org/2001/04/xmlenc#sha256`, `DigestValue` **`DWxin1xWOeI8OuWQXazh4VjLWAaCLAA954em7DMh0h8=`**                                                                                                                                               |
+| `DataObjectFormat`      | `ObjectReference="#r-id-1"`, `MimeType` `application/octet-stream`                                                                                                                                                                                                                        |
+| One mechanism at a time | Either a BCCR digital signature or Hacienda's cryptographic key                                                                                                                                                                                                                           |
 
 Verified today: the SHA-256 of the PDF served at the policy URL (163,479 bytes,
 last-modified 8 Jan 2025) is `0d6c629f…d21f`, whose base64 is exactly
@@ -773,16 +783,16 @@ not needed.
 
 None of these is installed in this repository's `node_modules` today.
 
-| Package                        | Latest (published)       | Licence       | Role and status                                                                                                                                                                                                                                                         |
-| ------------------------------ | ------------------------ | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `xadesjs`                      | 3.1.0 (9 Nov 2026)       | MIT           | PeculiarVentures. Produces XAdES on top of `xmldsigjs`; `Sign()` options include `signingCertificate`, `signingTime`, `policy: { identifier: { value }, hash, digestValue? }`, `signedPropertiesReference`. Eight releases in the last 13 months. `engines`: Node `^20.19.0` or `>=22.12.0`; peers `xmldsigjs` and `xml-core` `^3.1.0`. In Node, register a DOM and XPath implementation (e.g. `@xmldom/xmldom`, `xpath`) |
-| `xmldsigjs`                    | 3.1.0 (9 Nov 2026)       | MIT           | XMLDSig engine used by `xadesjs`; supports C14N and exclusive C14N, RSASSA-PKCS1-v1_5, SHA-256/512                                                                                                                                                                      |
-| `xml-crypto`                   | 6.4.0 (14 Oct 2026)      | MIT           | node-saml. XMLDSig only: the XAdES `QualifyingProperties` object and its reference must be built by hand. Viable, more code                                                                                                                                             |
-| `node-forge`                   | 1.4.3 (4 Nov 2026)       | BSD-3 or GPL-2 | PKCS#12 parsing, hashing, X.509 fields (issuer name, serial) for `SigningCertificate`                                                                                                                                                                                  |
-| `@xmldom/xmldom`               | 0.9.12 (21 Aug 2026)     | MIT           | DOM for Node                                                                                                                                                                                                                                                            |
-| `@facturacr/atv-sdk`           | 2.0.15-alpha (27 Jun 2026) | MIT         | Community Costa Rica SDK (token, send, sign). Alpha; depends on `xadesjs ^2.1.2`, `fast-xml-parser ^3.19`, `axios ^0.30`, `xmldom-alpha`. 4.4 coverage UNVERIFIED. Read it as a reference, do not depend on it                                                          |
-| `haciendacostarica-signer`     | 1.0.2 (28 Jun 2019)      | MIT           | Unmaintained since 2019. Reference only                                                                                                                                                                                                                                 |
-| `xmllint-wasm`                 | 5.3.0 (5 Aug 2026)       | MIT           | XSD validation in Node without native code; `libxmljs2` 0.37.0 (1 Jun 2025) is the native alternative. The `xmllint` CLI validated the samples here                                                                                                                     |
+| Package                    | Latest (published)         | Licence        | Role and status                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------- | -------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `xadesjs`                  | 3.1.0 (9 Nov 2026)         | MIT            | PeculiarVentures. Produces XAdES on top of `xmldsigjs`; `Sign()` options include `signingCertificate`, `signingTime`, `policy: { identifier: { value }, hash, digestValue? }`, `signedPropertiesReference`. Eight releases in the last 13 months. `engines`: Node `^20.19.0` or `>=22.12.0`; peers `xmldsigjs` and `xml-core` `^3.1.0`. In Node, register a DOM and XPath implementation (e.g. `@xmldom/xmldom`, `xpath`) |
+| `xmldsigjs`                | 3.1.0 (9 Nov 2026)         | MIT            | XMLDSig engine used by `xadesjs`; supports C14N and exclusive C14N, RSASSA-PKCS1-v1_5, SHA-256/512                                                                                                                                                                                                                                                                                                                        |
+| `xml-crypto`               | 6.4.0 (14 Oct 2026)        | MIT            | node-saml. XMLDSig only: the XAdES `QualifyingProperties` object and its reference must be built by hand. Viable, more code                                                                                                                                                                                                                                                                                               |
+| `node-forge`               | 1.4.3 (4 Nov 2026)         | BSD-3 or GPL-2 | PKCS#12 parsing, hashing, X.509 fields (issuer name, serial) for `SigningCertificate`                                                                                                                                                                                                                                                                                                                                     |
+| `@xmldom/xmldom`           | 0.9.12 (21 Aug 2026)       | MIT            | DOM for Node                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `@facturacr/atv-sdk`       | 2.0.15-alpha (27 Jun 2026) | MIT            | Community Costa Rica SDK (token, send, sign). Alpha; depends on `xadesjs ^2.1.2`, `fast-xml-parser ^3.19`, `axios ^0.30`, `xmldom-alpha`. 4.4 coverage UNVERIFIED. Read it as a reference, do not depend on it                                                                                                                                                                                                            |
+| `haciendacostarica-signer` | 1.0.2 (28 Jun 2019)        | MIT            | Unmaintained since 2019. Reference only                                                                                                                                                                                                                                                                                                                                                                                   |
+| `xmllint-wasm`             | 5.3.0 (5 Aug 2026)         | MIT            | XSD validation in Node without native code; `libxmljs2` 0.37.0 (1 Jun 2025) is the native alternative. The `xmllint` CLI validated the samples here                                                                                                                                                                                                                                                                       |
 
 Recommended stack: build the XML with a small typed builder, validate with the
 XSDs in CI and before every send, sign with `xadesjs` 3.x on Node 22's built-in
@@ -797,13 +807,13 @@ research: **acceptance of any signature is UNVERIFIED until a sandbox test**.
 
 ### 5.1 Endpoints
 
-| Purpose             | Production                                                                                   | Sandbox                                                                                           |
-| ------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Token               | `https://idp.comprobanteselectronicos.go.cr/auth/realms/rut/protocol/openid-connect/token`   | `https://idp.comprobanteselectronicos.go.cr/auth/realms/rut-stag/protocol/openid-connect/token`   |
-| Logout              | `…/auth/realms/rut/protocol/openid-connect/logout`                                           | `…/auth/realms/rut-stag/protocol/openid-connect/logout`                                           |
-| `client_id`         | `api-prod`                                                                                   | `api-stag`                                                                                        |
-| API base            | `https://api.comprobanteselectronicos.go.cr/recepcion/v1/`                                   | Annex: `https://api.comprobanteselectronicos.go.cr/recepcion-sandbox/v1/` — see the warning below |
-| User name shape     | `cpf-01-1234-5678@comprobanteselectronicos.go.cr` (ANX example)                              | `cpj-3-101-XXXXXX@stag.comprobanteselectronicos.go.cr` (IDP example)                              |
+| Purpose         | Production                                                                                 | Sandbox                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Token           | `https://idp.comprobanteselectronicos.go.cr/auth/realms/rut/protocol/openid-connect/token` | `https://idp.comprobanteselectronicos.go.cr/auth/realms/rut-stag/protocol/openid-connect/token`   |
+| Logout          | `…/auth/realms/rut/protocol/openid-connect/logout`                                         | `…/auth/realms/rut-stag/protocol/openid-connect/logout`                                           |
+| `client_id`     | `api-prod`                                                                                 | `api-stag`                                                                                        |
+| API base        | `https://api.comprobanteselectronicos.go.cr/recepcion/v1/`                                 | Annex: `https://api.comprobanteselectronicos.go.cr/recepcion-sandbox/v1/` — see the warning below |
+| User name shape | `cpf-01-1234-5678@comprobanteselectronicos.go.cr` (ANX example)                            | `cpj-3-101-XXXXXX@stag.comprobanteselectronicos.go.cr` (IDP example)                              |
 
 Sources: ANX Anexo 3 (pp. 97–98) for production; IDP for the sandbox realm and
 client. Both realms' OIDC discovery documents
@@ -812,10 +822,10 @@ and list `password` and `refresh_token` among `grant_types_supported`.
 
 **Sandbox URL warning (observed today, without credentials):**
 
-| Request                                                                              | Response                                                         |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| `GET https://api.comprobanteselectronicos.go.cr/recepcion/v1/recepcion/{clave}`      | 401, body `{"message":"Unauthorized"}`, header `x-amzn-errortype: UnauthorizedException` (route exists) |
-| `GET https://api-sandbox.comprobanteselectronicos.go.cr/recepcion/v1/recepcion/{clave}` | 401, same body and header (route exists)                     |
+| Request                                                                                 | Response                                                                                                                                                                      |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET https://api.comprobanteselectronicos.go.cr/recepcion/v1/recepcion/{clave}`         | 401, body `{"message":"Unauthorized"}`, header `x-amzn-errortype: UnauthorizedException` (route exists)                                                                       |
+| `GET https://api-sandbox.comprobanteselectronicos.go.cr/recepcion/v1/recepcion/{clave}` | 401, same body and header (route exists)                                                                                                                                      |
 | `GET https://api.comprobanteselectronicos.go.cr/recepcion-sandbox/v1/recepcion/{clave}` | 403, body `{"message":"Missing Authentication Token"}`, header `x-amzn-errortype: MissingAuthenticationTokenException` (the gateway's answer for a route that does not exist) |
 
 Re-run in the fact-check on 21 Nov 2026 with the same results. COM26 (April
@@ -866,7 +876,7 @@ requests per taxpayer.
 {
   "clave": "50621112600310112345600100001040000001532148291037",
   "fecha": "2026-11-21T21:30:00-06:00",
-  "emisor":   { "tipoIdentificacion": "02", "numeroIdentificacion": "3101123456" },
+  "emisor": { "tipoIdentificacion": "02", "numeroIdentificacion": "3101123456" },
   "receptor": { "tipoIdentificacion": "02", "numeroIdentificacion": "3101654321" },
   "callbackUrl": "https://example.com/hacienda/callback",
   "consecutivoReceptor": "…only when sending a MensajeReceptor…",
@@ -874,23 +884,23 @@ requests per taxpayer.
 }
 ```
 
-| Field                 | Required | Notes                                                                                                                        |
-| --------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `clave`               | yes      | ≤ 50                                                                                                                         |
-| `fecha`               | yes      | RFC 3339 date-time; the doc's pattern is `yyyy-MM-dd'T'HH:mm:ssZ` and its example reads `2016-01-01T00:00:00-0600` (no colon). Which offset spellings are accepted is UNVERIFIED; start with the same string as `FechaEmision` |
-| `emisor`              | yes      | `tipoIdentificacion` (2), `numeroIdentificacion` (≤ 12)                                                                      |
-| `receptor`            | no       | Omit for a tiquete without receiver                                                                                          |
-| `callbackUrl`         | no       | 5.5                                                                                                                          |
-| `consecutivoReceptor` | only for receiver messages | 20 digits                                                                                                  |
-| `comprobanteXml`      | yes      | The **signed** XML, UTF-8 bytes, Base64                                                                                      |
+| Field                 | Required                   | Notes                                                                                                                                                                                                                          |
+| --------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `clave`               | yes                        | ≤ 50                                                                                                                                                                                                                           |
+| `fecha`               | yes                        | RFC 3339 date-time; the doc's pattern is `yyyy-MM-dd'T'HH:mm:ssZ` and its example reads `2016-01-01T00:00:00-0600` (no colon). Which offset spellings are accepted is UNVERIFIED; start with the same string as `FechaEmision` |
+| `emisor`              | yes                        | `tipoIdentificacion` (2), `numeroIdentificacion` (≤ 12)                                                                                                                                                                        |
+| `receptor`            | no                         | Omit for a tiquete without receiver                                                                                                                                                                                            |
+| `callbackUrl`         | no                         | 5.5                                                                                                                                                                                                                            |
+| `consecutivoReceptor` | only for receiver messages | 20 digits                                                                                                                                                                                                                      |
+| `comprobanteXml`      | yes                        | The **signed** XML, UTF-8 bytes, Base64                                                                                                                                                                                        |
 
 Responses:
 
-| Status | Meaning                                                                                                                              | Headers                                                                                           |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| `201`  | Received; validation still pending. (The reference says 201; treat any 2xx as "received")                                            | `Location` (status URL), `X-Ratelimit-Limit`, `X-Ratelimit-Remaining`, `X-Ratelimit-Reset`        |
-| `400`  | Validation error                                                                                                                     | `X-Error-Cause` (e.g. "El comprobante con la Clave […] ya fue recibido."), `validation-exception` |
-| `401`  | Token missing or expired                                                                                                             |                                                                                                   |
+| Status | Meaning                                                                                   | Headers                                                                                           |
+| ------ | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `201`  | Received; validation still pending. (The reference says 201; treat any 2xx as "received") | `Location` (status URL), `X-Ratelimit-Limit`, `X-Ratelimit-Remaining`, `X-Ratelimit-Reset`        |
+| `400`  | Validation error                                                                          | `X-Error-Cause` (e.g. "El comprobante con la Clave […] ya fue recibido."), `validation-exception` |
+| `401`  | Token missing or expired                                                                  |                                                                                                   |
 
 These three are the only statuses the reference documents for `POST
 /recepcion`. It documents no `202` (often quoted by vendors) and no `403`; a
@@ -906,7 +916,12 @@ attempt succeeded: switch to polling, do not create a new document.
 ### 5.4 `GET /recepcion/{clave}` (API)
 
 ```json
-{ "clave": "…", "fecha": "2026-11-21T21:30:00-0600", "ind-estado": "aceptado", "respuesta-xml": "PD94…" }
+{
+  "clave": "…",
+  "fecha": "2026-11-21T21:30:00-0600",
+  "ind-estado": "aceptado",
+  "respuesta-xml": "PD94…"
+}
 ```
 
 `ind-estado` ∈ `recibido`, `procesando`, `aceptado`, `rechazado`, `error`.
@@ -954,23 +969,23 @@ against its registries (ANX p. 17) — and has up to **3 hours** to answer
 
 ### 5.7 Timing, contingency, delivery, retention
 
-| Rule                           | Detail                                                                                                                                                                                                                             | Source                    |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| When to issue                  | In the act of sale or service                                                                                                                                                                                                      | RCE art. 18               |
-| When to send to Hacienda       | "De forma inmediata y automatizada"                                                                                                                                                                                                | RCE art. 21               |
-| Issuer has no internet         | Generate and sign at the time of sale; send within **2 business days**; situation digit `3`                                                                                                                                        | RCE art. 21               |
-| Hacienda's link is down        | Store the files and send when the link is back; no paper voucher. (No deadline or situation change is stated)                                                                                                                      | RCE art. 21               |
-| Issuer's system unusable       | Pre-printed "comprobante provisional"; within **2 business days** after recovery issue the electronic documents (situation `2`) referencing each voucher (`TipoDocIR` `08`, `Codigo` `05`); keep proof of the contingency          | RCE art. 23; ANX nota 3   |
-| Delivery to the buyer          | At the time of sale, by the agreed electronic means (e-mail or "puesta a disposición"), XML plus PDF representation, **even before Hacienda answers**; then deliver Hacienda's confirmation when it arrives                        | RCE art. 2.11, 18; RES27 art. 5 |
-| PDF                            | Legible content; document type, clave and consecutive number shown together; code descriptions instead of bare codes                                                                                                               | ANX notas 1, 7; RES27 art. 5 |
-| QR code                        | 2.5 × 2.5 cm, bottom right — but its entry into force was **suspended** until Hacienda announces it (RES27 Transitorio III). Whether it has since been activated is UNVERIFIED; reserve the space                                  | RES27                     |
-| Hacienda rejects               | Document is void; issue a replacement immediately; no credit note                                                                                                                                                                  | RCE art. 10, 19           |
-| No acceptance message          | A document without Hacienda's acceptance message cannot support the receiver's IVA credit or deductible expense. A fee factura stuck in `recibido` or rejected costs the seller their input IVA, so the 3-hour alert in 8.2 is a seller-facing issue | RCE art. 21; RES27 art. 11 |
-| Receiver's confirmation        | Taxpayer receivers send a `MensajeReceptor` (accept / partial / reject) to Hacienda within **8 business days counted from the first day of the month following** the transaction; silence = accepted. Not applicable to final consumers | RES27 art. 10; RCE art. 20 |
-| Receiver rejects               | Issuer must immediately issue the credit/debit note and, if needed, a new document                                                                                                                                                 | RES27 art. 10             |
-| Retention                      | All XML issued, sent and received and associated documents: **5 years** (CNPT art. 109), without prejudice to the longer limitation period of CNPT art. 51; unalterable, legible, retrievable                                      | RCE art. 4.1.i, 22        |
-| Provider retention             | A software provider only has to keep data two months; the taxpayer is responsible for the archive                                                                                                                                  | RES27 art. 7; RCE art. 16 |
-| Penalties                      | Not issuing or delivering: CNPT arts. 85–86; not sending the XML: CNPT art. 83                                                                                                                                                     | RCE art. 24               |
+| Rule                     | Detail                                                                                                                                                                                                                                               | Source                          |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| When to issue            | In the act of sale or service                                                                                                                                                                                                                        | RCE art. 18                     |
+| When to send to Hacienda | "De forma inmediata y automatizada"                                                                                                                                                                                                                  | RCE art. 21                     |
+| Issuer has no internet   | Generate and sign at the time of sale; send within **2 business days**; situation digit `3`                                                                                                                                                          | RCE art. 21                     |
+| Hacienda's link is down  | Store the files and send when the link is back; no paper voucher. (No deadline or situation change is stated)                                                                                                                                        | RCE art. 21                     |
+| Issuer's system unusable | Pre-printed "comprobante provisional"; within **2 business days** after recovery issue the electronic documents (situation `2`) referencing each voucher (`TipoDocIR` `08`, `Codigo` `05`); keep proof of the contingency                            | RCE art. 23; ANX nota 3         |
+| Delivery to the buyer    | At the time of sale, by the agreed electronic means (e-mail or "puesta a disposición"), XML plus PDF representation, **even before Hacienda answers**; then deliver Hacienda's confirmation when it arrives                                          | RCE art. 2.11, 18; RES27 art. 5 |
+| PDF                      | Legible content; document type, clave and consecutive number shown together; code descriptions instead of bare codes                                                                                                                                 | ANX notas 1, 7; RES27 art. 5    |
+| QR code                  | 2.5 × 2.5 cm, bottom right — but its entry into force was **suspended** until Hacienda announces it (RES27 Transitorio III). Whether it has since been activated is UNVERIFIED; reserve the space                                                    | RES27                           |
+| Hacienda rejects         | Document is void; issue a replacement immediately; no credit note                                                                                                                                                                                    | RCE art. 10, 19                 |
+| No acceptance message    | A document without Hacienda's acceptance message cannot support the receiver's IVA credit or deductible expense. A fee factura stuck in `recibido` or rejected costs the seller their input IVA, so the 3-hour alert in 8.2 is a seller-facing issue | RCE art. 21; RES27 art. 11      |
+| Receiver's confirmation  | Taxpayer receivers send a `MensajeReceptor` (accept / partial / reject) to Hacienda within **8 business days counted from the first day of the month following** the transaction; silence = accepted. Not applicable to final consumers              | RES27 art. 10; RCE art. 20      |
+| Receiver rejects         | Issuer must immediately issue the credit/debit note and, if needed, a new document                                                                                                                                                                   | RES27 art. 10                   |
+| Retention                | All XML issued, sent and received and associated documents: **5 years** (CNPT art. 109), without prejudice to the longer limitation period of CNPT art. 51; unalterable, legible, retrievable                                                        | RCE art. 4.1.i, 22              |
+| Provider retention       | A software provider only has to keep data two months; the taxpayer is responsible for the archive                                                                                                                                                    | RES27 art. 7; RCE art. 16       |
+| Penalties                | Not issuing or delivering: CNPT arts. 85–86; not sending the XML: CNPT art. 83                                                                                                                                                                       | RCE art. 24                     |
 
 Suggested retention for Yuntera's own archive: 10 years, to cover the extended
 limitation period. **[ACCOUNTANT]**
@@ -994,10 +1009,20 @@ GET https://api.hacienda.go.cr/fe/cabys?codigo=2829000000200  # exact code
 Search response:
 
 ```json
-{ "total": 16, "cantidad": 2,
-  "cabys": [ { "codigo": "2829000000200", "descripcion": "Camisetas para bebé",
-               "categorias": ["…8 levels…"], "impuesto": 13,
-               "uri": "https://api.hacienda.go.cr/fe/cabys?codigo=2829000000200", "estado": "" } ] }
+{
+  "total": 16,
+  "cantidad": 2,
+  "cabys": [
+    {
+      "codigo": "2829000000200",
+      "descripcion": "Camisetas para bebé",
+      "categorias": ["…8 levels…"],
+      "impuesto": 13,
+      "uri": "https://api.hacienda.go.cr/fe/cabys?codigo=2829000000200",
+      "estado": ""
+    }
+  ]
+}
 ```
 
 Code lookup returns an **array** (`[]` when the code does not exist) of
@@ -1037,12 +1062,12 @@ UNVERIFIED. Mirror what you need through the API.
 - **For Yuntera's own lines** (candidates found by searching the API today; the
   choice is an **[ACCOUNTANT]** decision):
 
-| Use                         | Candidate code                                                                                                              | Rate |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---- |
-| Delivery fee                | `6803000000000` "Servicios de entrega local"                                                                                | 13%  |
-| Sales commission            | Family `625xxxxxxxxxx` "Servicios de venta al por menor de …, prestados a comisión o por contrato (bienes que son propiedad de otros)", e.g. `6254400000000` (electrodomésticos) | 13%  |
-| Warehouse / fulfilment fee  | `6729000000000` "Servicios de almacenamiento y depósito, n.c.p."                                                            | 13%  |
-| Payment-processing pass-through | `7119002009900` "Gestión de comisiones de tarjeta de crédito y débito, n.c.p."                                          | 13%  |
+| Use                             | Candidate code                                                                                                                                                                   | Rate |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| Delivery fee                    | `6803000000000` "Servicios de entrega local"                                                                                                                                     | 13%  |
+| Sales commission                | Family `625xxxxxxxxxx` "Servicios de venta al por menor de …, prestados a comisión o por contrato (bienes que son propiedad de otros)", e.g. `6254400000000` (electrodomésticos) | 13%  |
+| Warehouse / fulfilment fee      | `6729000000000` "Servicios de almacenamiento y depósito, n.c.p."                                                                                                                 | 13%  |
+| Payment-processing pass-through | `7119002009900` "Gestión de comisiones de tarjeta de crédito y débito, n.c.p."                                                                                                   | 13%  |
 
 ## 7. Direct integration or a provider
 
@@ -1060,15 +1085,15 @@ UNVERIFIED. Mirror what you need through the API.
 
 ### 7.2 Local providers with a public API (vendor pages read today; all secondary)
 
-| Provider                 | API                                                             | Multi-issuer                                   | Published price                                                                                                                         | Notes                                                                                                         |
-| ------------------------ | --------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| AFECR (Anthon Solutions) | REST, docs `https://afecr.com/doc`, sandbox (100 test documents), webhooks on integrator plans; FE, TE, NC, ND, FEC, FEE, REP | Up to 3 / 10 / 25 companies by plan | Prepaid packs, IVA included: ₡5,537 (250 documents), ₡8,927 (500), ₡16,837 (1,000), ₡33,787 (3,000), ₡45,087 (5,000)                     | States v4.4                                                                                                   |
-| Factúrele                | REST, docs `https://portal.facturele.com/api-docs`, test environment, webhooks; 7 document types and supplier-invoice reception | Yes (accounting-firm plan)          | "Desde" US$6.15 per quarter for companies, API "desde 500 documentos"; billed by volume; 1 month free                                    | States v4.4                                                                                                   |
-| FACTURATica              | HTTPS POST form-encoded web service, polling for status         | Not described                                  | API only on annual "ILIMITADO TODO" licences (price not on the page); optional US$500 one-off assisted integration; no per-document fee | Key is uploaded to their panel; page version 2.6.1 dated 15 Nov 2026 references annex 4.4                     |
-| FactuGo                  | REST, docs `http://app.factugo-cr.com/integrations/api/documentation` | Not stated                                | US$54 / 87 / 130 per month + IVA for 500 / 1,250 / 3,000 documents                                                                      |                                                                                                               |
-| Factura en CR            | REST, JavaScript SDK                                            | Claimed (search result)                        | "Desde ₡2.49" per document, 3 free per month (search result; not confirmed on the page read)                                            | The page's usage counters showed zero: treat as new and unproven                                              |
-| Alegra                   | REST `https://api.alegra.com/api/v1/…`, webhooks; `POST /invoices/stamp` emits up to 10 invoices; a Costa Rica REP endpoint is documented | One company per account     | Costa Rica plan prices not retrieved                                                                                                    | An accounting product with an API rather than an invoicing API; no idempotency key (third-party note)         |
-| Gosocket                 | —                                                               | —                                              | —                                                                                                                                       | No evidence found of a Costa Rica issuing API: **UNVERIFIED**                                                 |
+| Provider                 | API                                                                                                                                       | Multi-issuer                        | Published price                                                                                                                         | Notes                                                                                                 |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| AFECR (Anthon Solutions) | REST, docs `https://afecr.com/doc`, sandbox (100 test documents), webhooks on integrator plans; FE, TE, NC, ND, FEC, FEE, REP             | Up to 3 / 10 / 25 companies by plan | Prepaid packs, IVA included: ₡5,537 (250 documents), ₡8,927 (500), ₡16,837 (1,000), ₡33,787 (3,000), ₡45,087 (5,000)                    | States v4.4                                                                                           |
+| Factúrele                | REST, docs `https://portal.facturele.com/api-docs`, test environment, webhooks; 7 document types and supplier-invoice reception           | Yes (accounting-firm plan)          | "Desde" US$6.15 per quarter for companies, API "desde 500 documentos"; billed by volume; 1 month free                                   | States v4.4                                                                                           |
+| FACTURATica              | HTTPS POST form-encoded web service, polling for status                                                                                   | Not described                       | API only on annual "ILIMITADO TODO" licences (price not on the page); optional US$500 one-off assisted integration; no per-document fee | Key is uploaded to their panel; page version 2.6.1 dated 15 Nov 2026 references annex 4.4             |
+| FactuGo                  | REST, docs `http://app.factugo-cr.com/integrations/api/documentation`                                                                     | Not stated                          | US$54 / 87 / 130 per month + IVA for 500 / 1,250 / 3,000 documents                                                                      |                                                                                                       |
+| Factura en CR            | REST, JavaScript SDK                                                                                                                      | Claimed (search result)             | "Desde ₡2.49" per document, 3 free per month (search result; not confirmed on the page read)                                            | The page's usage counters showed zero: treat as new and unproven                                      |
+| Alegra                   | REST `https://api.alegra.com/api/v1/…`, webhooks; `POST /invoices/stamp` emits up to 10 invoices; a Costa Rica REP endpoint is documented | One company per account             | Costa Rica plan prices not retrieved                                                                                                    | An accounting product with an API rather than an invoicing API; no idempotency key (third-party note) |
+| Gosocket                 | —                                                                                                                                         | —                                   | —                                                                                                                                       | No evidence found of a Costa Rica issuing API: **UNVERIFIED**                                         |
 
 With any provider: they hold the company's `.p12` and API password; they
 usually assign the consecutive number and clave themselves (so numbering moves
@@ -1139,34 +1164,34 @@ order event ──> fiscal document row (status pending, numbers allocated, clav
 
 ### 8.3 Data to store per document issued by Yuntera
 
-| Group       | Fields                                                                                                                                                                                                                 |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity    | `document_type`, `clave` (50, alphanumeric), `consecutivo` (20), establishment, terminal, sequence number, situation (`1`–`3`), security code, schema version (`4.4`), `proveedor_sistemas`                              |
-| Issuer      | Identification type and number, legal name, commercial name, activity code, province/cantón/district/other signs, e-mails (snapshot at issue time)                                                                      |
-| Receiver    | Nullable: identification type and number, name, e-mail, address, activity code                                                                                                                                          |
-| Commercial  | `emitted_at` (timestamptz; the instant used for `FechaEmision` and the clave date), sale condition, credit days, currency, exchange rate, payment methods with amounts                                                  |
-| Lines       | Per line: number, CABYS, commercial code, quantity, unit, description, unit price, discounts (amount, code), subtotal, taxable base, tax code, tarifa code, tarifa, tax amount, exemption data, net tax, line total     |
-| Charges     | `OtrosCargos` entries: type, third-party identification and name, description, amount                                                                                                                                   |
-| Totals      | Every `ResumenFactura` value written to the XML, plus the IVA-inclusive amount charged in minor units for reconciliation                                                                                                |
-| Reference   | Referenced clave, its type and date, reference code, reason; `replaces_id` / `replaced_by_id`                                                                                                                           |
-| Links       | `order_id`, `seller_id` (as receiver of fee invoices), settlement or payout id, refund id                                                                                                                               |
-| Artefacts   | Storage path and SHA-256 of the signed XML, of Hacienda's response XML, of the PDF                                                                                                                                      |
-| Transmission| Status, `sent_at`, HTTP status and `X-Error-Cause` of the last attempt, attempt count, `next_attempt_at`, `last_polled_at`, Hacienda state, `accepted_at` / `rejected_at`, `DetalleMensaje`, transport (`direct` or provider name) |
-| Delivery    | When and how the XML/PDF and the confirmation were delivered to the receiver                                                                                                                                            |
+| Group        | Fields                                                                                                                                                                                                                             |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity     | `document_type`, `clave` (50, alphanumeric), `consecutivo` (20), establishment, terminal, sequence number, situation (`1`–`3`), security code, schema version (`4.4`), `proveedor_sistemas`                                        |
+| Issuer       | Identification type and number, legal name, commercial name, activity code, province/cantón/district/other signs, e-mails (snapshot at issue time)                                                                                 |
+| Receiver     | Nullable: identification type and number, name, e-mail, address, activity code                                                                                                                                                     |
+| Commercial   | `emitted_at` (timestamptz; the instant used for `FechaEmision` and the clave date), sale condition, credit days, currency, exchange rate, payment methods with amounts                                                             |
+| Lines        | Per line: number, CABYS, commercial code, quantity, unit, description, unit price, discounts (amount, code), subtotal, taxable base, tax code, tarifa code, tarifa, tax amount, exemption data, net tax, line total                |
+| Charges      | `OtrosCargos` entries: type, third-party identification and name, description, amount                                                                                                                                              |
+| Totals       | Every `ResumenFactura` value written to the XML, plus the IVA-inclusive amount charged in minor units for reconciliation                                                                                                           |
+| Reference    | Referenced clave, its type and date, reference code, reason; `replaces_id` / `replaced_by_id`                                                                                                                                      |
+| Links        | `order_id`, `seller_id` (as receiver of fee invoices), settlement or payout id, refund id                                                                                                                                          |
+| Artefacts    | Storage path and SHA-256 of the signed XML, of Hacienda's response XML, of the PDF                                                                                                                                                 |
+| Transmission | Status, `sent_at`, HTTP status and `X-Error-Cause` of the last attempt, attempt count, `next_attempt_at`, `last_polled_at`, Hacienda state, `accepted_at` / `rejected_at`, `DetalleMensaje`, transport (`direct` or provider name) |
+| Delivery     | When and how the XML/PDF and the confirmation were delivered to the receiver                                                                                                                                                       |
 
 ### 8.4 Data to store per document reported by a seller
 
-| Field                                   | Rule                                                                                                                                     |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `clave`                                 | Validated as in 3.3; issuer part must equal the seller's identification                                                                  |
-| Derived from the clave                  | Document type, date, consecutive number, situation                                                                                       |
-| `total` declared                        | Compared with the seller's share of the order                                                                                            |
-| Signed XML (strongly recommended)       | Parse: root and namespace are v4.4, `Clave` equals the reported one, `Emisor/Identificacion/Numero` equals the seller's, `TotalComprobante` matches; store path and SHA-256 |
-| Hacienda response XML (optional)        | `MensajeHacienda/Mensaje` = `1`; store                                                                                                   |
-| PDF (optional)                          | Shown to the shopper                                                                                                                     |
-| `verification`                          | `clave_only` / `xml_checked` / `hacienda_response_checked`                                                                               |
-| `no_document_reason`                    | `regimen_simplificado` when the seller is exempt                                                                                         |
-| Audit                                   | Who reported it and when; later credit notes linked to the original                                                                      |
+| Field                             | Rule                                                                                                                                                                        |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clave`                           | Validated as in 3.3; issuer part must equal the seller's identification                                                                                                     |
+| Derived from the clave            | Document type, date, consecutive number, situation                                                                                                                          |
+| `total` declared                  | Compared with the seller's share of the order                                                                                                                               |
+| Signed XML (strongly recommended) | Parse: root and namespace are v4.4, `Clave` equals the reported one, `Emisor/Identificacion/Numero` equals the seller's, `TotalComprobante` matches; store path and SHA-256 |
+| Hacienda response XML (optional)  | `MensajeHacienda/Mensaje` = `1`; store                                                                                                                                      |
+| PDF (optional)                    | Shown to the shopper                                                                                                                                                        |
+| `verification`                    | `clave_only` / `xml_checked` / `hacienda_response_checked`                                                                                                                  |
+| `no_document_reason`              | `regimen_simplificado` when the seller is exempt                                                                                                                            |
+| Audit                             | Who reported it and when; later credit notes linked to the original                                                                                                         |
 
 A packing or payout step can require the clave before the seller's payout is
 released. On the shopper's order page, show per seller: document type, clave,
@@ -1216,15 +1241,15 @@ server-side only.
 
 ### 9.4 Mismatches with the current code (not changed by this research)
 
-| Where                                                                                    | Today                                                                                 | Issue                                                                                                                                                                                           |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `supabase/migrations/20261121080800_finance.sql` line 380                                | `clave ~ '^[0-9]{50}$'`                                                               | The April 2026 XSD allows `[a-zA-Z0-9]{50}`; a document from a new legal entity with an alphanumeric identification would be refused by the database                                            |
-| `packages/core/src/cr/identity.ts` (`juridica` case)                                     | `^[2-5]\d{9}$`                                                                        | Same change: alphanumeric legal-entity identifications are now allowed (ANX bitácora 22/04/2026 item 1). Exact new format UNVERIFIED                                                            |
-| `packages/core/src/cr/compliance.ts` lines 51–52                                         | `HACIENDA_PAYMENT_CODE_PLATFORM = "07"` described as "collected through a digital platform on the seller's behalf" | The annex defines `05` as payment received by a third party instead of the issuer, and does not define `07`. Decide with the accountant before guiding sellers                |
-| `packages/core/src/cr/compliance.ts` lines 33–41                                         | Type codes `01`–`04`, `08`–`10`                                                       | Correct; `05`/`06`/`07` (receiver messages) are absent, which is fine while Yuntera does not send them                                                                                          |
-| `supabase/migrations/20261121080100_identity.sql` lines 71–94 (`seller_private`)         | `fiscal_address` is free text; no date of birth or company registration number        | A factura's receiver `Ubicacion` needs province, cantón and district codes when it is included, and the platform report (2.3) needs date of birth for individuals and the registration number for entities. `id_number` already allows letters (`^[0-9A-Z]{9,12}$`) |
-| `docs/research/costa-rica-fact-sheet.md` line 67                                         | Sandbox at `/recepcion-sandbox/v1/`                                                   | That is the annex's text, but the route did not resolve today; see 5.1                                                                                                                          |
-| `docs/research/costa-rica-fact-sheet.md` lines 37–41                                     | Platform reporting described generally                                                | Confirmed for sale of goods, with the EUR 1 million opt-in exclusion and the per-seller thresholds in 2.3                                                                                       |
+| Where                                                                            | Today                                                                                                              | Issue                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `supabase/migrations/20261121080800_finance.sql` line 380                        | `clave ~ '^[0-9]{50}$'`                                                                                            | The April 2026 XSD allows `[a-zA-Z0-9]{50}`; a document from a new legal entity with an alphanumeric identification would be refused by the database                                                                                                                |
+| `packages/core/src/cr/identity.ts` (`juridica` case)                             | `^[2-5]\d{9}$`                                                                                                     | Same change: alphanumeric legal-entity identifications are now allowed (ANX bitácora 22/04/2026 item 1). Exact new format UNVERIFIED                                                                                                                                |
+| `packages/core/src/cr/compliance.ts` lines 51–52                                 | `HACIENDA_PAYMENT_CODE_PLATFORM = "07"` described as "collected through a digital platform on the seller's behalf" | The annex defines `05` as payment received by a third party instead of the issuer, and does not define `07`. Decide with the accountant before guiding sellers                                                                                                      |
+| `packages/core/src/cr/compliance.ts` lines 33–41                                 | Type codes `01`–`04`, `08`–`10`                                                                                    | Correct; `05`/`06`/`07` (receiver messages) are absent, which is fine while Yuntera does not send them                                                                                                                                                              |
+| `supabase/migrations/20261121080100_identity.sql` lines 71–94 (`seller_private`) | `fiscal_address` is free text; no date of birth or company registration number                                     | A factura's receiver `Ubicacion` needs province, cantón and district codes when it is included, and the platform report (2.3) needs date of birth for individuals and the registration number for entities. `id_number` already allows letters (`^[0-9A-Z]{9,12}$`) |
+| `docs/research/costa-rica-fact-sheet.md` line 67                                 | Sandbox at `/recepcion-sandbox/v1/`                                                                                | That is the annex's text, but the route did not resolve today; see 5.1                                                                                                                                                                                              |
+| `docs/research/costa-rica-fact-sheet.md` lines 37–41                             | Platform reporting described generally                                                                             | Confirmed for sale of goods, with the EUR 1 million opt-in exclusion and the per-seller thresholds in 2.3                                                                                                                                                           |
 
 ## 10. Questions for the accountant
 
@@ -1379,23 +1404,23 @@ confirmation, 5-year retention, the two-month provider retention, and RES25's
 scope, thresholds, data set, channel, penalty and Transitorio. The API HTML
 downloaded today differs from the draft's hash only in an injected CDN script.
 
-| # | Where | What the note said | What is right | Source |
-| --- | --- | --- | --- | --- |
-| 1 | Bottom line, 3.15, 3.16 | 1 Nov 2026 date of the April adjustments "secondary: Delfino" | Confirmed by Hacienda's own communiqué, which also says the codes are already live in STAG and production and may be used earlier; alphanumeric cédulas apply only once the Registro Nacional announces them | COM26 |
-| 2 | 3.16 | TRIBU-CR start 6 Oct 2025 "secondary" | Primary: 09:00 on 6 Oct 2025, ATV disabled from 23:45 on 25 Sep 2025; MH-DGT-RES-0043-2025 lists RES27 among the resolutions it adapts | RES43 |
-| 3 | 3.16, 11 | Resolution that moved 4.4 to 1 Sep 2025 unknown | MH-DGT-RES-0001-2025 per a secondary source; CP-08-2025 confirms only that a resolution was "en proceso de publicación" | CP-08-2025; Siempre al Día |
-| 4 | 3.13 | Reference-code table ended at `16`, omitted `17` and `TipoDocIR` `19` | `17` "Pago a comprobante electrónico" (REP only) and `TipoDocIR` `19` added; the `01`→`07` and `13`→`15` follow-up rule added | ANX pp. 72–73; COM26 |
-| 5 | 3.15 | "`TotalComprobante` must equal the payment methods" | Only when two or more methods are used | ANX p. 56 |
-| 6 | 5.2 | Refresh token "lived 30 minutes" in the guide | The guide's text says 10 hours (2018); the 30 minutes is its 2017 sample token. Both shown | IDP p. 12 |
-| 7 | 5.1 | Probe answers given as `UnauthorizedException` / `MissingAuthenticationTokenException` | Those are the `x-amzn-errortype` header values; bodies are `{"message":"Unauthorized"}` / `{"message":"Missing Authentication Token"}`. Discovery documents advertise `http://` URLs | Probes, 21 Nov 2026 |
-| 8 | 5.3 | Statuses 201/400/401 only | Confirmed, and now stated that the reference documents no `202` and no `403`; `validation-exception` is a boolean header | API |
-| 9 | 5.7 | — | Added: a document without Hacienda's acceptance cannot support the receiver's IVA credit or deduction, which makes stuck fee invoices a seller problem | RCE art. 21; RES27 art. 11 |
-| 10 | 2.1 | "A buyer cannot issue a factura de compra" for simplified-regime sellers | RCE art. 2.13 is ambiguous on whether it covers all of them or only "no confirmante" ones; marked **[ACCOUNTANT]** | RCE art. 2.13 |
-| 11 | 3.4 | Activity-code mapping UNVERIFIED | Still UNVERIFIED; added that secondary sources put CIIU 4 in force on 6 Oct 2025 and claim the receiver code is mandatory, which the annex contradicts (FE condition 2) | ANX p. 18; Siempre al Día |
-| 12 | 4.1 | `CertDigest` "SHA-1 in the example" | Also noted that the counter-signature examples name SHA-512 with a 20-byte value, so they settle nothing | ANX pp. 89–94 |
-| 13 | 4.2 | Key validity "4 years" | Sources disagree (4 or 2 years); read `notAfter`. PIN rule still secondary; KPMG adds a six-month provider transition | Siempre al Día; Alegra; KPMG |
-| 14 | 2.3 | RES-0004-2026 window "reportedly" | Still secondary and not found; added the yearly 30 April deadline (art. 5.6) and that the first window has passed | Gazette Alcance 179 |
-| 15 | Source keys | RCE dated 2 Oct 2024 | Signed 2 Oct 2024; RES27 cites it as of 8 Nov 2024 | RCE signature line; RES27 considerando VII |
+| #   | Where                   | What the note said                                                                     | What is right                                                                                                                                                                                                | Source                                     |
+| --- | ----------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| 1   | Bottom line, 3.15, 3.16 | 1 Nov 2026 date of the April adjustments "secondary: Delfino"                          | Confirmed by Hacienda's own communiqué, which also says the codes are already live in STAG and production and may be used earlier; alphanumeric cédulas apply only once the Registro Nacional announces them | COM26                                      |
+| 2   | 3.16                    | TRIBU-CR start 6 Oct 2025 "secondary"                                                  | Primary: 09:00 on 6 Oct 2025, ATV disabled from 23:45 on 25 Sep 2025; MH-DGT-RES-0043-2025 lists RES27 among the resolutions it adapts                                                                       | RES43                                      |
+| 3   | 3.16, 11                | Resolution that moved 4.4 to 1 Sep 2025 unknown                                        | MH-DGT-RES-0001-2025 per a secondary source; CP-08-2025 confirms only that a resolution was "en proceso de publicación"                                                                                      | CP-08-2025; Siempre al Día                 |
+| 4   | 3.13                    | Reference-code table ended at `16`, omitted `17` and `TipoDocIR` `19`                  | `17` "Pago a comprobante electrónico" (REP only) and `TipoDocIR` `19` added; the `01`→`07` and `13`→`15` follow-up rule added                                                                                | ANX pp. 72–73; COM26                       |
+| 5   | 3.15                    | "`TotalComprobante` must equal the payment methods"                                    | Only when two or more methods are used                                                                                                                                                                       | ANX p. 56                                  |
+| 6   | 5.2                     | Refresh token "lived 30 minutes" in the guide                                          | The guide's text says 10 hours (2018); the 30 minutes is its 2017 sample token. Both shown                                                                                                                   | IDP p. 12                                  |
+| 7   | 5.1                     | Probe answers given as `UnauthorizedException` / `MissingAuthenticationTokenException` | Those are the `x-amzn-errortype` header values; bodies are `{"message":"Unauthorized"}` / `{"message":"Missing Authentication Token"}`. Discovery documents advertise `http://` URLs                         | Probes, 21 Nov 2026                        |
+| 8   | 5.3                     | Statuses 201/400/401 only                                                              | Confirmed, and now stated that the reference documents no `202` and no `403`; `validation-exception` is a boolean header                                                                                     | API                                        |
+| 9   | 5.7                     | —                                                                                      | Added: a document without Hacienda's acceptance cannot support the receiver's IVA credit or deduction, which makes stuck fee invoices a seller problem                                                       | RCE art. 21; RES27 art. 11                 |
+| 10  | 2.1                     | "A buyer cannot issue a factura de compra" for simplified-regime sellers               | RCE art. 2.13 is ambiguous on whether it covers all of them or only "no confirmante" ones; marked **[ACCOUNTANT]**                                                                                           | RCE art. 2.13                              |
+| 11  | 3.4                     | Activity-code mapping UNVERIFIED                                                       | Still UNVERIFIED; added that secondary sources put CIIU 4 in force on 6 Oct 2025 and claim the receiver code is mandatory, which the annex contradicts (FE condition 2)                                      | ANX p. 18; Siempre al Día                  |
+| 12  | 4.1                     | `CertDigest` "SHA-1 in the example"                                                    | Also noted that the counter-signature examples name SHA-512 with a 20-byte value, so they settle nothing                                                                                                     | ANX pp. 89–94                              |
+| 13  | 4.2                     | Key validity "4 years"                                                                 | Sources disagree (4 or 2 years); read `notAfter`. PIN rule still secondary; KPMG adds a six-month provider transition                                                                                        | Siempre al Día; Alegra; KPMG               |
+| 14  | 2.3                     | RES-0004-2026 window "reportedly"                                                      | Still secondary and not found; added the yearly 30 April deadline (art. 5.6) and that the first window has passed                                                                                            | Gazette Alcance 179                        |
+| 15  | Source keys             | RCE dated 2 Oct 2024                                                                   | Signed 2 Oct 2024; RES27 cites it as of 8 Nov 2024                                                                                                                                                           | RCE signature line; RES27 considerando VII |
 
 Nothing found changes the build-or-buy recommendation in 7 and 8: the API is
 still the documented two calls, the endpoints have not moved under TRIBU-CR,
