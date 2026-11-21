@@ -29,6 +29,14 @@
 -- TypeScript specification.
 
 -- Escapes LIKE wildcards so a shopper typing "%" or "_" searches for those characters.
+-- The search functions below pin one of pg_trgm's settings
+-- (`set pg_trgm.word_similarity_threshold`). A function may only do that once the
+-- server knows the setting exists, which it does only after the extension's
+-- library has been loaded into the session. A superuser may pin an unknown
+-- setting; the role that applies migrations on a hosted database is not one. So
+-- load the library first, by calling one of its functions.
+select extensions.word_similarity('a', 'a');
+
 create or replace function private.like_escape(p_text text) returns text
 language sql immutable parallel safe strict
 set search_path = ''
