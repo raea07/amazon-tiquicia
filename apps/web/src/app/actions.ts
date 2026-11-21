@@ -12,6 +12,7 @@
 import { parsePhone } from "@yuntera/core";
 import {
   type ActionState,
+  endSession,
   GENERIC_ERROR,
   isRedirect,
   messageOf,
@@ -32,7 +33,7 @@ import {
   writeLocation,
 } from "@/lib/cart";
 import { getViewer, safeReturnPath, signInUrl } from "@/lib/session";
-import { sessionApi, sessionClient } from "@/lib/supabase";
+import { sessionApi } from "@/lib/supabase";
 
 const GENERIC = GENERIC_ERROR;
 
@@ -103,9 +104,7 @@ export async function signUp(_previous: ActionState, formData: FormData): Promis
 }
 
 export async function signOut(): Promise<void> {
-  const supabase = await sessionClient();
-  await supabase.auth.signOut();
-  redirect("/");
+  await endSession("/");
 }
 
 // ── Addresses ───────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { fontClassName } from "@yuntera/next-kit/fonts";
 import { AppShell } from "@yuntera/next-kit/shell";
 import { buttonClass, Skeleton } from "@yuntera/ui";
 import type { Metadata, Viewport } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { STAFF_ROLE } from "@/lib/labels";
 import { canSee, currentStaff, SECTIONS } from "@/lib/staff";
@@ -56,6 +57,9 @@ async function Account() {
         <span className="font-semibold">{staff.full_name ?? "Personal"}</span>
         <span className="ml-2 text-ink-muted">{STAFF_ROLE[staff.staff_role]}</span>
       </span>
+      <Link href="/cuenta" className={buttonClass({ variant: "ghost", size: "sm" })}>
+        Cuenta
+      </Link>
       <form action={signOut}>
         <button type="submit" className={buttonClass({ variant: "ghost", size: "sm" })}>
           Salir

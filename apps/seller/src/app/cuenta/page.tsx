@@ -1,3 +1,4 @@
+import { AccountSecuritySection } from "@yuntera/next-kit/account";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Alert, Badge, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
@@ -34,6 +35,10 @@ export default function AccountPage() {
         <Suspense fallback={<Skeleton className="h-96" />}>
           <Account />
         </Suspense>
+      </div>
+      <div className="mt-10 max-w-4xl">
+        <h2 className="mb-4 text-2xl font-bold">Su acceso</h2>
+        <AccountSecuritySection secondFactor />
       </div>
     </div>
   );

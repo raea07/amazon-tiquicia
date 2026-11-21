@@ -16,8 +16,14 @@ const TABLES: Record<string, string> = {
   app_settings: "Ajustes de la plataforma",
   warehouse_staff: "Personal de bodega",
   drivers: "Repartidores",
+  "auth.mfa_factors": "Verificación en dos pasos",
 };
-const ACTIONS: Record<string, string> = { INSERT: "Creó", UPDATE: "Cambió", DELETE: "Eliminó" };
+const ACTIONS: Record<string, string> = {
+  INSERT: "Creó",
+  UPDATE: "Cambió",
+  DELETE: "Eliminó",
+  RESET_MFA: "Reinició",
+};
 
 // Shown as "changed" only; the values of these are never printed on screen.
 const SENSITIVE = /iban|sinpe|id_number|phone|email|address/i;
