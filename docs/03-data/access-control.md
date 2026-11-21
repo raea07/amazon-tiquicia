@@ -73,8 +73,10 @@ any staff role read every delivery code. So the rule is now absolute:
   tables, so it also covers tables added by migrations that ran before it.
 - **Nothing granted by default.** The default privileges of `postgres` (the
   role the migrations run as) give the API roles and PUBLIC nothing on new
-  tables, sequences or functions in `public` or `private`, and PUBLIC nothing
-  on new functions anywhere. A hosted Supabase project ships with defaults
+  tables, sequences or functions, in any schema and globally (a default set
+  for one schema is not cancelled by a revoke for another, so the migration
+  sweeps every default `postgres` holds, except in the platform's `auth` and
+  `storage` schemas). A hosted Supabase project ships with defaults
   that grant `anon`, `authenticated` and `service_role` everything new in
   `public`; the local shim copies that, and the migrations switch the API
   roles' part off on both. `service_role`'s defaults are the platform's and
@@ -89,8 +91,10 @@ any staff role read every delivery code. So the rule is now absolute:
 `110_lockdown.sql` fails when any of this stops being true: a privilege on a
 table, view or sequence; a function in `public` that is not owner's-rights
 with an empty search path; a function executable by a role the list does not
-name; a table without row-level security; a policy that reads another table
-directly; a default that would grant new objects; a deferred trigger without
+name; a table without row-level security; a policy that reads another table of
+`public` or `private` directly, or calls a function that runs with the
+caller's rights; a policy other than `for select` on our tables; a default
+that would grant new objects; a deferred trigger without
 its owner's rights. It is what keeps the door closed when later migrations are
 merged.
 
@@ -134,11 +138,15 @@ seller. Their results did not change.
 Enabled on every table in `public` and `private`. No API role can read a
 table directly any more, so the policies no longer decide what a screen shows;
 they are there so that a privilege granted by mistake still exposes only the
-rows its policy allows. Only **read** policies remain: the write policies went
-with the write privileges, so even a mistaken `insert`, `update` or `delete`
-grant is refused by row-level security. Two read policies were narrowed after
-the review: customer profiles are readable by support (not every staff role),
-and driver records by ops (not support).
+rows its policy allows. Only **read** policies remain on the tables in `public`
+and `private`: the lockdown migration drops every other policy it finds
+(including `for all`), and `110_lockdown.sql` fails if one is added later, so
+even a mistaken `insert`, `update` or `delete` grant is refused by row-level
+security. Two read policies were narrowed after the review: customer profiles
+are readable by support (not every staff role), and driver records by ops (not
+support). `110_lockdown.sql` tests the policies themselves too: it grants the
+mistaken privilege inside its own rolled-back transaction and checks what each
+kind of user would then see.
 
 Policy style, which matters for both correctness and speed:
 
@@ -160,12 +168,20 @@ A summary; the migration is authoritative.
 
 ### Visitor (`anon`)
 
-| Can                                                                           | Cannot                                                                        |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Search and browse active products from active sellers; read published reviews | See drafts, rejected listings, or anything from a pending or suspended seller |
-| Read categories, districts, zones, holidays, the fee schedule                 | Read any profile, address, order, stock level or seller's private details     |
-| Get a delivery estimate and a checkout quote                                  | Place an order                                                                |
-| Report a listing, review or seller, giving an e-mail address                  | Read the report queue                                                         |
+| Can                                                                           | Cannot                                                                                                  |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Search and browse active products from active sellers; read published reviews | See drafts or rejected listings, or find a pending or suspended seller's products in search (see below) |
+| List categories and districts                                                 | Read any table: no profile, address, order, stock level or seller's private details                     |
+| See delivery fees and dates in a quote                                        | Read the fee schedule, zones or calendar themselves                                                     |
+| Get a delivery estimate and a checkout quote                                  | Place an order                                                                                          |
+| Report a listing, review or seller, giving an e-mail address                  | Read the report queue                                                                                   |
+
+Everything in this table is what the ten functions [listed
+below](#what-each-role-may-execute) return; a visitor can reach nothing else.
+One gap: `get_product` and `shop_path_exists` still open the product page of a
+listing created by a seller who has since been suspended, if a visitor has its
+address. Search no longer lists it, and the direct read the review used is
+closed, but that rule of the two functions is not yet changed.
 
 ### Shopper (any signed-in user)
 
@@ -205,15 +221,17 @@ A summary; the migration is authoritative.
 
 ### Staff
 
-Admin implies every role below.
+Admin implies every role below. "Reach" is what the `ops_*` and other staff
+functions return to that role; the read policies name the same roles, but only
+as the second lock.
 
-| Role      | Reach                                                                                                                                                                     |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, zones and calendar, dispatch board, routes, settlements, returns; approve or suspend sellers |
-| `support` | Orders and timelines, profiles, addresses, consents, sellers' private details, stock levels, returns, complaints, content reports; cancel an order for a shopper          |
-| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs              |
-| `catalog` | All listings; approve or reject a listing or a listing edit; resolve content reports. Categories, brands, synonyms and review moderation have no function yet             |
-| `admin`   | All of the above, plus staff membership and the audit log (settings have no function yet)                                                                                 |
+| Role      | Reach                                                                                                                                                                                              |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, the dispatch board, routes, settlements, returns; approve or suspend sellers; zones and calendar have no function yet |
+| `support` | Orders and timelines (with the shopper's contact and address), sellers' private details, returns, complaints, content reports; cancel an order for a shopper                                       |
+| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs                                       |
+| `catalog` | All listings; approve or reject a listing or a listing edit; resolve content reports. Categories, brands, synonyms and review moderation have no function yet                                      |
+| `admin`   | All of the above, plus staff membership and the audit log (settings have no function yet)                                                                                                          |
 
 Sensitive changes by staff — to staff membership, seller status and private
 details, drivers, warehouse assignments, settings, fees, payouts — are written
