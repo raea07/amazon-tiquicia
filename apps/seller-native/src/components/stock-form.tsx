@@ -40,7 +40,8 @@ export function StockForm({
   return (
     <Stack gap={3}>
       <Text variant="small" tint="muted">
-        En {place}.{" "}
+        {/* In Inventario the place is the heading of the list already. */}
+        {product ? "" : `En ${place}. `}
         {reserved > 0 ? `${reserved} apartadas para pedidos.` : "Ninguna apartada para pedidos."}
       </Text>
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: space[2] }}>

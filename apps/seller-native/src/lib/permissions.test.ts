@@ -52,7 +52,9 @@ const UNUSED_IOS = [
   "NSMotionUsageDescription",
 ];
 
-describe("Yuntera Vende asks for nothing its screens do not use", { skip: !existsSync(expo) }, () => {
+describe("Yuntera Vende asks for nothing its screens do not use", {
+  skip: !existsSync(expo),
+}, () => {
   for (const variant of [undefined, "preview", "development"]) {
     it(`${variant ?? "store build"}: no camera, photos, microphone or location`, () => {
       const resolved = introspect(variant);

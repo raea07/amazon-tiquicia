@@ -18,6 +18,7 @@ import {
   Text,
   TextField,
 } from "@yuntera/expo-kit/ui";
+import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { View } from "react-native";
 import { SelectSheet } from "@/components/select";
@@ -75,9 +76,10 @@ export default function InboundScreen() {
             ? `Rotule cada caja con la referencia ${reference}, bien visible.`
             : "Rotule cada caja con la referencia del envío, que aparece en Inventario."}
         </Alert>
-        <LinkButton href="/inventario" block>
+        {/* Back to the inventory underneath, not a second copy of it. */}
+        <Button block onPress={() => router.dismissTo("/inventario")}>
           Volver al inventario
-        </LinkButton>
+        </Button>
       </Screen>
     );
   }
