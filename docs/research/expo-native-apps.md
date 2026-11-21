@@ -478,9 +478,10 @@ import * as Crypto from "expo-crypto";
 import * as aesjs from "aes-js";
 
 // AFTER_FIRST_UNLOCK: readable while the phone is locked, which the drivers'
-// background task needs. The default is WHEN_UNLOCKED. [E19]
+// background task needs. The default is WHEN_UNLOCKED. [E19] THIS_DEVICE_ONLY
+// keeps the key out of backups restored on another phone.
 const keyOptions: SecureStore.SecureStoreOptions = {
-  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
 };
 
 export const sessionStorage = {
