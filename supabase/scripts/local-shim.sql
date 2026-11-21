@@ -95,3 +95,87 @@ as $$
 $$;
 
 grant execute on function auth.jwt(), auth.uid(), auth.role() to anon, authenticated, service_role;
+
+-- ── Storage ─────────────────────────────────────────────────────────────────
+-- The parts of Supabase Storage's schema that the migrations and the local
+-- API stand-in (tools/dev-api/src/routes/storage.ts) use: the two tables with
+-- the columns, keys and defaults a hosted project has, the path helpers that
+-- rules call, and the grants the platform gives the API roles. As on Supabase,
+-- the API roles may attempt anything on storage.objects and row-level security
+-- with the migrations' rules decides; with no rule, nothing is allowed.
+-- Not imitated: the storage service's own triggers (versioning, prefixes, the
+-- guard against deleting rows by SQL) and the bucket analytics tables.
+create schema if not exists storage;
+
+create table if not exists storage.buckets (
+  id text primary key,
+  name text not null unique,
+  owner uuid,
+  owner_id text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  public boolean default false,
+  avif_autodetection boolean default false,
+  file_size_limit bigint,
+  allowed_mime_types text[]
+);
+
+create table if not exists storage.objects (
+  id uuid primary key default gen_random_uuid(),
+  bucket_id text references storage.buckets (id),
+  name text,
+  owner uuid,
+  owner_id text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  last_accessed_at timestamptz default now(),
+  metadata jsonb,
+  path_tokens text[] generated always as (string_to_array(name, '/')) stored,
+  version text,
+  user_metadata jsonb,
+  unique (bucket_id, name)
+);
+
+alter table storage.buckets enable row level security;
+alter table storage.objects enable row level security;
+
+create or replace function storage.foldername(name text) returns text[]
+language plpgsql immutable
+as $$
+declare
+  _parts text[];
+begin
+  select string_to_array(name, '/') into _parts;
+  return _parts[1:array_length(_parts, 1) - 1];
+end
+$$;
+
+create or replace function storage.filename(name text) returns text
+language plpgsql immutable
+as $$
+declare
+  _parts text[];
+begin
+  select string_to_array(name, '/') into _parts;
+  return _parts[array_length(_parts, 1)];
+end
+$$;
+
+create or replace function storage.extension(name text) returns text
+language plpgsql immutable
+as $$
+declare
+  _parts text[];
+  _filename text;
+begin
+  select string_to_array(name, '/') into _parts;
+  select _parts[array_length(_parts, 1)] into _filename;
+  return reverse(split_part(reverse(_filename), '.', 1));
+end
+$$;
+
+grant usage on schema storage to anon, authenticated, service_role;
+grant all on storage.objects to anon, authenticated, service_role;
+grant all on storage.buckets to anon, authenticated, service_role;
+grant execute on function storage.foldername(text), storage.filename(text), storage.extension(text)
+  to anon, authenticated, service_role;
