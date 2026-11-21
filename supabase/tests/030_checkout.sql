@@ -7,6 +7,7 @@ select pg_temp.remember('cafe', pg_temp.offer('cafe-molido-tarrazu-340g')::text)
 select pg_temp.remember('laptop', pg_temp.offer('laptop-14-nimbo-libro')::text);
 select pg_temp.remember('hamaca', pg_temp.offer('hamaca-algodon-doble')::text);
 select pg_temp.remember('carreta', pg_temp.offer('carreta-decorativa-pintada-20cm')::text);
+select pg_temp.remember('unpaid', pg_temp.unpaid_order('test-unpaid-030')::text);
 select pg_temp.remember('pending_offer',
   (select o.id::text from public.offers o join public.sellers s on s.id = o.seller_id
    where s.slug = 'bazar-nuevo'));
@@ -309,7 +310,7 @@ reset role;
 
 do $$
 begin
-  update public.orders set status = 'delivered' where idempotency_key = 'seed-today-e1';
+  update public.orders set status = 'delivered' where id = current_setting('t.unpaid')::uuid;
   raise exception 'jumped from pending payment to delivered';
 exception when others then
   if sqlerrm <> 'invalid_order_transition' then raise; end if;
@@ -334,7 +335,9 @@ declare
   v_before integer := (select available_quantity from public.offers where id = current_setting('t.cafe')::uuid);
   v_expired integer;
 begin
-  assert private.expire_unpaid_orders() = 0, 'fresh orders are left alone';
+  -- Anything else already stale (the seed's unpaid order, on an older database) may go here.
+  perform private.expire_unpaid_orders();
+  assert (select status from public.orders where id = v_order) = 'pending_payment', 'fresh orders are left alone';
   update public.orders set placed_at = now() - interval '31 minutes' where id = v_order;
   v_expired := private.expire_unpaid_orders();
   assert v_expired >= 1, 'stale unpaid order expires';
@@ -350,8 +353,7 @@ update public.app_settings set value = '"live"' where key = 'payments_mode';
 select pg_temp.login('comprador@yuntera.example');
 do $$
 begin
-  perform public.confirm_sandbox_payment(
-    (select id from public.orders where idempotency_key = 'seed-today-e1'));
+  perform public.confirm_sandbox_payment(current_setting('t.unpaid')::uuid);
   raise exception 'simulated a payment while in live mode';
 exception when others then
   if sqlerrm <> 'sandbox_disabled' then raise; end if;

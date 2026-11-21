@@ -9,7 +9,8 @@
 -- of checkout, warehouse, dispatch and delivery.
 --
 -- Accounts (password from the `app.seed_password` setting, else the local
--- default below — pass a random one when seeding a shared preview):
+-- default below; a hosted preview is seeded with `remote-db.sh seed`, which
+-- takes a random password from the environment and sends only its hash):
 --   comprador@yuntera.example   shopper
 --   vendedor@yuntera.example    seller (TecnoCasa and Ferretería El Higuerón)
 --   bodega@yuntera.example      warehouse associate
@@ -31,55 +32,45 @@ $$;
 
 -- ── Helpers (session-local) ────────────────────────────────────────────────
 
--- Creates a confirmed e-mail/password user on Supabase Auth, or on the local shim.
+-- Creates a confirmed e-mail/password user, with the same rows Supabase Auth
+-- writes when someone signs up (checked against a real sign-up on a hosted
+-- project). The local shim has the same columns, so this runs unchanged on both.
 create function pg_temp.seed_user(p_email text, p_name text) returns uuid
 language plpgsql as $$
 declare
   v_id uuid := gen_random_uuid();
-  v_password text := coalesce(nullif(current_setting('app.seed_password', true), ''), 'yuntera-local-dev');
-  v_hash text := extensions.crypt(v_password, extensions.gen_salt('bf'));
-  v_col text;
+  -- A hosted seed passes only the bcrypt hash (remote-db.sh seed), so the
+  -- password itself never appears in the seed's statement text.
+  v_hash text := coalesce(
+    nullif(current_setting('app.seed_password_hash', true), ''),
+    extensions.crypt(
+      coalesce(nullif(current_setting('app.seed_password', true), ''), 'yuntera-local-dev'),
+      extensions.gen_salt('bf', 10)));
 begin
-  if exists (
-    select 1 from information_schema.columns
-    where table_schema = 'auth' and table_name = 'users' and column_name = 'instance_id'
-  ) then
-    execute $q$
-      insert into auth.users
-        (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-         raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
-      values
-        ('00000000-0000-0000-0000-000000000000', $1, 'authenticated', 'authenticated', $2, $3,
-         now(), '{"provider":"email","providers":["email"]}', jsonb_build_object('full_name', $4),
-         now(), now())
-    $q$ using v_id, p_email, v_hash, p_name;
-
-    -- The auth service expects these token columns to hold empty strings, not NULL.
-    foreach v_col in array array[
-      'confirmation_token', 'recovery_token', 'email_change_token_new', 'email_change',
-      'email_change_token_current', 'phone_change', 'phone_change_token', 'reauthentication_token'
-    ] loop
-      if exists (
-        select 1 from information_schema.columns
-        where table_schema = 'auth' and table_name = 'users' and column_name = v_col
-      ) then
-        execute format('update auth.users set %I = coalesce(%I, '''') where id = $1', v_col, v_col)
-          using v_id;
-      end if;
-    end loop;
-
-    execute $q$
-      insert into auth.identities
-        (id, user_id, provider_id, provider, identity_data, last_sign_in_at, created_at, updated_at)
-      values
-        (gen_random_uuid(), $1, $1::text, 'email',
-         jsonb_build_object('sub', $1::text, 'email', $2, 'email_verified', true),
-         now(), now(), now())
-    $q$ using v_id, p_email;
-  else
-    insert into auth.users (id, email, encrypted_password, email_confirmed_at, raw_user_meta_data)
-    values (v_id, p_email, v_hash, now(), jsonb_build_object('full_name', p_name));
+  if v_hash !~ '^\$2[aby]\$[0-9]{2}\$.{53}$' then
+    raise exception 'app.seed_password_hash is not a bcrypt hash';
   end if;
+  insert into auth.users
+    (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+     raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+     -- The auth service reads these as strings and fails on NULL; it writes ''.
+     confirmation_token, recovery_token, email_change_token_new, email_change,
+     email_change_token_current, phone_change, phone_change_token, reauthentication_token)
+  values
+    ('00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated', lower(p_email),
+     v_hash, now(),
+     '{"provider":"email","providers":["email"]}', jsonb_build_object('full_name', p_name),
+     now(), now(),
+     '', '', '', '', '', '', '', '');
+
+  -- Supabase Auth gives every account one identity per sign-in method.
+  insert into auth.identities
+    (user_id, provider_id, provider, identity_data, created_at, updated_at)
+  values
+    (v_id, v_id::text, 'email',
+     jsonb_build_object('sub', v_id::text, 'email', lower(p_email), 'email_verified', true,
+                        'phone_verified', false),
+     now(), now());
   return v_id;
 end;
 $$;

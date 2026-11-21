@@ -7,7 +7,7 @@ begin;
 select pg_temp.remember('to_pick', (select id::text from public.orders where idempotency_key = 'seed-today-d2'));
 select pg_temp.remember('packed', (select id::text from public.orders where idempotency_key = 'seed-today-c1'));
 select pg_temp.remember('seller_order', (select id::text from public.orders where idempotency_key = 'seed-today-f1'));
-select pg_temp.remember('unpaid', (select id::text from public.orders where idempotency_key = 'seed-today-e1'));
+select pg_temp.remember('unpaid', pg_temp.unpaid_order('test-unpaid-050')::text);
 select pg_temp.remember('cod_order', (select id::text from public.orders where idempotency_key = 'seed-today-b1'));
 select pg_temp.remember('depot', (select id::text from public.warehouses where code = 'SJO1'));
 select pg_temp.remember('carlos', (select id::text from public.drivers where full_name like 'Carlos%'));
