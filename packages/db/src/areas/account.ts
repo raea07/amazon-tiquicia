@@ -29,6 +29,16 @@ export const mfaAttempts = z.object({
 });
 export type MfaAttempts = z.infer<typeof mfaAttempts>;
 
+/**
+ * An attempt counted before its code goes to Auth. `attempt_id` is null when
+ * the account is locked; the other fields say where the limit stands if this
+ * code turns out wrong.
+ */
+export const mfaReservation = mfaAttempts.extend({
+  attempt_id: z.number().int().positive().nullable(),
+});
+export type MfaReservation = z.infer<typeof mfaReservation>;
+
 export const staffSecurityRow = z.object({
   user_id: z.uuid(),
   full_name: z.string().nullable(),
@@ -53,7 +63,9 @@ export const deletionBlocker = z.enum([
   "account_is_warehouse_staff",
   "account_has_open_orders",
   "account_has_open_returns",
+  "account_has_pending_refund",
   "account_has_open_complaints",
+  "account_runs_open_shop",
   "account_shop_has_stock",
   "account_shop_has_open_orders",
   "account_shop_has_balance",
@@ -76,6 +88,15 @@ export type DeletionResult = z.infer<typeof deletionResult>;
 // ── Errors raised by the database ───────────────────────────────────────────
 
 export const errors = {
+  session_ended: {
+    "es-CR": "Su sesión terminó en este aparato. Ingrese de nuevo para continuar.",
+    en: "Your session on this device has ended. Sign in again to continue.",
+  },
+  second_factor_required: {
+    "es-CR":
+      "Antes de continuar, escriba el código de su aplicación de autenticación en la verificación en dos pasos.",
+    en: "Before continuing, enter the code from your authenticator app in two-step verification.",
+  },
   cannot_reset_own_factor: {
     "es-CR":
       "No puede quitar su propia verificación en dos pasos desde aquí. Pídaselo a otra persona administradora.",
@@ -110,6 +131,16 @@ export const errors = {
       "Tiene una devolución o un reembolso sin terminar. Cuando se complete podrá eliminar la cuenta.",
     en: "You have a return or refund in progress. Once it is complete you can delete the account.",
   },
+  account_has_pending_refund: {
+    "es-CR":
+      "Tiene un reembolso de un pedido cancelado que todavía no llega. Cuando se complete podrá eliminar la cuenta.",
+    en: "A refund for a cancelled order has not reached you yet. Once it is complete you can delete the account.",
+  },
+  account_runs_open_shop: {
+    "es-CR":
+      "Usted es la única persona a cargo de una tienda abierta en Yuntera. Escríbanos para cerrarla; cuando esté cerrada podrá eliminar la cuenta.",
+    en: "You are the only person in charge of an open shop on Yuntera. Contact us to close it; once it is closed you can delete the account.",
+  },
   account_has_open_complaints: {
     "es-CR":
       "Tiene un reclamo que todavía estamos atendiendo. Cuando lo cerremos podrá eliminar la cuenta.",
@@ -117,8 +148,8 @@ export const errors = {
   },
   account_shop_has_stock: {
     "es-CR":
-      "Una tienda de la que usted es parte todavía tiene inventario. Retírelo o pase la tienda a otra persona antes de eliminar la cuenta.",
-    en: "A shop you belong to still has stock. Remove it or hand the shop to someone else before deleting the account.",
+      "Una tienda de la que usted es parte todavía tiene inventario en nuestra bodega. Escríbanos para retirarlo; cuando no quede nada podrá eliminar la cuenta.",
+    en: "A shop you belong to still has stock in our warehouse. Contact us to withdraw it; once nothing is left you can delete the account.",
   },
   account_shop_has_open_orders: {
     "es-CR":
@@ -168,8 +199,8 @@ export const authErrors = {
   },
   otp_expired: {
     "es-CR":
-      "El enlace o el código ya no sirve: venció, ya se usó o no es correcto. Pida uno nuevo.",
-    en: "The link or code no longer works: it expired, was already used or is wrong. Ask for a new one.",
+      "El enlace o el código no sirvió. Si escribió el código, revíselo y escríbalo de nuevo. Si pasó una hora o ya lo usó en otro aparato, pida un correo nuevo.",
+    en: "The link or code did not work. If you typed the code, check it and enter it again. If an hour has passed or you already used it on another device, ask for a new e-mail.",
   },
   over_email_send_rate_limit: {
     "es-CR": "Ya le enviamos un correo hace poco. Espere un momento antes de pedir otro.",
@@ -329,13 +360,20 @@ export function authErrorMessage(
 
 // ── Methods ─────────────────────────────────────────────────────────────────
 
-export const api = ({ call }: Caller) => ({
+export const api = ({ call, run }: Caller) => ({
   /** The session's assurance level and whether this person must use a second factor. */
   mySecurity: () => call("my_security", {}, accountSecurity),
-  /** Whether a second-factor code may be tried now (the database's limit on wrong codes). */
+  /** Where the database's limit on wrong second-factor codes stands. */
   mfaAttemptStatus: () => call("mfa_attempt_status", {}, mfaAttempts),
-  /** Reports a code Auth refused; returns the new state of the limit. */
-  mfaRecordFailure: () => call("mfa_record_failure", {}, mfaAttempts),
+  /**
+   * Counts an attempt before its code is sent to Auth (null `attempt_id`:
+   * locked, do not send). Counting first is what keeps parallel requests
+   * inside the limit.
+   */
+  mfaReserveAttempt: () => call("mfa_reserve_attempt", {}, mfaReservation),
+  /** Auth accepted the code: its reservation is not a failure. Call with the aal2 session. */
+  mfaAttemptSucceeded: (attemptId: number) =>
+    run("mfa_attempt_succeeded", { p_attempt_id: attemptId }),
   /** Administrators: every member of staff and whether they have a second factor. */
   opsStaffSecurity: () => call("ops_staff_security", {}, z.array(staffSecurityRow)),
   /** Administrators: removes a colleague's second factors and ends their sessions. */

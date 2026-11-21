@@ -483,7 +483,8 @@ begin
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute');
   assert open_to_visitors =
-    'cart_lines, checkout_quote, delivery_estimate, get_product, list_categories, list_districts, '
+    -- check_request runs before every Data API request, visitors' included.
+    'cart_lines, check_request, checkout_quote, delivery_estimate, get_product, list_categories, list_districts, '
     || 'report_content, reviewer_display_name, search_products, suggest_products',
     format('functions open to visitors changed: %s', open_to_visitors);
 end

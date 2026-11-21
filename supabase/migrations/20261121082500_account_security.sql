@@ -12,7 +12,12 @@
 --     everyone and protects no single account. Auth's own per-account hook
 --     (MFA verification attempt) needs the Team plan; the hook function is
 --     written below so it can be switched on there, and until then the apps
---     ask `mfa_attempt_status` before every code and report every wrong one.
+--     reserve an attempt (`mfa_reserve_attempt`) before every code they send.
+--   * Making the second factor and the end of a session count in the database
+--     itself, not only in the apps' screens: `private.factor_ok` in the staff
+--     and seller helpers, and `check_request`, run by the Data API before
+--     every request, which refuses a deleted account, an ended session, and a
+--     password-only session of an account that has a second factor.
 --   * `ops_reset_staff_factor`: an administrator removes the authenticator of a
 --     colleague who lost their device. Recovery codes do not exist in Auth yet.
 --   * `delete_my_account`: the right to erasure (Ley 8968) and the app stores'
@@ -26,10 +31,15 @@
 
 -- ── Wrong second-factor codes ──────────────────────────────────────────────
 
+-- One row per code tried and not (yet) known to be right. `reserved` rows are
+-- attempts the apps announced before sending the code to Auth: counting them
+-- up front means a burst of parallel requests cannot outrun the limit. A right
+-- code removes its own reservation; a wrong one leaves it as a failure.
 create table private.mfa_failures (
   id bigint generated always as identity primary key,
   user_id uuid not null,
-  failed_at timestamptz not null default now()
+  failed_at timestamptz not null default now(),
+  reserved boolean not null default false
 );
 
 create index mfa_failures_user_idx on private.mfa_failures (user_id, failed_at desc);
@@ -57,7 +67,7 @@ as $$
       from fifth f), 0));
 $$;
 
--- Asked by the apps before they send a code to Auth.
+-- Asked by the apps before they show the code form.
 create or replace function public.mfa_attempt_status() returns jsonb
 language plpgsql stable security definer
 set search_path = ''
@@ -70,10 +80,38 @@ begin
 end;
 $$;
 
--- Told by the apps when Auth refused a code. A person can only ever add
--- failures to their own account, never remove them: there is no function that
--- clears the count, which simply ages out.
-create or replace function public.mfa_record_failure() returns jsonb
+-- Called by the apps before every code they send to Auth. Counts the attempt
+-- as a failure straight away, under a per-account lock so concurrent calls are
+-- counted one after another, and says whether the code may be sent at all.
+-- `attempt_id` is null when the account is locked; otherwise the apps pass it
+-- to `mfa_attempt_succeeded` if Auth accepts the code. The status returned is
+-- the one that applies if this code turns out wrong. A person can only ever
+-- add attempts to their own account: nothing clears the count but time and a
+-- right code, which removes only its own reservation.
+create or replace function public.mfa_reserve_attempt() returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_user uuid := (select auth.uid());
+  v_id bigint;
+begin
+  if v_user is null then
+    perform private.fail('not_authenticated');
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('mfa:' || v_user::text, 0));
+  delete from private.mfa_failures f
+  where f.user_id = v_user and f.failed_at < now() - interval '1 day';
+  if (private.mfa_status(v_user) ->> 'locked')::boolean then
+    return private.mfa_status(v_user) || jsonb_build_object('attempt_id', null);
+  end if;
+  insert into private.mfa_failures (user_id, reserved) values (v_user, true) returning id into v_id;
+  return private.mfa_status(v_user) || jsonb_build_object('attempt_id', v_id);
+end;
+$$;
+
+-- Auth accepted the code: the reservation made for it is not a failure.
+create or replace function public.mfa_attempt_succeeded(p_attempt_id bigint) returns void
 language plpgsql security definer
 set search_path = ''
 as $$
@@ -83,44 +121,182 @@ begin
   if v_user is null then
     perform private.fail('not_authenticated');
   end if;
-  if not (private.mfa_status(v_user) ->> 'locked')::boolean then
-    insert into private.mfa_failures (user_id) values (v_user);
+  -- Only a reservation of one's own, made in the last few minutes; and only an
+  -- account whose session has now passed the second step (or that is enrolling
+  -- its first factor, which has no verified one yet) can say a code was right.
+  if not private.factor_ok() then
+    perform private.fail('second_factor_required');
   end if;
   delete from private.mfa_failures f
-  where f.user_id = v_user and f.failed_at < now() - interval '1 day';
-  return private.mfa_status(v_user);
+  where f.id = p_attempt_id and f.user_id = v_user and f.reserved
+    and f.failed_at > now() - interval '5 minutes';
 end;
 $$;
 
 -- The same limit as an Auth hook ("MFA verification attempt", Team plan and
 -- above). Once enabled in the project's Auth settings, Auth itself calls it on
 -- every code, including codes sent to Auth directly rather than through the
--- apps, and a rejection signs the account out everywhere.
+-- apps, and a rejection signs the account out everywhere. It counts each wrong
+-- code once: when the apps already reserved the attempt, it turns that
+-- reservation into the failure instead of adding a second row.
 create or replace function public.hook_mfa_verification_attempt(event jsonb) returns jsonb
 language plpgsql security definer
 set search_path = ''
 as $$
 declare
   v_user uuid := nullif(event ->> 'user_id', '')::uuid;
+  v_pending bigint;
+  v_before integer;
 begin
   if v_user is null then
     return jsonb_build_object('decision', 'continue');
   end if;
-  if (private.mfa_status(v_user) ->> 'locked')::boolean then
+  perform pg_advisory_xact_lock(hashtextextended('mfa:' || v_user::text, 0));
+  select f.id into v_pending from private.mfa_failures f
+  where f.user_id = v_user and f.reserved and f.failed_at > now() - interval '5 minutes'
+  order by f.failed_at desc limit 1;
+  -- Failures before this attempt: the reservation for this very code does not count.
+  select count(*) - (case when v_pending is null then 0 else 1 end) into v_before
+  from private.mfa_failures f
+  where f.user_id = v_user and f.failed_at > now() - interval '15 minutes';
+  if v_before >= 5 then
     return jsonb_build_object('decision', 'reject',
       'message', 'Too many wrong codes. Try again in 15 minutes.');
   end if;
   if coalesce((event ->> 'valid')::boolean, false) then
     return jsonb_build_object('decision', 'continue');
   end if;
-  insert into private.mfa_failures (user_id) values (v_user);
-  if (private.mfa_status(v_user) ->> 'locked')::boolean then
-    return jsonb_build_object('decision', 'reject',
-      'message', 'Too many wrong codes. Try again in 15 minutes.');
+  if v_pending is null then
+    insert into private.mfa_failures (user_id) values (v_user);
+  else
+    update private.mfa_failures set reserved = false where id = v_pending;
   end if;
   return jsonb_build_object('decision', 'continue');
 end;
 $$;
+
+-- ── Sessions that must not act ─────────────────────────────────────────────
+
+-- True when the session has done what the account requires: passed the second
+-- step (aal2), or the account has no verified second factor at all. This is
+-- the check Supabase documents for "only users who enrolled" (auth-mfa guide),
+-- and the one that makes a factor protect anything: without it a password
+-- alone (aal1) would open every function the apps keep behind /verificar.
+create or replace function private.factor_ok() returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select coalesce((select auth.jwt()) ->> 'aal', '') = 'aal2'
+      or not exists (
+        select 1 from auth.mfa_factors f
+        where f.user_id = (select auth.uid()) and f.status = 'verified');
+$$;
+
+-- The staff gate: any member of staff with a factor must have passed it, and
+-- when `require_staff_mfa` is on, every staff session must be aal2.
+create or replace function private.staff_session_ok() returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select private.factor_ok() and case
+    when coalesce((select value from public.app_settings where key = 'require_staff_mfa'), 'false'::jsonb) = 'true'::jsonb
+      then coalesce((select auth.jwt()) ->> 'aal', '') = 'aal2'
+    else true
+  end;
+$$;
+
+-- The seller helpers, now also refusing a seller who turned the second factor
+-- on and has not passed it in this session. Every seller function and every
+-- seller policy (banking details included) goes through one of these.
+create or replace function private.is_seller_member(p_seller_id uuid) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.seller_members m
+    where m.seller_id = p_seller_id and m.user_id = (select auth.uid())
+  ) and private.factor_ok();
+$$;
+
+create or replace function private.is_seller_admin(p_seller_id uuid) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.seller_members m
+    where m.seller_id = p_seller_id
+      and m.user_id = (select auth.uid())
+      and m.role in ('owner', 'admin')
+  ) and private.factor_ok();
+$$;
+
+create or replace function private.my_seller_ids() returns setof uuid
+language sql stable security definer
+set search_path = ''
+as $$
+  select m.seller_id from public.seller_members m
+  where m.user_id = (select auth.uid()) and private.factor_ok();
+$$;
+
+-- Runs before every Data API request (PostgREST's `db_pre_request`, set
+-- below), in the same transaction, as the caller. Refuses:
+--   * a token whose account was deleted, or whose session was ended (signed
+--     out, password changed, factor reset by an administrator, account
+--     deleted). Access tokens stay valid for up to an hour by themselves; this
+--     makes ending a session take effect at once;
+--   * an account with a second factor whose session has not passed it, for
+--     everything except what the second-step screen itself needs.
+-- For a request that can write, the account's sign-in row is locked FOR KEY
+-- SHARE until the request ends. `delete_my_account` locks the same row FOR
+-- UPDATE, so a request and a deletion of the same account never overlap: a
+-- request that started first finishes first (and its order, say, then blocks
+-- the deletion), and one that waited finds the account gone. Auth's own
+-- updates of that row take a weaker lock and are not held up.
+create or replace function public.check_request() returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_user uuid := (select auth.uid());
+  v_session text := (select auth.jwt()) ->> 'session_id';
+  v_function text := regexp_replace(coalesce(current_setting('request.path', true), ''), '^/?rpc/', '');
+begin
+  if v_user is null then
+    return; -- visitors and server keys: grants and policies decide
+  end if;
+  if current_setting('transaction_read_only') = 'off' then
+    perform 1 from auth.users u where u.id = v_user and u.deleted_at is null for key share;
+  else
+    perform 1 from auth.users u where u.id = v_user and u.deleted_at is null;
+  end if;
+  if not found then
+    perform private.fail('session_ended');
+  end if;
+  if v_session is not null
+     and not exists (select 1 from auth.sessions s where s.id::text = v_session) then
+    perform private.fail('session_ended');
+  end if;
+  if not private.factor_ok()
+     and v_function not in ('my_security', 'my_roles', 'mfa_attempt_status',
+                            'mfa_reserve_attempt', 'mfa_attempt_succeeded') then
+    perform private.fail('second_factor_required');
+  end if;
+end;
+$$;
+
+-- Register it with the Data API, for this database only. On a hosted project
+-- the migration runs as `postgres`, which Supabase's own guide has run exactly
+-- this for ("Securing your API"); locally the shim creates the role and the
+-- API stand-in reads the setting the way PostgREST does.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'authenticator') then
+    execute format('alter role authenticator in database %I set pgrst.db_pre_request = %L',
+                   current_database(), 'public.check_request');
+  end if;
+end
+$$;
+notify pgrst, 'reload config';
 
 -- ── What the screens need to know about the session ───────────────────────
 
@@ -220,6 +396,87 @@ begin
 end;
 $$;
 
+-- ── Personal data in the audit trail ───────────────────────────────────────
+--
+-- The audit trail is immutable, so whatever personal data reaches it stays
+-- there past any deletion. It records that a change happened and who made it;
+-- it does not need a driver's name or ID number, or a shop's legal identity,
+-- contact details and bank account, to do that (for a sole trader those are a
+-- person's name, cédula and phone). Those columns are left out, and the names of
+-- the ones that changed are kept under `changed_private`. The bank account
+-- number was already left out; the rest of the list is new here.
+create or replace function private.audit_private_columns(p_table text) returns text[]
+language sql immutable
+set search_path = ''
+as $$
+  select case p_table
+    when 'drivers' then array['full_name', 'phone', 'id_number', 'plate', 'license_class',
+                              'license_expires_on', 'inspection_expires_on', 'insurance_expires_on']
+    when 'seller_private' then array['legal_name', 'id_number', 'payout_iban', 'payout_holder_name', 'contact_email',
+                                     'contact_phone', 'sinpe_movil_number', 'fiscal_address',
+                                     'postal_code', 'kyc_notes']
+    else '{}'::text[]
+  end;
+$$;
+
+create or replace function private.audit_redact(p_row jsonb, p_columns text[]) returns jsonb
+language sql immutable
+set search_path = ''
+as $$
+  select case when p_row is null then null else p_row - p_columns end;
+$$;
+
+create or replace function private.audit() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_old jsonb := case when tg_op <> 'INSERT' then to_jsonb(old) end;
+  v_new jsonb := case when tg_op <> 'DELETE' then to_jsonb(new) end;
+  v_hidden text[] := private.audit_private_columns(tg_table_name);
+  v_changed jsonb;
+  v_key text;
+begin
+  if cardinality(v_hidden) > 0 then
+    select coalesce(jsonb_agg(c order by c), '[]'::jsonb) into v_changed
+    from unnest(v_hidden) c
+    where (v_old -> c) is distinct from (v_new -> c);
+    v_old := private.audit_redact(v_old, v_hidden);
+    v_new := private.audit_redact(v_new, v_hidden);
+    if v_new is not null and jsonb_array_length(v_changed) > 0 then
+      v_new := v_new || jsonb_build_object('changed_private', v_changed);
+    end if;
+  end if;
+  v_key := coalesce(
+    (coalesce(v_new, v_old) ->> 'id'),
+    (coalesce(v_new, v_old) ->> 'user_id'),
+    (coalesce(v_new, v_old) ->> 'seller_id'),
+    (coalesce(v_new, v_old) ->> 'key'),
+    (coalesce(v_new, v_old) ->> 'version')
+  );
+  insert into private.audit_log (actor_id, action, table_name, row_key, old_row, new_row)
+  values ((select auth.uid()), tg_op, tg_table_name, v_key, v_old, v_new);
+  return null;
+end;
+$$;
+
+-- Rows written before this migration still hold those columns. This is the one
+-- rewrite the immutable trail ever gets, done by the owner while the guard is
+-- off for this transaction only; it removes data and changes nothing else.
+alter table private.audit_log disable trigger audit_log_immutable;
+update private.audit_log l
+set old_row = private.audit_redact(l.old_row, private.audit_private_columns(l.table_name)),
+    new_row = private.audit_redact(l.new_row, private.audit_private_columns(l.table_name))
+where l.table_name in ('drivers', 'seller_private')
+  and (l.old_row ?| private.audit_private_columns(l.table_name)
+       or l.new_row ?| private.audit_private_columns(l.table_name));
+alter table private.audit_log enable trigger audit_log_immutable;
+
+revoke execute on function
+  private.audit_private_columns(text),
+  private.audit_redact(jsonb, text[])
+from public, anon, authenticated;
+
 -- ── Deleting an account ────────────────────────────────────────────────────
 --
 -- What happens, in one transaction:
@@ -280,9 +537,27 @@ as $$
     case when exists (select 1 from public.return_requests r
                       where r.user_id = p_user and r.status in ('requested', 'approved', 'received'))
       then 'account_has_open_returns' end,
+    -- A cancelled order that was paid is refunded later, through the gateway
+    -- and to the account or phone that paid; that needs the person's details.
+    case when exists (select 1 from public.payments p
+                      join public.orders o on o.id = p.order_id
+                      where o.user_id = p_user
+                        and o.status in ('cancelled', 'refunded')
+                        and p.status in ('authorized', 'captured', 'partially_refunded'))
+      then 'account_has_pending_refund' end,
     case when exists (select 1 from public.complaints c
                       where c.user_id = p_user and c.status <> 'resolved')
       then 'account_has_open_complaints' end,
+    -- The last person in charge of a shop that is open or opening: closing it
+    -- is Yuntera's decision (ops_set_seller_status), not a side effect.
+    case when exists (select 1 from public.seller_members m
+                      join public.sellers s on s.id = m.seller_id
+                      where m.user_id = p_user and m.role in ('owner', 'admin')
+                        and s.status in ('pending', 'active')
+                        and not exists (select 1 from public.seller_members o
+                                        where o.seller_id = m.seller_id and o.user_id <> p_user
+                                          and o.role in ('owner', 'admin')))
+      then 'account_runs_open_shop' end,
     case when exists (select 1 from public.stock_levels sl
                       where sl.seller_id in (select seller_id from mine) and sl.on_hand > 0)
       then 'account_shop_has_stock' end,
@@ -314,10 +589,43 @@ begin
   if v_user is null then
     perform private.fail('not_authenticated');
   end if;
+  if not private.factor_ok() then
+    perform private.fail('second_factor_required');
+  end if;
   return jsonb_build_object(
     'blockers', to_jsonb(private.account_deletion_blockers(v_user)),
     'orders_kept', (select count(*) from public.orders o where o.user_id = v_user),
     'reviews_kept', (select count(*) from public.reviews r where r.user_id = v_user));
+end;
+$$;
+
+-- A shop whose last person in charge deleted the account: closed for good,
+-- and its private details go. A shop that never sold anything and was never
+-- paid loses them all, its legal name and identification number included. A
+-- shop that traded keeps those two (and the tax regime) with the invoices,
+-- payouts and ledger entries made under them, for the tax retention period;
+-- its contact details and bank account go.
+create or replace function private.close_abandoned_shop(p_seller_id uuid) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  update public.sellers s set status = 'closed' where s.id = p_seller_id and s.status <> 'closed';
+  if not exists (select 1 from public.order_items i where i.seller_id = p_seller_id)
+     and not exists (select 1 from public.payouts po where po.seller_id = p_seller_id)
+     and not exists (select 1 from public.ledger_entries e
+                     join public.ledger_accounts a on a.id = e.account_id
+                     where a.seller_id = p_seller_id) then
+    delete from public.seller_private sp where sp.seller_id = p_seller_id;
+  else
+    update public.seller_private sp
+    set contact_email = p_seller_id::text || '@tienda-cerrada.invalid',
+        contact_phone = '+50620000000',
+        fiscal_address = 'Eliminada junto con la cuenta.',
+        postal_code = null, payout_iban = null, payout_holder_name = null,
+        sinpe_movil_number = null, kyc_notes = null
+    where sp.seller_id = p_seller_id;
+  end if;
 end;
 $$;
 
@@ -330,11 +638,18 @@ declare
   v_blockers text[];
   v_orders integer;
   v_reviews integer;
+  v_shop uuid;
 begin
   if v_user is null then
     perform private.fail('not_authenticated');
   end if;
+  -- An account with a second factor is deleted only from a session that passed it.
+  if not private.factor_ok() then
+    perform private.fail('second_factor_required');
+  end if;
   -- One deletion at a time per account, and none for an account already gone.
+  -- Requests of this account in flight hold this row FOR KEY SHARE (see
+  -- check_request), so the deletion waits for them and they cannot follow it.
   perform 1 from auth.users u where u.id = v_user and u.deleted_at is null for update;
   if not found then
     perform private.fail('not_authenticated');
@@ -349,7 +664,9 @@ begin
     when 'account_is_warehouse_staff' then perform private.fail('account_is_warehouse_staff');
     when 'account_has_open_orders' then perform private.fail('account_has_open_orders');
     when 'account_has_open_returns' then perform private.fail('account_has_open_returns');
+    when 'account_has_pending_refund' then perform private.fail('account_has_pending_refund');
     when 'account_has_open_complaints' then perform private.fail('account_has_open_complaints');
+    when 'account_runs_open_shop' then perform private.fail('account_runs_open_shop');
     when 'account_shop_has_stock' then perform private.fail('account_shop_has_stock');
     when 'account_shop_has_open_orders' then perform private.fail('account_shop_has_open_orders');
     when 'account_shop_has_balance' then perform private.fail('account_shop_has_balance');
@@ -393,18 +710,34 @@ begin
   where cr.reporter_id = v_user;
 
   -- Roles that ended earlier: an inactive staff row, a former driver, shops
-  -- left behind with nothing pending (the blockers above guarantee that).
+  -- left behind with nothing pending (the blockers above guarantee that). The
+  -- audit trail never held a driver's or a shop's personal columns (see
+  -- private.audit), so nothing of them is left there either.
   delete from public.staff_members s where s.user_id = v_user and not s.active;
   update public.drivers d
   set full_name = 'Repartidor retirado', phone = '+50650000000', id_number = '000000000',
       plate = null, license_class = null, license_expires_on = null,
       inspection_expires_on = null, insurance_expires_on = null
   where d.user_id = v_user;
+  -- Shops (already suspended or closed: see account_runs_open_shop) this
+  -- person leaves with nobody in charge.
+  for v_shop in
+    select m.seller_id from public.seller_members m
+    where m.user_id = v_user
+      and not exists (select 1 from public.seller_members o
+                      where o.seller_id = m.seller_id and o.user_id <> v_user
+                        and o.role in ('owner', 'admin'))
+  loop
+    perform private.close_abandoned_shop(v_shop);
+  end loop;
   delete from public.seller_members m where m.user_id = v_user;
   delete from private.mfa_failures f where f.user_id = v_user;
 
-  -- The sign-in record: every session ends, no way to sign in remains, and the
-  -- e-mail address is free for a new account.
+  -- The sign-in record: every session ends (and with check_request, every
+  -- access token issued for them stops working at once), no way to sign in
+  -- remains, and the e-mail address is free for a new account. The ban is
+  -- finite, as Auth's own bans are: Auth reads banned_until into a Go time
+  -- value, which has no 'infinity'.
   delete from auth.sessions s where s.user_id = v_user;
   delete from auth.mfa_factors f where f.user_id = v_user;
   delete from auth.one_time_tokens t where t.user_id = v_user;
@@ -418,7 +751,7 @@ begin
       email_change_token_current = '', phone_change_token = '', reauthentication_token = '',
       raw_user_meta_data = '{}'::jsonb,
       last_sign_in_at = null,
-      banned_until = 'infinity',
+      banned_until = now() + interval '100 years',
       deleted_at = now(),
       updated_at = now()
   where u.id = v_user;
@@ -438,10 +771,14 @@ $$;
 
 revoke execute on function
   private.mfa_status(uuid),
+  private.factor_ok(),
   private.account_deletion_blockers(uuid),
+  private.close_abandoned_shop(uuid),
   public.mfa_attempt_status(),
-  public.mfa_record_failure(),
+  public.mfa_reserve_attempt(),
+  public.mfa_attempt_succeeded(bigint),
   public.hook_mfa_verification_attempt(jsonb),
+  public.check_request(),
   public.my_security(),
   public.ops_staff_security(),
   public.ops_reset_staff_factor(uuid),
@@ -451,13 +788,17 @@ from public, anon, authenticated;
 
 grant execute on function
   public.mfa_attempt_status(),
-  public.mfa_record_failure(),
+  public.mfa_reserve_attempt(),
+  public.mfa_attempt_succeeded(bigint),
   public.my_security(),
   public.ops_staff_security(),
   public.ops_reset_staff_factor(uuid),
   public.account_deletion_check(),
   public.delete_my_account()
 to authenticated;
+
+-- The Data API runs check_request as the caller, visitors included.
+grant execute on function public.check_request() to anon, authenticated;
 
 -- Only Auth itself calls the hook.
 grant execute on function public.hook_mfa_verification_attempt(jsonb) to supabase_auth_admin;

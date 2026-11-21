@@ -1,8 +1,10 @@
 /**
  * Calls a database function the way the Supabase Data API (PostgREST) does:
  * inside one transaction, as the `anon` or `authenticated` role, with the
- * caller's JWT claims in `request.jwt.claims`. Grants and row-level security
- * therefore apply exactly as they do to a real API request.
+ * caller's JWT claims in `request.jwt.claims`, `request.method` and
+ * `request.path` set, and the pre-request function configured for PostgREST
+ * (`pgrst.db_pre_request`) called first. Grants, row-level security and that
+ * check therefore apply exactly as they do to a real API request.
  *
  * Shared by the local gateway and by the contract tests.
  */
@@ -72,6 +74,34 @@ async function describe(client: PoolClient, name: string): Promise<FunctionSigna
   }));
 }
 
+const QUALIFIED = /^([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)$/;
+
+/**
+ * The Data API's pre-request function, read where PostgREST reads it: the
+ * `pgrst.db_pre_request` setting of the `authenticator` role, for this
+ * database or for all of them (the database-specific one wins). PostgREST
+ * calls it before every request, in the request's transaction, after
+ * switching to the caller's role and setting the claims; so does this.
+ */
+async function preRequestFunction(client: PoolClient): Promise<string | null> {
+  const { rows } = await client.query<{ value: string }>(
+    `select substr(cfg, length('pgrst.db_pre_request=') + 1) as value
+       from pg_db_role_setting s
+       join pg_roles r on r.oid = s.setrole
+       cross join lateral unnest(s.setconfig) as cfg
+      where r.rolname = 'authenticator'
+        and cfg like 'pgrst.db_pre_request=%'
+        and s.setdatabase in (0, (select oid from pg_database where datname = current_database()))
+      order by s.setdatabase desc
+      limit 1`,
+  );
+  const value = rows[0]?.value?.trim();
+  if (!value) return null;
+  const match = QUALIFIED.exec(value.includes(".") ? value : `public.${value}`);
+  if (!match) throw new Error(`pgrst.db_pre_request is not a function name: ${value}`);
+  return `"${match[1]}"."${match[2]}"`;
+}
+
 /** HTTP status for a database error, following PostgREST's mapping. */
 function statusFor(sqlState: string, isAnonymous: boolean): number {
   if (sqlState === "42501") return isAnonymous ? 401 : 403;
@@ -130,6 +160,12 @@ export async function callRpc(
       await client.query("select set_config('request.jwt.claims', $1, true)", [
         claims ? JSON.stringify(claims) : "",
       ]);
+      await client.query(
+        "select set_config('request.method', 'POST', true), set_config('request.path', $1, true)",
+        [`/rpc/${name}`],
+      );
+      const preRequest = await preRequestFunction(client);
+      if (preRequest) await client.query(`select ${preRequest}()`);
       const { rows } = await client.query<{ result: unknown }>(sql, values);
       await client.query("commit");
       return { ok: true, data: signature.returnsVoid ? null : (rows[0]?.result ?? null) };

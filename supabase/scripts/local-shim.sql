@@ -20,6 +20,14 @@ begin
   if not exists (select from pg_roles where rolname = 'service_role') then
     create role service_role nologin noinherit bypassrls;
   end if;
+  -- The role the Data API connects as. Here it only carries the Data API's
+  -- in-database settings (`pgrst.db_pre_request`), which the local stand-in
+  -- reads the way PostgREST does; nothing logs in with it.
+  if not exists (select from pg_roles where rolname = 'authenticator') then
+    create role authenticator nologin noinherit;
+  end if;
+exception when duplicate_object then
+  null; -- another local database created it at the same moment
 end
 $$;
 

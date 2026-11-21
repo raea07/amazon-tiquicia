@@ -20,6 +20,8 @@ const DEFAULTS = {
   mfa_verification_hook: "off",
   /** Where links point when the request names no redirect (`site_url`). */
   site_url: process.env.DEV_SITE_URL ?? "http://127.0.0.1:3000",
+  /** Other addresses e-mail links may point at, comma-separated (`uri_allow_list`). */
+  uri_allow_list: "",
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;

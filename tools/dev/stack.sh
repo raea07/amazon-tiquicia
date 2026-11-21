@@ -55,6 +55,7 @@ export NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$API_KEY
 export EXPO_PUBLIC_SUPABASE_URL=$API_URL
 export EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$API_KEY
 export WEB_URL=http://127.0.0.1:$(app_port web)
+export DEV_SITE_URL=http://localhost:$(app_port web)
 export SELLER_URL=http://127.0.0.1:$(app_port seller)
 export OPS_URL=http://127.0.0.1:$(app_port ops)
 export FIELD_URL=http://127.0.0.1:$(app_port field)

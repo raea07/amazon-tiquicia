@@ -7,6 +7,8 @@
  * apps use; sessions with a stable id, an assurance level and sign-in methods
  * that survive refreshes; refresh-token rotation with the 10-second reuse
  * window; one-time tokens stored as Auth stores them; real time-based codes.
+ * E-mail links point where Auth would let them: `redirect_to` when it is on
+ * the site URL's host or in `uri_allow_list`, otherwise the site URL itself.
  * Not truthful: no rate limits per IP, no CAPTCHA, no leaked-password check,
  * no phone or OAuth, no "secure e-mail change" second link, no reauthenticate
  * nonce, and e-mails go to a local mailbox (GET /dev/mail), never out.
@@ -18,6 +20,7 @@ import { jwtVerify } from "jose";
 import qrcode from "qrcode-generator";
 import { authError, isEmail, isUuid } from "../auth/errors.ts";
 import { sendMail, type TemplateName } from "../auth/mail.ts";
+import { redirectFor } from "../auth/redirect.ts";
 import { numberSetting, setting } from "../auth/settings.ts";
 import {
   type AuthUser,
@@ -129,14 +132,20 @@ async function mailOneTimeToken(
   await pool.query(`update auth.users set ${SENT_AT_COLUMN[kind]} = now() where id = $1`, [
     user.id,
   ]);
+  const siteUrl = await setting("site_url");
   await sendMail(address, TEMPLATE_FOR[kind], {
     Token: code,
     TokenHash: hash,
-    SiteURL: await setting("site_url"),
-    RedirectTo: url.searchParams.get("redirect_to") ?? "",
+    SiteURL: siteUrl,
+    RedirectTo: await allowedRedirect(url.searchParams.get("redirect_to"), siteUrl),
     Email: user.email,
     NewEmail: kind === "email_change_token_new" ? address : "",
   });
+}
+
+/** Where an e-mail link may point, with this database's `uri_allow_list` (see auth/redirect.ts). */
+async function allowedRedirect(requested: string | null, siteUrl: string): Promise<string> {
+  return redirectFor(requested, siteUrl, (await setting("uri_allow_list")).split(","));
 }
 
 async function weakPassword(req: IncomingMessage, password: string) {
