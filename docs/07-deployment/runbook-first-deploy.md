@@ -206,52 +206,79 @@ In the preview the seed already provides `central@yuntera.example` as an admin.
 
 ## 7. Create the Vercel projects
 
-One project per app, all pointing at the same repository.
+Done for the preview on 21 November 2026. One project per app, **not connected
+to the Git repository**: a connected project builds on every push, and four
+projects would each build for every commit. Deploys are uploads, on demand.
 
-| Project           | Root directory | State of the app                |
-| ----------------- | -------------- | ------------------------------- |
-| `yuntera-web`     | `apps/web`     | Built                           |
-| `yuntera-vende`   | `apps/seller`  | Built                           |
-| `yuntera-central` | `apps/ops`     | In progress                     |
-| `yuntera-field`   | `apps/field`   | Planned — deploy when it exists |
+| Project           | Root directory | Preview address                    |
+| ----------------- | -------------- | ---------------------------------- |
+| `yuntera-web`     | `apps/web`     | https://yuntera-web.vercel.app     |
+| `yuntera-vende`   | `apps/seller`  | https://yuntera-vende.vercel.app   |
+| `yuntera-central` | `apps/ops`     | https://yuntera-central.vercel.app |
+| `yuntera-campo`   | `apps/field`   | https://yuntera-campo.vercel.app   |
 
-For each:
+What lives in the repository, so a second environment builds the same way:
+each app's `vercel.json` (framework and the `iad1` region, next to the
+database), `engines.node` in each app's `package.json`, and the
+`ENABLE_EXPERIMENTAL_COREPACK` pass-through in `turbo.json`, which makes the
+hosted build use the pnpm version named in `packageManager`.
 
-1. Import the repository; set **Root Directory** as above. Framework: Next.js.
-   Leave the install and build commands at their defaults; Vercel detects pnpm
-   and the workspace from the lockfile and `packageManager`.
-2. Node.js version: 22.
-3. Environment variables, for Production and Preview:
+What has to be set on each project, in the dashboard or through the API:
+
+1. **Root Directory** as above, with **Include files outside the root
+   directory** on. The apps import workspace packages (`@yuntera/core`,
+   `@yuntera/db`, …) from `packages/`; with this setting the build finds them.
+2. Node.js 22.x.
+3. **Deployment Protection → Vercel Authentication → All Deployments.** The
+   team's default, "Standard", leaves the production `vercel.app` address
+   public; "All Deployments" puts every address behind a Vercel login. Keep it
+   on all four projects until the name has passed its trademark search and the
+   shop is meant to be public; the console stays protected after that.
+4. Environment variables, for the environment being deployed:
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
-   `NEXT_PUBLIC_SITE_URL` ([what they are](environments.md#settings-per-app)).
-4. Function region: the one matching the database's region.
-5. Deploy.
+   `NEXT_PUBLIC_SITE_URL` (the app's own address) and
+   `ENABLE_EXPERIMENTAL_COREPACK=1`; on `yuntera-vende` also
+   `NEXT_PUBLIC_SHOP_URL` (the shop's address)
+   ([what they are](environments.md#settings-per-app)). Only Production has
+   them today: a Vercel preview deployment would not reach the database.
 
-⚠ The apps import workspace packages (`@yuntera/core`, `@yuntera/db`, …)
-from outside their root directory. Vercel supports this for pnpm workspaces,
-but it has not been tried with this repository. If a build cannot find a
-workspace package, check that the project is allowed to include files outside
-its root directory.
+Then deploy from the repository root, one app at a time (the team builds one
+deployment at a time):
 
-**Plan.** Vercel's free plan is for non-commercial use. A preview with fake
-data fits; a store taking real orders needs a paid plan. Confirm the current
-terms before launch.
+```bash
+VERCEL_ORG_ID=<team id> VERCEL_PROJECT_ID=<project id> vercel deploy --prod
+```
 
-**Protect the console.** Until it is on its own domain with staff sign-in and
-a second factor, put `yuntera-central` behind Vercel's deployment protection so
-it is not reachable by anyone who guesses the address.
+**Seed the database before building the shop.** Catalogue pages are
+prerendered from the live database at build time. A shop built against an empty
+database serves an empty home page until the cached copy refreshes on the next
+visit (about a minute).
+
+**Plan.** The owner's team is on Vercel's Pro plan, which is billed by use.
+Vercel Authentication is included. Password Protection is a paid extra per
+project and is not enabled; nothing else that bills was turned on.
 
 ## 8. Smoke test
 
-On the deployed storefront, with the browser's developer tools open on the
-Console and Network tabs. Every step should work with no error in the console
-and no blocked request.
+First, without a Vercel login, every address of all four projects must redirect
+to `vercel.com/sso-api`. For automated checks, generate a Protection Bypass for
+Automation on the project, send it as the `x-vercel-protection-bypass` header
+to the `vercel.app` hosts only, and revoke it when the check is done.
+
+Then, on the deployed storefront, with the browser's developer tools open on
+the Console and Network tabs. Every step should work with no error in the
+console and no blocked request.
+
+On 21 November 2026 steps 1–4, 6–15 and the sign-in page of each other app
+passed against the preview, at desktop width and at 390 px; one test order was
+placed. Not yet done there: step 5, step 16 on a real phone, step 17, and the
+pick, pack, route and delivery chain in the paragraph after the table.
 
 | #   | Do                                                        | Expect                                                                                                                         |
 | --- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | 1   | Open the home page                                        | Categories and products appear; fonts load; response headers include `content-security-policy` and `strict-transport-security` |
 | 2   | Search `licuadra`                                         | The blender is found despite the typo                                                                                          |
-| 3   | Search `laptop`                                           | The laptop is first, the backpack second                                                                                       |
+| 3   | Search `laptop`                                           | The laptop is first, the backpack ("Salveque urbano…") second                                                                  |
 | 4   | Open a product with two offers                            | One is featured with a price, a seller and a delivery date; the other is listed below                                          |
 | 5   | Choose a delivery zone                                    | The date and shipping update                                                                                                   |
 | 6   | Add two products to the cart; open the cart               | Lines, total, IVA included                                                                                                     |
@@ -263,7 +290,7 @@ and no blocked request.
 | 12  | Choose SINPE Móvil and confirm                            | An order page with instructions and a reference code                                                                           |
 | 13  | Simulate the payment                                      | The page updates to show a four-digit delivery PIN                                                                             |
 | 14  | Open "Mis pedidos"                                        | The new order is listed                                                                                                        |
-| 15  | Open another shopper's order number by typing its address | "No encontramos esa página"                                                                                                    |
+| 15  | Open another shopper's order number by typing its address | "No encontramos esa página" (the status is 200: personal pages are streamed, see decision 6)                                   |
 | 16  | Repeat steps 1–6 on a phone                               | Nothing overflows sideways; everything is reachable by thumb                                                                   |
 | 17  | In the dashboard, look at the Auth and API logs           | No errors; sign-ins and function calls appear                                                                                  |
 
