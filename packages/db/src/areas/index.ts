@@ -12,10 +12,12 @@
  * rest, and `createApi()` returns its methods alongside the core ones.
  */
 
+import { listingsApi, listingsErrors } from "./listings";
 import type { Caller, Messages } from "./types";
 
+export * from "./listings";
 export type { Caller, Messages } from "./types";
 
-export const areaErrors = {} as const satisfies Messages;
+export const areaErrors = { ...listingsErrors } as const satisfies Messages;
 
-export const areaApi = (_caller: Caller) => ({});
+export const areaApi = (caller: Caller) => ({ ...listingsApi(caller) });
