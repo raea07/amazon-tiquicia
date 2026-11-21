@@ -54,6 +54,10 @@
       "android": {
         "track": "internal",
         "releaseStatus": "draft"
+      },
+      "ios": {
+        "appleTeamId": "6MQVM5UNDL",
+        "language": "es-MX"
       }
     }
   }
