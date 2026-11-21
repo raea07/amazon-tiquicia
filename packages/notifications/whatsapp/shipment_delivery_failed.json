@@ -1,0 +1,20 @@
+{
+  "slug": "shipment_delivery_failed",
+  "category": "utility",
+  "language": "es",
+  "header": { "type": "text", "text": "No pudimos entregar su pedido" },
+  "body": "Hola, {{first_name}}. Hoy no pudimos entregar su pedido {{order_number}}: {{reason}}. Lo intentamos de nuevo en los próximos días hábiles y le avisaremos la fecha. Si algo de la entrega debe cambiar, escríbanos desde la página del pedido.",
+  "footer": "Yuntera. Responda BAJA para no recibir más avisos.",
+  "button": {
+    "type": "url",
+    "text": "Ver el pedido",
+    "url": "https://www.yuntera.cr/pedidos/{{button_url}}"
+  },
+  "variables": {
+    "first_name": "Ana",
+    "order_number": "YT-100123",
+    "reason": "no había nadie para recibirlo",
+    "button_url": "YT-100123"
+  },
+  "ttl_seconds": 43200
+}

@@ -19,6 +19,7 @@ const TABLES: Record<string, string> = {
   payouts: "Pagos a vendedores",
   fee_payment_methods: "Tarifas de cobro",
   "auth.mfa_factors": "Verificación en dos pasos",
+  notification_deliveries: "Mensajes reenviados",
 };
 const ACTIONS: Record<string, string> = {
   INSERT: "Creó",

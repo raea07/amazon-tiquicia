@@ -14,6 +14,7 @@
 
 import * as account from "./account";
 import { listingsApi, listingsErrors } from "./listings";
+import * as notifications from "./notifications";
 import * as peoplePayouts from "./people-payouts";
 import type { Caller, Messages } from "./types";
 
@@ -44,6 +45,15 @@ export {
   waitText,
 } from "./account";
 export * from "./listings";
+export {
+  type ChannelChoicesInput,
+  COMMERCIAL_CONSENT_VERSION,
+  type DeadLetters,
+  type NotificationRow,
+  type NotificationSettings,
+  type SellerNotificationSettings,
+  type ShopChannelChoicesInput,
+} from "./notifications";
 export type {
   AuditTrailEntry,
   CreatedPayoutRun,
@@ -67,10 +77,12 @@ export const areaErrors = {
   ...peoplePayouts.errors,
   ...listingsErrors,
   ...account.errors,
+  ...notifications.errors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
   ...peoplePayouts.api(caller),
   ...listingsApi(caller),
   ...account.api(caller),
+  ...notifications.api(caller),
 });

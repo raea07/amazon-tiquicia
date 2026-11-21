@@ -20,4 +20,8 @@ export {
   SubmitButton,
 } from "./forms";
 export { type NavItem, NavLinks } from "./nav";
+export {
+  NotificationSettingsForm,
+  type NotificationSettingsValues,
+} from "./notification-settings";
 export { PinPicker } from "./pin-picker";

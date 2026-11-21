@@ -1,10 +1,11 @@
 /**
  * Calls a database function the way the Supabase Data API (PostgREST) does:
- * inside one transaction, as the `anon` or `authenticated` role, with the
- * caller's JWT claims in `request.jwt.claims`, `request.method` and
- * `request.path` set, and the pre-request function configured for PostgREST
- * (`pgrst.db_pre_request`) called first. Grants, row-level security and that
- * check therefore apply exactly as they do to a real API request.
+ * inside one transaction, as the `anon` or `authenticated` role (or, for the
+ * server-side worker's secret key, `service_role`), with the caller's JWT
+ * claims in `request.jwt.claims`, `request.method` and `request.path` set, and
+ * the pre-request function configured for PostgREST (`pgrst.db_pre_request`)
+ * called first. Grants, row-level security and that check therefore apply
+ * exactly as they do to a real API request.
  *
  * Shared by the local gateway and by the contract tests.
  */
@@ -12,8 +13,10 @@
 import type { Pool, PoolClient } from "pg";
 
 export interface Claims {
+  /** The user's id; empty for the server-side worker. */
   sub: string;
-  role: "authenticated";
+  /** `service_role` only for a request made with the local secret key (the worker). */
+  role: "authenticated" | "service_role";
   email?: string;
   aal?: string;
   [claim: string]: unknown;
@@ -156,7 +159,12 @@ export async function callRpc(
 
     await client.query("begin");
     try {
-      await client.query(`set local role ${claims ? "authenticated" : "anon"}`);
+      const role = !claims
+        ? "anon"
+        : claims.role === "service_role"
+          ? "service_role"
+          : "authenticated";
+      await client.query(`set local role ${role}`);
       await client.query("select set_config('request.jwt.claims', $1, true)", [
         claims ? JSON.stringify(claims) : "",
       ]);

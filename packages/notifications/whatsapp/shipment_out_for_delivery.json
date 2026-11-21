@@ -1,0 +1,19 @@
+{
+  "slug": "shipment_out_for_delivery",
+  "category": "utility",
+  "language": "es",
+  "header": { "type": "text", "text": "Su pedido va en camino" },
+  "body": "Hola, {{first_name}}. Su pedido {{order_number}} salió hoy con el repartidor de Yuntera y llega en el transcurso del día. Tenga a mano el código de entrega de la página del pedido: el repartidor se lo pedirá en la puerta.",
+  "footer": "Yuntera. Responda BAJA para no recibir más avisos.",
+  "button": {
+    "type": "url",
+    "text": "Seguir el pedido",
+    "url": "https://www.yuntera.cr/pedidos/{{button_url}}"
+  },
+  "variables": {
+    "first_name": "Ana",
+    "order_number": "YT-100123",
+    "button_url": "YT-100123"
+  },
+  "ttl_seconds": 14400
+}
