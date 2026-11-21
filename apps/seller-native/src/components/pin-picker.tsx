@@ -1,8 +1,8 @@
-import { decodePlusCode, encodePlusCode, isInCostaRica } from "@yuntera/core";
 import { colors, radius, space } from "@yuntera/expo-kit/theme";
 import { Alert, Button, Text, TextField } from "@yuntera/expo-kit/ui";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { readPlusCode } from "@/lib/plus-code";
 
 export interface Pin {
   lat: number;
@@ -15,7 +15,9 @@ export interface Pin {
  * Code, as the seller centre's PinPicker does. The web also offers "use my
  * current location"; this app does not ask for the phone's location (it has
  * no location permission), so the Plus Code, which Google Maps shows for any
- * place, is the one way in.
+ * place, is the one way in. It takes the short form Google Maps shows beside
+ * a place ("Q4XR+RH Orosi, Cartago") as well as the full one; see
+ * readPlusCode.
  */
 export function PinPicker({
   pin,
@@ -28,18 +30,17 @@ export function PinPicker({
   const [error, setError] = useState<string | null>(null);
 
   function applyPlusCode() {
-    const decoded = decodePlusCode(plus);
-    if (!decoded) {
+    const read = readPlusCode(plus);
+    if (!read.ok) {
       onChange(null);
-      setError("Ese código Plus no es válido. Tiene esta forma: 66XQWWMX+GG.");
+      setError(
+        read.reason === "outside"
+          ? "Esa ubicación está fuera de Costa Rica."
+          : "Ese código Plus no es válido. Cópielo tal como lo muestra Google Maps, por ejemplo Q4XR+RH Orosi, o completo: 66XRQ4XR+RH.",
+      );
       return;
     }
-    if (!isInCostaRica(decoded)) {
-      onChange(null);
-      setError("Esa ubicación está fuera de Costa Rica.");
-      return;
-    }
-    onChange({ lat: decoded.lat, lng: decoded.lng, plusCode: encodePlusCode(decoded) });
+    onChange({ lat: read.point.lat, lng: read.point.lng, plusCode: read.plusCode });
     setError(null);
   }
 
@@ -54,7 +55,7 @@ export function PinPicker({
           label="Código Plus"
           value={plus}
           onChangeText={setPlus}
-          placeholder="66XQWWMX+GG"
+          placeholder="Q4XR+RH Orosi"
           autoCapitalize="characters"
           autoCorrect={false}
           style={styles.flex}
@@ -79,7 +80,8 @@ export function PinPicker({
         <Alert tone="danger">{error}</Alert>
       ) : (
         <Text variant="small" tint="muted">
-          Abra el lugar en Google Maps y copie el código Plus que aparece.
+          Abra el lugar en Google Maps y copie el código Plus que aparece en sus datos, por ejemplo
+          «Q4XR+RH Orosi». Sirve así o completo.
         </Text>
       )}
     </View>

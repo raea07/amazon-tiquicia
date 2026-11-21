@@ -64,7 +64,14 @@ export default function LocationScreen() {
         hint="Como se las daría a un mensajero. Incluya el horario si no es todo el día."
         testID="location-address"
       />
-      <PinPicker pin={pin} onChange={setPin} />
+      <PinPicker
+        pin={pin}
+        onChange={(next) => {
+          setPin(next);
+          // The point is now marked: drop the old message; saving checks everything again.
+          if (next) setError(null);
+        }}
+      />
       <Stack gap={3}>
         <FormMessage error={error} testID="location-result" />
         <Button
