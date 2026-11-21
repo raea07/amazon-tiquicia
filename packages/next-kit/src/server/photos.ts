@@ -4,36 +4,49 @@ import type { ProductPhoto } from "@yuntera/db";
 import { apiEnv, sessionApi, sessionClient } from "./supabase";
 
 /**
+ * How a photo that is not public yet reaches the browser.
+ *   "signed"  a link signed for the person looking, valid for fifteen minutes,
+ *             made here under their session. Only catalogue staff may sign
+ *             links to waiting files (the storage rules refuse sellers, so a
+ *             seller cannot turn a photo nobody reviewed into a link anyone
+ *             can open).
+ *   route     the seller centre's own address for it (`<route>/<path>`), which
+ *             downloads the file under the seller's session and passes it on.
+ */
+export type WaitingPreview = "signed" | { route: string };
+
+/**
  * Where the browser can show each photo, for the seller centre and the
- * console. A published photo is shown from its public address. One that is
- * not public yet is shown through a link signed for the person looking (a
- * member of the shop, or catalogue staff), valid for fifteen minutes: the
- * waiting files are private, and the link is made here, under their session.
+ * console. A published photo is shown from its public address; one that is
+ * not public yet as `waiting` says. Rejected photos have no files to show.
  */
 export async function photoPreviews(
   photos: ProductPhoto[],
-  size: PhotoSize = 400,
+  { size = 400, waiting = "signed" }: { size?: PhotoSize; waiting?: WaitingPreview } = {},
 ): Promise<Map<string, string>> {
   const previews = new Map<string, string>();
   const { url } = apiEnv();
-  const waiting: { id: string; path: string }[] = [];
+  const pending: { id: string; path: string }[] = [];
   for (const photo of photos) {
     if (photo.published) previews.set(photo.photo_id, photoUrl(url, photo.template, size));
     else if (photo.state !== "rejected") {
-      waiting.push({ id: photo.photo_id, path: photo.template.replace("{w}", String(size)) });
+      pending.push({ id: photo.photo_id, path: photo.template.replace("{w}", String(size)) });
     }
   }
-  if (waiting.length > 0) {
-    const { data } = await (await sessionClient()).storage
-      .from(PHOTO_BUCKETS.pending)
-      .createSignedUrls(
-        waiting.map((w) => w.path),
-        15 * 60,
-      );
-    for (const signed of data ?? []) {
-      const match = waiting.find((w) => w.path === signed.path);
-      if (match && signed.signedUrl) previews.set(match.id, signed.signedUrl);
-    }
+  if (pending.length === 0) return previews;
+  if (waiting !== "signed") {
+    for (const item of pending) previews.set(item.id, `${waiting.route}/${item.path}`);
+    return previews;
+  }
+  const { data } = await (await sessionClient()).storage
+    .from(PHOTO_BUCKETS.pending)
+    .createSignedUrls(
+      pending.map((w) => w.path),
+      15 * 60,
+    );
+  for (const signed of data ?? []) {
+    const match = pending.find((w) => w.path === signed.path);
+    if (match && signed.signedUrl) previews.set(match.id, signed.signedUrl);
   }
   return previews;
 }
