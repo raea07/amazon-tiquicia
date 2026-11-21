@@ -2,6 +2,7 @@ export { safeReturnPath, signInPath } from "../paths";
 export type { ActionState } from "../types";
 export {
   confirmUrl,
+  endedSession,
   getSecurity,
   passwordIsCorrect,
   type Security,

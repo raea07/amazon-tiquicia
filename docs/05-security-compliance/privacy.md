@@ -176,26 +176,31 @@ address both app stores require. Someone who cannot sign in writes to the
 privacy contact.
 
 **When it waits.** Deletion is refused, with the reason and what to do, while
-the account has an order in progress, an open return or refund, an open
-complaint, belongs to a shop with stock, undelivered orders or money pending in
-either direction, or holds a staff, driver or warehouse role (an administrator
-removes those first).
+the account has an order in progress, an open return, a refund still owed for a
+paid order that was cancelled (the refund goes back through the gateway, to the
+card or phone that paid, so the details are still needed), an open complaint,
+is the only person in charge of a shop that is open or awaiting approval
+(Yuntera closes the shop first), belongs to a shop with stock, undelivered
+orders or money pending in either direction, or holds a staff, driver or
+warehouse role (an administrator removes those first). An account with a second
+factor can be deleted only from a session that has passed it.
 
 **What is erased**, in one transaction:
 
-| Where                                   | What happens                                                                                     |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Profile                                 | Name and phone erased, phone verification and marketing choice cleared                           |
-| Addresses                               | Deleted                                                                                          |
-| Consents                                | Deleted                                                                                          |
-| Past orders and their route stops       | Recipient name, phone, _señas_ and Plus Code erased; the map pin rounded to about 1 km           |
-| Returns and complaints (closed)         | The person's own text erased                                                                     |
-| Content reports they filed              | The e-mail given erased                                                                          |
-| Reviews                                 | Stay published, shown as «Cliente»: the name they came from is gone                              |
-| Shop memberships, inactive staff row    | Deleted; a former driver's record keeps no name, phone or ID number                              |
-| Second factors, sessions, sign-in links | Deleted: every session ends                                                                      |
-| Sign-in record (`auth.users`)           | E-mail replaced by `<id>@cuenta-eliminada.invalid`, password and metadata erased, sign-in banned |
-| Auth's own sign-in log, where kept      | Entries for the account deleted                                                                  |
+| Where                                   | What happens                                                                                                                                                                                         |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Profile                                 | Name and phone erased, phone verification and marketing choice cleared                                                                                                                               |
+| Addresses                               | Deleted                                                                                                                                                                                              |
+| Consents                                | Deleted                                                                                                                                                                                              |
+| Past orders and their route stops       | Recipient name, phone, _señas_ and Plus Code erased; the map pin rounded to about 1 km                                                                                                               |
+| Returns and complaints (closed)         | The person's own text erased                                                                                                                                                                         |
+| Content reports they filed              | The e-mail given erased                                                                                                                                                                              |
+| Reviews                                 | Stay published, shown as «Cliente»: the name they came from is gone                                                                                                                                  |
+| Shop memberships, inactive staff row    | Deleted; a former driver's record keeps no name, phone, ID number or plate                                                                                                                           |
+| A shop left with nobody in charge       | Closed. Never traded: its private details (legal name, cédula, contact, bank) deleted. Traded: contact, address and bank details erased; legal name and identification number kept with its invoices |
+| Second factors, sessions, sign-in links | Deleted: every session ends, and every access token issued for them stops working at once                                                                                                            |
+| Sign-in record (`auth.users`)           | E-mail replaced by `<id>@cuenta-eliminada.invalid`, password and metadata erased, sign-in banned for 100 years                                                                                       |
+| Auth's own sign-in log, where kept      | Entries for the account deleted                                                                                                                                                                      |
 
 **What is kept, and why.** Orders, their lines, payments, shipments,
 electronic invoices and ledger entries, for the legal retention period (five
@@ -205,6 +210,14 @@ no longer leads to a name, e-mail, phone or address. A register
 (`private.account_deletions`) records that a deletion happened, on which day
 and how many orders were kept, with no id. The record of who did what at work
 (order events, stock movements, audit trail) keeps the bare id.
+
+**The audit trail holds no personal columns.** It is immutable, so it never
+receives them: for drivers it leaves out name, phone, ID number, plate and
+licence dates; for a shop's private details, the legal name, identification
+number, contact details, fiscal address and bank account. It keeps that a
+change happened, who made it, and the names of the columns that changed
+(`changed_private`). Rows written before this rule were stripped of those
+columns once, by the migration that introduced it.
 
 **The e-mail address is free again.** A new sign-up with the same address is a
 new, unrelated account.
@@ -229,11 +242,24 @@ only run on a local imitation of the Auth tables):
 2. After a real deletion, Auth refuses the old password (`invalid_credentials`)
    and the old refresh token, and a sign-up with the same address creates a new
    account.
-3. **An access token already issued stays valid until it expires** (an hour by
-   default): the Data API checks its signature, not the account. In that hour
-   the deleted account's own browser could still call functions as the bare id
-   (for instance save an address). The apps clear the cookie at once, so this
-   needs the token copied out beforehand. Shortening `jwt_exp` narrows it.
+3. **Access tokens issued before the deletion.** Auth's access tokens are
+   valid by themselves for up to an hour. The Data API runs
+   `public.check_request` before every request (`pgrst.db_pre_request`, set by
+   the migration on the `authenticator` role for the project's database), and
+   it refuses a token whose account is deleted or whose session no longer
+   exists. It also locks the account's sign-in row for the length of a writing
+   request, so a request and a deletion of the same account never overlap.
+   Verify on the hosted project: `select setconfig from pg_db_role_setting s
+   join pg_roles r on r.oid = s.setrole where r.rolname = 'authenticator'`
+   shows the setting, and a token kept from before a test deletion gets
+   `session_ended` from `/rest/v1/rpc/my_orders`. If the migration's
+   `alter role authenticator in database …` was refused there, run Supabase's
+   documented form, `alter role authenticator set pgrst.db_pre_request =
+   'public.check_request'; notify pgrst, 'reload config';`, as `postgres`.
+4. **The ban Auth can read.** The sign-in row is banned until now + 100 years
+   (Auth's own bans are finite; it reads the column into a Go time value). After
+   a test deletion, open the dashboard's user list and fetch that user with the
+   admin API to see that both still load.
 
 ## Second factor for staff
 
@@ -242,14 +268,29 @@ account page; the QR code is drawn on Yuntera's own server and the key is also
 shown as text. Once enrolled, sign-in asks for a code after the password, in
 every app. When the setting `require_staff_mfa` is on, a member of staff with
 no factor is taken to enrolment before anything else, and the database refuses
-staff functions to any session that has not passed the second step. Removing
+staff functions to any session that has not passed the second step. Whatever
+the setting, an account that has a factor counts in the database only once its
+session has passed it (`private.factor_ok`, in the staff and seller helpers and
+the deletion functions, and `public.check_request` before every Data API
+request): a password alone, used against the API directly, opens nothing but
+the second step. Removing
 or replacing a factor needs a fresh code. An administrator who lost the phone
 is recovered by another administrator from _Seguridad_
 (`public.ops_reset_staff_factor`: never on oneself, recorded in the audit
-trail). Five wrong codes in fifteen minutes pause the second step for that
-account (`private.mfa_failures`, checked by the apps; Auth's own per-account
-hook needs the Team plan and is written, not enabled). Sellers may turn the
-same protection on for their account.
+trail); the colleague's sessions end, and their access tokens stop working,
+at once. Five wrong codes in fifteen minutes pause the second step for that
+account (`private.mfa_failures`): the apps reserve each attempt before the code
+goes to Auth, under a per-account lock, so parallel requests are counted too.
+Auth's own per-account hook needs the Team plan and is written, not enabled;
+when it is, it turns the apps' reservation into the failure instead of counting
+twice. Codes sent to Auth directly, bypassing the apps, meet only Auth's per-IP
+limit until the hook is enabled. Sellers may turn the same protection on for
+their account.
+
+An administrator cannot reset their own factor. Keep at least two
+administrators with a factor before turning `require_staff_mfa` on (the
+_Seguridad_ screen warns while there are fewer); the break-glass procedure for
+the last administrator is in `security-program.md`.
 
 ## Processors and processing abroad
 

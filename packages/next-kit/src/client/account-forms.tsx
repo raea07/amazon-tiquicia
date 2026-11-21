@@ -290,6 +290,12 @@ export function ConfirmEmailPanel({
           </SubmitButton>
         </div>
       </form>
+      <p className="border-t border-border pt-4 text-sm">
+        ¿Ya confirmó su correo en otro aparato?{" "}
+        <Link href="/ingresar" className="font-semibold text-link underline">
+          Ingresar
+        </Link>
+      </p>
     </div>
   );
 }

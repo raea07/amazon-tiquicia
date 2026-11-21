@@ -1,5 +1,5 @@
 import "server-only";
-import type { Roles } from "@yuntera/db";
+import { ApiError, type Roles } from "@yuntera/db";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { signInPath } from "../paths";
@@ -38,10 +38,17 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
   };
 });
 
-/** Sends visitors to sign in, and brings them back to `returnTo` afterwards. */
+/**
+ * Sends visitors to sign in, and brings them back to `returnTo` afterwards.
+ * A session that has not yet passed the account's second step goes to that
+ * step first (the database refuses it anything else in any case).
+ */
 export async function requireViewer(returnTo: string): Promise<Viewer> {
   const viewer = await getViewer();
   if (!viewer) redirectTo(signInPath(returnTo));
+  const { secondStepPath } = await import("./account");
+  const step = await secondStepPath(returnTo);
+  if (step) redirectTo(step);
   return viewer;
 }
 
@@ -53,8 +60,23 @@ export async function requireViewer(returnTo: string): Promise<Viewer> {
  */
 export const getRoles = cache(async (): Promise<Roles | null> => {
   if (!(await getViewer())) return null;
-  return (await sessionApi()).myRoles();
+  return whileSessionLives((await sessionApi()).myRoles());
 });
+
+/**
+ * The database refuses a token whose session has ended (signed out elsewhere,
+ * password changed, factor reset, account deleted) with `session_ended`, even
+ * while the token itself has not expired. The per-request checks pass such a
+ * session to /auth/salir, which clears its cookie, instead of failing the page.
+ */
+export async function whileSessionLives<T>(call: Promise<T>): Promise<T> {
+  try {
+    return await call;
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "session_ended") redirectTo("/auth/salir");
+    throw error;
+  }
+}
 
 export async function requireRoles(returnTo: string): Promise<Roles> {
   const roles = await getRoles();

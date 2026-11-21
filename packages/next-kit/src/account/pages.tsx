@@ -16,7 +16,7 @@ import {
   SecondFactorForm,
 } from "../client/account-forms";
 import { safeReturnPath, signInPath } from "../paths";
-import { getSecurity } from "../server/account";
+import { getSecurity, isRecoverySession, recoveryJustFinished } from "../server/account";
 import { redirectTo, requireViewer } from "../server/session";
 import { sessionApi } from "../server/supabase";
 
@@ -105,6 +105,40 @@ async function NewPassword({ home }: { home: string }) {
         <p className="mt-2">
           <Link href="/recuperar" className="font-semibold underline">
             Pedir otro correo
+          </Link>
+        </p>
+      </Alert>
+    );
+  }
+  if (await recoveryJustFinished()) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Alert tone="success" title="Contraseña cambiada">
+          Listo: su contraseña cambió. Cerramos las demás sesiones abiertas de su cuenta, en
+          cualquier aparato; ahí tendrá que ingresar de nuevo.
+        </Alert>
+        <Link href={home as never} className={buttonClass({ block: true })}>
+          Continuar
+        </Link>
+      </div>
+    );
+  }
+  // Signed in, but not through a reset link or code: the current password is
+  // asked for on the account page instead.
+  if (!(await isRecoverySession())) {
+    return (
+      <Alert tone="warning" title="Esta página es para restablecer la contraseña">
+        <p>
+          Solo funciona justo después de abrir el enlace o escribir el código del correo de
+          restablecimiento. Para cambiar la contraseña estando dentro de su cuenta, hágalo en Mi
+          cuenta: ahí le pedimos la contraseña actual.
+        </p>
+        <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          <Link href="/cuenta" className="font-semibold underline">
+            Ir a Mi cuenta
+          </Link>
+          <Link href="/recuperar" className="font-semibold underline">
+            Pedir un correo de restablecimiento
           </Link>
         </p>
       </Alert>

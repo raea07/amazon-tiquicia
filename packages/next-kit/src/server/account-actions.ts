@@ -17,10 +17,18 @@ import { ApiError, authErrorMessage, waitText } from "@yuntera/db";
 import { isEmail, isLinkType, isTokenHash, normaliseCode, passwordProblem } from "../auth-rules";
 import { safeReturnPath } from "../paths";
 import type { ActionState } from "../types";
-import { confirmUrl, getSecurity, passwordIsCorrect, qrDataUri } from "./account";
+import {
+  clearRecoverySession,
+  confirmUrl,
+  getSecurity,
+  isRecoverySession,
+  markRecoverySession,
+  passwordIsCorrect,
+  qrDataUri,
+} from "./account";
 import { GENERIC_ERROR, isRedirect, messageOf } from "./actions";
 import { getViewer, redirectTo } from "./session";
-import { sessionApi, sessionClient } from "./supabase";
+import { apiFor, sessionApi, sessionClient } from "./supabase";
 
 const field = (formData: FormData, name: string) => String(formData.get(name) ?? "").trim();
 const returnTo = (formData: FormData) => safeReturnPath(field(formData, "siguiente") || "/");
@@ -79,23 +87,27 @@ export async function verifyRecoveryCode(
   if (!isEmail(email)) return { error: "Escriba un correo válido.", values, step: "code" };
   if (!code) return { error: "El código tiene 6 dígitos.", values, step: "code" };
   const supabase = await sessionClient();
-  const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "recovery" });
+  const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "recovery" });
   if (error) return { error: authErrorMessage(error), values, step: "code" };
+  await markRecoverySession(data.session?.access_token);
   redirectTo("/recuperar/nueva");
 }
 
-/** Sets the new password at the end of a reset. Ends every other session of the account. */
+const NOT_A_RECOVERY =
+  "Para elegir una contraseña nueva aquí hace falta el enlace o el código del correo de restablecimiento, usado en la última media hora. Pida otro correo, o, si está dentro de su cuenta, cámbiela en «Mi cuenta», donde le pedimos la actual.";
+
+/**
+ * Sets the new password at the end of a reset. Ends every other session of
+ * the account. Only for a session that came from the reset link or code (see
+ * isRecoverySession): any other session must give the current password, on
+ * the account page.
+ */
 export async function setNewPassword(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
   const viewer = await getViewer();
-  if (!viewer) {
-    return {
-      error:
-        "El enlace o el código ya no sirve: venció o ya se usó. Pida un correo nuevo para restablecer su contraseña.",
-    };
-  }
+  if (!viewer || !(await isRecoverySession())) return { error: NOT_A_RECOVERY };
   const password = String(formData.get("password") ?? "");
   const problem = passwordProblem(password, {
     repeat: String(formData.get("repeat") ?? ""),
@@ -113,6 +125,7 @@ export async function setNewPassword(
   }
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: authErrorMessage(error) };
+  await clearRecoverySession();
   return {
     ok: "Listo: su contraseña cambió. Cerramos las demás sesiones abiertas de su cuenta, en cualquier aparato; ahí tendrá que ingresar de nuevo.",
     step: "done",
@@ -140,7 +153,10 @@ export async function confirmEmailLink(
   const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
   if (error) return { error: authErrorMessage(error), data: { type } };
 
-  if (type === "recovery") redirectTo("/recuperar/nueva");
+  if (type === "recovery") {
+    await markRecoverySession(data.session?.access_token);
+    redirectTo("/recuperar/nueva");
+  }
   if (type === "email_change") redirectTo("/cuenta");
   redirectTo(await settleSignUp(data.user?.user_metadata));
 }
@@ -221,21 +237,30 @@ export async function changePassword(
 async function passSecondStep(factorId: string, raw: unknown): Promise<ActionState | null> {
   const code = normaliseCode(raw);
   if (!code) return { error: "Escriba los 6 dígitos que muestra su aplicación de autenticación." };
-  const api = await sessionApi();
-  const status = await api.mfaAttemptStatus();
-  if (status.locked) {
+  const supabase = await sessionClient();
+  const api = apiFor(supabase);
+  // Counted before the code goes to Auth, so parallel requests cannot outrun
+  // the limit; a right code gives its reservation back below.
+  const attempt = await api.mfaReserveAttempt();
+  if (attempt.attempt_id === null) {
     return {
-      error: `${authErrorMessage({ code: "mfa_locked" })} Podrá intentarlo de nuevo en ${waitText(status.retry_after_seconds)}.`,
+      error: `${authErrorMessage({ code: "mfa_locked" })} Podrá intentarlo de nuevo en ${waitText(attempt.retry_after_seconds)}.`,
     };
   }
-  const supabase = await sessionClient();
   const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
-  if (!error) return null;
+  if (!error) {
+    // The same client now holds the aal2 session, which the database requires here.
+    try {
+      await api.mfaAttemptSucceeded(attempt.attempt_id);
+    } catch (cause) {
+      console.error(cause instanceof ApiError ? cause.code : cause);
+    }
+    return null;
+  }
   if (error.code === "mfa_verification_failed") {
-    const after = await api.mfaRecordFailure();
-    const tail = after.locked
-      ? ` Por seguridad, espere ${waitText(after.retry_after_seconds)} antes de intentarlo de nuevo.`
-      : ` Le quedan ${after.attempts_left} ${after.attempts_left === 1 ? "intento" : "intentos"} antes de una pausa de 15 minutos.`;
+    const tail = attempt.locked
+      ? ` Por seguridad, espere ${waitText(attempt.retry_after_seconds)} antes de intentarlo de nuevo.`
+      : ` Le quedan ${attempt.attempts_left} ${attempt.attempts_left === 1 ? "intento" : "intentos"} antes de una pausa de 15 minutos.`;
     return { error: `${authErrorMessage(error)}${tail}` };
   }
   return { error: authErrorMessage(error) };
@@ -354,6 +379,7 @@ export async function deleteAccount(
   try {
     await (await sessionApi()).deleteMyAccount();
   } catch (error) {
+    if (isRedirect(error)) throw error;
     if (error instanceof ApiError) return { error: error.userMessage("es-CR") };
     return { error: messageOf(error) };
   }

@@ -1,7 +1,9 @@
 // Account deletion in the shop, with e-mail confirmation switched on for this
 // journey's database: a new shopper signs up, is told to check their e-mail,
 // sees the resend limit, cannot sign in before confirming, confirms with the
-// code, and deletes the account (wrong password first); the address can then
+// code, and deletes the account (wrong password first), after which the token
+// and page of another device where the account was signed in stop working at
+// once; the address can then
 // sign up again from scratch. A shopper with an order on its way is refused,
 // with the reason. The public page about deletion opens without signing in.
 //
@@ -21,16 +23,28 @@ const check = (ok, what) => {
   if (!ok) throw new Error(`check failed: ${what}`);
 };
 
-async function api(method, path, data) {
+async function api(method, path, data, token) {
   const ctx = await request.newContext();
   const r = await ctx.fetch(`${API}${path}`, {
     method,
-    headers: { apikey: KEY, "x-supabase-api-version": "2024-01-01" },
+    headers: {
+      apikey: KEY,
+      "x-supabase-api-version": "2024-01-01",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
     data,
   });
   const body = r.status() === 204 ? null : await r.json().catch(() => null);
   await ctx.dispose();
   return { status: r.status(), body };
+}
+
+/** The access token inside a browser context's session cookie. */
+async function accessTokenOf(context) {
+  const cookie = (await context.cookies()).find((c) => /^sb-.*-auth-token$/.test(c.name));
+  check(cookie, "the session cookie exists");
+  const json = Buffer.from(cookie.value.replace(/^base64-/, ""), "base64url").toString("utf8");
+  return JSON.parse(json).access_token;
 }
 
 async function mail(to, kind) {
@@ -143,6 +157,12 @@ const overflow = (page) =>
     (await text(page.locator("main:visible h1:visible"))).slice(0, 30),
   );
 
+  // The same person is also signed in on another device.
+  const device = await newPage();
+  await signIn(device.page, email, "mi-clave-nueva-1");
+  await device.page.waitForURL((u) => new URL(u).pathname === "/");
+  const deviceToken = await accessTokenOf(device.context);
+
   // 4. Delete the account.
   await page.click('main:visible a:has-text("Eliminar mi cuenta")');
   await page.waitForURL((u) => new URL(u).pathname === "/cuenta/eliminar");
@@ -177,6 +197,28 @@ const overflow = (page) =>
     .catch(() => {});
   log("account page afterwards ->", path(page));
   check(path(page) === "/ingresar", "signed out");
+
+  // The other device's token has not expired, but nothing it sends is
+  // accepted any more: neither a direct call to the API nor its next page.
+  const late = await api(
+    "POST",
+    "/rest/v1/rpc/save_address",
+    {
+      p_recipient_name: "Lucía Fernández Arias",
+      p_phone: "+50688887777",
+      p_postal_code: "10101",
+      p_senas: "Casa azul frente al parque",
+      p_lat: 9.93,
+      p_lng: -84.08,
+    },
+    deviceToken,
+  );
+  log("other device, direct API call:", late.status, late.body?.message);
+  check(late.status >= 400 && late.body?.message === "session_ended", "the stale token is refused");
+  await device.page.goto(BASE + "/cuenta", { waitUntil: "load" });
+  await device.page.waitForURL((u) => new URL(u).pathname === "/ingresar");
+  log("other device, next page ->", path(device.page));
+  await device.context.close();
 
   // 5. The account is gone; the address can start again.
   await signIn(page, email, "mi-clave-nueva-1");

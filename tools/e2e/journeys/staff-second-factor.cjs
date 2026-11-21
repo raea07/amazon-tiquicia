@@ -1,10 +1,13 @@
 // Staff second factor in the console: an administrator enrols an authenticator
-// (the codes are computed here, as an authenticator app would), signs out and
-// back in through the second step, with a wrong code first; the setting that
+// (the codes are computed here, as an authenticator app would), and from then
+// on a password-only token is refused by the API even with the setting off;
+// signs out and back in through the second step, with a wrong code first; the setting that
 // requires a factor is switched on in this journey's own database, and a new
 // colleague is taken to enrolment before anything else (while the database
 // refuses them staff functions); finally the administrator resets the
-// colleague's factor from the staff security screen.
+// colleague's factor from the staff security screen, which ends the session
+// on the colleague's lost phone at once. Last, a shopper with a factor is held
+// at the second step in the shop, and the database refuses the deletion.
 //
 // A journey drives the real app in a real browser against a freshly seeded
 // database. It fails when a step does not arrive where it should, when the
@@ -15,6 +18,7 @@ const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const BASE = process.env.OPS_URL || "http://127.0.0.1:3002";
+const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
@@ -116,6 +120,14 @@ async function go(page, url) {
 }
 const path = (page) => new URL(page.url()).pathname;
 /** Waits briefly for a redirect that streams in after the page loaded. */
+/** The access token inside a browser context's session cookie. */
+async function accessTokenOf(context) {
+  const cookie = (await context.cookies()).find((c) => /^sb-.*-auth-token$/.test(c.name));
+  check(cookie, "the session cookie exists");
+  const json = Buffer.from(cookie.value.replace(/^base64-/, ""), "base64url").toString("utf8");
+  return JSON.parse(json).access_token;
+}
+
 async function settle(page, expected) {
   await page
     .waitForURL((u) => new URL(u).pathname === expected, { timeout: 10000 })
@@ -192,6 +204,23 @@ async function settle(page, expected) {
     "badge now:",
     await text(admin.page.locator('main:visible section[aria-labelledby="dos-pasos"] h2 + *')),
   );
+
+  // With the setting still off, the factor protects the account against
+  // someone who has only the password and calls the API directly: the token
+  // from a password sign-in (aal1) opens nothing but the second step.
+  const passwordOnly = (
+    await api("POST", "/auth/v1/token?grant_type=password", { email: ADMIN, password: PASSWORD })
+  ).body.access_token;
+  for (const fn of ["ops_staff_security", "audit_entries", "ops_overview"]) {
+    const direct = await api("POST", `/rest/v1/rpc/${fn}`, {}, passwordOnly);
+    log(`${fn} with the password only:`, direct.status, direct.body?.message);
+    check(
+      direct.status >= 400 && direct.body?.message === "second_factor_required",
+      `${fn} refused at aal1 for an account with a factor`,
+    );
+  }
+  const step = await api("POST", "/rest/v1/rpc/my_security", {}, passwordOnly);
+  check(step.status === 200, "what the second-step screen needs still answers");
 
   // 2. Out and back in: the password alone leads to the second step.
   await admin.page.click('header button:has-text("Salir")');
@@ -285,6 +314,9 @@ async function settle(page, expected) {
   );
   check(colleagueSecret !== adminSecret, "each enrolment has its own secret");
 
+  // The colleague's phone is lost with the console open on it.
+  const stolenToken = await accessTokenOf(colleague.context);
+
   // 4. The administrator recovers the colleague (lost phone) from the staff screen.
   await go(admin.page, BASE + "/seguridad");
   const card = admin.page.locator("main:visible li", { hasText: COLLEAGUE });
@@ -301,6 +333,15 @@ async function settle(page, expected) {
   await admin.page.screenshot({ path: SHOTS + "/m4-reset.png", fullPage: true });
   await go(admin.page, BASE + "/auditoria");
   log("audit:", (await text(admin.page.locator("main:visible tbody tr").first())).slice(0, 140));
+
+  // The session on the lost phone ends at once, not when its token expires:
+  // the token is refused by the database and the open page goes to sign-in.
+  const afterReset = await api("POST", "/rest/v1/rpc/ops_overview", {}, stolenToken);
+  log("lost phone's token after the reset:", afterReset.status, afterReset.body?.message);
+  check(afterReset.body?.message === "session_ended", "the lost phone's session is over");
+  await colleague.page.goto(BASE + "/atencion", { waitUntil: "load" });
+  log("lost phone, next page ->", await settle(colleague.page, "/ingresar"));
+  check(path(colleague.page) === "/ingresar", "the lost phone is signed out");
 
   // The colleague's next sign-in starts again with enrolment.
   await colleague.context.clearCookies();
@@ -319,6 +360,44 @@ async function settle(page, expected) {
     (await admin.page.locator("main:visible h2:visible").allInnerTexts()).slice(0, 3),
   );
   await admin.context.close();
+
+  // 6. A shopper who turned the factor on (here through the API, as any app
+  //    would) is held at the second step in the shop as well: the account
+  //    page and the deletion page do not open with the password alone, and
+  //    the database refuses the deletion to a password-only token.
+  const SHOPPER = "comprador3@yuntera.example";
+  const shopperToken = (
+    await api("POST", "/auth/v1/token?grant_type=password", { email: SHOPPER, password: PASSWORD })
+  ).body.access_token;
+  const factor = (await api("POST", "/auth/v1/factors", { factor_type: "totp" }, shopperToken))
+    .body;
+  const challenge = (await api("POST", `/auth/v1/factors/${factor.id}/challenge`, {}, shopperToken))
+    .body;
+  const verified = await api(
+    "POST",
+    `/auth/v1/factors/${factor.id}/verify`,
+    { challenge_id: challenge.id, code: await freshCode(factor.totp.secret) },
+    shopperToken,
+  );
+  check(verified.status === 200, "the shopper's factor is verified");
+  const shopperAal1 = (
+    await api("POST", "/auth/v1/token?grant_type=password", { email: SHOPPER, password: PASSWORD })
+  ).body.access_token;
+  const deletion = await api("POST", "/rest/v1/rpc/delete_my_account", {}, shopperAal1);
+  log("delete_my_account with the password only:", deletion.status, deletion.body?.message);
+  check(deletion.body?.message === "second_factor_required", "deletion needs the second step");
+  const shopper = await newPage();
+  await go(shopper.page, WEB + "/ingresar");
+  await shopper.page.fill('main:visible input[name="email"]', SHOPPER);
+  await shopper.page.fill('main:visible input[name="password"]', PASSWORD);
+  await shopper.page.click('main:visible form button[type="submit"]');
+  await shopper.page.waitForURL((u) => new URL(u).pathname === "/verificar");
+  for (const page of ["/cuenta", "/cuenta/eliminar"]) {
+    await shopper.page.goto(WEB + page, { waitUntil: "load" });
+    log(`shop ${page} before the second step ->`, await settle(shopper.page, "/verificar"));
+    check(path(shopper.page) === "/verificar", `${page} waits for the second step`);
+  }
+  await shopper.context.close();
 
   log("\nERRORS:", errors.length ? errors : "none");
   await browser.close();

@@ -158,6 +158,32 @@ write down the time.
 A one-page version of this runbook, with phone numbers, is kept outside the
 systems it describes.
 
+### The last administrator lost their authenticator
+
+`ops_reset_staff_factor` never acts on oneself, so with a single administrator
+who has lost the phone (and `require_staff_mfa` on) no screen can help. Prevent
+it: keep two administrators with a factor before the setting goes on; the
+console's _Seguridad_ screen warns while there are fewer.
+
+If it happens anyway, the break-glass is a statement run by the database owner
+(SQL editor of the hosted project, or `supabase/scripts/remote-db.sh psql`),
+by someone other than the administrator concerned, after confirming who they
+are by a channel other than e-mail:
+
+```sql
+begin;
+-- Who: the administrator's id, checked against the staff list first.
+delete from auth.mfa_factors where user_id = '<id>';
+delete from auth.sessions where user_id = '<id>';
+insert into private.audit_log (actor_id, action, table_name, row_key, old_row, new_row)
+values (null, 'RESET_MFA_BREAK_GLASS', 'auth.mfa_factors', '<id>',
+        jsonb_build_object('by', '<who ran this>', 'why', '<ticket or note>'), null);
+commit;
+```
+
+The person then signs in with the password and enrols again at once. Record
+the incident as above; the audit row is the trace.
+
 ## Mapping to OWASP ASVS Level 2
 
 ASVS is used as the checklist of record. The table maps its areas to where this

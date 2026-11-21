@@ -39,6 +39,24 @@ multi-factor sign-in for this session. With the setting on, a staff member who
 signed in with a password alone has exactly a shopper's access. The setting
 ships as `false` and must be turned on before launch.
 
+**Any account with a second factor.** Whatever the setting, `private.factor_ok()`
+is true only when the session is `aal2` or the account has no verified factor.
+It is part of `staff_session_ok`, of the seller helpers (`is_seller_member`,
+`is_seller_admin`, `my_seller_ids`) and of the deletion functions, so a
+password alone opens nothing that the factor protects.
+
+**Before every Data API request** PostgREST runs `public.check_request()`
+(`pgrst.db_pre_request` on the `authenticator` role). It refuses a token whose
+account has been deleted or whose session no longer exists (`session_ended`:
+signing out, a password change, a factor reset and a deletion take effect at
+once, not when the token expires), and a password-only session of an account
+with a factor for everything except the second-step screen's own functions
+(`second_factor_required`). For writing requests it holds the account's
+sign-in row `FOR KEY SHARE`, which `delete_my_account` locks `FOR UPDATE`, so
+requests and the deletion of the same account are serialised. Realtime and
+Storage do not run it: their policies must use the helpers above, which
+include `factor_ok`.
+
 ## Three layers
 
 ```mermaid

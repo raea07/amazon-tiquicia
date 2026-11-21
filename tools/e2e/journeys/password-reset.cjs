@@ -1,7 +1,9 @@
 // Password reset in the shop: ask for the e-mail (same answer for an unknown
 // address), follow the link from the local mailbox, set a new password, see the
-// old one refused and the other session ended; then the same with the 6-digit
-// code; then a reused link, an expired link and a wrong code.
+// old one refused and the other session ended (its open page goes to sign-in
+// at once); an ordinary session cannot use the reset page; then the same with
+// the 6-digit code; then a reused link, an expired link and a wrong code; and a
+// link asked for with a disallowed address, which falls back to the shop.
 //
 // A journey drives the real app in a real browser against a freshly seeded
 // database. It fails when a step does not arrive where it should, when the
@@ -181,12 +183,27 @@ async function refreshTokenOf(context) {
   });
   log("other session renewal:", renewed.status, renewed.body?.code);
   check(renewed.status === 400, "the other session was ended");
+  // Not only its renewal: the page it still has open stops working at once
+  // (the database refuses the token of an ended session) and goes to sign-in.
+  await other.page.goto(BASE + "/cuenta", { waitUntil: "load" });
+  await other.page.waitForURL((u) => new URL(u).pathname === "/ingresar");
+  log("other session, next page:", new URL(other.page.url()).pathname);
   const fresh = await newPage();
   await signIn(fresh.page, EMAIL, PASSWORD);
   log("old password:", await text(fresh.page.locator('main:visible [role="alert"]')));
   await signIn(fresh.page, EMAIL, "nueva-clave-2026");
   await fresh.page.waitForURL((u) => new URL(u).pathname === "/");
   log("new password: signed in");
+  // An ordinary session (no reset link or code) cannot set a password without
+  // the current one: the reset page sends it to the account page instead.
+  await go(fresh.page, BASE + "/recuperar/nueva");
+  const ordinary = await text(fresh.page.locator("main:visible").first());
+  log("reset page for an ordinary session:", ordinary.slice(0, 160));
+  check(/restablecer la contraseña/.test(ordinary), "the page explains it is for a reset");
+  check(
+    (await fresh.page.locator('main:visible input[name="password"]').count()) === 0,
+    "no new-password form for an ordinary session",
+  );
   await fresh.context.close();
   await other.context.close();
 
@@ -237,6 +254,24 @@ async function refreshTokenOf(context) {
   log(
     "new-password page without a session:",
     await text(page.locator('main:visible [role="alert"]')),
+  );
+
+  // 8. A reset asked for with an address Auth does not allow: the e-mail link
+  //    points at the shop itself, never at that address, and still reaches
+  //    the page that verifies links.
+  const evil = await api(
+    "POST",
+    `/auth/v1/recover?redirect_to=${encodeURIComponent("https://evil.example/x")}`,
+    { email: EMAIL },
+  );
+  check(evil.status === 200, "the request is answered as usual");
+  const fallback = await mail(EMAIL, "recovery");
+  log("link for a disallowed address:", fallback.link.replace(/token_hash=\w+/, "token_hash=…"));
+  check(!fallback.link.includes("evil.example"), "the disallowed address is not in the e-mail");
+  await go(page, onBase(fallback.link));
+  check(
+    new URL(page.url()).pathname === "/auth/confirm",
+    "the site's own address forwards the link to /auth/confirm",
   );
 
   await context.close();
