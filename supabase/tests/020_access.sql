@@ -112,7 +112,11 @@ begin
   ), 'and so are its lines';
   assert (select count(*) from public.addresses) = 1, 'only their own address';
   assert (select count(*) from public.profiles) = 1, 'only their own profile';
-  assert (select bool_and(delivery_pin ~ '^[0-9]{4}$') from public.orders), 'they can read their delivery PIN';
+  -- The delivery code is read through get_order only (070_api.sql); since the
+  -- review of 21 November 2026 it is in no table an API role can read.
+  assert not exists (select 1 from information_schema.columns
+                     where table_schema = 'public' and table_name = 'orders' and column_name = 'delivery_pin'),
+    'the delivery code is not in the orders table';
 
   -- Nothing operational or commercial leaks to a shopper.
   assert (select count(*) from public.seller_private) = 0, 'seller legal data';
