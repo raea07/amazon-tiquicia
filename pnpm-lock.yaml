@@ -814,9 +814,6 @@ importers:
       '@types/react':
         specifier: ^19
         version: 19.3.0
-      react:
-        specifier: 19.3.1
-        version: 19.3.1
       tsx:
         specifier: 4.23.15
         version: 4.23.15
