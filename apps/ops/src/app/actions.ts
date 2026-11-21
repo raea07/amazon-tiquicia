@@ -76,22 +76,7 @@ export async function setSellerStatus(
 
 // ── Catalogue ───────────────────────────────────────────────────────────────
 
-export async function reviewProduct(
-  _previous: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const productId = uuid(formData, "productId");
-  if (!productId.success) return { error: GENERIC_ERROR };
-  const approve = formData.get("decision") === "yes";
-  return staffAction(
-    "/catalogo",
-    async (api) => {
-      await api.opsReviewProduct(productId.data, approve, note(formData) || null);
-      return approve ? "Producto publicado." : "Producto rechazado; el vendedor ve el motivo.";
-    },
-    typed(formData, "note"),
-  );
-}
+// Reviewing a new listing (with its photos) is in photo-actions.ts.
 
 // ── Care ────────────────────────────────────────────────────────────────────
 

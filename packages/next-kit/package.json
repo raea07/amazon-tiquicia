@@ -14,7 +14,8 @@
     "./config": "./config.mjs",
     "./base.css": "./styles/base.css",
     "./shell": "./src/shell.tsx",
-    "./listing-changes": "./src/listing-changes.tsx"
+    "./listing-changes": "./src/listing-changes.tsx",
+    "./product-image": "./src/product-image.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

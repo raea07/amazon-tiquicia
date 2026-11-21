@@ -1,10 +1,12 @@
 import {
   daysBetween,
+  isPhotoTemplate,
   type OfferCandidate,
   selectFeaturedOffer,
   toCostaRicaTime,
 } from "@yuntera/core";
 import type { ProductOffer, ProductPage } from "@yuntera/db";
+import { pictureAddress } from "@yuntera/next-kit/product-image";
 import { Alert, Badge, formatDate, formatPrice, Price, Skeleton, Stars } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
@@ -13,6 +15,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { AddToCart } from "@/components/add-to-cart";
 import { ProductGrid } from "@/components/product-card";
+import { ProductGallery } from "@/components/product-gallery";
 import { readLocation } from "@/lib/cart";
 import { getProductPage } from "@/lib/data";
 
@@ -24,8 +27,22 @@ export async function generateMetadata({ params }: PageProps<"/p/[slug]">): Prom
     title: product.title,
     description: (product.description ?? product.bullet_points.join(". ")).slice(0, 160),
     alternates: { canonical: `/p/${slug}` },
-    openGraph: { title: product.title, images: product.images[0] ? [product.images[0].path] : [] },
+    openGraph: {
+      title: product.title,
+      images: pictures(product)
+        .slice(0, 1)
+        .map((image) => pictureAddress(image.path)),
+    },
   };
+}
+
+/**
+ * The pictures to show: the approved photos when there are any, otherwise the
+ * placeholder drawing (the database returns photos first, then drawings).
+ */
+function pictures(product: ProductPage) {
+  const photos = product.images.filter((image) => isPhotoTemplate(image.path));
+  return photos.length > 0 ? photos : product.images;
 }
 
 export default function ProductRoute(props: PageProps<"/p/[slug]">) {
@@ -92,20 +109,7 @@ async function Product({ params, searchParams }: PageProps<"/p/[slug]">) {
       <Breadcrumbs product={product} />
 
       <div className="mt-4 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_22rem]">
-        <div className="overflow-hidden rounded-lg border border-border bg-arena-100">
-          {product.images[0] ? (
-            // biome-ignore lint/performance/noImgElement: SVG placeholders gain nothing from next/image
-            <img
-              src={product.images[0].path}
-              alt={product.images[0].alt || product.title}
-              width={800}
-              height={800}
-              className="aspect-square size-full object-cover"
-            />
-          ) : (
-            <div className="aspect-square" />
-          )}
-        </div>
+        <ProductGallery images={pictures(product)} title={product.title} />
 
         <div className="flex flex-col gap-4">
           {product.brand ? (
@@ -453,7 +457,7 @@ function StructuredData({
     name: product.title,
     description: product.description ?? undefined,
     brand: product.brand ? { "@type": "Brand", name: product.brand } : undefined,
-    image: product.images.map((image) => image.path),
+    image: pictures(product).map((image) => pictureAddress(image.path)),
     aggregateRating:
       product.rating_count > 0
         ? {

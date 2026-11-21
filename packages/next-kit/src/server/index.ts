@@ -11,6 +11,7 @@ export {
   passwordSignUp,
   typed,
 } from "./actions";
+export { deleteUnneededPhotoFiles, photoPreviews } from "./photos";
 export {
   getRoles,
   getViewer,

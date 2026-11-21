@@ -118,7 +118,7 @@ function checkKey(name: string) {
 
 function filePath(bucket: string, name: string): string {
   const path = resolve(STORAGE_DIR, bucket, name);
-  if (!path.startsWith(STORAGE_DIR + "/")) fail("InvalidKey");
+  if (!path.startsWith(`${STORAGE_DIR}/`)) fail("InvalidKey");
   return path;
 }
 

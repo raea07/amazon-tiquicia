@@ -1,3 +1,4 @@
+import { ProductImage } from "@yuntera/next-kit/product-image";
 import { Badge, Price, Stars } from "@yuntera/ui";
 import type { Route } from "next";
 import Link from "next/link";
@@ -28,16 +29,12 @@ export function ProductCard({
     <article className="group relative flex h-full flex-col overflow-hidden rounded-lg border border-border bg-surface transition-shadow hover:shadow-md">
       <div className="relative aspect-square bg-arena-100">
         {product.image_path ? (
-          // Demo pictures are small local SVGs; seller photos will go through the image optimiser.
-          // biome-ignore lint/performance/noImgElement: SVG placeholders gain nothing from next/image
-          <img
-            src={product.image_path}
+          <ProductImage
+            path={product.image_path}
             alt=""
-            width={400}
-            height={400}
-            loading={priority ? "eager" : "lazy"}
-            decoding="async"
-            className="size-full object-cover"
+            sizes="(min-width: 1024px) 18rem, (min-width: 640px) 33vw, 50vw"
+            priority={priority}
+            className="size-full object-contain"
           />
         ) : null}
         {product.made_in_cr ? (

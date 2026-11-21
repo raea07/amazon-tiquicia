@@ -1,3 +1,4 @@
+import { ProductImage } from "@yuntera/next-kit/product-image";
 import {
   buttonClass,
   EmptyState,
@@ -56,13 +57,11 @@ async function Orders() {
           >
             <div className="size-16 shrink-0 overflow-hidden rounded-md bg-arena-100">
               {order.first_image_path ? (
-                // biome-ignore lint/performance/noImgElement: SVG placeholders gain nothing from next/image
-                <img
-                  src={order.first_image_path}
+                <ProductImage
+                  path={order.first_image_path}
                   alt=""
-                  width={64}
-                  height={64}
-                  className="size-full object-cover"
+                  sizes="64px"
+                  className="size-full object-contain"
                 />
               ) : null}
             </div>

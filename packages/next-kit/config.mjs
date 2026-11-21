@@ -33,7 +33,9 @@ export function securityHeaders(options = {}) {
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    // Pictures: the app itself (icons, placeholder drawings), previews of a
+    // photo being chosen (blob:), and the project's own storage, nothing else.
+    `img-src 'self' data: blob: ${apiOrigin}/storage/v1/object/`,
     "font-src 'self'",
     `connect-src 'self' ${apiOrigin}${isDev ? " ws: http://127.0.0.1:* http://localhost:*" : ""}`,
     "frame-ancestors 'none'",

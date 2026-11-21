@@ -1,5 +1,6 @@
 import { ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
 import { ApiError, type OrderDetail } from "@yuntera/db";
+import { ProductImage } from "@yuntera/next-kit/product-image";
 import {
   Alert,
   formatDate,
@@ -162,13 +163,11 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                     <div className="flex gap-4">
                       <div className="size-16 shrink-0 overflow-hidden rounded-md bg-arena-100">
                         {item.image_path ? (
-                          // biome-ignore lint/performance/noImgElement: SVG placeholders gain nothing from next/image
-                          <img
-                            src={item.image_path}
+                          <ProductImage
+                            path={item.image_path}
                             alt=""
-                            width={64}
-                            height={64}
-                            className="size-full object-cover"
+                            sizes="64px"
+                            className="size-full object-contain"
                           />
                         ) : null}
                       </div>

@@ -6,12 +6,17 @@ import {
   money,
   OversizeItemError,
   type PaymentMethod,
+  PHOTO_RULES,
   parseColones,
 } from "@yuntera/core";
 import { type ActionState, FormMessage, SubmitButton } from "@yuntera/next-kit/client";
 import { Alert, formatPrice, SelectField, TextAreaField, TextField } from "@yuntera/ui";
-import { useActionState, useState } from "react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { createListing } from "@/app/actions";
+import { sendListingToReview } from "@/app/photo-actions";
+import { checkQueuedText, PhotoQueue, type QueuedPhoto, uploadQueue } from "./photo-manager";
 
 const initial: ActionState = {};
 
@@ -59,8 +64,44 @@ export function ListingForm({ categories }: { categories: CategoryOption[] }) {
 
   const groups = [...new Set(categories.map((category) => category.group))];
 
+  // Photos chosen here wait in the browser. Once the listing exists (the
+  // action saves it as a draft when there are photos), they are uploaded to
+  // it, and then it is sent to review if that is what the seller asked for.
+  const router = useRouter();
+  const [photos, setPhotos] = useState<QueuedPhoto[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const started = useRef<string | null>(null);
+  const createdId = state.ok ? state.values?.productId : undefined;
+  useEffect(() => {
+    if (!createdId || started.current === createdId) return;
+    started.current = createdId;
+    const submit = state.values?.intent === "submit";
+    setUploading(true);
+    void (async () => {
+      const failures = await uploadQueue(createdId, photos, setPhotos);
+      if (failures.length > 0) {
+        router.push(`/productos/${createdId}?fotos=incompletas` as Route);
+        return;
+      }
+      if (submit) {
+        const sent = await sendListingToReview(createdId);
+        if (sent.error) {
+          router.push(`/productos/${createdId}` as Route);
+          return;
+        }
+      }
+      router.push(submit ? "/productos?creado=revision" : "/productos?creado=borrador");
+    })();
+  }, [createdId, photos, router, state.values?.intent]);
+
   return (
-    <form action={action} className="grid gap-8 lg:grid-cols-[1fr_22rem]">
+    <form
+      action={action}
+      onSubmit={(event) => {
+        if (!checkQueuedText(setPhotos, photos)) event.preventDefault();
+      }}
+      className="grid gap-8 lg:grid-cols-[1fr_22rem]"
+    >
       <div className="flex flex-col gap-6">
         <fieldset className="flex flex-col gap-4">
           <legend className="font-display text-xl font-bold">1. El producto</legend>
@@ -218,8 +259,30 @@ export function ListingForm({ categories }: { categories: CategoryOption[] }) {
           </div>
         </fieldset>
 
-        <FormMessage state={state} />
-        <div className="flex flex-wrap gap-3">
+        <fieldset className="flex flex-col gap-4">
+          <legend className="font-display text-xl font-bold">5. Fotos</legend>
+          <p className="text-sm text-ink-muted">
+            Opcional, pero un producto con buenas fotos se vende mejor. La primera es la que se ve
+            en las listas y búsquedas; después puede cambiar el orden.
+          </p>
+          <PhotoQueue
+            items={photos}
+            onChange={setPhotos}
+            room={PHOTO_RULES.maxPhotos}
+            busy={uploading}
+          />
+          {photos.length > 0 ? <input type="hidden" name="fotos" value="1" /> : null}
+        </fieldset>
+
+        {uploading ? (
+          <Alert tone="info" title="Producto guardado">
+            Estamos subiendo sus fotos. No cierre esta página.
+          </Alert>
+        ) : (
+          <FormMessage state={state} />
+        )}
+        {/* Once saved, the photos are on their way: the form must not be sent again. */}
+        <div className={uploading ? "hidden" : "flex flex-wrap gap-3"}>
           <SubmitButton size="lg" pendingLabel="Enviando…">
             Enviar a revisión
           </SubmitButton>
@@ -234,8 +297,8 @@ export function ListingForm({ categories }: { categories: CategoryOption[] }) {
           </SubmitButton>
         </div>
         <p className="text-sm text-ink-muted">
-          Revisamos cada producto nuevo antes de publicarlo, normalmente en un día hábil. Las fotos
-          se agregan después de crear el producto.
+          Revisamos cada producto nuevo antes de publicarlo, con sus fotos, normalmente en un día
+          hábil.
         </p>
       </div>
 
