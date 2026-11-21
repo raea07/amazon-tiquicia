@@ -33,8 +33,11 @@ USAGE_LINES='2,25p'
 
 [ -n "$COMMAND" ] && [ -n "$REF" ] || { sed -n "$USAGE_LINES" "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2; }
 
-AUTH=()
-[ -n "${SUPABASE_ACCESS_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN")
+# curl reads the token from a config on a file descriptor, so it never appears
+# in the process list. Prints nothing when the variable is unset.
+auth_config() {
+  [ -z "${SUPABASE_ACCESS_TOKEN:-}" ] || printf 'header = "Authorization: Bearer %s"\n' "$SUPABASE_ACCESS_TOKEN"
+}
 
 # The suites and the seed are written for psql. Inlines `\ir` includes; refuses
 # any other psql command, which the API would reject with a confusing error.
@@ -67,7 +70,7 @@ run_sql() {
       process.stdout.write(JSON.stringify(params.length ? { query: sql, parameters: params } : { query: sql })));
   ' "$@")"
   local response
-  response="$(curl -sS -m 180 -X POST "$API" "${AUTH[@]}" -H "content-type: application/json" \
+  response="$(curl -sS -m 180 -X POST "$API" --config <(auth_config) -H "content-type: application/json" \
     --data-binary @- -w $'\n%{http_code}' <<<"$body")"
   status="${response##*$'\n'}"
   response="${response%$'\n'*}"
