@@ -121,7 +121,7 @@ A summary; the migration is authoritative.
 | Search and browse active products from active sellers; read published reviews | See drafts, rejected listings, or anything from a pending or suspended seller |
 | Read categories, districts, zones, holidays, the fee schedule                 | Read any profile, address, order, stock level or seller's private details     |
 | Get a delivery estimate and a checkout quote                                  | Place an order                                                                |
-| Report a listing, review or seller, giving an e-mail address                  | Read the report queue                                                         |
+| Report a listing, review or shop that is public, giving an e-mail address     | Read the report queue; report something that does not exist or is not public  |
 
 ### Shopper (any signed-in user)
 
@@ -131,7 +131,7 @@ A summary; the migration is authoritative.
 | Add, edit and soft-delete their own addresses                                         | See anyone else's                                                                         |
 | Place, pay (in sandbox), cancel and read their own orders, including the delivery PIN | Read another person's order — it answers "not found", the same as one that does not exist |
 | Review a product they received; request a return; file a complaint                    | Review something they did not buy, or twice                                               |
-| Record and withdraw their own consents                                                |                                                                                           |
+| Record and withdraw their own consents, dated by the database                         | Back-date a consent, change one, or undo a withdrawal                                     |
 
 ### Seller member
 
@@ -142,7 +142,7 @@ A summary; the migration is authoritative.
 | See the order lines they sold and each line's progress, with the shopper's first name, district and cantón          | See the shopper's full name, phone, e-mail, address or map pin — Yuntera delivers, so the seller never needs them       |
 | Set stock at their own location; announce stock sent to a warehouse; mark their own parcels packed                  | Change stock held in a Yuntera warehouse                                                                                |
 | Reply to a review of their product                                                                                  | Remove or edit a review                                                                                                 |
-| Admins and owners: edit the shop front, manage members, request a change of payout account (finance approves it)    | Change the payout account or contact phone and e-mail; read an account number in full; create, alter or remove an owner |
+| Admins and owners: invite members (they must accept), remove staff, ask for a change of payout account, shop name, fiscal details or contact (staff approve each) | Add anyone without their acceptance; change the payout account, name, fiscal details or contact directly; read an account number in full; create, alter or remove an owner |
 
 ### Warehouse associate
 
@@ -189,6 +189,76 @@ shop's phone on file, so sellers cannot change that phone or the contact e-mail
 directly either, and a request made within 30 days of a change to them is
 flagged. Nobody in finance decides a request they made, or one for a shop they
 belong to.
+
+## Access that ends at once
+
+Every check reads the row that grants the access, on every call, so taking
+the row away ends the access with the next request. What each kind of
+account keeps, tested function by function in `supabase/tests/120_limits.sql`
+(each prefix is called with every argument it takes, and every call must
+refuse):
+
+| Account                                  | What happens                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Driver suspended, offboarded or pending  | `driver_today` returns their own record and no routes; every other driver function refuses. Their routes go back to dispatch at once (a trigger on `drivers`, whatever path changed the status): a route not started becomes a draft without driver; of a route being driven, the stops still to do move to a new draft route and the old one closes with its cash count for the driver who collected the money. `ops_released_routes` lists them on the dispatch screen, with the parcels still in that driver's hands. |
+| Staff member switched off                | Every `ops_*` function and the audit trail refuse (`forbidden`): `has_staff_role` reads `active`.                                                                                                                                                                                                                                          |
+| Warehouse worker removed from a site     | Every `wms_*` function refuses for that site.                                                                                                                                                                                                                                                                                              |
+| Member removed from a shop               | Every `seller_*` function refuses for that shop; nothing of it stays readable.                                                                                                                                                                                                                                                             |
+| Shop pending (not yet verified)          | Reads its data, keeps drafts, invites its team, asks for changes. Cannot send a listing for review, edit a published one or announce stock to a warehouse (`shop_not_active`).                                                                                                                                                             |
+| Shop suspended                           | As pending, and also cannot put an offer back on sale or reply publicly to a review. It can still pause offers, count stock, pack what it already sold and be paid what it is owed later.                                                                                                                                                 |
+| Shop closed                              | Reads only.                                                                                                                                                                                                                                                                                                                                |
+
+## Limits against abuse
+
+The database cannot trust a caller's network address: the apps call it from
+their own servers, and anyone with the publishable key can call it directly
+and claim any address. So no limit below depends on one. They are of four
+kinds: the thing acted on must exist and be public; a repeat is the same
+thing, not a second one; one account can have only so much open at a time;
+and what a visitor can send is bounded before any work is done. Each is a
+setting in `app_settings` (an administrator changes it without a migration)
+or a named constant in the function, and each is tested at its edge.
+
+| Limit                                      | Value                           | Where                              | Why this number                                                                                                                                         |
+| ------------------------------------------ | ------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shops waiting for verification per account | 1 (`max_pending_shops_per_account`) | `create_seller`                    | Nobody honest needs two at once; the second can be registered as soon as the first is decided.                                                          |
+| Listings in review per shop                | 50 (`max_listings_in_review_per_seller`) | `seller_create_listing`, `seller_update_listing` | New listings and edits of published ones together. Enough for a shop's first catalogue upload; more waits as drafts. |
+| Drafts per shop                            | 200 (`max_draft_listings_per_seller`) | `seller_create_listing`            | Drafts are never reviewed; this only stops a table from filling up.                                                                                     |
+| Open inbound shipments per shop            | 10 (`max_open_inbounds_per_seller`) | `seller_create_inbound`            | Each is an expected delivery on the dock's board; ten covers a week of daily deliveries.                                                                |
+| Lines per inbound shipment; units per line | 100; 100 000                    | `seller_create_inbound`            | A shipment is a truckload, not the catalogue. A repeated product is refused (`invalid_lines`).                                                          |
+| Open reports per signed-in account         | 20 (`max_open_reports_per_account`) | `report_content`                   | Someone reporting genuinely rarely has more waiting; a repeat of an open report (same target and reason) returns the same report.                       |
+| Visitor reports per hour, whole platform   | 300 (`visitor_reports_per_hour`) | `report_content`                   | A safety valve, about ten times the expected volume. Above it a visitor is asked to write to support, except about something nobody has reported yet: that first report always gets in, so a flood cannot silence the reports about one listing. |
+| Open complaints per account                | 5 (`max_open_complaints_per_account`) | `file_complaint`                   | The same complaint again (same order, category and text) returns the first.                                                                             |
+| Invitations waiting per shop; team size    | 20; 50 (`max_pending_invitations_per_shop`, `max_members_per_shop`) | `seller_invite_member` | A small business's team, with room.                                                                                                       |
+| Search text                                | 200 characters, 12 words        | `search_products`, `suggest_products` | Longer input is cut, not refused. The same numbers are `SEARCH_INPUT_LIMITS` in `packages/core/src/search.ts`, kept equal by a unit test.            |
+| Lines in a checkout quote                  | `max_lines_per_order` (40)      | `checkout_quote`                   | Counted before any pricing work; malformed lines are answered as an issue.                                                                              |
+| Staff queues                               | 100 per page, oldest first      | `ops_care_queues` (with totals), `ops_listings_for_review`, `wms_board` (with `inbound_total`), `ops_shop_change_requests` | The payload no longer grows with whatever was filed.                         |
+| Report details; complaint text             | 2 000; 10–4 000 characters      | `report_content`, `file_complaint` | What a person writes about one problem.                                                                                                                 |
+
+Reports must be about a listing, review or shop a shopper can see. The
+e-mail a visitor types is recorded only as a contact detail staff may use by
+hand: nothing sends a message to it, and the event the report emits does not
+carry it. The same rule holds for invitations to a shop: the event names the
+invited account (whose address its owner proved), never the address typed.
+
+Shop registration accepts an identification number another shop uses, with
+the same answer as any other registration, so it reveals nothing; staff see
+the clash (`ops_seller_id_clashes`) and only one shop can ever be verified with
+a number (a partial unique index). A name that contains "yuntera" (ignoring
+spaces and punctuation), sounds like the platform speaking (soporte, ayuda,
+oficial…), uses another alphabet, or reads the same as another active shop's
+name is refused, at registration and when a change of name is requested.
+
+## Changes only a function makes
+
+| Change                                    | How                                                                                                                                                                                                                                                                               |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Joining a shop                            | `seller_invite_member` (owner or admin; only the owner offers "admin"), then the invited account's `seller_answer_invitation`. The invitation is bound to the account that had the address when it was sent, expires after 14 days, and the owner (or an admin, for staff) can revoke it. `seller_remove_member` and `seller_set_member_role` replace direct writes; nobody changes the owner. |
+| The shop's name, fiscal details, contact  | `seller_request_shop_change`, decided with `ops_decide_shop_change`: ops decide names and fiscal details, finance decides the contact (it is the phone finance calls to confirm a new payout account). A change of contact is refused while a payout-account request waits, and an approved one flags the next payout-account request. Nobody decides their own request or one for a shop they belong to. |
+| Consents                                  | `record_consent` (only the policy version in force, in `app_settings.policy_versions`; agreeing again adds nothing) and `withdraw_consent`. A trigger dates every consent and withdrawal with the database's clock and refuses any other change, whoever makes it.                   |
+| Fees                                      | **Not through the API at all.** Commission rates, warehouse and payment fees and shipping prices change in a migration, where the parity test with `packages/core/src/fees.ts` keeps both sides equal. No API role has a write grant on the fee tables, `categories` or `delivery_zones`, and every change to them (and to holidays and zone closures) is in the audit log. |
+| Payout account approval                   | Approving a request stamps `payout_approved_at`. An account on file that finance never approved is not paid (it counts as no approved account).                                                                                                                                  |
+| Packages sent to a warehouse              | Triggers on `offers` and `skus` refuse a warehouse offer whose package exceeds the largest fee tier (30 kg, 120 cm a side), whatever path tries.                                                                                                                                 |
 
 ## Rules for `security definer` functions
 
@@ -295,8 +365,11 @@ visible and what must not.
 
 ## What is not in place yet
 
-- **Rate limiting.** Nothing limits sign-in attempts or function calls beyond
-  the platform's defaults. The PIN check is the one place with its own counter.
+- **Rate limiting by time.** The limits above cap what one account can have
+  open and bound what a visitor can send; nothing counts calls per minute, and
+  sign-in attempts are limited only by the platform. Supabase Auth counts the
+  app server's address, not the visitor's, because sign-in runs on the
+  server. A request body size limit at the API gateway is also not set here.
 - **Row-level security is enabled, not forced.** Table owners acting directly
   in the database are not subject to it. API roles are, which is what matters
   for requests; it means SQL run by an administrator in the dashboard sees
