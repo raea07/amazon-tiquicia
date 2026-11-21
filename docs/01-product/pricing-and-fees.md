@@ -78,11 +78,10 @@ Móvil) that was below cost. They are still not contracted rates: until a
 gateway is chosen ([open question](../08-open-questions.md)), quote sellers a
 range, not a figure.
 
-One known flaw: the fixed amount is charged once per seller per order, while
-a gateway charges it once per payment. On an order with items from two
-sellers, each is charged ₡180. That must be fixed before real sellers are
-billed; see
-[fees and settlement](../04-algorithms/fees-and-settlement.md#what-the-database-does-and-where-it-differs-from-the-specification).
+The fixed amount is charged once per order, as a gateway charges it once per
+payment. When an order has items from several sellers they share it in
+proportion to what each sold, to the céntimo; see
+[fees and settlement](../04-algorithms/fees-and-settlement.md#the-calculation).
 
 ### A statement a seller can check
 
