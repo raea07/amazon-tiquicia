@@ -83,9 +83,30 @@ changed_fields() { # current-json
   ' "$1" "$body"
 }
 
+# Supabase refuses any change to the e-mail templates or subjects while a
+# project sends with its built-in sender on the free plan ("Email template
+# modification is not available for free tier projects using the default email
+# provider"), and refuses the whole request with them. Until custom SMTP is
+# set (here or already on the project), send the settings alone and say so.
+fit_to_project() { # current-json
+  local fitted
+  fitted="$(node -e '
+    const [current, wanted] = [JSON.parse(process.argv[1]), JSON.parse(process.argv[2])];
+    if (current.smtp_host || wanted.smtp_host) { process.stdout.write(JSON.stringify(wanted)); process.exit(0); }
+    const kept = Object.fromEntries(Object.entries(wanted).filter(([k]) => !/^mailer_(subjects|templates)_/.test(k)));
+    process.stdout.write(JSON.stringify(kept));
+  ' "$1" "$body")"
+  if [ "$fitted" != "$body" ]; then
+    echo "NOT SENT: the e-mail templates and subjects. This project uses Supabase's built-in sender,"
+    echo "which on the free plan does not allow changing them; they are applied once custom SMTP is set."
+  fi
+  body="$fitted"
+}
+
 case "$COMMAND" in
   plan)
     if current="$(fetch_current 2>/dev/null)"; then
+      fit_to_project "$current"
       echo "Fields that would change on $REF ($ENVIRONMENT):"
       changed_fields "$current"
     else
@@ -96,10 +117,15 @@ case "$COMMAND" in
 
   apply)
     current="$(fetch_current)"
+    fit_to_project "$current"
     echo "Changing on $REF ($ENVIRONMENT):"
     changed_fields "$current"
-    curl -sS -m 120 --fail-with-body -X PATCH "$API" --config <(auth_config) \
-      -H "content-type: application/json" --data-binary @- <<<"$body" > /dev/null
+    # On a refusal, show the API's message (an error answer carries no settings).
+    if ! response="$(curl -sS -m 120 --fail-with-body -X PATCH "$API" --config <(auth_config) \
+      -H "content-type: application/json" --data-binary @- <<<"$body")"; then
+      node -e 'try { const e = JSON.parse(process.argv[1]); console.error(e.message ?? e.msg ?? process.argv[1]); } catch { console.error(process.argv[1].slice(0, 500)); }' "$response" >&2
+      exit 1
+    fi
     after="$(fetch_current)"
     echo "Fields that still differ after applying (unknown to the API, or refused):"
     changed_fields "$after"
