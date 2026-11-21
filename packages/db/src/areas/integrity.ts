@@ -58,7 +58,8 @@ export const integrityErrors = {
     en: "The product has not come back to the warehouse yet. Record that it arrived first, then the refund.",
   },
   order_not_refundable: {
-    "es-CR": "Este pedido no tiene un pago cobrado que se pueda reembolsar, o ya se reembolsó entero.",
+    "es-CR":
+      "Este pedido no tiene un pago cobrado que se pueda reembolsar, o ya se reembolsó entero.",
     en: "This order has no collected payment left to refund, or it was already refunded in full.",
   },
   refund_exceeds_purchase: {
@@ -113,7 +114,8 @@ export const integrityErrors = {
     en: "That quantity is more than the seller announced on this inbound. Count again; if extra units arrived, the seller must announce another inbound.",
   },
   inbound_line_complete: {
-    "es-CR": "Esta línea ya se recibió completa. Si la escaneó dos veces, no hace falta hacer nada.",
+    "es-CR":
+      "Esta línea ya se recibió completa. Si la escaneó dos veces, no hace falta hacer nada.",
     en: "This line was already received in full. If you scanned it twice, there is nothing to do.",
   },
 

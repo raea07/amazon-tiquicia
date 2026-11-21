@@ -26,7 +26,8 @@ import pg from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 const shared = process.env.DATABASE_URL;
-const racesName = process.env.RACES_DB_NAME ?? `${shared ? new URL(shared).pathname.slice(1) : ""}_races`;
+const racesName =
+  process.env.RACES_DB_NAME ?? `${shared ? new URL(shared).pathname.slice(1) : ""}_races`;
 const withDatabase = (name: string) => {
   const target = new URL(shared ?? "postgres://localhost/postgres");
   target.pathname = `/${name}`;
@@ -54,7 +55,8 @@ const live = new Set<Session>();
 /** A session with an open transaction, acting as the given user. */
 async function open(email: string): Promise<Session> {
   const client = await pool.connect();
-  const pid = (await client.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]?.pid ?? 0;
+  const pid =
+    (await client.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]?.pid ?? 0;
   await client.query("begin");
   await client.query(
     "select set_config('request.jwt.claims', $1, true), set_config('role', 'authenticated', true)",
@@ -147,7 +149,10 @@ const PLACE = `select public.place_order($1::jsonb,
 
 async function place(email: string, lines: Record<string, number>, method: string, key: string) {
   const items = await Promise.all(
-    Object.entries(lines).map(async ([slug, quantity]) => ({ offer_id: await offer(slug), quantity })),
+    Object.entries(lines).map(async ([slug, quantity]) => ({
+      offer_id: await offer(slug),
+      quantity,
+    })),
   );
   const result = await as<{ order_id: string }>(email, PLACE, [JSON.stringify(items), method, key]);
   return result.order_id;
@@ -223,7 +228,9 @@ async function deliver(order: string) {
 }
 
 const item = (order: string) =>
-  lookup<string>("select id as r from public.order_items where order_id = $1 order by id limit 1", [order]);
+  lookup<string>("select id as r from public.order_items where order_id = $1 order by id limit 1", [
+    order,
+  ]);
 
 describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", () => {
   let buyer = "";
@@ -336,7 +343,9 @@ describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", (
     await end(b, "rollback");
 
     expect(
-      await lookup<string>("select status::text as r from public.payments where order_id = $1", [order]),
+      await lookup<string>("select status::text as r from public.payments where order_id = $1", [
+        order,
+      ]),
     ).toBe("cancelled");
     expect(
       await lookup<number>(
@@ -372,7 +381,8 @@ describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", (
     const original = before.rows[0];
     if (!original) throw new Error("no offer");
     const newPrice = Number(original.price) + 100_000;
-    const UPDATE = "select public.seller_update_offer($1, $2, $3::public.offer_status, null, $4) as r";
+    const UPDATE =
+      "select public.seller_update_offer($1, $2, $3::public.offer_status, null, $4) as r";
 
     const a = await open(other);
     const placed = await one<{ order_id: string; total_minor: number }>(a, PLACE, [
@@ -408,9 +418,10 @@ describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", (
   it("the last unit: two shoppers order it at once — the second waits and is told it is gone", async () => {
     const drill = await offer("taladro-inalambrico-roble-20v");
     const holders: Array<{ email: string; order: string }> = [];
-    let left = await lookup<number>("select available_quantity as r from public.offers where id = $1", [
-      drill,
-    ]);
+    let left = await lookup<number>(
+      "select available_quantity as r from public.offers where id = $1",
+      [drill],
+    );
     try {
       // Other accounts hold everything but one unit (ten each at most).
       while (left > 1) {
@@ -439,7 +450,9 @@ describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", (
       await end(b, "rollback");
       holders.push({ email: first, order: won.order_id });
       expect(
-        await lookup<number>("select available_quantity as r from public.offers where id = $1", [drill]),
+        await lookup<number>("select available_quantity as r from public.offers where id = $1", [
+          drill,
+        ]),
       ).toBe(0);
     } finally {
       for (const holder of holders) {
@@ -454,11 +467,16 @@ describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", (
     let sendero = "";
 
     beforeAll(async () => {
-      sendero = await lookup<string>("select id as r from public.sellers where slug = 'tienda-sendero'");
+      sendero = await lookup<string>(
+        "select id as r from public.sellers where slug = 'tienda-sendero'",
+      );
     });
 
     afterAll(async () => {
-      if (payout) await pool.query("delete from public.payouts where id = $1 and status = 'scheduled'", [payout]);
+      if (payout)
+        await pool.query("delete from public.payouts where id = $1 and status = 'scheduled'", [
+          payout,
+        ]);
       if (run) await pool.query("delete from public.payout_runs where id = $1", [run]);
     });
 
@@ -489,9 +507,11 @@ describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", (
       const order = await place(buyer, { "libreta-tapa-dura-a5": 1 }, "card", `int10-${RUN}`);
       await pay(buyer, order);
       await deliver(order);
-      const ret = await as<string>(buyer, "select public.request_return($1, 'withdrawal', 1) as r", [
-        await item(order),
-      ]);
+      const ret = await as<string>(
+        buyer,
+        "select public.request_return($1, 'withdrawal', 1) as r",
+        [await item(order)],
+      );
       await as(STAFF, "select public.ops_receive_return($1, true, null) as r", [ret]);
 
       // A payout of exactly what the seller has available now.
@@ -545,9 +565,9 @@ describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", (
       // With the first one undone, the second may pay it; it is rolled back too.
       await second;
       await end(b, "rollback");
-      expect(await lookup<string>("select status as r from public.payouts where id = $1", [payout])).toBe(
-        "scheduled",
-      );
+      expect(
+        await lookup<string>("select status as r from public.payouts where id = $1", [payout]),
+      ).toBe("scheduled");
     });
   });
 });
