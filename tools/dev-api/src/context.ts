@@ -17,6 +17,12 @@ export const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://postgres:postgres@127.0.0.1:5432/yuntera_local";
 export const PUBLISHABLE_KEY =
   process.env.DEV_PUBLISHABLE_KEY ?? "sb_publishable_local_development_only";
+/**
+ * Stands in for a Supabase secret key, which server-side code (the
+ * notification worker) uses to call its functions as the `service_role`. Local
+ * only: nothing in the apps holds it, and on Supabase the real key is a secret.
+ */
+export const SECRET_KEY = process.env.DEV_SECRET_KEY ?? "sb_secret_local_development_only";
 export const ORIGIN = `http://${HOST}:${PORT}`;
 export const ISSUER = `${ORIGIN}/auth/v1`;
 export const KEY_ID = "local-dev";
@@ -124,6 +130,10 @@ export async function readJson(req: IncomingMessage): Promise<Record<string, unk
 export async function authenticate(req: IncomingMessage): Promise<Claims | null> {
   const header = req.headers.authorization;
   const token = header?.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : null;
+  // The secret key, sent as `apikey` (and usually as the bearer too), is the worker.
+  if (req.headers.apikey === SECRET_KEY && (!token || token === SECRET_KEY)) {
+    return { sub: "", role: "service_role" };
+  }
   if (!token || token === PUBLISHABLE_KEY) return null;
   try {
     const { payload } = await jwtVerify(token, keys.publicKey, {

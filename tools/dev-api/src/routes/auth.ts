@@ -172,7 +172,7 @@ export const authRoutes: Routes = async ({ req, res, url, route }) => {
 
   if (route === "GET /auth/v1/user") {
     const claims = await authenticate(req);
-    const user = claims ? await userById(claims.sub) : null;
+    const user = claims?.sub ? await userById(claims.sub) : null;
     if (!user) {
       throw new HttpError(401, { code: 401, error_code: "no_authorization", msg: "Not signed in" });
     }
