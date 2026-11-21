@@ -1,3 +1,4 @@
+import { SignOutButton } from "@yuntera/expo-kit/auth";
 import { oneParam } from "@yuntera/expo-kit/paths";
 import { space, tone } from "@yuntera/expo-kit/theme";
 import {
@@ -18,9 +19,8 @@ import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { StopRow } from "@/components/route-parts";
 import { OfflineBanner, QueueCard, TrackingStatus } from "@/components/status";
-import { useDriver } from "@/lib/driver";
+import { needsExplanation, useDriver } from "@/lib/driver";
 import { isOpen, nextStop, parcels, type ShownRoute, summarise } from "@/lib/route";
-import { locationPermission } from "@/lib/tracking";
 
 /** The messages a stop screen leaves when it sends the driver back here, as on the web. */
 function Flash({ aviso }: { aviso: string | undefined }) {
@@ -57,16 +57,15 @@ function Flash({ aviso }: { aviso: string | undefined }) {
 }
 
 function RouteCard({ route }: { route: ShownRoute }) {
-  const { startRoute, shareLocation, permission } = useDriver();
+  const { startRoute, shareLocation } = useDriver();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const summary = summarise(route);
 
   const start = async () => {
     setError(null);
-    // Our own explanation comes before the system's location prompt.
-    const allowed = permission ?? (await locationPermission());
-    if (allowed !== "granted") {
+    // Our own explanation comes before the system's prompts.
+    if (await needsExplanation()) {
       router.push({ pathname: "/ubicacion", params: { ruta: route.route_id } });
       return;
     }
@@ -114,8 +113,10 @@ function RouteCard({ route }: { route: ShownRoute }) {
       {route.status === "in_progress" && !summary.finished ? (
         <TrackingStatus
           onShare={() => {
-            if (permission === "granted") void shareLocation();
-            else router.push("/ubicacion");
+            void needsExplanation().then((first) => {
+              if (first) router.push("/ubicacion");
+              else void shareLocation();
+            });
           }}
         />
       ) : null}
@@ -239,9 +240,7 @@ export default function RouteScreen() {
             envía cuando vuelva a ingresar con su cuenta.
           </Text>
         ) : null}
-        <Button variant="ghost" block onPress={() => void driver.signOut()} testID="sign-out">
-          Cerrar sesión
-        </Button>
+        <SignOutButton signOut={driver.signOut} />
       </Stack>
     </Screen>
   );

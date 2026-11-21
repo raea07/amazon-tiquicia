@@ -18,7 +18,7 @@ import {
   type QueueSnapshot,
   useQueue,
 } from "@yuntera/expo-kit/offline";
-import { sessionStorage } from "@yuntera/expo-kit/supabase";
+import { appStorage } from "@yuntera/expo-kit/supabase";
 import {
   createContext,
   type ReactNode,
@@ -30,6 +30,7 @@ import {
   useState,
 } from "react";
 import { AppState } from "react-native";
+import { askNoticePermission, noticePermission } from "./notice";
 import {
   type ArrivePayload,
   connectOutbox,
@@ -44,6 +45,7 @@ import {
 import {
   type FailureReason,
   findStop,
+  keptOnPhone,
   needsTracking,
   type QueuedStopAction,
   refusalMessage,
@@ -61,14 +63,32 @@ import {
 } from "./tracking";
 
 /**
- * The day's routes, kept encrypted on the phone so they stay readable without
- * signal. They hold customers' names, phones and addresses, so they are
- * cleared at sign-out and when access is lost, and expire after a day.
+ * Whether our explanation screen (/ubicacion) must come before sharing: the
+ * location permission is not granted yet, or, on Android 13 and later, the
+ * phone has not yet been asked whether the app may show the sharing notice.
+ */
+export async function needsExplanation(): Promise<boolean> {
+  return (
+    (await locationPermission()) !== "granted" || (await noticePermission()) === "undetermined"
+  );
+}
+
+/** A saved day older than this is removed, read or not. */
+export const SAVED_DAY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The routes still to drive, kept on the phone so they stay readable without
+ * signal (keptOnPhone in route.ts says what is kept). They hold customers'
+ * names, phones and addresses. They live in the app's ordinary storage, which
+ * the operating system encrypts with the device and keeps to this app (the
+ * kit ships no cipher; docs/02-architecture/decisions.md §26 and
+ * docs/05-security-compliance/privacy.md say why), and they are removed at
+ * sign-out, at a change of account, when access is lost and after a day.
  */
 const savedDay = createSnapshotCache<DriverDay>({
-  store: sessionStorage,
+  store: appStorage,
   key: "yuntera-ruta.day.v1",
-  maxAgeMs: 24 * 60 * 60 * 1000,
+  maxAgeMs: SAVED_DAY_MAX_AGE_MS,
 });
 
 const DAY_KEY = ["driver-today"] as const;
@@ -125,7 +145,8 @@ export interface DriverValue {
   /** Stops left for later ("Dejar pendiente y seguir"), only on this phone. */
   later: ReadonlySet<string>;
   leaveForLater(stopId: string): void;
-  signOut(): Promise<void>;
+  /** Resolves to false when the phone could not be signed out (the kit's signOutDevice). */
+  signOut(): Promise<boolean>;
 }
 
 const DriverContext = createContext<DriverValue | null>(null);
@@ -154,7 +175,13 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const [tracking, setTracking] = useState<Tracking>("off");
   const [permission, setPermission] = useState<Permission | null>(null);
 
-  // The day saved on this phone for this account, read once per sign-in.
+  // An expired day goes at start-up whoever is signed in, even nobody.
+  useEffect(() => {
+    void savedDay.prune();
+  }, []);
+
+  // The day saved on this phone for this account, read once per sign-in
+  // (the read removes another account's) and kept in step with each save.
   const [saved, setSaved] = useState<{
     owner: string | null;
     day: DriverDay | null;
@@ -245,9 +272,25 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       void reloadRoles();
       return;
     }
-    void savedDay.save(userId, day.data);
+    const kept = keptOnPhone(day.data);
+    void savedDay.save(userId, kept);
+    setSaved({ owner: userId, day: kept, savedAt: Date.now(), loaded: true });
     if (access === "unavailable") void reloadRoles();
   }, [day.data, userId, inside, access, reloadRoles, forgetDay]);
+
+  // A day kept past its limit is not shown, even with the app left open.
+  useEffect(() => {
+    if (saved.savedAt === null) return;
+    const left = saved.savedAt + SAVED_DAY_MAX_AGE_MS - Date.now();
+    const timer = setTimeout(
+      () => {
+        setSaved((current) => ({ ...current, day: null, savedAt: null }));
+        void savedDay.prune();
+      },
+      Math.max(0, left),
+    );
+    return () => clearTimeout(timer);
+  }, [saved.savedAt]);
   // A refusal of the day itself (no longer a driver) also means reading access again.
   useEffect(() => {
     if (day.isError) noteRefusal(day.error);
@@ -381,6 +424,12 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     let allowed = await locationPermission();
     if (allowed === "undetermined") allowed = await askLocationPermission();
     setPermission(allowed);
+    // Android 13+: the notice shown while the position is shared needs its
+    // own permission, asked once, right here (the explanation screen says so).
+    // A "no" does not stop the sharing; only the notice stays hidden.
+    if (allowed === "granted" && (await noticePermission()) === "undetermined") {
+      await askNoticePermission();
+    }
     const started = allowed === "granted" ? await startTracking() : "denied";
     setTracking(started);
     return started;
@@ -515,7 +564,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     await outbox.discard((entry) => entry.kind === "position");
     await outbox.setOwner(null);
     connectOutbox(null);
-    await session.signOut();
+    return session.signOut();
   }, [session]);
 
   const value: DriverValue = {

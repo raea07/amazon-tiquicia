@@ -23,11 +23,15 @@
  *   stop was already closed, the route ended) is kept as "rejected" with the
  *   message to show, and the pass carries on with the next one.
  * - **Survives restarts.** Every change is written to the store it is given
- *   (the encrypted app storage on a phone).
+ *   (the app's ordinary storage on a phone, which the operating system
+ *   encrypts with the device; the kit ships no cipher). Entries are plain
+ *   data and nothing here writes to the log.
  * - **One account's actions are never sent as another's.** Each entry
  *   records who queued it. Only the signed-in account's entries are shown and
- *   sent; another account's stay stored, untouched, until that account signs
- *   in again on this phone or they expire (`maxAgeMs`).
+ *   sent. Signing out (`setOwner(null)`) keeps that account's entries, so the
+ *   same person can send them after signing in again; a different account
+ *   signing in on this phone (a change of account) removes them from the
+ *   store, since they could never be sent as anyone else.
  * - **Nothing goes stale silently.** An entry waits at most `maxAgeMs`, which
  *   may differ per entry (a position means nothing after a few minutes, an
  *   arrival after a day). Past that it is not sent: it is dropped, or, when
@@ -146,7 +150,10 @@ function isEntry(value: unknown): value is QueueEntry {
 export interface OfflineQueue {
   /** Reads the stored queue. Every other method waits for it; calling it again does nothing. */
   load(): Promise<void>;
-  /** Who is signed in (null: nobody). Only their entries are shown and sent. */
+  /**
+   * Who is signed in (null: nobody). Only their entries are shown and sent.
+   * A different account removes every entry queued by anyone else.
+   */
   setOwner(owner: string | null): Promise<void>;
   /** Adds an action for the signed-in account. Throws if nobody is signed in. */
   enqueue<P>(kind: string, payload: P, options?: { coalesce?: string }): Promise<QueueEntry<P>>;
@@ -325,6 +332,12 @@ export function createOfflineQueue(options: QueueOptions): OfflineQueue {
       if (owner === next) return;
       owner = next;
       lastFlush = null;
+      if (next !== null && entries.some((entry) => entry.owner !== next)) {
+        // A change of account: the previous person's actions can never be
+        // sent as this one, so they do not stay on the phone either.
+        entries = entries.filter((entry) => entry.owner === next);
+        await persist();
+      }
       changed();
     },
 

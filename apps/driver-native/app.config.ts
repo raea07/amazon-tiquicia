@@ -14,12 +14,16 @@ import type { ExpoConfig } from "expo/config";
  * that adds photos or scanning gives them Spanish texts instead.
  *
  * What all four apps share is in packages/expo-kit/src/config.ts. Permission
- * texts are in Spanish and say why, as both stores require. `easProjectId`
- * and `owner` are filled in after `eas init` creates the project.
+ * texts are in Spanish and say why, as both stores require. `owner` is the
+ * company's Expo team account; `easProjectId` is filled in after `eas init`
+ * creates the project there.
  */
 export default (): ExpoConfig =>
   defineAppConfig("driver", {
     slug: "yuntera-ruta",
+    // The Expo team account the project will live in, as for the shopper app.
+    // The project itself (and its id) is created by `eas init` under it.
+    owner: "raulea07s-team",
     easProjectId: undefined,
     plugins: [
       [
@@ -61,6 +65,14 @@ export default (): ExpoConfig =>
       "android.permission.READ_EXTERNAL_STORAGE",
       "android.permission.WRITE_EXTERNAL_STORAGE",
     ],
+    // Android 13 and later show the location foreground service's notice only
+    // to an app that may post notifications. Asked for (after the app's own
+    // explanation) when the driver starts sharing the position, never for
+    // anything else: the app sends no other notification.
+    androidPermissions: ["android.permission.POST_NOTIFICATIONS"],
+    // The day kept for a dead zone holds customers' details; it stays off
+    // Google's cloud backup (iOS: AsyncStorage is excluded from backups).
+    androidBackup: false,
     // expo-task-manager's plugin, applied by Expo automatically, adds "fetch";
     // route tracking needs only the "location" background mode.
     removeBackgroundModes: ["fetch"],

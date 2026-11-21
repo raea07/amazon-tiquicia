@@ -12,7 +12,7 @@
 import type { Api, ApiError } from "@yuntera/db";
 import { messageOf } from "@yuntera/expo-kit/api";
 import { createOfflineQueue, type FlushResult } from "@yuntera/expo-kit/offline";
-import { sessionStorage } from "@yuntera/expo-kit/supabase";
+import { appStorage } from "@yuntera/expo-kit/supabase";
 import { ageLimit, expiredMessage, type PositionPayload, sendWith } from "./send";
 
 export {
@@ -27,12 +27,18 @@ export {
 } from "./send";
 
 /**
- * Kept in the encrypted app storage (the same arrangement as the session),
- * because positions and stop ids are the driver's personal data. Each entry
- * belongs to the account that queued it and is never sent as anyone else.
+ * Kept in the app's ordinary storage, which the operating system encrypts
+ * with the device and keeps to this app (the kit ships no cipher). It is
+ * rewritten with every position, and the location task writes it while the
+ * screen is locked. Entries hold stop ids, failure reasons and the driver's
+ * positions, never a customer's name, phone or address (the screens look
+ * those up in the day). Each entry belongs to the account that queued it and
+ * is never sent as anyone else: positions go at sign-out, all of an
+ * account's entries go when it loses access or another account signs in on
+ * the phone, and every entry has an age limit (send.ts).
  */
 export const outbox = createOfflineQueue({
-  store: sessionStorage,
+  store: appStorage,
   key: "yuntera-ruta.outbox.v1",
   // All three are safe to send again when it is unknown whether the first
   // try arrived: the database refuses a second arrival or failure for the

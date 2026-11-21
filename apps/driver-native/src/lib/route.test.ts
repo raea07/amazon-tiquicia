@@ -5,6 +5,7 @@ import {
   attemptsNotice,
   checkDelivery,
   countCash,
+  keptOnPhone,
   needsTracking,
   nextStop,
   refusalMessage,
@@ -156,5 +157,43 @@ describe("the day as the driver sees it", () => {
       needsTracking(withQueued(day([stop(1)]), [{ kind: "fail", stopId: "s1", reason: "other" }])),
       false,
     );
+  });
+});
+
+describe("what is kept on the phone for a dead zone", () => {
+  it("keeps the routes still to drive, and no phone number for a stop already closed", () => {
+    const today = {
+      ...day([
+        stop(1, { status: "delivered", phone: "+50688880001" }),
+        stop(2, { status: "failed", phone: "+50688880002" }),
+        stop(3, { status: "arrived", phone: "+50688880003" }),
+        stop(4, { phone: "+50688880004" }),
+      ]),
+    } as DriverDay;
+    const finished = {
+      ...today.routes[0],
+      route_id: "r0",
+      code: "R-0",
+      status: "completed",
+      stops: [stop(9, { status: "delivered", phone: "+50688880009" })],
+    };
+    const cancelled = { ...finished, route_id: "r00", code: "R-00", status: "cancelled" };
+    const assigned = { ...today.routes[0], route_id: "r2", code: "R-2", status: "assigned" };
+    const kept = keptOnPhone({
+      ...today,
+      routes: [finished, cancelled, ...today.routes, assigned],
+    } as DriverDay);
+
+    assert.deepEqual(
+      kept.routes.map((route) => route.code),
+      ["R-1", "R-2"],
+    );
+    assert.deepEqual(
+      kept.routes[0]?.stops.map((s) => s.phone),
+      ["", "", "+50688880003", "+50688880004"],
+    );
+    assert.ok(!JSON.stringify(kept).includes("+50688880009"));
+    // The driver's own details stay, so the app still opens without signal.
+    assert.equal(kept.driver.full_name, "Carlos");
   });
 });

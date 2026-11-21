@@ -82,24 +82,29 @@ function Directions({ stop }: { stop: ShownStop }) {
         >
           Abrir en Waze
         </Button>
-        <Button
-          variant="secondary"
-          block
-          style={styles.cell}
-          onPress={() => openOutside(`tel:${stop.phone}`)}
-          testID="stop-call"
-        >
-          Llamar
-        </Button>
-        <Button
-          variant="secondary"
-          block
-          style={styles.cell}
-          onPress={() => openOutside(whatsappUrl(stop.phone))}
-          testID="stop-whatsapp"
-        >
-          WhatsApp
-        </Button>
+        {/* The copy saved for a dead zone keeps no phone for a stop already closed. */}
+        {stop.phone ? (
+          <>
+            <Button
+              variant="secondary"
+              block
+              style={styles.cell}
+              onPress={() => openOutside(`tel:${stop.phone}`)}
+              testID="stop-call"
+            >
+              Llamar
+            </Button>
+            <Button
+              variant="secondary"
+              block
+              style={styles.cell}
+              onPress={() => openOutside(whatsappUrl(stop.phone))}
+              testID="stop-whatsapp"
+            >
+              WhatsApp
+            </Button>
+          </>
+        ) : null}
       </View>
     </Card>
   );

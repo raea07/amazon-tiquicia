@@ -83,6 +83,26 @@ export function withQueued(day: DriverDay, queued: QueuedStopAction[]): ShownRou
   }));
 }
 
+/**
+ * The part of the day worth keeping on the phone for a dead zone, and no
+ * more: the routes still to be driven (assigned or in progress), and for
+ * stops already closed on the server no phone number, since nobody needs to
+ * call a customer whose parcel is delivered or on its way back. Finished and
+ * cancelled routes, which driver_today returns for a day, are shown while
+ * there is signal but never written to the phone.
+ */
+export function keptOnPhone(day: DriverDay): DriverDay {
+  return {
+    ...day,
+    routes: day.routes
+      .filter((route) => route.status === "assigned" || route.status === "in_progress")
+      .map((route) => ({
+        ...route,
+        stops: route.stops.map((stop) => (isOpen(stop) ? stop : { ...stop, phone: "" })),
+      })),
+  };
+}
+
 /** The next stop to go to: the first open one, skipping those left for later. */
 export function nextStop(route: ShownRoute, later: ReadonlySet<string> = new Set()) {
   const open = route.stops.filter(isOpen);

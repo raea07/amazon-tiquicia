@@ -408,12 +408,44 @@ describe("offline queue: accounts", () => {
     await q.flush(api.send);
     expect(api.received).toEqual(["arrive:s9"]);
 
-    // Ana's action is still there, and is sent when she is back.
+    // A change of account: Ana's action could never be sent as Luis, so it
+    // left the phone when he signed in.
+    expect(store.map.get(KEY) ?? "").not.toContain("s1");
     const later = queueOn(store);
     await later.setOwner("ana");
-    expect(later.snapshot().pending).toBe(1);
+    expect(later.snapshot().pending).toBe(0);
+  });
+
+  it("keeps an account's actions across its own sign-out and sign-in", async () => {
+    const store = fakeStore();
+    const q = queueOn(store);
+    await q.setOwner("ana");
+    await q.enqueue("fail", "s1");
+    await q.flush(async () => ({ result: "offline" }));
+    await q.setOwner(null);
+    expect(q.snapshot().entries).toEqual([]);
+
+    const later = queueOn(store);
+    await later.setOwner("ana");
+    const api = server();
     await later.flush(api.send);
-    expect(api.received).toEqual(["arrive:s9", "fail:s1"]);
+    expect(api.received).toEqual(["fail:s1"]);
+  });
+
+  it("removes another account's entries from the store at a change of account, after a restart too", async () => {
+    const store = fakeStore();
+    const before = queueOn(store);
+    await before.setOwner("ana");
+    await before.enqueue("arrive", "s1");
+    await before.enqueue("position", "p1", { coalesce: "position" });
+    await before.flush(async (entry) =>
+      entry.kind === "arrive" ? { result: "rejected", message: "no" } : { result: "offline" },
+    );
+
+    const after = queueOn(store);
+    await after.setOwner("luis");
+    expect(after.snapshot().entries).toEqual([]);
+    expect(store.map.has(KEY)).toBe(false);
   });
 
   it("stops a pass when the account changes during it", async () => {
@@ -427,9 +459,10 @@ describe("offline queue: accounts", () => {
       await q.setOwner("luis");
       return { result: "done" };
     });
+    // The pass stopped at once; Luis signing in also removed what Ana had left.
     expect(sent).toEqual(["s1"]);
     await q.setOwner("ana");
-    expect(q.snapshot().entries.map((e) => e.payload)).toEqual(["s2"]);
+    expect(q.snapshot().entries).toEqual([]);
   });
 
   it("discards what matches, for example positions at sign-out", async () => {

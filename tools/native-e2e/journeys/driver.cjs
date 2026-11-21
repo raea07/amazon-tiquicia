@@ -564,6 +564,17 @@ async function newRoute() {
   await driver.dispose();
 
   // ── 8. Sign out: nothing of the day stays on the phone ──
+  // Before that: finished routes are shown, but the copy kept for a dead zone
+  // holds only routes still to drive, so no customer of today is left in it.
+  const keptDay = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => k.includes(".day."));
+    return key ? localStorage.getItem(key) : null;
+  });
+  check(
+    keptDay !== null && JSON.parse(keptDay).value.routes.length === 0,
+    "with both routes finished, the copy saved on the phone keeps no route",
+  );
+  check(!/María Fernández|Andrés|\+506/.test(keptDay ?? ""), "and no customer's name or phone");
   await byId("sign-out").click();
   await byId("sign-in-email").waitFor();
   const keys = await page.evaluate(() => Object.keys(localStorage));

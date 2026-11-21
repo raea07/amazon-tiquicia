@@ -5,8 +5,9 @@ import type { ExpoConfig } from "expo/config";
 
 /**
  * The seller app, "Yuntera Vende" (com.yuntera.vende). What all four apps
- * share is in packages/expo-kit/src/config.ts. `easProjectId` and `owner` are
- * filled in after `eas init` creates the project.
+ * share is in packages/expo-kit/src/config.ts. `owner` is the company's Expo
+ * team account; `easProjectId` is filled in after `eas init` creates the
+ * project there.
  *
  * The screens built so far use no camera, photo library, microphone or
  * location, so the app asks for none of them. expo-image-picker (product
@@ -21,6 +22,9 @@ import type { ExpoConfig } from "expo/config";
 export default (): ExpoConfig =>
   defineAppConfig("seller", {
     slug: "yuntera-vende",
+    // The Expo team account the project will live in, as for the shopper app.
+    // The project itself (and its id) is created by `eas init` under it.
+    owner: "raulea07s-team",
     easProjectId: undefined,
     plugins: [
       [
