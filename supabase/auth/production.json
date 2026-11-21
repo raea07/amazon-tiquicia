@@ -1,0 +1,20 @@
+{
+  "$comment": "Sign-in settings for the production project, applied by supabase/scripts/auth-config.sh. ${NAME} is read from the environment when the script runs. Field names are the Management API's (PATCH /v1/projects/<ref>/config/auth); the first group was set on the preview project on 21 Nov 2026 (runbook step 6), the second group is taken from the Management API's naming and is checked by the script reading the settings back.",
+  "settings": {
+    "site_url": "https://www.yuntera.cr",
+    "uri_allow_list": "https://www.yuntera.cr/auth/confirm,https://vende.yuntera.cr/auth/confirm,https://central.yuntera.cr/auth/confirm,https://ruta.yuntera.cr/auth/confirm,https://bodega.yuntera.cr/auth/confirm",
+    "disable_signup": false,
+    "external_email_enabled": true,
+    "mailer_autoconfirm": false,
+    "password_min_length": 8,
+    "mfa_totp_enroll_enabled": true,
+    "mfa_totp_verify_enabled": true,
+
+    "mailer_otp_exp": 3600,
+    "mailer_otp_length": 6,
+    "smtp_max_frequency": 60,
+    "mailer_secure_email_change_enabled": true,
+    "security_update_password_require_reauthentication": false
+  },
+  "notifications": true
+}

@@ -1,3 +1,4 @@
+import { AccountSecuritySection } from "@yuntera/next-kit/account";
 import { buttonClass, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -58,6 +59,8 @@ async function Account() {
             </button>
           </form>
         </section>
+
+        <AccountSecuritySection />
       </div>
 
       <section id="direcciones" aria-labelledby="dir-titulo" className="scroll-mt-28">

@@ -8,9 +8,11 @@ import {
   TextAreaField,
   TextField,
 } from "@yuntera/ui";
-import { type ReactNode, useActionState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { type ReactNode, useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import type { ActionState } from "../types";
+import { ConfirmEmailPanel, PasswordRules } from "./account-forms";
 
 type FormAction = (previous: ActionState, formData: FormData) => Promise<ActionState>;
 
@@ -124,9 +126,21 @@ export function ActionForm({
   );
 }
 
-/** E-mail and password. The action decides where to go next. */
+/**
+ * E-mail and password. The action decides where to go next. An account whose
+ * address is not confirmed yet is told so, with the code entry and a resend.
+ */
 export function SignInForm({ action, returnTo }: { action: FormAction; returnTo: string }) {
   const [state, formAction] = useActionState(action, initial);
+  if (state.step === "confirm-email" && state.values?.email) {
+    return (
+      <ConfirmEmailPanel
+        email={state.values.email}
+        tone="danger"
+        message={`${state.error ?? ""} Lo enviamos a ${state.values.email}.`}
+      />
+    );
+  }
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="siguiente" value={returnTo} />
@@ -148,6 +162,12 @@ export function SignInForm({ action, returnTo }: { action: FormAction; returnTo:
       <SubmitButton block size="lg" pendingLabel="Ingresando…">
         Ingresar
       </SubmitButton>
+      <Link
+        href="/recuperar"
+        className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-link underline"
+      >
+        Olvidé mi contraseña
+      </Link>
     </form>
   );
 }
@@ -166,6 +186,10 @@ export function SignUpForm({
   legalBase?: string;
 }) {
   const [state, formAction] = useActionState(action, initial);
+  const [password, setPassword] = useState("");
+  if (state.step === "confirm-email" && state.values?.email) {
+    return <ConfirmEmailPanel email={state.values.email} tone="success" message={state.ok} />;
+  }
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="siguiente" value={returnTo} />
@@ -189,8 +213,10 @@ export function SignUpForm({
         type="password"
         autoComplete="new-password"
         minLength={8}
-        hint="Al menos 8 caracteres."
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
       />
+      <PasswordRules password={password} />
       {/* Unticked by default: consent has to be something the person does. */}
       <label className="flex items-start gap-3 text-sm">
         <input

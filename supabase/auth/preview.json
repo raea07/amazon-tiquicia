@@ -1,0 +1,20 @@
+{
+  "$comment": "Sign-in settings for the preview project, applied by supabase/scripts/auth-config.sh. ${NAME} is read from the environment when the script runs: YUNTERA_SHOP_URL and YUNTERA_REDIRECT_URLS (comma-separated <app address>/auth/confirm for each app). Confirmation stays off on the preview until custom SMTP exists: the built-in sender only mails members of the Supabase organisation, twice an hour.",
+  "settings": {
+    "site_url": "${YUNTERA_SHOP_URL}",
+    "uri_allow_list": "${YUNTERA_REDIRECT_URLS}",
+    "disable_signup": false,
+    "external_email_enabled": true,
+    "mailer_autoconfirm": true,
+    "password_min_length": 8,
+    "mfa_totp_enroll_enabled": true,
+    "mfa_totp_verify_enabled": true,
+
+    "mailer_otp_exp": 3600,
+    "mailer_otp_length": 6,
+    "smtp_max_frequency": 60,
+    "mailer_secure_email_change_enabled": true,
+    "security_update_password_require_reauthentication": false
+  },
+  "notifications": false
+}

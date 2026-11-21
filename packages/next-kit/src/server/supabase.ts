@@ -86,5 +86,14 @@ export async function sessionClient(): Promise<SupabaseClient> {
 }
 
 export async function sessionApi(): Promise<Api> {
-  return createApi(transportFor(await sessionClient()));
+  return apiFor(await sessionClient());
+}
+
+/**
+ * The API through a given session client, so a call made right after that
+ * client changed the session (a second factor just passed) carries the new
+ * token rather than the one the request's cookies arrived with.
+ */
+export function apiFor(client: SupabaseClient): Api {
+  return createApi(transportFor(client));
 }

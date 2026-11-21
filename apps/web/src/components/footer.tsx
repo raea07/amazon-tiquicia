@@ -63,6 +63,11 @@ export function Footer() {
                 Privacidad
               </Link>
             </li>
+            <li>
+              <Link href="/ayuda/eliminar-cuenta" className="hover:text-ink hover:underline">
+                Eliminar su cuenta
+              </Link>
+            </li>
           </ul>
         </nav>
       </div>

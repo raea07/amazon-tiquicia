@@ -1,0 +1,45 @@
+{
+  "layout": "_layout.html",
+  "templates": {
+    "confirmation": {
+      "subject": "Confirme su correo en Yuntera",
+      "file": "confirmation.html"
+    },
+    "recovery": {
+      "subject": "Restablezca su contraseña de Yuntera",
+      "file": "recovery.html"
+    },
+    "email_change": {
+      "subject": "Confirme su nuevo correo en Yuntera",
+      "file": "email_change.html"
+    },
+    "magic_link": {
+      "subject": "Su enlace para ingresar a Yuntera",
+      "file": "magic_link.html"
+    },
+    "invite": {
+      "subject": "Le invitaron a Yuntera",
+      "file": "invite.html"
+    },
+    "reauthentication": {
+      "subject": "{{ .Token }} es su código de verificación de Yuntera",
+      "file": "reauthentication.html"
+    },
+    "password_changed_notification": {
+      "subject": "Su contraseña de Yuntera cambió",
+      "file": "password_changed_notification.html"
+    },
+    "email_changed_notification": {
+      "subject": "El correo de su cuenta de Yuntera cambió",
+      "file": "email_changed_notification.html"
+    },
+    "mfa_factor_enrolled_notification": {
+      "subject": "Activó la verificación en dos pasos en Yuntera",
+      "file": "mfa_factor_enrolled_notification.html"
+    },
+    "mfa_factor_unenrolled_notification": {
+      "subject": "Se quitó la verificación en dos pasos en Yuntera",
+      "file": "mfa_factor_unenrolled_notification.html"
+    }
+  }
+}

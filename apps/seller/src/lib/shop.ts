@@ -1,6 +1,12 @@
 import "server-only";
 import type { Roles } from "@yuntera/db";
-import { getRoles, redirectTo, requireRoles, sessionApi } from "@yuntera/next-kit/server";
+import {
+  getRoles,
+  redirectTo,
+  requireRoles,
+  secondStepPath,
+  sessionApi,
+} from "@yuntera/next-kit/server";
 import { cookies } from "next/headers";
 import { cache } from "react";
 
@@ -26,9 +32,15 @@ export async function currentShop(): Promise<{ roles: Roles; shop: Shop } | null
   return shop ? { roles, shop } : null;
 }
 
-/** Like `currentShop`, but sends visitors to sign in and people without a shop to register one. */
+/**
+ * Like `currentShop`, but sends visitors to sign in, people without a shop to
+ * register one, and a person who turned the second factor on but has not
+ * passed it in this session to the second step.
+ */
 export async function requireShop(returnTo: string): Promise<{ roles: Roles; shop: Shop }> {
   const roles = await requireRoles(returnTo);
+  const step = await secondStepPath(returnTo);
+  if (step) redirectTo(step);
   const shop = pick(roles, (await cookies()).get(SHOP_COOKIE)?.value);
   if (!shop) redirectTo("/registro");
   return { roles, shop };

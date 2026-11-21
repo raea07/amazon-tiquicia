@@ -1,4 +1,5 @@
 import { parsePhone } from "@yuntera/core";
+import { AccountSecuritySection } from "@yuntera/next-kit/account";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Alert, Badge, formatDate, Skeleton } from "@yuntera/ui";
@@ -37,6 +38,10 @@ export default function AccountPage() {
         <Suspense fallback={<Skeleton className="h-96" />}>
           <Account />
         </Suspense>
+      </div>
+      <div className="mt-10 max-w-4xl">
+        <h2 className="mb-4 text-2xl font-bold">Su acceso</h2>
+        <AccountSecuritySection secondFactor />
       </div>
     </div>
   );

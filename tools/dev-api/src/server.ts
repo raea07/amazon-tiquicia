@@ -2,15 +2,20 @@
  * Local stand-in for the Supabase API.
  *
  * WHAT IT IS  A small HTTP server that answers what the apps ask of Supabase:
- *             database function calls (`/rest/v1/rpc/*`) and e-mail + password
- *             sessions (`/auth/v1/*`). It lets the apps run end to end against
- *             a plain local PostgreSQL, with no Docker.
+ *             database function calls (`/rest/v1/rpc/*`) and Auth (`/auth/v1/*`):
+ *             sign-in and sign-up, sessions and refresh tokens, e-mail
+ *             confirmation and password recovery by link or 6-digit code, and
+ *             time-based second factors. It lets the apps run end to end
+ *             against a plain local PostgreSQL, with no Docker. E-mails land in
+ *             a local mailbox (GET /dev/mail), never in a real inbox.
  *
  * WHAT IT IS NOT  Supabase. It is never deployed and must never be exposed to a
- *             network: it has no rate limiting and keeps refresh tokens in
- *             memory. Production uses Supabase's own services. Behaviour the
- *             apps rely on is kept to a narrow, documented surface so the two
- *             cannot drift far — but the first run against real Supabase is
+ *             network: it has no per-IP rate limits, no CAPTCHA, no leaked-
+ *             password check and no phone or OAuth sign-in. Production uses
+ *             Supabase's own services. The Auth requests and answers follow
+ *             docs/research/supabase-auth-storage-wire-format.md, and what is
+ *             imitated and what is not is listed at the top of
+ *             src/routes/auth.ts — but the first run against real Supabase is
  *             still a real test.
  *
  * Start:  pnpm --filter @yuntera/dev-api start
@@ -46,7 +51,7 @@ const server = createServer((req, res) => {
   const url = new URL(req.url ?? "/", ORIGIN);
   handle({ req, res, url, route: `${req.method} ${url.pathname}` }).catch((error: unknown) => {
     if (res.headersSent) return res.end();
-    if (error instanceof HttpError) return send(res, error.status, error.body);
+    if (error instanceof HttpError) return send(res, error.status, error.body, error.headers);
     console.error(error);
     send(res, 500, { code: "XX000", message: "Internal error in the local stand-in" });
   });
