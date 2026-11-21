@@ -12,9 +12,10 @@
 
 export type Locale = "es-CR" | "en";
 
-type Messages = Record<string, { "es-CR": string; en: string }>;
+import { areaErrors } from "./areas";
+import type { Messages } from "./areas/types";
 
-export const ERROR_MESSAGES = {
+const CORE_MESSAGES = {
   // ── Session ──
   not_authenticated: {
     "es-CR": "Inicie sesión para continuar.",
@@ -403,6 +404,9 @@ export const ERROR_MESSAGES = {
     en: "That sort order does not exist.",
   },
 } as const satisfies Messages;
+
+/** Every error code the API can return: the core ones above plus each area's. */
+export const ERROR_MESSAGES = { ...CORE_MESSAGES, ...areaErrors } as const satisfies Messages;
 
 export type ErrorCode = keyof typeof ERROR_MESSAGES;
 

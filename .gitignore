@@ -42,3 +42,6 @@ tools/dev-api/.keys
 
 # Browser journey screenshots
 tools/e2e/screenshots/
+
+# Per-lane logs and process ids written by tools/dev/stack.sh
+.lane/

@@ -9,6 +9,7 @@ export {
   type SaveAddressInput,
   type SearchInput,
 } from "./api";
+export * from "./areas";
 export {
   ApiError,
   ERROR_MESSAGES,

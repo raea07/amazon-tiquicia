@@ -10,6 +10,7 @@
  */
 
 import { z } from "zod";
+import { areaApi } from "./areas";
 import { ApiError, type TransportError, toApiError } from "./errors";
 import * as s from "./schemas";
 
@@ -125,7 +126,7 @@ export function createApi(transport: RpcTransport) {
   const run = (fn: string, args: Record<string, unknown> = {}) =>
     call(fn, args, z.unknown()).then(() => undefined);
 
-  return {
+  const core = {
     // ── Browse (no account needed) ──────────────────────────────────────────
     searchProducts: (input: SearchInput = {}) =>
       call(
@@ -612,6 +613,9 @@ export function createApi(transport: RpcTransport) {
     auditEntries: (table?: string | null, limit?: number) =>
       call("audit_entries", { p_table: table ?? undefined, p_limit: limit }, z.array(s.auditEntry)),
   };
+
+  // Areas added after the first cut live in src/areas, one file each.
+  return { ...core, ...areaApi({ call, run }) };
 }
 
 export type Api = ReturnType<typeof createApi>;
