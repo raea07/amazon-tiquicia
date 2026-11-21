@@ -403,19 +403,19 @@ Through the Management API (`PATCH /v1/projects/<ref>/config/auth`) or
 Authentication → settings in the dashboard. Read the current values first;
 the full object contains secrets, so print only the fields you change.
 
-| Setting                            | Management API field                                  | Preview (set 21 Nov 2026)                                     | Production                      |
-| ---------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------- | ------------------------------- |
-| Site URL                           | `site_url`                                            | The shop's `vercel.app` address                               | `https://www.yuntera.cr`        |
-| Additional redirect URLs           | `uri_allow_list`                                      | Each app's `/auth/confirm`                                    | Each app's production address   |
-| Sign-ups allowed                   | `disable_signup` = false                              | Yes                                                           | Yes                             |
-| E-mail provider                    | `external_email_enabled`                              | Enabled                                                       | Enabled                         |
-| Confirm e-mail                     | `mailer_autoconfirm` (true means **no** confirmation) | **Off**: turn on with SMTP                                    | On                              |
-| Minimum password length            | `password_min_length`                                 | 8, to match the apps' forms                                   | 8 or more                       |
-| Leaked-password protection         | `password_hibp_enabled`                               | Off: needs the Pro plan                                       | On                              |
-| Multi-factor authentication (TOTP) | `mfa_totp_enroll_enabled`, `mfa_totp_verify_enabled`  | Enabled                                                       | Enabled                         |
-| Code length in e-mails             | `mailer_otp_length`                                   | 6 (the platform's default was 8)                              | 6                               |
+| Setting                            | Management API field                                  | Preview (set 21 Nov 2026)                                    | Production                      |
+| ---------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------ | ------------------------------- |
+| Site URL                           | `site_url`                                            | The shop's `vercel.app` address                              | `https://www.yuntera.cr`        |
+| Additional redirect URLs           | `uri_allow_list`                                      | Each app's `/auth/confirm`                                   | Each app's production address   |
+| Sign-ups allowed                   | `disable_signup` = false                              | Yes                                                          | Yes                             |
+| E-mail provider                    | `external_email_enabled`                              | Enabled                                                      | Enabled                         |
+| Confirm e-mail                     | `mailer_autoconfirm` (true means **no** confirmation) | **Off**: turn on with SMTP                                   | On                              |
+| Minimum password length            | `password_min_length`                                 | 8, to match the apps' forms                                  | 8 or more                       |
+| Leaked-password protection         | `password_hibp_enabled`                               | Off: needs the Pro plan                                      | On                              |
+| Multi-factor authentication (TOTP) | `mfa_totp_enroll_enabled`, `mfa_totp_verify_enabled`  | Enabled                                                      | Enabled                         |
+| Code length in e-mails             | `mailer_otp_length`                                   | 6 (the platform's default was 8)                             | 6                               |
 | E-mail templates and subjects      | `mailer_templates_*`, `mailer_subjects_*`             | ⚠ Supabase's defaults: refused without SMTP on the free plan | Ours, from `supabase/templates` |
-| Custom SMTP                        | `smtp_*`                                              | Not set                                                       | **Required**                    |
+| Custom SMTP                        | `smtp_*`                                              | Not set                                                      | **Required**                    |
 
 The Site URL and redirect URLs are set once the apps' Vercel addresses exist
 (step 7). The redirect list must hold each app's `/auth/confirm` address: every
