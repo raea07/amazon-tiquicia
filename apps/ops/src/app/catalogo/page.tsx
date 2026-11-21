@@ -4,6 +4,7 @@ import { photoPreviews, sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Badge, EmptyState, formatDateTime, formatPrice, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { reviewListingEdit } from "@/app/listing-actions";
 import { reviewNewListing } from "@/app/photo-actions";
@@ -21,6 +22,14 @@ export default function CatalogPage() {
         legal venderlo, que la descripción sea veraz y que no copie una marca ajena. Un precio alto
         o bajo no es motivo de rechazo.
       </PageHeader>
+      <p className="mt-2 text-sm">
+        <Link
+          href="/catalogo/fotos"
+          className="inline-flex min-h-11 items-center text-link underline"
+        >
+          Retirar una foto que ya está en la tienda
+        </Link>
+      </p>
       <div className="mt-6">
         <Suspense fallback={<Skeleton className="h-96" />}>
           <Review />
@@ -41,8 +50,10 @@ async function Review() {
   const photosOf = new Map(photoQueue.map((item) => [item.product_id, item]));
   const photoChanges = photoQueue.filter((item) => item.kind === "change");
   const toPublish = photoQueue.filter((item) => item.kind === "publish");
+  // Staff look at the largest copy: it is the one the public sizes are made from.
   const previews = await photoPreviews(
     photoQueue.flatMap((item) => [...item.before, ...item.after]),
+    { size: 1600 },
   );
 
   return (

@@ -44,6 +44,15 @@ const id = z.uuid();
 
 const deleteUnneededFiles = (productId: string) => deleteUnneededPhotoFiles(productId);
 
+/**
+ * Changing the photos of a listing that waits for review sends it back to
+ * draft (staff must not publish photos they did not see): say so.
+ */
+const BACK_TO_DRAFT =
+  " Como cambió las fotos mientras el producto esperaba revisión, volvió a borrador: envíelo a revisión de nuevo cuando termine.";
+const backToDraft = (before: string, after: string) =>
+  before === "pending_review" && after === "draft" ? BACK_TO_DRAFT : "";
+
 export interface PhotoUploadTarget {
   photoId: string;
   contentType: string;
@@ -100,8 +109,10 @@ export async function finishPhotoUpload(input: z.input<typeof finishSchema>): Pr
   await requireSeller(`/productos/${productId}`);
 
   const api = await sessionApi();
+  let before = "";
   try {
-    const { seller_id: sellerId } = await api.sellerPhotos(productId);
+    const { seller_id: sellerId, status } = await api.sellerPhotos(productId);
+    before = status;
     const storage = (await sessionClient()).storage.from(PHOTO_BUCKETS.pending);
     for (const size of PHOTO_RULES.sizes) {
       const { data } = await storage.download(
@@ -122,8 +133,8 @@ export async function finishPhotoUpload(input: z.input<typeof finishSchema>): Pr
     return { error: messageOf(error) };
   }
   const state = await attempt(async () => {
-    await api.sellerFinishPhoto(photoId, alt, width, height);
-    return "Foto agregada.";
+    const finished = await api.sellerFinishPhoto(photoId, alt, width, height);
+    return `Foto agregada.${backToDraft(before, finished.listing_status)}`;
   });
   if (state.ok) refresh();
   return state;
@@ -140,13 +151,12 @@ export async function savePhotos(input: z.input<typeof orderSchema>): Promise<Ac
   if (!parsed.success) return { error: GENERIC_ERROR };
   await requireSeller(`/productos/${parsed.data.productId}`);
   const state = await attempt(async () => {
-    const saved = await (await sessionApi()).sellerSavePhotos(
-      parsed.data.productId,
-      parsed.data.items,
-    );
+    const api = await sessionApi();
+    const { status: before } = await api.sellerPhotos(parsed.data.productId);
+    const saved = await api.sellerSavePhotos(parsed.data.productId, parsed.data.items);
     return saved.outcome === "in_review"
       ? "Guardamos el orden y los textos. Como el producto está publicado, los revisamos antes de mostrarlos; mientras tanto la tienda muestra las fotos aprobadas."
-      : "Guardamos el orden y los textos de las fotos.";
+      : `Guardamos el orden y los textos de las fotos.${backToDraft(before, saved.listing_status)}`;
   });
   if (state.ok) refresh();
   return state;
@@ -159,10 +169,12 @@ export async function removePhoto(productId: string, photoId: string): Promise<A
   if (!product.success || !photo.success) return { error: GENERIC_ERROR };
   await requireSeller(`/productos/${product.data}`);
   const state = await attempt(async () => {
-    const { outcome } = await (await sessionApi()).sellerRemovePhoto(photo.data);
+    const api = await sessionApi();
+    const { status: before } = await api.sellerPhotos(product.data);
+    const { outcome, listing_status: after } = await api.sellerRemovePhoto(photo.data);
     if (outcome === "removed") {
       await deleteUnneededFiles(product.data);
-      return "Quitamos la foto.";
+      return `Quitamos la foto.${backToDraft(before, after)}`;
     }
     return "La foto se quitará cuando aprobemos el cambio. Mientras tanto la tienda la sigue mostrando.";
   });

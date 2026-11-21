@@ -64,7 +64,7 @@ async function EditListing({ params, searchParams }: PageProps<"/productos/[id]"
   const variantName = listing.variants.find((v) => v.sku_id === listing.content.sku_id);
   const photos = archived ? null : await (await sessionApi()).sellerPhotos(listing.product_id);
   const previews = photos
-    ? await photoPreviews([...photos.photos, ...photos.leaving])
+    ? await photoPreviews([...photos.photos, ...photos.leaving], { waiting: { route: "/fotos" } })
     : new Map<string, string>();
   const managed = (list: NonNullable<typeof photos>["photos"]): ManagedPhoto[] =>
     list.map((photo) => ({ ...photo, preview: previews.get(photo.photo_id) ?? null }));

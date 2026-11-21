@@ -14,14 +14,23 @@ import {
   uploadPhoto,
 } from "@/lib/photo-client";
 
+/** A focus ring on a label that holds a hidden file input. */
+const FOCUS =
+  "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus";
+
 const ALT_HINT =
   "Describa lo que se ve, como se lo contaría a alguien que no puede ver la foto. Ejemplo: «Licuadora con vaso de vidrio, vista de frente». No hace falta escribir «foto de».";
 
 export interface QueuedPhoto extends PreparedPhoto {
+  /** Which chosen file it came from, to notice the same file chosen twice. */
+  source: string;
   alt: string;
   progress: number | null;
   error: string | null;
 }
+
+// Name and size: a phone names every camera picture alike, but no two weigh the same.
+const sourceOf = (file: File) => `${file.name}:${file.size}`;
 
 /**
  * Choosing photos: from the files on the device or, on a phone, the camera.
@@ -52,14 +61,22 @@ export function PhotoQueue({
     setPreparing(true);
     const found: string[] = [];
     const ready: QueuedPhoto[] = [];
-    for (const [index, file] of Array.from(list).entries()) {
-      if (index >= free) {
+    // The same file chosen again (same name and size) is not added twice.
+    const seen = new Set(items.map((item) => item.source));
+    for (const file of Array.from(list)) {
+      const source = sourceOf(file);
+      if (seen.has(source)) {
+        found.push(`«${file.name}» ya está en la lista, así que no la agregamos otra vez.`);
+        continue;
+      }
+      if (ready.length >= free) {
         found.push(`«${file.name}» no se agregó: ${PROBLEM_MESSAGE.too_many}.`);
         continue;
       }
+      seen.add(source);
       try {
         const photo = await preparePhoto(file);
-        ready.push({ ...photo, alt: "", progress: null, error: null });
+        ready.push({ ...photo, source, alt: "", progress: null, error: null });
       } catch (error) {
         const problem = error instanceof PhotoProblemError ? error.problem : "unreadable";
         found.push(`«${file.name}» ${PROBLEM_MESSAGE[problem]}.`);
@@ -80,8 +97,10 @@ export function PhotoQueue({
         <label
           className={buttonClass({
             variant: "secondary",
-            className:
-              free <= 0 || busy || preparing ? "pointer-events-none opacity-55" : "cursor-pointer",
+            // The input inside is what has the focus; show it on the button.
+            className: `${FOCUS}${
+              free <= 0 || busy || preparing ? " pointer-events-none opacity-55" : " cursor-pointer"
+            }`,
           })}
         >
           Elegir fotos
@@ -100,8 +119,8 @@ export function PhotoQueue({
         <label
           className={buttonClass({
             variant: "secondary",
-            className: `hidden pointer-coarse:inline-flex ${
-              free <= 0 || busy || preparing ? "pointer-events-none opacity-55" : "cursor-pointer"
+            className: `hidden pointer-coarse:inline-flex${FOCUS}${
+              free <= 0 || busy || preparing ? " pointer-events-none opacity-55" : " cursor-pointer"
             }`,
           })}
         >
@@ -296,12 +315,27 @@ export function PhotoManager({
   const fromServer = () =>
     photos.map((photo) => ({ photoId: photo.photo_id, alt: photo.alt ?? "" }));
   const [order, setOrder] = useState(fromServer);
-  // When the page brings new photos (one was added or decided), start from them.
+  // When the page brings a new list (a photo was added, removed or decided),
+  // take it, but keep the text the seller typed and has not saved yet for the
+  // photos that are still there.
   const source = photos.map((photo) => `${photo.photo_id}:${photo.alt ?? ""}`).join("|");
-  const [seen, setSeen] = useState(source);
-  if (seen !== source) {
-    setSeen(source);
-    setOrder(fromServer());
+  const [seen, setSeen] = useState({ source, photos });
+  if (seen.source !== source) {
+    const savedBefore = new Map(seen.photos.map((photo) => [photo.photo_id, photo.alt ?? ""]));
+    const typed = new Map(
+      order
+        .filter(
+          (item) => savedBefore.has(item.photoId) && item.alt !== savedBefore.get(item.photoId),
+        )
+        .map((item) => [item.photoId, item.alt]),
+    );
+    setSeen({ source, photos });
+    setOrder(
+      photos.map((photo) => ({
+        photoId: photo.photo_id,
+        alt: typed.get(photo.photo_id) ?? photo.alt ?? "",
+      })),
+    );
   }
   const [queue, setQueue] = useState<QueuedPhoto[]>([]);
   const [busy, setBusy] = useState(false);
@@ -362,7 +396,9 @@ export function PhotoManager({
         <p className="mt-1 text-sm text-ink-muted">
           {published
             ? "Agregar, quitar o reordenar fotos de un producto publicado pasa por revisión. Mientras tanto la tienda sigue mostrando las fotos aprobadas."
-            : "Las fotos se revisan junto con el producto. La primera es la que se ve en las listas y búsquedas."}
+            : status === "pending_review"
+              ? "Las fotos se revisan junto con el producto. Si las cambia ahora, el producto vuelve a borrador y tendrá que enviarlo a revisión otra vez."
+              : "Las fotos se revisan junto con el producto. La primera es la que se ve en las listas y búsquedas."}
         </p>
       </div>
 
@@ -435,7 +471,7 @@ export function PhotoManager({
                       variant="secondary"
                       size="sm"
                       disabled={busy || index === 0}
-                      aria-label={`Subir la foto ${index + 1} un lugar`}
+                      aria-label={`Antes: mover la foto ${index + 1} un lugar antes`}
                       onClick={() => move(index, -1)}
                     >
                       ↑ Antes
@@ -444,7 +480,7 @@ export function PhotoManager({
                       variant="secondary"
                       size="sm"
                       disabled={busy || index === order.length - 1}
-                      aria-label={`Bajar la foto ${index + 1} un lugar`}
+                      aria-label={`Después: mover la foto ${index + 1} un lugar después`}
                       onClick={() => move(index, 1)}
                     >
                       ↓ Después

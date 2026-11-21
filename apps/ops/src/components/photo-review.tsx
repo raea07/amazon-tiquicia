@@ -35,7 +35,7 @@ export function PhotoStrip({
               data-review-photo={photo.photo_id}
             >
               {preview ? (
-                // biome-ignore lint/performance/noImgElement: a 400 px copy shown through a short-lived link
+                // biome-ignore lint/performance/noImgElement: the largest copy, through a short-lived link
                 <img
                   src={preview}
                   alt={photo.alt ?? ""}
@@ -51,6 +51,22 @@ export function PhotoStrip({
                 {photo.state === "pending" ? <Badge tone="warning">Nueva</Badge> : null}
                 {removing.includes(photo.photo_id) ? <Badge tone="danger">Se quita</Badge> : null}
               </p>
+              {photo.files_changed ? (
+                <p className="text-danger">
+                  El vendedor volvió a subir el archivo después de terminar la foto. No se
+                  publicará: al aprobar, se rechaza sola.
+                </p>
+              ) : null}
+              {preview ? (
+                <a
+                  href={preview}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-11 items-center text-link underline"
+                >
+                  Ver la foto {index + 1} en tamaño completo
+                </a>
+              ) : null}
               <p className="text-ink-muted">
                 <span className="sr-only">Texto alternativo: </span>
                 {photo.alt ?? photo.live_alt}
