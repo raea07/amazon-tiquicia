@@ -2,13 +2,19 @@
  * Local stand-in for the Supabase API.
  *
  * WHAT IT IS  A small HTTP server that answers what the apps ask of Supabase:
- *             database function calls (`/rest/v1/rpc/*`) and e-mail + password
- *             sessions (`/auth/v1/*`). It lets the apps run end to end against
- *             a plain local PostgreSQL, with no Docker.
+ *             database function calls (`/rest/v1/rpc/*`), e-mail + password
+ *             sessions (`/auth/v1/*`) and the file storage calls storage-js
+ *             makes (`/storage/v1/*`, listed in src/routes/storage.ts). It lets
+ *             the apps run end to end against a plain local PostgreSQL, with
+ *             no Docker. Storage decisions are made by the same rules on
+ *             storage.objects that the migrations create, evaluated by
+ *             PostgreSQL as the caller; the files sit on local disk.
  *
  * WHAT IT IS NOT  Supabase. It is never deployed and must never be exposed to a
  *             network: it has no rate limiting and keeps refresh tokens in
- *             memory. Production uses Supabase's own services. Behaviour the
+ *             memory. Its storage has no CDN, no image transformation, no
+ *             listing or moving of files and none of the storage service's
+ *             own database triggers. Production uses Supabase's own services. Behaviour the
  *             apps rely on is kept to a narrow, documented surface so the two
  *             cannot drift far — but the first run against real Supabase is
  *             still a real test.
