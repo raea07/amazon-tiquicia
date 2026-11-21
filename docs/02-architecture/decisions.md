@@ -24,7 +24,7 @@ its own entry, not something that happens by drift.
 | 15  | [Fees regrounded on published gateway costs](#15-fees-regrounded-on-published-gateway-costs)                                                        | Built; amounts are assumptions           |
 | 16  | [No cloud resources created without the owner](#16-no-cloud-resources-created-without-the-owner)                                                    | Standing                                 |
 | 17  | [Native styling: plain StyleSheet with tokens from the brand package](#17-native-styling-plain-stylesheet-with-tokens-from-the-brand-package)       | Built                                    |
-| 18  | [The session is encrypted on phones](#18-the-session-is-encrypted-on-phones)                                                                        | Built; unverified on a device            |
+| 18  | [The session lives in the phone's secure store alone](#18-the-session-lives-in-the-phones-secure-store-alone)                                       | Built; unverified on a device            |
 | 19  | [A darker field outline in the native apps than on the web](#19-a-darker-field-outline-in-the-native-apps-than-on-the-web)                          | Built                                    |
 | 20  | [The seller app's store identifier is cr.yuntera.vende](#20-the-seller-apps-store-identifier-is-cryunteravende)                                     | Chosen; owner to confirm                 |
 | 21  | [The brand package does not declare React](#21-the-brand-package-does-not-declare-react)                                                            | Built                                    |
@@ -488,31 +488,65 @@ native components draw is listed there and tested for 4.5:1 or 3:1 contrast.
 - Styles are written as objects, not class names, so screens are a little more
   verbose than with a utility-class library.
 
-## 18. The session is encrypted on phones
+## 18. The session lives in the phone's secure store alone
 
 **Context.** A signed-in session holds a refresh token, which is as good as
-the password until it expires. The phone's secure store (Keychain, Keystore)
-is the right place for it, but it is meant for small values and a session is
-larger than it accepts reliably. Ordinary app storage takes any size but is
-plain text, readable from a backup or a rooted phone.
+the password until it expires, so on a phone it belongs in the platform's
+secure store: the Keychain on iOS, storage encrypted with a Keystore key on
+Android, both reached through `expo-secure-store`. That store is meant for
+small values, and a session (two tokens and the user) is larger than it
+reliably accepts. The first version therefore encrypted the session in
+JavaScript with AES (`aes-js`), kept the ciphertext in ordinary app storage
+and only the random key in the secure store. Shipping a cipher of our own
+makes Apple's export-compliance question, asked for every build and holding
+it as "Missing Compliance" until answered, a matter for an adviser. The apps
+are about to go to TestFlight and Google Play internal testing.
 
-**Decision.** Encrypt the session with AES (`aes-js`) and keep the ciphertext
-in ordinary app storage; keep only the random key in the secure store. On
-iOS the key is readable after the phone's first unlock (so a background task
-can still call the API) and only on this device
-(`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`), so a backup restored on another phone
-starts signed out. Signing out always removes the session from the phone,
-even with no connection. The web export of the apps, used only for the
-journeys, keeps the session in the browser's local storage instead and must
-not serve as a model for a public website.
+**Decision.** Ship no cipher. The session is kept only in the secure store,
+split into pieces of at most 1,024 bytes of UTF-8 (half the roughly 2,048
+bytes some iOS releases refused), never cutting a character, with a small
+manifest written last (`packages/expo-kit/src/supabase/secure-session-storage.ts`).
+Pieces go into whichever of two slots the manifest does not point to, so at
+every moment the manifest points to a complete value or to none; byte length
+and a checksum confirm the pieces read back, and anything inconsistent reads
+as signed out and is deleted. Calls run one at a time. On iOS the pieces stay
+readable after the phone's first unlock (so a background task can still call
+the API) and only on this device (`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`), so
+a backup restored on another phone starts signed out. Because the iOS
+Keychain survives uninstalling the app, a marker in ordinary storage (not
+secret) records that this installation has cleaned up; when it is missing,
+the first call removes what the old adapter left (the ciphertext in ordinary
+storage and its key in the secure store) and any session kept from before a
+reinstall. All four apps declare `ios.config.usesNonExemptEncryption: false`
+(`packages/expo-kit/src/config.ts`): the apps' only encryption is the
+operating system's (HTTPS, Keychain, Keystore), which is exempt. A test fails
+if a cipher, hash or key-derivation library is added to the kit, a native
+app or a package they bundle. The web export, used only for the journeys,
+keeps the session in the browser's local storage and must not serve as a
+model for a public website.
 
 **Consequences.**
 
-- A copy of the app's storage without the secure store reveals nothing useful.
-- The logic is unit-tested with fake stores; whether the secure store and the
-  encryption behave on a real phone is unknown until a build is installed.
-- Because the app encrypts data, App Store Connect asks an export-compliance
-  question (`usesNonExemptEncryption`). It is left for the owner to answer.
+- Everyone signed in to a native app signs in once more after this update.
+  Only development and test builds existed before it, so only their
+  testers are affected.
+- TestFlight builds no longer wait on the export-compliance question. The
+  declaration must be revisited if an app ever adds encryption of its own.
+- The size limit was taken from Expo's SecureStore documentation ("some iOS
+  releases refused values above roughly 2048 bytes. Expo does not enforce a
+  limit") and checked in the installed `expo-secure-store` 58.0.3: the iOS
+  module stores the value's UTF-8 bytes in one Keychain item with no limit
+  of its own, and the Android module encrypts it with a Keystore key into
+  one SharedPreferences entry, also with no limit. Key names may contain
+  only letters, digits, `.`, `-` and `_`, checked in its source. The real
+  limits on today's phones, the behaviour after a restore to a new device
+  and the Keychain setting are unverified until a build is installed.
+- A session now takes several secure-store calls to read; the last value is
+  kept in memory, so this happens once per start rather than before every
+  API call. A second JavaScript runtime writing the session at the same time
+  is not supported.
+- The logic is unit-tested with fake stores, including stores that fail or
+  stop at every write of an update and of a sign-out.
 
 ## 19. A darker field outline in the native apps than on the web
 
