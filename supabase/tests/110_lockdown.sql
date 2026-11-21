@@ -645,10 +645,9 @@ select pg_temp.denied('DTA-14', format('delete from public.product_images where 
 reset role;
 
 -- ── DTA-15, DTA-M1: suspended sellers' products; sales volumes ─────────────
--- DTA-15 is closed here only as far as the direct read goes. get_product and
--- shop_path_exists still serve a suspended seller's own product pages to a
--- visitor (search no longer lists them): that is a rule of those functions,
--- left to the workstream that owns them.
+-- The direct read is closed here. The product page itself (get_product and
+-- shop_path_exists) is closed by the limits migration (083000); its test is
+-- in 120_limits.sql ("Merge: what the streams left to each other").
 
 update public.sellers set status = 'suspended' where slug = 'tienda-sendero';
 select pg_temp.login_anon();
