@@ -36,7 +36,7 @@ back-off, no lease, no dedupe): add a per-consumer job row written by a trigger,
 a SQL planner that turns an event into one **delivery row per recipient and
 channel**, and a worker that claims deliveries with `FOR UPDATE SKIP LOCKED` plus
 a lease, retries with exponential back-off inside Bird's 3-hour idempotency
-window, dead-letters, and keeps per-order FIFO. Trigger it with `pg_net` (kick on
+window (with a new key after any retained `4xx` such as `402`), dead-letters, and keeps per-order FIFO. Trigger it with `pg_net` (kick on
 insert) plus `pg_cron` (sweep), and keep all logic in a Node-testable package
 with a thin Deno entry file. On this note's reading of the Costa Rican texts
 (a lawyer must confirm it), the order, delivery, refund and account messages are
@@ -198,11 +198,13 @@ can briefly return `404` [B1] [B2].
 | Still in flight | `409 E01004 RequestInProgress`; lock expires within 30 s; retry same key | [B2] [B3] |
 | Protection unavailable | `503 E01033 IdempotencyUnavailable`, attempt not executed; retry same key | [B3] |
 | `5xx` | not retained; retry with the same key and body | [B3] |
-| Retained `4xx` | a retained rejection is replayed for the same key, so **after fixing a `422` use a new key** | [B3] |
+| Retained `4xx` | a retained rejection is replayed for the same key, so **after fixing a `422` use a new key**. The guide does not limit this to `422`: a `402 WalletInsufficientBalance` retried with the same key after the wallet is topped up can come back as the replayed `402`. Whether a `429` is retained is not stated (**UNVERIFIED**; it is refused before execution, so probably not) | [B3] |
 
 Consequences for our worker: freeze the exact request body text before the
 first attempt and resend those bytes; keep the whole retry horizon under 3
-hours; add a generation suffix to the key when a human requeues a dead message.
+hours; add a generation suffix to the key when a human requeues a dead message,
+**and also when retrying after any `4xx` other than `409 E01004` and `429`**
+(for example after a `402`, once the wallet is funded).
 
 ### 1.4 Sending domain and DNS
 
@@ -312,7 +314,10 @@ Bounce classes: `10`, `30` hard; `20–24`, `40`, `70`, `100` soft; `25` admin;
 | `complaint` | automatically on a spam complaint | yes | no | **no** (dashboard only; `422 SuppressionNotRemovableByAPIKey`) |
 | `manual` | us (`POST /v1/email/suppressions {email}`; idempotent, `201` or `200`) | yes | **yes** | yes |
 
-Source [B10]. Unsubscribes are stored as **preferences**, not suppressions; an
+Source [B10]. A complaint that Bird can attribute to a Brand does **not** create
+a `complaint` suppression: it records a revoked preference (`origin: complaint`)
+for that Brand, fires `preference.revoked` and **no** `email_suppression.created`.
+Only unattributed complaints land in the table above [B7] [B10]. Unsubscribes are stored as **preferences**, not suppressions; an
 opt-out recorded with coverage "all messages" blocks transactional mail too
 [B10] [B11]. Look up with `GET /v1/email/suppressions?email=` (prefix match:
 compare the full address yourself); addresses never go in a URL path [B10].
@@ -396,8 +401,8 @@ Source [B8] [P1].
 | Step | Who | Detail | Source |
 | --- | --- | --- | --- |
 | Meta business portfolio | owner | created or selected inside Meta's Embedded Signup, opened from Bird's **WhatsApp > Numbers** page | [B16] [B17] |
-| A phone number | owner | three paths: a number allocated by Bird (Bird receives Meta's code); **a number from another provider ("I have my own number", Meta sends the code by SMS or voice)**; or an existing WhatsApp Business app number through **coexistence**. A number on personal WhatsApp must have that account deleted first. WhatsApp numbers carry no extra Bird charge | [B17] [B19] |
-| WhatsApp Business Account (WABA) | created in the same flow | templates live on the WABA; `from` must be a number on the same WABA as the template (`422 E15023` otherwise) | [B16] [B20] |
+| A phone number | owner | three paths: a dedicated number bought from Bird and allocated to the workspace (Bird receives Meta's code); **a number from another provider ("I have my own number", Meta sends the code by SMS or voice)**; or an existing WhatsApp Business app number through **coexistence**. A number on personal WhatsApp either moves to the WhatsApp Business app and then connects by coexistence, or has its WhatsApp account deleted (wait up to three minutes) before connecting; coexistence cannot take a personal-app number directly. Connecting a number to WhatsApp carries no extra Bird charge; a number bought from Bird is still a paid number subscription | [B17] [B19] |
+| WhatsApp Business Account (WABA) | created in the same flow | templates live on the WABA; `from` must be a number on the same WABA as the template (`422 E15023 WhatsAppSenderWABAMismatch` otherwise; a number the workspace cannot send from is `422 WhatsAppSenderNotFound`) | [B15] [B23] |
 | Business verification (Meta) | owner | **not** required to author utility or marketing templates; required to author authentication templates. It raises the limits: an unverified portfolio is limited to 2 numbers and 250 unique customers per 24 h for business-initiated messages, scaling to 2,000; Meta's decision can come within minutes or take up to 14 business days | [B20] [B21] [B24] |
 | Templates approved by Meta | us | every business-initiated message outside the 24-hour window must be an approved template | [B15] [B22] |
 | Opt-in | us | section 2.5 | [B19] [M1] |
@@ -443,10 +448,13 @@ Rules that cause rejections or surprises [B20] [B21] [B23] [B27]:
   variable needs a sample value; too many variables for too little text is
   rejected.
 - Approval is per language and asynchronous: `pending`, `approved`, `rejected`,
-  `paused`, `disabled`. A send can only use a language listed in
-  `available_languages`. No guaranteed review time.
-- Per-language time to live (`message_send_ttl_seconds`): utility 30 s to 12 h.
-  Set a short one on "out for delivery" so a late message is dropped.
+  `submit_failed`, `paused`, `disabled`, `limit_exceeded`, `in_appeal`. A send
+  can only use a language listed in `available_languages`, and only from the
+  template's `live_version_id`. No guaranteed review time.
+- Per-language time to live (`message_send_ttl_seconds`): utility 30 s to 12 h;
+  **if it is not set, utility defaults to 30 days**. It counts from the hand-off
+  to Meta. Set a short one on "out for delivery" so a late message is dropped;
+  changing only the TTL needs no new review.
 - The language tag for Spanish (`es` versus a regional code) should be read from
   the template editor; which Spanish codes are offered is **UNVERIFIED**.
 
@@ -516,10 +524,18 @@ Status flow: `accepted` → `sent` (handed to WhatsApp) → `delivered` or `fail
   the method is the business's choice; "Businesses must comply with applicable
   law" [M1]. Bird: opt-in is required "for anything you start"; Meta enforces
   after the fact through quality ratings and template pauses [B19].
-- Opt-out: Bird ships a keyword catalogue on our own numbers: a reply of `STOP`
-  opts out, `START` reverses it; rules can be customised (**Keywords** page)
-  [B28] [B31]. Whether Spanish keywords such as `BAJA` are in the default
-  catalogue is **UNVERIFIED**; add them as our own rule.
+- Opt-out: Bird ships a keyword catalogue on our own numbers. The worldwide set
+  is `stop`, `stop all`, `stopall`, `unsubscribe`, `cancel`, `end`, `quit`,
+  `revoke`, `optout`; `start` and `unstop` reverse it. Matching is on the whole
+  message, ignoring case, accents and trailing punctuation, so "cancelar mi
+  pedido" does not opt anyone out. Our own rule (`POST
+  /v1/whatsapp/keyword-rules`, `operation: "opt_out"`, `keywords`, `reply`)
+  adds keywords and a Spanish reply; it never removes Bird's unless
+  `excluded_keywords` says so [B28] [B31]. Bird may hold a larger set per
+  sender country; whether that set for `CR` already contains Spanish words such
+  as `baja` is **UNVERIFIED** (it is readable with `GET
+  /v1/whatsapp/keyword-rules?country=CR&scope=system`, not run here); add them
+  as our own rule with `country: "CR"`.
 - A blocked send is accepted and then fails asynchronously with
   `whatsapp.rejected`, `error.code: "recipient_suppressed"` [B28]. Opt-outs also
   arrive as `preference.revoked` with `channel: "whatsapp"` [B6].
@@ -542,7 +558,8 @@ country. Bird's fee is charged when the send is processed and is kept even if
 delivery later fails; Meta's share is charged on the `delivered` or `read`
 receipt. Inbound messages are free. **Since 1 October 2026** service messages
 and utility templates sent inside an open window are charged too, with 1,000
-free service messages per business number per month. Bird pays Meta on our
+free service messages per business number per month (confirmed on Meta's own
+pricing pages, which also say Meta charges only for delivered messages) [M2]. Bird pays Meta on our
 behalf from the wallet; no Meta payment method is needed. A Scale plan
 discounts only Bird's fee [P4].
 
@@ -583,8 +600,8 @@ Event types: `whatsapp.accepted`, `whatsapp.sent`, `whatsapp.delivered`,
 | Content rules | "Political, adult, gambling traffic is prohibited"; "Mobile operators do not allow promotional messages from other operators to be delivered to their subscribers"; quiet hours "apply" but the window is not stated | [P6] |
 | Price | **US$0.10 per segment** outbound (alphanumeric or short code); US$0.0010 inbound on a short code; no carrier fee listed | [P5] |
 | Segments | 160 chars (GSM-7) or 70 (UCS-2) per single segment; capped at 12 segments; `options.smart_encoding` swaps typographic characters only | [B33] |
-| Spanish accents | `á`, `í`, `ó`, `ú` are outside GSM-7 and force 70-char segments (`é`, `ñ`, `¿`, `¡` are inside). From the GSM 03.38 alphabet, **UNVERIFIED** today; write SMS copy without those four or budget two segments | — |
-| Events | `sms.accepted`, `sms.sent`, `sms.delivered`, `sms.undelivered`, `sms.failed`, `sms.rejected`, `sms.expired`; failures carry `error {code, description, carrier_error_code, occurred_at}` | [B35] |
+| Spanish accents | Bird's character-limits page confirms `á`, `í`, `ú` force UCS-2 (70 chars per single segment, 67 per part) and `é` does not [B38]. `ó` outside and `ñ`, `¿`, `¡` inside GSM-7 come from the GSM 03.38 alphabet, not opened today (**UNVERIFIED**). Write SMS copy without `á í ó ú` or budget two segments; the response's `segments.encoding` (`GSM_7BIT` or `UCS2`) shows what was billed | [B38] |
+| Events | `sms.accepted`, `sms.sent`, `sms.delivered`, `sms.undelivered`, `sms.failed`, `sms.rejected`, `sms.expired`; failures carry `error {code, description, carrier_error_code, occurred_at}`. Also `sms.received` (inbound) and `sms_suppression.created`: a `STOP` reply suppresses only that sender-and-subscriber pair | [B35] |
 | Not supported | `scheduled_at` and several other fields return `422 SMSUnsupportedFeature` | [B33] |
 
 Conclusion: SMS to Costa Rica is six times the price of a WhatsApp utility
@@ -707,10 +724,16 @@ Design choice: **send synchronously from the hook**, not through the outbox.
 Auth mail is latency-sensitive, the hook already gives the user an error if
 sending fails, and queuing would park a live token hash in a table. Use
 `Idempotency-Key: auth/<webhook-id>` so Auth's own retries cannot double-send.
-If Bird answers `5xx` or times out, return `503` with `retry-after: 1`.
+If Bird answers `5xx` or times out, return `503` with `retry-after: 1`. Because
+Auth's 5-second budget covers the first call, a 2-second back-off and the
+retries, give the Bird call its own timeout of about 2 seconds, or a slow first
+attempt leaves no room for the retry.
 
-**UNVERIFIED:** whether Auth's hourly e-mail rate limit still applies when the
-hook is enabled; the exact timeout of Postgres-function hooks (the page renders
+Auth's hourly e-mail limit **does** still apply with the hook: the rate-limits
+page lists "emails sent" as configurable "when you use custom SMTP or the Send
+Email hook" [S12]. Raise it on the Rate Limits page in both set-ups.
+
+**UNVERIFIED:** the exact timeout of Postgres-function hooks (the page renders
 it from a config value that was not shown).
 
 ---
@@ -729,7 +752,7 @@ Client-side setup (permissions, channels, config plugin) is in
 | The token is stable across app upgrades. On Android a reinstall may change it; on iOS it survives uninstall and reinstall. It changes if the `applicationId` or the Expo project changes. **It never expires** | [E2] |
 | `addPushTokenListener` fires in the rare case the token changes while the app runs; re-register | [E3] |
 | When the app is uninstalled or permission is revoked, Expo eventually reports `DeviceNotRegistered`; this "takes an undefined amount of time" | [E1] [E2] |
-| Remote push does not work in Expo Go on Android from SDK 53; use a development build | [E3] |
+| Remote push does not work in Expo Go on Android from SDK 53 (the FAQ says Expo Go in SDK 53 and later does not support push at all); use a development build on both platforms | [E2] [E3] |
 
 Rules for our server:
 
@@ -782,13 +805,18 @@ Message fields we use [E1]: `to`, `title`, `body`, `data` (for example
 `{ "url": "/pedidos/YT-000123" }`), `sound: "default"` (iOS), `channelId`
 (Android; **if the channel does not exist on the device the notification is not
 shown**), `priority: "high"` for delivery-day messages, `ttl` (seconds; set a
-few hours on "out for delivery"), `collapseId` (one per order, so a newer status
-replaces an older one in transit), `badge`.
+few hours on "out for delivery"; a very low `ttl` with normal priority may never
+reach an Android phone in doze), `collapseId` (one per order: on iOS it also
+replaces a notification already on screen, **on Android it only coalesces
+messages still in transit**), `tag` (Android only: replaces a notification
+already displayed with the same tag, so send it too, with the same value),
+`badge`.
 
 ```json
 [{ "to": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]", "title": "Su pedido va en camino",
    "body": "YT-000123 llega hoy entre 1 p. m. y 5 p. m.", "data": { "url": "/pedidos/YT-000123" },
-   "channelId": "pedidos", "priority": "high", "ttl": 14400, "collapseId": "order-YT-000123" }]
+   "channelId": "pedidos", "priority": "high", "ttl": 14400,
+   "collapseId": "order-YT-000123", "tag": "order-YT-000123" }]
 ```
 
 ### 4.4 Tickets, receipts and errors
@@ -818,7 +846,8 @@ Two stages [E1]:
 | network, HTTP 5xx | — | exponential back-off |
 
 There is no idempotency key on the Expo API. A retry after a lost response can
-show the notification twice; `collapseId` limits the damage on the device.
+show the notification twice; `collapseId` (iOS) and `tag` (Android) limit the
+damage on the device.
 
 ### 4.5 Security
 
@@ -832,6 +861,15 @@ show the notification twice; `collapseId` limits the damage on the device.
   debugging the service may see them [E2], and lock screens show them. **Never
   put the delivery code, an address or an amount owed in a push**; say what
   happened and deep-link into the app.
+- Apple App Review Guideline 4.5.4: push "should not be used to send sensitive
+  personal or confidential information", must not be required for the app to
+  work, and must not be used "for promotions or direct marketing purposes
+  unless customers have explicitly opted in to receive them via consent
+  language displayed in your app's UI", with an in-app way to opt out [A1]. So
+  marketing push needs its own unticked in-app consent (separate from the OS
+  permission prompt) and a switch in the app's settings. No push-specific
+  Google Play clause was found; Play's spam and deceptive-notification policies
+  apply generally (**UNVERIFIED** beyond that).
 
 ---
 
@@ -847,7 +885,7 @@ show the notification twice; `collapseId` limits the damage on the device.
 | **Decreto 37899-MEIC (Reglamento a la Ley 7472), art. 200** (e-commerce chapter, consolidated text printed 11 Feb 2026) | "El comerciante debe abstenerse de enviar comunicaciones por cualquier medio electrónico; cuando las mismas no han sido previamente solicitadas por los consumidores". The merchant must implement "procedimientos efectivos y fáciles de usar" so consumers "elijan si desean recibir o no **mensajes comerciales** y, cuando elijan no recibirlos, su decisión debe ser acatada de forma **inmediata**". A communication made with automatic systems without prior consent, or hiding its origin, without a way to stop it, is unsolicited. SUTEL may refer merchants to the Comisión Nacional del Consumidor | [L3] |
 | **Ley 8968, arts. 5 and 6** | before collecting data, inform of the database, purposes, recipients, rights and the controller's identity and address; consent must be **express and in writing, physical or electronic**, and "podrá ser revocado de la misma forma, sin efecto retroactivo"; art. 6.4: data must not be used for purposes incompatible with those stated | [L4] |
 | **Decreto 37554-JP (Reglamento a la Ley 8968), arts. 4–8** | consent must be free, **specific** ("referido a una o varias finalidades determinadas"), informed, express and individual; given in a document "de forma independiente de cualquier otro documento"; **the burden of proof is on the controller** (art. 6); revocation by "mecanismos expeditos, sencillos y gratuitos" (art. 7), acted on within five business days (art. 8) | [L5] |
-| **Ley 10946 (Gobernanza de los Servicios Digitales y el Comercio Electrónico)**, published 24 Jun 2026, in force 12 months later | per a law-firm summary: digital advertising must be identifiable as such; commercial e-mails must **begin with the word "publicidad", "invitación" or "oferta"**; unsolicited commercial communications are prohibited unless they derive from an existing contractual or pre-contractual relationship; fines by the Comisión Nacional del Consumidor | [L6]; primary text and article numbers **UNVERIFIED** |
+| **Ley 10946 (Gobernanza de los Servicios Digitales y el Comercio Electrónico)**, published 24 Jun 2026 (per secondary sources), "entrará en vigencia 12 meses después de su publicación" (Transitorio único) | **Art. 9**: commercial communications, invitations and offers "deberán ser claramente identificables como tales", with the sender's name identifiable; by e-mail they "incluirán al comienzo del mensaje la palabra publicidad, invitación u oferta, según corresponda"; promotions (discounts, prizes) must be labelled with their conditions accessible. **Art. 29**: the merchant must not send commercial communications "por cualquier medio" that were not previously requested or consented to, "o cuando no se deriven de una relación contractual o precontractual existente"; easy opt-out, honoured "de forma inmediata"; and "**No se podrá supeditar la transacción comercial o la prestación del servicio a la aceptación del consumidor de recibir comunicaciones comerciales**". SUTEL may refer cases to the Comisión Nacional del Consumidor | [L7] (full text as reproduced by a law firm); [L6] (summary). The La Gaceta print was not opened, so the publication date is **UNVERIFIED** |
 | Meta WhatsApp policy | opt-in naming the business, for any business-initiated message; the business must also comply with local law | [M1] |
 
 The copy of Decreto 37554-JP consulted is the TSE print; whether it includes
@@ -906,8 +944,13 @@ lawyer's view.
    `profiles.marketing_opt_in` and `consents.revoked_at`.
 5. **Immediate effect** (art. 200): the database is the source of truth and is
    checked when a delivery is planned **and again when it is claimed**.
-6. **From mid-2027** (Ley 10946): marketing e-mail subjects begin with
-   "Publicidad", "Invitación" or "Oferta" (confirm against the law's text).
+6. **From mid-2027** (Ley 10946 art. 9, in force 12 months after publication):
+   marketing e-mail starts with the word "Publicidad", "Invitación" or "Oferta".
+   The text says "al comienzo del mensaje", which is not necessarily the
+   subject line; put it at the start of the subject **and** of the body until
+   the lawyer or the regulation says which. Art. 29 also forbids making a
+   purchase conditional on accepting commercial messages: the marketing box at
+   checkout or sign-up must never be required to continue.
 7. **Quiet hours.** No Costa Rican rule fixing hours was found in these texts
    (**UNVERIFIED**; Bird's country page only says quiet hours "apply" for SMS
    [P6]). Product rule proposed: no WhatsApp, SMS or push between 21:00 and
@@ -927,8 +970,12 @@ lawyer's view.
 4. Do Ley 8642's sanctions (aimed at an "operador o proveedor") apply to a
    merchant, or is the exposure through the Comisión Nacional del Consumidor
    (art. 200) and PRODHAB only?
-5. Exact wording and article numbers of Ley 10946 on commercial communications,
-   and its regulation when issued.
+5. Ley 10946 art. 29 treats communications that "se deriven de una relación
+   contractual o precontractual existente" as not unsolicited: from mid-2027,
+   does that widen what may be sent to existing customers without the
+   marketing opt-in, and does Ley 8968's specific consent still require it?
+   Does "al comienzo del mensaje" (art. 9) mean the subject line? Its
+   regulation when issued.
 
 ---
 
@@ -949,6 +996,12 @@ lawyer's view.
 Do not read the outbox with a "last id seen" cursor: identity values are
 assigned before commit, so a transaction with a lower id can commit after a
 higher id was read and be skipped for ever.
+
+Supabase Queues (`pgmq`) was considered as the delivery queue: it offers
+durable messages with "exactly once" delivery "within a customizable visibility
+window" [S13]. It does not give per-order FIFO across retries, a frozen request
+body or a staff-visible dead-letter row on its own, so the plain tables below
+remain the recommendation; `pgmq` would only replace the lease columns.
 
 ### 6.2 Schema (proposed)
 
@@ -1109,7 +1162,7 @@ second message.
 | `409 E01005` | permanent | bug: key reused with a different body |
 | `400`, `404`, `422` (validation, unknown template or language, parameter mismatch, reserved recipient domain, closed service window) | permanent | `dead` at once; needs a code or template fix, then requeue with a new `generation` |
 | `401`, `403`, `421` | configuration | `dead` and staff alert; stop claiming that channel |
-| `402`, e-mail `quota_exceeded`, SMS `SMSDestinationDailySpendExceeded` | account | do not burn attempts: push `available_at` out 15 min and alert staff |
+| `402`, e-mail `quota_exceeded`, SMS `SMSDestinationDailySpendExceeded` | account | do not burn attempts: push `available_at` out 15 min, alert staff, and **bump `generation` and re-freeze the body before the next attempt**: a retained `402`/`422` is replayed for the same key for 3 hours [B3] |
 | Expo `DeviceNotRegistered` | recipient | disable token, `skipped` |
 | recipient opted out or has no address at claim time | recipient | `skipped` |
 
@@ -1126,7 +1179,7 @@ possible; say so on the button).
 | Bird e-mail, WhatsApp, SMS | header `Idempotency-Key: yt/<env>/<delivery id>/<generation>` (≤ 255 chars) | `request_body`, stored before attempt 1 and resent byte for byte |
 | Bird SMTP (Auth standby) | header `X-Bird-Idempotency-Key` [B8] | — |
 | Auth hook | `Idempotency-Key: auth/<webhook-id>` | deterministic render of the hook payload |
-| Expo | none available | `collapseId` per order |
+| Expo | none available | `collapseId` (iOS) and `tag` (Android) per order |
 | Inbound webhooks (Bird) | unique index on `webhook-id`; status changes are monotonic and compare the event `timestamp`, because deliveries are unordered [B6] | — |
 
 ### 6.7 Ordering per order
@@ -1273,7 +1326,7 @@ export type Rendered =
   | { channel: "whatsapp"; templateSlug: string; language: string; parameters: Record<string, string> }
   | { channel: "sms"; text: string }
   | { channel: "push"; title: string; body: string; data: Record<string, string>;
-      channelId?: string; collapseId?: string; ttlSeconds?: number };
+      channelId?: string; collapseId?: string; tag?: string; ttlSeconds?: number };
 
 export interface OutboundMessage {
   deliveryId: string;          // our uuid: reference, metadata.delivery_id
@@ -1502,9 +1555,9 @@ From addresses proposed: `pedidos@<SENDING_DOMAIN>` (orders),
 | 1 | Whether Bird allocates +506 numbers and which +506 number types Meta accepts for WhatsApp | UNVERIFIED |
 | 2 | Spanish language codes offered in Bird's WhatsApp template editor; whether Spanish opt-out keywords are in Bird's default catalogue | UNVERIFIED |
 | 3 | Which short or long code replaces an alphanumeric sender in Costa Rica; delivery quality per operator; the SMS quiet-hours window | UNVERIFIED |
-| 4 | GSM-7 treatment of `á í ó ú` in Bird's segment counter | UNVERIFIED (not opened today) |
-| 5 | Whether Supabase Auth's hourly e-mail limit applies with the Send Email Hook on; Postgres-hook timeout | UNVERIFIED |
-| 6 | Ley 10946: primary text, article numbers and exact entry-into-force date for commercial communications | UNVERIFIED (law-firm summary only) |
+| 4 | GSM-7 treatment of `ó` (Bird confirms `á í ú` force UCS-2) | UNVERIFIED for `ó` only |
+| 5 | Postgres-hook timeout (the hourly e-mail limit does apply with the hook, see 3.3) | UNVERIFIED |
+| 6 | Ley 10946: articles 9 and 29 and the 12-month vacatio read from a law firm's reproduction of the full text; La Gaceta print and the exact publication date not opened | partly UNVERIFIED |
 | 7 | Whether the consulted print of Decreto 37554-JP includes all reforms | UNVERIFIED |
 | 8 | Whether transactional WhatsApp/SMS need consent separate from the privacy notice; reach of the existing-customer exception; whether Ley 8642 fines reach a merchant | legal question |
 | 9 | Version of `@messagebird/sdk`; whether Bird's `email_send` defaults differ from the pricing page | UNVERIFIED; read `RateLimit-Policy` at run time |
@@ -1556,6 +1609,7 @@ Bird documentation, read on 21 Nov 2026 through Bird's documentation tools
 - [B35] <https://bird.com/docs/guides/sms/events> and <https://bird.com/docs/api/reference/list-sms-message-events> (search extracts)
 - [B36] <https://bird.com/docs/guides/email/unsubscribe-links> and <https://bird.com/docs/knowledge-base/deliverability/gmail-yahoo-requirements> (search extracts)
 - [B37] <https://bird.com/docs/guides/whatsapp/overview>
+- [B38] <https://bird.com/docs/guides/sms/character-limits> (fact-check)
 
 Bird public pricing and country pages, fetched 21 Nov 2026:
 
@@ -1579,6 +1633,8 @@ Supabase documentation, read through Supabase's documentation search:
 - [S9] <https://supabase.com/docs/guides/functions/background-tasks>
 - [S10] <https://supabase.com/docs/guides/platform/upgrading> (`pg_cron` records)
 - [S11] <https://supabase.com/docs/guides/ai/automatic-embeddings> (queue + `pg_cron` + `pg_net` + Edge Function pattern)
+- [S12] <https://supabase.com/docs/guides/auth/rate-limits> (fact-check)
+- [S13] <https://supabase.com/docs/guides/queues> (fact-check)
 
 Expo documentation, read through Expo's documentation tools:
 
@@ -1589,6 +1645,8 @@ Expo documentation, read through Expo's documentation tools:
 Meta and PostgreSQL:
 
 - [M1] <https://developers.facebook.com/documentation/business-messaging/whatsapp/getting-opt-in>
+- [M2] <https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing> and <https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing/non-template-messages> (fact-check)
+- [A1] <https://developer.apple.com/app-store/review/guidelines/> §4.5.4 (fact-check)
 - [PG1] <https://www.postgresql.org/docs/16/sql-select.html> (the locking clause)
 
 Costa Rican texts:
@@ -1599,6 +1657,7 @@ Costa Rican texts:
 - [L4] Ley 8968, arts. 5 and 6 — <https://www.tse.go.cr/pdf/normativa/leydeprotecciondelapersona.pdf>
 - [L5] Decreto 37554-JP, arts. 4–8 — <https://www.tse.go.cr/pdf/normativa/reglamentoleyproteccionpersona.pdf>
 - [L6] ECIJA, report on the Ley de Gobernanza de los Servicios Digitales y el Comercio Electrónico (secondary) — <https://files.griddo.ecija.com/ecija-informe-ley-de-gobernanza-de-servicios-digitales-y-comercio-electronico.pdf> and <https://www.ecija.com/actualidad-insights/nueva-ley-de-comercio-electronico-en-costa-rica-guia-para-adaptar-su-negocio-en-los-12-meses-que-tiene-de-plazo>
+- [L7] Ley 10946, full text as reproduced by Bufete de Costa Rica, arts. 9 and 29 and Transitorio único — <https://bufetedecostarica.com/wp-content/uploads/2026/07/gobernanza-de-los-servicios-digitales-y-el-comercio-electronico_10946.pdf> (fact-check; not the official La Gaceta print)
 
 Files in this repository:
 
@@ -1618,3 +1677,74 @@ Files in this repository:
 - `docs/06-operations/customer-service.md:18-22`, `docs/06-operations/logistics-playbook.md:106`
 - `docs/research/supabase-auth-storage-wire-format.md` (§1, §5, §6)
 - `docs/research/expo-native-apps.md` (§4d)
+
+## Corrections after fact-check
+
+Fact-check of 21 November 2026. About 120 load-bearing claims were re-verified
+independently of the note's own citations: Bird through its documentation tools
+only (no account tool was called; nothing was sent, bought or configured), Bird's
+public pricing and country pages, Supabase's documentation search, Expo's
+documentation tools, Meta's developer pages, Apple's App Review Guidelines, and
+the Costa Rican texts downloaded and read in full (Ley 8642 from SUTEL, Decreto
+35205 from SUTEL, Decreto 37899 consolidated SCIJ print of 11 Feb 2026, Ley 8968
+and Decreto 37554 from the TSE). Every re-checked claim not listed below was
+confirmed as written, including: base URLs and the `421` wrong-region answer;
+`Authorization: Bearer bk_{region}_…`; key scopes, one-time display and 24-hour
+rotation grace; `POST /v1/email/messages`, `/v1/email/batches` (100,
+all-or-nothing), `/v1/whatsapp/messages` (one recipient, no batch),
+`/v1/sms/messages` and `/v1/sms/batches` (100) with their field limits; the
+error envelope; every idempotency code (`E01004` lock within 30 s, `E01005`,
+`E01033`, 3-hour retention, raw-body comparison); the rate-limit headers and
+every published plan figure; the Standard Webhooks signature recipe, headers,
+15-second deadline, retry schedule, replay and rotation limits; the e-mail event
+and rejection-reason catalogues and bounce classes; suppression reasons and
+category rules (default `marketing`); DKIM TXT, return-path CNAME and DMARC as the
+send gate with no apex SPF; SMTP hosts, ports, `bird` username, key-level
+configuration and `X-Bird-Idempotency-Key`; WhatsApp prices for Costa Rica
+(US$0.0163 utility, US$0.079 marketing) and the 1 October 2026 change; the
+coexistence 20 messages per second; the SMS Costa Rica page (alphanumeric
+overwritten, one-way; short code preserved; US$0.10 per segment); the Send Email
+Hook payload, action types, reversed e-mail-change hash names, `v1,whsec_`
+secret, 20 KB limit, status-code handling and 5-second budget; custom SMTP's
+30-per-hour start; Edge Function limits; `pg_net`, `pg_cron` and Database
+Webhook facts; the Expo endpoints, 100-message and 1,000-receipt limits, 600 per
+second, 4096 bytes, ticket and receipt shapes, error codes, 15-minute and
+24-hour receipt timing and enhanced push security; and every quoted Costa Rican
+article (Ley 8642 arts. 44, 67 b) 7) and 68 b); Decreto 35205 arts. 31–33;
+Decreto 37899 art. 200; Ley 8968 art. 5.2 and the "adecuación al fin" principle
+in art. 6; Decreto 37554 arts. 4–8).
+
+| # | Where | What the note said | What is right | Source |
+| --- | --- | --- | --- | --- |
+| 1 | 1.3, 6.5, 6.6 | Retained `4xx` replayed for the same key: "after fixing a `422` use a new key"; account errors (`402`, quota) retried later with the same key | Bird retains `4xx` rejections in general, not only `422`. A `402` retried with the same key after a top-up can be replayed as `402` for 3 hours, so the message never goes. The worker now bumps `generation` (new key, new frozen body) after any `4xx` except `409 E01004` and `429`. Whether `429` is retained is not stated | [B3] |
+| 2 | 4.3, 4.4, 6.6, 7 | `collapseId` per order "replaces an older one" and limits duplicates on the device | On Android `collapseId` only coalesces messages in transit; replacing a notification already on screen needs `tag` (Android only). Both are now sent; `tag` added to the `Rendered` push type. Low `ttl` with normal priority may never reach a dozing Android phone | [E1] |
+| 3 | 5.1, 5.3, 5.4 | Ley 10946 known only from a law-firm summary; e-mail "subjects" begin with "Publicidad"… | Full text (law-firm reproduction) read: art. 9 says "al comienzo del mensaje", not the subject; art. 29 bans unconsented commercial messages "por cualquier medio" unless they derive from an existing contractual or pre-contractual relationship, requires immediate opt-out, and forbids making a purchase conditional on accepting commercial messages; in force 12 months after publication. Advice changed to subject **and** body start, and a lawyer question added on the contractual-relationship wording | [L7] |
+| 4 | 3.3, open point 5 | Whether Auth's hourly e-mail limit applies with the hook "UNVERIFIED" | It applies and is configurable with custom SMTP or the hook; raise it in both set-ups. Also added: give the Bird call a ~2 s timeout so Auth's 5 s budget leaves room for one retry | [S12]; [S2] |
+| 5 | 4.5 | No Apple/Google push-content rules | Apple 4.5.4: no sensitive personal data in push, no marketing push without explicit in-app consent and an in-app opt-out. No push-specific Google Play clause found | [A1] |
+| 6 | 2.1 | Personal WhatsApp number "must have that account deleted first"; "no extra Bird charge"; `422 E15023` without a name | Personal-app number: either move to the Business app and use coexistence, or delete the account and wait up to three minutes. Connection is free but a number bought from Bird is a paid subscription. `E15023` is `WhatsAppSenderWABAMismatch`; `WhatsAppSenderNotFound` added | [B15] [B17] [B19] [B23] |
+| 7 | 2.2 | Template statuses `pending/approved/rejected/paused/disabled`; utility TTL range only | Also `submit_failed`, `limit_exceeded`, `in_appeal`; sends use `live_version_id`. Utility TTL **defaults to 30 days** when not set, counted from hand-off to Meta | [B21] |
+| 8 | 2.5 | Default WhatsApp opt-out keywords: `STOP`/`START` | Full worldwide list (nine opt-out words, `start`/`unstop`), whole-message matching ignoring case and accents, and how to add Spanish words with `country: "CR"` | [B31] |
+| 9 | 2.8, open point 4 | `á í ó ú` outside GSM-7 "UNVERIFIED" | Bird confirms `á`, `í`, `ú` force UCS-2 and `é` does not; `ó`, `ñ`, `¿`, `¡` still rest on GSM 03.38 | [B38] |
+| 10 | 2.8 | SMS events list | Adds `sms.received` and `sms_suppression.created`; an SMS `STOP` suppresses one sender-and-subscriber pair | [B35] |
+| 11 | 1.7 | Complaints always create a `complaint` suppression | A complaint attributed to a Brand records a revoked preference instead, with `preference.revoked` and no `email_suppression.created`; the webhook list in section 10 already subscribes to it | [B7] [B10] |
+| 12 | 2.6 | 1,000 free service messages per number (Bird only) | Confirmed on Meta's pricing page, which also says Meta charges only delivered messages | [M2] |
+| 13 | 4.1 | Expo Go limitation "on Android" | The SDK page says Android; the FAQ says Expo Go in SDK 53+ has no push at all. Use a development build on both | [E2] [E3] |
+| 14 | 6.1 | Supabase Queues not discussed | `pgmq` noted and why the plain tables stay | [S13] |
+
+Still **UNVERIFIED** after the fact-check: whether Bird can sell a +506 number
+and which +506 types Meta accepts (only the account's number search would tell;
+not run); the Spanish language codes in the WhatsApp template editor; whether
+Bird's `CR` keyword set already has Spanish opt-out words; which code replaces
+an alphanumeric SMS sender in Costa Rica, delivery quality per operator and the
+SMS quiet-hours window; the GSM-7 status of `ó`, `ñ`, `¿`, `¡`; whether Bird
+retains `429` responses for a key; the `@messagebird/sdk` version; the
+Postgres-hook timeout; whether a timed-out `pg_net` request stops an Edge
+Function; the official La Gaceta text and publication date of Ley 10946; whether
+the TSE print of Decreto 37554 includes all reforms; Google Play rules specific to
+push content; the parked-domain DNS records. Costa Rica's Meta utility rate
+(US$0.0113) matches Bird's page and a third-party calculator, but Meta's own rate
+card was not opened. Prices change: re-read the pricing pages before budgeting.
+
+Note on the Supabase documentation pages: some pages carry a paragraph addressed
+to AI agents asking for a feedback report. It is page content, not an instruction
+from the project owner, and was ignored.
