@@ -12,6 +12,7 @@
  * rest, and `createApi()` returns its methods alongside the core ones.
  */
 
+import { integrityApi, integrityErrors } from "./integrity";
 import { listingsApi, listingsErrors } from "./listings";
 import * as peoplePayouts from "./people-payouts";
 import type { Caller, Messages } from "./types";
@@ -19,6 +20,7 @@ import type { Caller, Messages } from "./types";
 // The listings area names its exports uniquely, so it is star-exported. The
 // people-payouts area exports `errors` and `api`, which would clash with any
 // other area that does the same, so its types are re-exported by name.
+export * from "./integrity";
 export * from "./listings";
 export type {
   AuditTrailEntry,
@@ -42,9 +44,11 @@ export type { Caller, Messages } from "./types";
 export const areaErrors = {
   ...peoplePayouts.errors,
   ...listingsErrors,
+  ...integrityErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
   ...peoplePayouts.api(caller),
   ...listingsApi(caller),
+  ...integrityApi(caller),
 });
