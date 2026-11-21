@@ -67,7 +67,7 @@ export function PayoutDetailsForm({
         name="iban"
         value={iban}
         onChange={(event) => setIban(event.target.value)}
-        placeholder="CR05 0152 0200 1026 2840 66"
+        placeholder="CR00 0000 0000 0000 0000 00"
         autoComplete="off"
         autoCapitalize="characters"
         spellCheck={false}
