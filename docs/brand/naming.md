@@ -47,15 +47,15 @@ that carried the country's coffee to port and is a national symbol of work. To
 do something _en yunta_ is to pull together. **Yuntera** is a coined word built
 on that root.
 
-| Check                                     | Result                                                                            |
-| ----------------------------------------- | --------------------------------------------------------------------------------- |
-| `yuntera.com`                             | Available — US$12.03/yr                                                           |
-| `yuntera.cr`                              | Not delegated in DNS (appears unregistered) — register directly at NIC Costa Rica |
-| `yuntera.app`                             | Available — US$14.99/yr                                                           |
-| `yuntera.store` / `.shop` / `.co` / `.io` | Available                                                                         |
-| Apple App Store (CR, US, MX, ES)          | No app named Yuntera                                                              |
-| Google Play (CR)                          | No app named Yuntera                                                              |
-| Web search                                | No company, brand or product named Yuntera found                                  |
+| Check                                     | Result                                                                                         |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `yuntera.com`                             | **Registered 21 Nov 2026** through the owner's Vercel team (US$12.03/yr, auto-renew on)        |
+| `yuntera.cr`                              | Not delegated in DNS (appears unregistered) — register directly at NIC Costa Rica              |
+| `yuntera.app`                             | **Registered 21 Nov 2026** through the owner's Vercel team (US$9.99 first year, then US$15/yr) |
+| `yuntera.store` / `.shop` / `.co` / `.io` | Available                                                                                      |
+| Apple App Store (CR, US, MX, ES)          | No app named Yuntera                                                                           |
+| Google Play (CR)                          | No app named Yuntera                                                                           |
+| Web search                                | No company, brand or product named Yuntera found                                               |
 
 Why it was chosen over the other survivors:
 

@@ -45,3 +45,6 @@ tools/e2e/screenshots/
 
 # Per-lane logs and process ids written by tools/dev/stack.sh
 .lane/
+
+# Git worktrees created for parallel work
+.claude/worktrees/

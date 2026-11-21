@@ -19,20 +19,19 @@ Supabase API — never against a real Supabase project.
 
 In the order that unblocks the most.
 
-1. **Decide where the database lives.** Your Supabase organisation is on a paid
-   plan, so a new project there is billed (about US$10 a month on top of the
-   plan, by Supabase's published pricing). The alternative is a separate free
-   organisation. I created nothing while you were away because either choice
-   spends your money or creates an account in your name. Once you choose,
-   [`docs/07-deployment/runbook-first-deploy.md`](docs/07-deployment/runbook-first-deploy.md)
-   is the step-by-step, and I can run it with you.
-2. **Confirm the name before spending on it.** `yuntera.com` and `yuntera.app`
-   were available and `yuntera.cr` did not resolve when checked; none has been
-   bought. The checks cover domains, app stores and visible web presence. They
-   are **not** a trademark search: that has to be done at the Registro Nacional
-   before the name is used in public. Details and runner-up names are in
-   [`docs/brand/naming.md`](docs/brand/naming.md). The name lives in one file
-   (`packages/brand/src/brand.ts`), so changing it is cheap.
+1. **Create the free Supabase organisation.** You chose to keep Yuntera out of
+   the paid organisation. Once the free one exists, tell me its name: I create
+   the project there, apply the migrations and follow
+   [`docs/07-deployment/runbook-first-deploy.md`](docs/07-deployment/runbook-first-deploy.md).
+   Until then nothing is deployed and the native apps cannot be tried against a
+   real backend.
+2. **Register `yuntera.cr` and do the trademark search.** `yuntera.com` and
+   `yuntera.app` were bought on 21 November 2026 through your Vercel team
+   (registrant: Astra Vier Solutions; auto-renew on; US$12.03 and US$9.99 for
+   the first year). `yuntera.cr` cannot be bought there: register it at NIC
+   Costa Rica or a reseller. The availability checks are **not** a trademark
+   search; that has to be done at the Registro Nacional before the name is used
+   in public. Details are in [`docs/brand/naming.md`](docs/brand/naming.md).
 3. **Have a Costa Rican lawyer and an accountant read the compliance
    documents.** They were written from public sources by an AI, not by a
    professional: consumer law, electronic invoicing, IVA on a marketplace,
