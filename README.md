@@ -197,4 +197,5 @@ and a phone.
 - [`docs/README.md`](docs/README.md) — index of the plan and architecture
 - [`docs/brand/naming.md`](docs/brand/naming.md) — why the product is called Yuntera
 - [`docs/07-deployment/runbook-first-deploy.md`](docs/07-deployment/runbook-first-deploy.md) — how to put it live
+- [`docs/07-deployment/store-testing.md`](docs/07-deployment/store-testing.md) — testing the shopper app through Google Play internal testing and TestFlight
 - [`docs/02-architecture/overview.md`](docs/02-architecture/overview.md) — how the system fits together

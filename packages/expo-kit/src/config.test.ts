@@ -79,6 +79,26 @@ describe("defineAppConfig", () => {
     expect(shop.ios?.bundleIdentifier).toBe("com.yuntera.shop");
   });
 
+  it("removes the biometric permissions from every app and variant", () => {
+    for (const app of ["shop", "seller", "driver", "warehouse"] as const) {
+      for (const variant of ["development", "preview", undefined]) {
+        if (variant) process.env.APP_VARIANT = variant;
+        else delete process.env.APP_VARIANT;
+        const blocked = defineAppConfig(app, {
+          slug: `yuntera-${app}`,
+          blockedPermissions: ["android.permission.CAMERA"],
+        }).android?.blockedPermissions;
+        expect(blocked).toEqual(
+          expect.arrayContaining([
+            "android.permission.USE_BIOMETRIC",
+            "android.permission.USE_FINGERPRINT",
+            "android.permission.CAMERA",
+          ]),
+        );
+      }
+    }
+  });
+
   it("carries no secret and no placeholder permission text", () => {
     const text = JSON.stringify(configFor());
     expect(text).not.toMatch(/secret|service_role|sb_secret/i);
