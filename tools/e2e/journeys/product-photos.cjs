@@ -5,8 +5,11 @@
 // published listing: the shop keeps the approved set until staff approve, staff reject one
 // new photo with a reason the seller reads, and another seller can touch none of it.
 // A client that skips the browser's checks is played from Node with the seller's own
-// session: the storage service refuses what is too large or not an allowed type, and a
-// text file declared as a JPEG is caught before it is published.
+// session: the storage service refuses what is too large or not an allowed type, an
+// upload address that could later replace the file, and a link to a waiting file; a text
+// file declared as a JPEG is caught before it is published; three different pictures
+// uploaded as one photo's sizes reach the shop only as the one staff looked at. Finally
+// staff take down a photo that is already in the shop.
 //
 // A journey drives the real apps in a real browser against a freshly seeded
 // database. It fails when a step does not arrive where it should, when the
@@ -29,6 +32,8 @@ const ALT_1 = "Cafetera Nimbo vista de frente con la jarra puesta";
 const ALT_2 = "Jarra de vidrio de la cafetera servida en una taza";
 const ALT_3 = "Panel de botones de la cafetera de cerca";
 const ALT_4 = "Cafetera junto a una caja de otra marca";
+const ALT_MIX = "Cafetera vista desde arriba con la tapa abierta";
+const TAKE_DOWN = "La foto muestra el número de teléfono de una persona.";
 const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.";
 
 (async () => {
@@ -119,7 +124,39 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
   const photo2 = await picture(140, 1800, 2400);
   const photo3 = await picture(220, 2000, 2000);
   const photo4 = await picture(300, 1600, 1200);
-  await painter.context().close();
+  // One flat colour each, to tell later which file the shop serves.
+  const flat = (colour, width, height) =>
+    painter
+      .evaluate(
+        ({ colour, width, height }) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const g = canvas.getContext("2d");
+          g.fillStyle = colour;
+          g.fillRect(0, 0, width, height);
+          return canvas.toDataURL("image/jpeg", 0.92).split(",")[1];
+        },
+        { colour, width, height },
+      )
+      .then((b64) => Buffer.from(b64, "base64"));
+  const red400 = await flat("#e00000", 400, 300);
+  const red800 = await flat("#e00000", 800, 600);
+  const green1600 = await flat("#00b000", 1600, 1200);
+  /** The colour in the middle of a JPEG, as [r, g, b], and its pixel size. */
+  const colourOf = (buffer) =>
+    painter.evaluate(async (b64) => {
+      const img = new Image();
+      img.src = `data:image/jpeg;base64,${b64}`;
+      await img.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const g = canvas.getContext("2d");
+      g.drawImage(img, 0, 0);
+      const [r, gr, b] = g.getImageData(canvas.width >> 1, canvas.height >> 1, 1, 1).data;
+      return { rgb: [r, gr, b], width: img.naturalWidth, height: img.naturalHeight };
+    }, buffer.toString("base64"));
   const jpeg = (name, buffer) => ({ name, mimeType: "image/jpeg", buffer });
 
   const sellerContext = await browser.newContext({
@@ -252,17 +289,23 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
     (await text(managed.first())).includes("Se revisa con el producto"),
     "draft photo state not shown",
   );
+  // Waiting photos are shown through the seller centre's own address, under the
+  // seller's session; sellers cannot sign links to them.
   const previewSrc = await managed.first().locator("img").getAttribute("src");
+  check(previewSrc?.startsWith("/fotos/"), `preview is not the seller centre's: ${previewSrc}`);
   check(
-    previewSrc?.includes("/storage/v1/object/sign/product-photos-pending/"),
-    `preview is not a signed link: ${previewSrc}`,
+    await managed
+      .first()
+      .locator("img")
+      .evaluate((img) => img.complete && img.naturalWidth > 0),
+    "the seller cannot see the waiting photo",
   );
+  const viaVisitor = await fetch(SELLER + previewSrc);
+  check(viaVisitor.status === 404, `a visitor opened the preview: ${viaVisitor.status}`);
   await seller.screenshot({ path: `${SHOTS}/pp2-draft-photos.png`, fullPage: true });
 
   // The waiting files are not retrievable by anyone who only knows where they are.
-  const waitingPath = decodeURIComponent(
-    new URL(previewSrc).pathname.replace("/storage/v1/object/sign/product-photos-pending/", ""),
-  );
+  const waitingPath = decodeURIComponent(previewSrc.replace(/^\/fotos\//, ""));
   const sizes = ["400", "800", "1600"];
   for (const size of sizes) {
     const path = waitingPath.replace(/\/400\.jpg$/, `/${size}.jpg`);
@@ -285,6 +328,23 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
 
   // A client that skips the browser: the storage service and the server still decide.
   const sellerToken = await tokenOf(sellerContext);
+  // Not even the owner can make a link anyone could open, for a minute or for ten years.
+  for (const expiresIn of [60, 315360000]) {
+    const own = await storage("POST", `/object/sign/product-photos-pending/${waitingPath}`, {
+      token: sellerToken,
+      type: "application/json",
+      body: JSON.stringify({ expiresIn }),
+    });
+    check(!own.json?.signedURL, `the seller signed a ${expiresIn} s link to a waiting photo`);
+  }
+  // But downloading it with their own session works (that is what the preview does).
+  const ownDownload = await storage("GET", `/object/product-photos-pending/${waitingPath}`, {
+    token: sellerToken,
+  });
+  check(
+    ownDownload.status === 200,
+    `the seller cannot download their photo: ${ownDownload.status}`,
+  );
   const reserved = await rpc(sellerToken, "seller_reserve_photo", { p_product_id: productId });
   check(reserved.status === 200, `reserve answered ${reserved.status}`);
   const files = reserved.body.files;
@@ -296,6 +356,18 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
         body: "{}",
       })
     ).json;
+  // An upload address that may replace the file later is refused when it is asked for.
+  const upsert = await storage(
+    "POST",
+    `/object/upload/sign/product-photos-pending/${files[0].path}`,
+    {
+      token: sellerToken,
+      type: "application/json",
+      body: "{}",
+      headers: { "x-upsert": "true" },
+    },
+  );
+  check(upsert.json?.code === "AccessDenied", `an upsert address answered ${upsert.json?.code}`);
   const big = await signUpload(files[0].path);
   const tooLarge = await storage(
     "PUT",
@@ -464,7 +536,7 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
   check((await rejected.count()) === 1, "the rejected photo is not shown to the seller");
   log("rejected:", await text(rejected.first()));
   check(
-    (await text(rejected.first())).includes("no es una foto válida"),
+    (await text(rejected.first())).includes("no es una imagen que podamos abrir"),
     "the rejection has no reason",
   );
   await rejected.first().locator('button:has-text("Quitar de la lista")').click();
@@ -479,6 +551,15 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
     .locator('main:visible input[type="file"][multiple]')
     .setInputFiles([jpeg("cafetera-botones.jpg", photo3), jpeg("cafetera-caja.jpg", photo4)]);
   await seller.locator("main:visible [data-queued-photo]").nth(1).waitFor();
+  // The same file again is not queued twice.
+  await seller
+    .locator('main:visible input[type="file"][multiple]')
+    .setInputFiles([jpeg("cafetera-botones.jpg", photo3)]);
+  await seller.locator('main:visible [role="alert"]', { hasText: "ya está en la lista" }).waitFor();
+  check(
+    (await seller.locator("main:visible [data-queued-photo]").count()) === 2,
+    "the same file was queued twice",
+  );
   await seller.getByLabel("Texto alternativo de la foto nueva 1").fill(ALT_3);
   await seller.getByLabel("Texto alternativo de la foto nueva 2").fill(ALT_4);
   await seller.click('main:visible button:has-text("Subir 2 fotos")');
@@ -490,11 +571,49 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
     (await text(seller.locator("main:visible [data-photo]").nth(2))).includes("En revisión"),
     "a new photo of a published listing is not waiting",
   );
+  // Text typed but not saved on another photo survives removing one.
+  const UNSAVED = "Texto escrito y todavía sin guardar";
+  await seller.getByLabel("Texto alternativo de la foto 2", { exact: true }).fill(UNSAVED);
   await seller.click('main:visible button:has-text("Quitar la foto 1")');
   await seller
     .locator('main:visible [role="status"]', { hasText: "se quitará cuando aprobemos" })
     .waitFor();
   await seller.locator("main:visible [data-leaving-photo]").waitFor();
+  const kept = await seller
+    .getByLabel("Texto alternativo de la foto 1", { exact: true })
+    .inputValue();
+  check(kept === UNSAVED, `unsaved text was lost when a photo was removed: ${kept}`);
+  await seller.click('main:visible button:has-text("Deshacer")');
+  check(
+    (await seller.getByLabel("Texto alternativo de la foto 1", { exact: true }).inputValue()) ===
+      ALT_2,
+    "undo did not bring back the saved text",
+  );
+
+  // A client that uploads three different pictures as one photo's sizes: red as the
+  // small ones, green as the largest, which is the one staff are shown.
+  const mixed = await rpc(sellerToken, "seller_reserve_photo", { p_product_id: productId });
+  check(mixed.status === 200, `reserve answered ${mixed.status}`);
+  for (const [file, bytes] of mixed.body.files.map((f) => [
+    f,
+    { 400: red400, 800: red800, 1600: green1600 }[f.size],
+  ])) {
+    const signed = await signUpload(file.path);
+    const put = await storage(
+      "PUT",
+      `/object/upload/sign/product-photos-pending/${file.path}?token=${signed.token}`,
+      { type: "image/jpeg", body: bytes },
+    );
+    check(put.status === 200, `mixed upload ${file.size} answered ${put.status}`);
+  }
+  const mixedDone = await rpc(sellerToken, "seller_finish_photo", {
+    p_photo_id: mixed.body.photo_id,
+    p_alt: ALT_MIX,
+    p_width: 1600,
+    p_height: 1200,
+  });
+  check(mixedDone.body?.state === "pending", `mixed finish: ${JSON.stringify(mixedDone.body)}`);
+  await seller.reload({ waitUntil: "networkidle" });
   log(
     "seller after the change:",
     (await text(seller.locator('main:visible section[aria-labelledby="fotos"]'))).slice(0, 300),
@@ -587,6 +706,14 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
   await change.waitFor();
   log("change for review:", (await text(change)).slice(0, 260));
   check((await text(change)).includes("Se quita"), "the removal is not shown");
+  const mixedCard = change.locator(`[data-review-photo="${mixed.body.photo_id}"]`).last();
+  const mixedPreview = await mixedCard
+    .locator("img")
+    .evaluate((img) => ({ src: img.currentSrc || img.src, width: img.naturalWidth }));
+  check(
+    mixedPreview.src.includes("/1600.jpg") && mixedPreview.width === 1600,
+    `staff are not shown the largest copy: ${mixedPreview.src.split("?")[0].split("/").pop()}`,
+  );
   await staff.screenshot({ path: `${SHOTS}/pp6-staff-photo-change.png`, fullPage: true });
   const boxed = change.locator("[data-review-photo]", { hasText: ALT_4 }).last();
   await boxed.locator("summary").click();
@@ -611,9 +738,30 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
     shown.map((p) => `${p.alt} [${p.loaded ? "ok" : "not loaded"}]`).join(" | "),
   );
   check(
-    shown.length === 2 && shown[0]?.alt === ALT_2 && shown[1]?.alt === ALT_3,
+    shown.length === 3 &&
+      shown[0]?.alt === ALT_2 &&
+      shown[1]?.alt === ALT_3 &&
+      shown[2]?.alt === ALT_MIX,
     "the shop does not show the new set",
   );
+  // Every public size of the mixed photo is the green picture staff saw, resized.
+  const mixedTemplate = mixed.body.files[0].path.replace(/400\.jpg$/, "");
+  for (const [size, width] of [
+    ["400", 400],
+    ["800", 800],
+    ["1600", 1600],
+  ]) {
+    const served = await fetch(
+      `${API}/storage/v1/object/public/product-photos/${mixedTemplate}${size}.jpg`,
+    );
+    const bytes = Buffer.from(await served.arrayBuffer());
+    const seen = served.ok ? await colourOf(bytes) : null;
+    log(`public ${size}:`, served.status, seen && `${seen.width}px rgb(${seen.rgb.join(",")})`);
+    check(
+      seen && seen.width === width && seen.rgb[1] > 120 && seen.rgb[0] < 80,
+      `the public ${size} is not the reviewed picture: ${JSON.stringify(seen)}`,
+    );
+  }
   check(
     shown.every((p) => p.loaded),
     "a new photo did not load",
@@ -633,6 +781,40 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
   check((await text(reason)).includes(REASON), "the seller does not see the rejection reason");
   await seller.screenshot({ path: `${SHOTS}/pp8-seller-rejected-reason.png`, fullPage: true });
 
+  // 10. Staff take down a photo that is already in the shop
+  await staff.goto(`${OPS}/catalogo`, { waitUntil: "networkidle" });
+  await staff.click('main a:has-text("Retirar una foto que ya está en la tienda")');
+  await staff.waitForURL((u) => new URL(u).pathname === "/catalogo/fotos");
+  await staff.getByLabel("Dirección del producto en la tienda").fill(WEB + SLUG);
+  await staff.click('main button:has-text("Buscar el producto")');
+  const live = staff.locator(`[data-takedown-photo="${mixed.body.photo_id}"]`);
+  await live.waitFor();
+  check((await text(live)).includes("En la tienda"), "the photo is not shown as in the shop");
+  await live.locator('textarea[name="note"]').fill(TAKE_DOWN);
+  await live.locator('button:has-text("Retirar esta foto")').click();
+  await live.waitFor({ state: "detached", timeout: 30000 });
+  check(
+    (await staff.locator("main [data-takedown-photo]").count()) === 2,
+    "the other photos are not listed any more",
+  );
+  await staff.screenshot({ path: `${SHOTS}/pp9-staff-take-down.png`, fullPage: true });
+  for (const size of sizes) {
+    const gone = await storage("GET", `/object/public/product-photos/${mixedTemplate}${size}.jpg`);
+    check(gone.json?.code === "NoSuchKey", `a taken-down file is still served: ${size}`);
+  }
+  shop = await openShop(SLUG);
+  shown = await gallery(shop);
+  log("shop after the take-down:", shown.map((p) => p.alt).join(" | "));
+  check(
+    shown.length === 2 && !shown.some((p) => p.alt === ALT_MIX),
+    "the shop still shows the photo",
+  );
+  await seller.goto(editUrl, { waitUntil: "networkidle" });
+  const down = seller.locator("main:visible [data-rejected-photo]", { hasText: ALT_MIX });
+  await down.waitFor();
+  check((await text(down)).includes(TAKE_DOWN), "the seller does not see why it was taken down");
+
+  await painter.context().close();
   await browser.close();
   if (errors.length > 0) {
     console.error(`\n${errors.length} problem(s):\n- ${errors.join("\n- ")}`);
