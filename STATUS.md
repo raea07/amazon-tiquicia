@@ -14,9 +14,8 @@ listing edits, add staff, drivers and warehouse workers, plan routes, settle
 cash, refund returns and pay sellers; a driver can deliver against the
 customer's code; a warehouse worker can pick, pack and receive. **A hosted
 preview exists.** The database is a Supabase project in your separate free
-organisation, with 20 migrations applied and the demo data loaded; the two
-migrations added today (people and payouts, and the fixes) are **not applied
-there yet**. The four web apps are deployed as a preview on Vercel at
+organisation, with all 22 migrations applied and the demo data loaded. The
+four web apps are deployed as a preview on Vercel at
 `yuntera-web`, `yuntera-vende`, `yuntera-central` and `yuntera-campo` (each
 `.vercel.app`); every address is behind a Vercel login, and the projects are
 not connected to the Git repository. Payments, messages and invoices are still
@@ -118,10 +117,12 @@ confirmation or password-reset screens yet.
 
 What these checks do **not** cover, stated plainly:
 
-- **Today's additions were not tried on the hosted project.** People
-  management, payouts, listing edits, the shared payment fee, lines from
-  several locations and the 404 answers were verified only locally, against
-  `tools/dev-api`, the local stand-in for the Supabase API.
+- **The hosted preview was smoke-tested, not exhaustively tested.** On
+  21 November 2026 all 11 database test suites passed on the hosted project,
+  and a browser test of the deployed apps covered shopping, paying (simulated),
+  picking, packing, routing and delivering one order, plus the screens added
+  that day. Not tried there: a staff role other than administrator (the demo
+  data has only an administrator), creating a payout run, and a real phone.
 - **No real money, messages or invoices.** Payments are in sandbox mode; no
   gateway, e-mail, SMS, WhatsApp or electronic-invoicing provider is connected.
   Payouts are bank transfers made by hand; the list the console produces is not
@@ -203,9 +204,14 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   do not exist: there is no rate limit and no check that the target exists.
   This must be fixed before production.
 - The shop refreshes its cached catalogue when a listing edit is approved or a
-  listing is archived, through a key (`SHOP_REFRESH_KEY`) that must be set to
-  the same value on the shop, the seller centre and the console. Without it,
-  changes still appear, within about a minute.
+  listing is archived, through a key (`SHOP_REFRESH_KEY`) set to the same
+  value on the shop, the seller centre and the console. It is set on the
+  preview, but while the shop sits behind the Vercel login the request cannot
+  reach it and is logged as an error; changes still appear within about a
+  minute. It works once the shop is public.
+- After a shopper chooses a delivery zone on a product page, the old date and
+  shipping price stay on screen for a few seconds before the new ones replace
+  them, with nothing showing that an update is on its way.
 
 ## Running it
 

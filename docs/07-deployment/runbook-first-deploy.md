@@ -366,10 +366,14 @@ What has to be set on each project, in the dashboard or through the API:
 4. Environment variables, for the environment being deployed:
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
    `NEXT_PUBLIC_SITE_URL` (the app's own address) and
-   `ENABLE_EXPERIMENTAL_COREPACK=1`; on `yuntera-vende` also
-   `NEXT_PUBLIC_SHOP_URL` (the shop's address)
-   ([what they are](environments.md#settings-per-app)). Only Production has
-   them today: a Vercel preview deployment would not reach the database.
+   `ENABLE_EXPERIMENTAL_COREPACK=1`; on `yuntera-vende` and `yuntera-central`
+   also `NEXT_PUBLIC_SHOP_URL` (the shop's address); and on `yuntera-web`,
+   `yuntera-vende` and `yuntera-central` the same `SHOP_REFRESH_KEY`, one
+   random value of 48 or more characters stored as a sensitive variable, which
+   lets the seller centre and the console ask the shop to drop its cached
+   catalogue ([what they are](environments.md#settings-per-app)). Only
+   Production has them today: a Vercel preview deployment would not reach the
+   database.
 
 Then deploy from the repository root, one app at a time (the team builds one
 deployment at a time):
@@ -398,10 +402,18 @@ Then, on the deployed storefront, with the browser's developer tools open on
 the Console and Network tabs. Every step should work with no error in the
 console and no blocked request.
 
-On 21 November 2026 steps 1–4, 6–15 and the sign-in page of each other app
-passed against the preview, at desktop width and at 390 px; one test order was
-placed. Not yet done there: step 5, step 16 on a real phone, step 17, and the
-pick, pack, route and delivery chain in the paragraph after the table.
+On 21 November 2026 steps 1–15 passed against the preview at desktop width and
+at 390 px, including step 5 and the pick, pack, route and delivery chain in the
+paragraph after the table (order YT-100114, route R-1034), and so did the
+screens added that day: staff, drivers, warehouse workers, payout preview,
+listing edits with review, and the 404 answers. Not yet done there: step 16 on
+a real phone, step 17, a staff role other than administrator (the demo data has
+only an administrator), and creating a payout run.
+
+While the shop is behind Vercel Authentication, the console's and the seller
+centre's request to refresh the shop's catalogue is redirected to the Vercel
+login and logged as an error; the shop shows approved edits within about a
+minute anyway. The request works once the shop is public.
 
 | #   | Do                                                        | Expect                                                                                                                         |
 | --- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
