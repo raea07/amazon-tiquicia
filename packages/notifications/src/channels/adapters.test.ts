@@ -236,6 +236,15 @@ describe("Bird WhatsApp", () => {
     });
   });
 
+  it("echoes the request's generation in the metadata, so late reports can be told apart", () => {
+    const body = JSON.parse(email.buildRequest({ ...emailMessage, generation: 3 }));
+    expect(body.metadata).toEqual({
+      delivery_id: emailMessage.deliveryId,
+      template: emailMessage.template,
+      generation: "3",
+    });
+  });
+
   it("refuses to send without our own number", async () => {
     const adapter = birdWhatsApp({ ...bird, from: "" });
     const result = await adapter.send(

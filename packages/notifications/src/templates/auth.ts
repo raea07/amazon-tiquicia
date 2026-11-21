@@ -44,17 +44,28 @@ const NOTICES: Record<string, string> = {
   mfa_factor_unenrolled_notification: "Se quitó un segundo factor de verificación de su cuenta",
 };
 
-/** The link that confirms a token hash, on the app the person came from. */
+/**
+ * The link that confirms a token hash: always the one verifying route,
+ * `/auth/confirm` (built by the account-security work in every app, with
+ * `confirmUrl()` as the redirect target), on the app the person came from.
+ * Only the origin of `redirect_to` is used (Supabase Auth has already checked
+ * it against the allow list), so the token never lands on any other page, its
+ * analytics or its referrer.
+ */
 export function confirmLink(
   redirectTo: string,
   siteUrl: string,
   hash: string,
   type: string,
 ): string {
-  const base = /^https?:\/\//.test(redirectTo)
-    ? redirectTo
-    : `${siteUrl.replace(/\/$/, "")}/auth/confirm`;
-  const url = new URL(base);
+  let origin: string;
+  try {
+    const from = new URL(redirectTo);
+    origin = /^https?:$/.test(from.protocol) ? from.origin : new URL(siteUrl).origin;
+  } catch {
+    origin = new URL(siteUrl).origin;
+  }
+  const url = new URL("/auth/confirm", origin);
   url.searchParams.set("token_hash", hash);
   url.searchParams.set("type", type);
   return url.toString();

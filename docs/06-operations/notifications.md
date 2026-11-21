@@ -117,7 +117,9 @@ Bird at once (research note 3.3).
    body; each webhook applied once; out-of-order reports never move a message
    backwards). Hard bounces, complaints, unsubscribes and WhatsApp opt-outs
    go to the suppression list and, for unsubscribes, withdraw the commercial
-   consent.
+   consent. Every request carries its generation in `metadata`; a report
+   about an earlier generation (a request that staff or the worker have since
+   replaced) is ignored.
 
 Only the worker can call the `worker_*` functions: they are granted to the
 `service_role` alone and each checks the caller again. The worker calls them
@@ -125,16 +127,23 @@ over the Data API with a secret key.
 
 ## When a message does not go out
 
-| What happened                                                                                     | What the worker does                                                                                                                                     | What staff see                                    |
-| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| No answer, a timeout, a 5xx, a 429, "request in progress"                                         | Retries with the **same key and bytes**: 15 s, 30 s, 1, 2, 4 … 60 min (±20 %), ten tries in about two hours, inside Bird's three-hour idempotency window | Nothing until it gives up                         |
-| Bird refuses the request (400, 404, 422: bad recipient, unknown template, closed WhatsApp window) | Dead letter at once                                                                                                                                      | **Detenido** · el proveedor rechazó el mensaje    |
-| Bad key, wrong region, unverified account (401, 403, 412, 421)                                    | Dead letter, and the channel pauses 15 minutes                                                                                                           | **Detenido** and a "canal en pausa" notice        |
-| Wallet empty or quota reached (402)                                                               | Holds 15 minutes without spending a try, then sends as a **new request** (Bird keeps a refused answer per key for three hours)                           | Nothing; after a day of holds, a dead letter      |
-| Person switched the channel off, address suppressed, no address, no device                        | Skipped, with the reason                                                                                                                                 | **No se envió** and why                           |
-| Ten tries failed                                                                                  | Dead letter                                                                                                                                              | **Detenido** · el proveedor no respondió a tiempo |
+| What happened                                                                                                   | What the worker does                                                                                                                                     | What staff see                                                 |
+| --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| No answer, a timeout, a 5xx, a 429, "request in progress"                                                       | Retries with the **same key and bytes**: 15 s, 30 s, 1, 2, 4 … 60 min (±20 %), ten tries in about two hours, inside Bird's three-hour idempotency window | Nothing until it gives up                                      |
+| Bird refuses the request (400, 404, 422: bad recipient, unknown template, closed WhatsApp window)               | Dead letter at once                                                                                                                                      | **Detenido** · el proveedor rechazó el mensaje                 |
+| Bad key, wrong region, unverified account (401, 403, 412, 421)                                                  | Dead letter, and the channel pauses 15 minutes                                                                                                           | **Detenido** and a "canal en pausa" notice                     |
+| Wallet empty or quota reached (402)                                                                             | Holds 15 minutes without spending a try, then sends as a **new request** (Bird keeps a refused answer per key for three hours)                           | Nothing; after a day of holds, a dead letter                   |
+| Person switched the channel off, address suppressed, no address, no device                                      | Skipped, with the reason                                                                                                                                 | **No se envió** and why                                        |
+| Ten tries failed                                                                                                | Dead letter                                                                                                                                              | **Detenido** · el proveedor no respondió a tiempo              |
+| Accepted, then reported as a temporary failure (e-mail soft bounce; WhatsApp or SMS `undelivered` or `expired`) | Back to the ordinary retries, as a **new request** (Bird kept the first one); a dead letter when no tries are left or the news is stale                  | Nothing until it gives up                                      |
+| Accepted, then reported as a permanent failure (hard bounce, `rejected`, WhatsApp or SMS `failed`)              | **No entregado**: final; a hard bounce also suppresses the address                                                                                       | **No entregado** and why, on the same page as the dead letters |
 
 **What staff do** (console, **Mensajes**, care and admin roles):
+
+The **Mensajes** page lists both kinds of message that reached nobody: the
+dead letters (**Detenido**, the worker gave up) and the ones the provider
+accepted and later reported undelivered (**No entregado**). Both can be sent
+again from there.
 
 1. Read the reason on the stuck message. A rejection usually means a wrong
    address or a template Meta has not approved; a configuration problem
@@ -154,9 +163,14 @@ always their address: ask them to correct it in their account.
   notifications, and the mobile number for WhatsApp and SMS. E-mail cannot be
   switched off while an order is in progress, and order messages always go by
   e-mail. Switching WhatsApp on records the time: that is the opt-in Meta
-  requires.
-- **Shops** (`vende…/cuenta/notificaciones`): the same for the shop's contact
-  address and a mobile number; e-mail is always on; only owners and admins
+  requires. Channels and the commercial consent are saved together in one
+  call (`set_my_notification_settings`), all or nothing; the page sends back
+  the `version` it was loaded with, and a save from a tab that is out of date
+  is refused with a request to reload instead of silently undoing a change
+  made elsewhere.
+- **Shops** (`vende…/cuenta/notificaciones`): the shop's contact address
+  (e-mail, always on), WhatsApp to a mobile number, and the seller app. Shops
+  have no SMS channel, so the page does not offer it. Only owners and admins
   can change it.
 - **Commercial messages**: a separate box that starts unticked, is never
   required for anything, and can be withdrawn at any time, effective at once.
@@ -171,8 +185,19 @@ always their address: ask them to correct it in their account.
 - **Suppression** (`private.notification_suppressions`): hard bounces and
   manual blocks stop everything to that address; complaints and unsubscribes
   stop commercial mail only; a WhatsApp or SMS opt-out stops that channel for
-  that number (switching it back on in the settings lifts the person's own
-  opt-out).
+  that number. Typing a number into a settings page proves nothing about who
+  holds the phone, so an opted-out number cannot be switched on there (the
+  page says to send `START` from that phone). Only the phone itself lifts it:
+  Bird's `preference.granted` webhook (after `START`) becomes `opted_in` and
+  lifts the suppression; the person then switches the channel on again.
+- **Push tokens**: `register_push_token` moves a token to another account
+  only when it was signed out (unregistered, or reported dead by Expo) or the
+  call names the same `device_id`; knowing someone's token is not enough.
+- **Account e-mails** (the Auth hook): every link goes to `/auth/confirm` on
+  the origin of `redirect_to` (or the site URL), with `token_hash` and `type`.
+  That is the route the account-security work adds to every app, and the
+  redirect target its `confirmUrl()` gives Auth; the token never goes to any
+  other page.
 
 ## Team mailboxes
 
@@ -221,6 +246,9 @@ Nothing below has been done. Values in angle brackets are placeholders.
    `packages/notifications/whatsapp/` (none is submitted), and add Spanish
    opt-out keywords (`BAJA`, `ALTO`, `NO MAS`) as a keyword rule with
    `country: "CR"`; the templates' footers tell people to reply `BAJA`.
+   Keep Bird's `START` opt-in keyword: the settings page tells a person whose
+   number opted out to send it, and its `preference.granted` webhook is what
+   lifts the opt-out.
 8. **SMS**, only if the fallback is wanted: enable Costa Rica under
    **SMS > Destinations** with a daily spend limit. Carriers overwrite the
    `Yuntera` sender.
@@ -338,8 +366,20 @@ clock), `packages/db/src/contract.notifications.test.ts`, and the
   Supabase's documentation shows secret keys carrying a JWT template with
   `role: service_role`, but it was not tried); the Management API upload in
   `deploy-notifications.sh` (several `file` parts with repository paths); the
-  `preference.revoked` webhook's field names; Bird's Spanish language code
-  for WhatsApp; SMS delivery in Costa Rica.
+  `preference.revoked` and `preference.granted` webhooks' field names; that
+  Bird echoes `metadata.generation` on every event (without it, a late report
+  is still matched only to a request not yet recorded, never to a newer one);
+  that Bird sends a final soft bounce as `email.bounced` with
+  `bounce_type: "soft"` rather than retrying silently; Bird's Spanish
+  language code for WhatsApp; SMS delivery in Costa Rica.
+- Phone numbers are not verified (no one-time code: it would need a real
+  send). A person can enter a number that is not theirs; the opt-out rule
+  above stops this from overriding the holder's `STOP`, but a number that
+  never opted out can still be entered by someone else.
+- No commercial message can be sent: the worker refuses any `marketing`
+  delivery (`commercial_frame_required`) until a commercial template is built
+  through `templates/commercial.ts` and the one-step unsubscribe page it
+  links to (for example `/baja`) exists in the shop; neither exists yet.
 - No daily e-mail digest of dead letters to staff (section 8's
   `staff_notification_failures`); staff see them in the console.
 - No automatic clean-up of old delivery rows yet; the request body is cleared

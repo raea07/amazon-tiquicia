@@ -147,6 +147,20 @@ async function processOne(deps: WorkerDeps, d: ClaimedDelivery): Promise<Outcome
     await queue.skip(d.id, workerId, "no_commercial_consent");
     return "skipped";
   }
+  // Even with consent, a commercial message may only be built by
+  // templates/commercial.ts (label, unsubscribe link, List-Unsubscribe,
+  // sender identification). No commercial template and no one-step
+  // unsubscribe page exist yet, so none is sent: it never falls through to the
+  // ordinary transactional templates.
+  if (d.category === "marketing") {
+    await queue.fail(d.id, workerId, {
+      kind: "permanent",
+      code: "commercial_frame_required",
+      message: "Commercial messages are built only through the commercial frame.",
+      newKey: false,
+    });
+    return "failed";
+  }
 
   if (settings.quietHours) {
     const until = quietUntil(d.channel, d.template, deps.clock.now());
@@ -192,6 +206,7 @@ async function processOne(deps: WorkerDeps, d: ClaimedDelivery): Promise<Outcome
   const message = {
     deliveryId: d.id,
     idempotencyKey: idempotencyKey(settings.env, d.id, d.generation),
+    generation: d.generation,
     category: d.category,
     template: d.template,
     to: d.to,

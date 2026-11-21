@@ -11,19 +11,30 @@
  *   timeout   no answer for 30 seconds
  *   ratelimit 429 with Retry-After: 1
  *   wallet    402 WalletInsufficientBalance
+ *   bounce_later  accepted, then reported as a temporary failure (an e-mail
+ *                 soft bounce; WhatsApp or SMS "undelivered")
+ *   fail_later    accepted, then reported as a permanent failure (e-mail
+ *                 "rejected"; WhatsApp or SMS "failed")
  *
  * Control endpoints (all under /_fake):
  *   GET  /_fake/messages[?channel=&to=&delivery_id=&template=]   the local outbox
  *   GET  /_fake/messages/<id>/html                               an e-mail as the person would see it
  *   GET  /_fake/attempts                                         every request, accepted or not
  *   POST /_fake/behaviour {rules: [{mode, channel?, to?, times?}]}
- *   POST /_fake/deliver {id, status?}                            send a delivery webhook now
+ *   POST /_fake/deliver {id, status?, bounce_type?, error_code?} send a delivery webhook now
  *   POST /_fake/reset
  */
 
 import { signStandardWebhook } from "@yuntera/notifications";
 
-export type Mode = "reject" | "fail" | "timeout" | "ratelimit" | "wallet";
+export type Mode =
+  | "reject"
+  | "fail"
+  | "timeout"
+  | "ratelimit"
+  | "wallet"
+  | "bounce_later"
+  | "fail_later";
 export interface Rule {
   mode: Mode;
   channel?: "email" | "whatsapp" | "sms" | "push";
@@ -46,7 +57,9 @@ export interface FakeMessage {
   parameters?: Record<string, string>;
   pushTitle?: string;
   pushBody?: string;
-  status: "accepted" | "delivered";
+  /** What the request's metadata said; Bird echoes it on every webhook. */
+  metadata?: Record<string, unknown>;
+  status: "accepted" | "delivered" | "failed";
   acceptedAt: string;
   webhooks: string[];
 }
@@ -102,24 +115,39 @@ export function createFake(options: FakeOptions = {}) {
     return rule;
   }
 
-  async function webhook(message: FakeMessage, status: string) {
+  async function webhook(
+    message: FakeMessage,
+    status: string,
+    extra: { bounceType?: string; errorCode?: string } = {},
+  ) {
     if (!options.webhookUrl || !options.webhookSecret) return;
     const type = message.channel === "email" ? `email.${status}` : `${message.channel}.${status}`;
+    const metadata = message.metadata ?? { delivery_id: message.deliveryId };
     const data: Record<string, unknown> =
       message.channel === "email"
         ? {
             email_id: message.id,
             recipient: message.to,
             recipient_role: "to",
-            metadata: { delivery_id: message.deliveryId },
+            metadata,
             tags: [],
+            ...(status === "bounced" ? { bounce_type: extra.bounceType ?? "soft" } : {}),
+            ...(status === "rejected" ? { rejection_reason: extra.errorCode ?? "rejected" } : {}),
           }
         : {
             [`${message.channel}_id`]: message.id,
             direction: "outbound",
             to: { phone_number: message.to },
-            metadata: { delivery_id: message.deliveryId },
+            metadata,
             tags: null,
+            ...(status === "failed" || status === "undelivered" || status === "rejected"
+              ? {
+                  error: {
+                    code: extra.errorCode ?? "message_undeliverable",
+                    description: "The message could not be delivered.",
+                  },
+                }
+              : {}),
           };
     const body = JSON.stringify({ type, timestamp: new Date().toISOString(), data });
     const id = `msg_fake_${crypto.randomUUID()}`;
@@ -138,6 +166,8 @@ export function createFake(options: FakeOptions = {}) {
       message.webhooks.push(`${type} → ${response.status}`);
       if (response.ok && (status === "delivered" || status === "read"))
         message.status = "delivered";
+      if (response.ok && ["bounced", "rejected", "failed", "undelivered"].includes(status))
+        message.status = "failed";
       log(`webhook ${type} for ${message.id}: ${response.status}`);
     } catch (error) {
       message.webhooks.push(`${type} → unreachable`);
@@ -145,14 +175,18 @@ export function createFake(options: FakeOptions = {}) {
     }
   }
 
-  function scheduleDelivery(message: FakeMessage) {
+  function scheduleDelivery(message: FakeMessage, later?: Mode) {
     const delay = options.deliverAfterMs ?? 300;
     if (delay < 0) return;
     const timer = setTimeout(async () => {
       timers.delete(timer);
       if (message.channel === "whatsapp" || message.channel === "sms")
         await webhook(message, "sent");
-      await webhook(message, "delivered");
+      if (later === "bounce_later")
+        await webhook(message, message.channel === "email" ? "bounced" : "undelivered");
+      else if (later === "fail_later")
+        await webhook(message, message.channel === "email" ? "rejected" : "failed");
+      else await webhook(message, "delivered");
     }, delay);
     timers.add(timer);
   }
@@ -310,13 +344,19 @@ export function createFake(options: FakeOptions = {}) {
         : {}),
       ...(channel === "sms" ? { text: String(body.text ?? "") } : {}),
       ...(template?.parameters ? { parameters: template.parameters } : {}),
+      ...(body.metadata && typeof body.metadata === "object"
+        ? { metadata: body.metadata as Record<string, unknown> }
+        : {}),
       status: "accepted",
       acceptedAt: new Date().toISOString(),
       webhooks: [],
     };
     messages.push(message);
     log(`accepted ${channel} ${id} (${message.template ?? "?"})`);
-    scheduleDelivery(message);
+    scheduleDelivery(
+      message,
+      rule?.mode === "bounce_later" || rule?.mode === "fail_later" ? rule.mode : undefined,
+    );
     return keep(202, { id, status: "accepted" });
   }
 
@@ -389,10 +429,18 @@ export function createFake(options: FakeOptions = {}) {
       return json(200, { rules });
     }
     if (request.method === "POST" && path === "/_fake/deliver") {
-      const body = (await request.json()) as { id: string; status?: string };
+      const body = (await request.json()) as {
+        id: string;
+        status?: string;
+        bounce_type?: string;
+        error_code?: string;
+      };
       const message = messages.find((m) => m.id === body.id);
       if (!message) return json(404, { error: "unknown message" });
-      await webhook(message, body.status ?? "delivered");
+      await webhook(message, body.status ?? "delivered", {
+        ...(body.bounce_type ? { bounceType: body.bounce_type } : {}),
+        ...(body.error_code ? { errorCode: body.error_code } : {}),
+      });
       return json(200, message);
     }
     if (request.method === "GET" && path === "/_fake/attempts") return json(200, attempts);

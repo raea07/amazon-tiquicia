@@ -239,6 +239,24 @@ describe("the worker loop", () => {
     expect(sends[1]?.body).toBe(sends[0]?.body);
   });
 
+  it("resends the frozen bytes, not a fresh rendering, when the data changed in between", async () => {
+    const clock = fakeClock(MORNING);
+    const { queue, store } = memoryQueue(clock, [{}]);
+    const { adapter, sends } = scripted([
+      { ok: false, kind: "retry", newKey: false },
+      { ok: true },
+    ]);
+    await runOnce(deps(clock, queue, adapter));
+    // The database would now hand over different variables (a renamed order,
+    // a corrected total): a retry under the same key must still be the same request.
+    if (store[0]) store[0].vars = { ...store[0].vars, order_number: "YT-999999" };
+    clock.advance(16_000);
+    await runOnce(deps(clock, queue, adapter));
+    expect(sends).toHaveLength(2);
+    expect(sends[0]?.body).toContain("YT-100123");
+    expect(sends[1]?.body).toBe(sends[0]?.body);
+  });
+
   it("uses a new key after a refusal the provider keeps (the generation rule)", async () => {
     const clock = fakeClock(MORNING);
     const { queue, store } = memoryQueue(clock, [{}]);
@@ -305,6 +323,30 @@ describe("the worker loop", () => {
       "2026-11-22T13:00:00.000Z",
     );
     expect(quietUntil("push", "order_placed", new Date(MORNING))).toBeNull();
+  });
+
+  it("starts and ends quiet hours exactly at 21:00 and 07:00 Costa Rica time", () => {
+    const at = (iso: string) => quietUntil("whatsapp", "order_placed", new Date(iso));
+    expect(at("2026-11-22T12:59:59Z")?.toISOString()).toBe("2026-11-22T13:00:00.000Z"); // 06:59:59
+    expect(at("2026-11-22T13:00:00Z")).toBeNull(); // 07:00
+    expect(at("2026-11-22T02:59:59Z")).toBeNull(); // 20:59:59
+    expect(at("2026-11-22T03:00:00Z")?.toISOString()).toBe("2026-11-22T13:00:00.000Z"); // 21:00
+    expect(at("2026-11-22T05:59:00Z")?.toISOString()).toBe("2026-11-22T13:00:00.000Z"); // 23:59
+    expect(at("2026-11-22T06:00:00Z")?.toISOString()).toBe("2026-11-22T13:00:00.000Z"); // 00:00
+  });
+
+  it("never renders a commercial message through the ordinary templates, even with consent", async () => {
+    const clock = fakeClock(MORNING);
+    const { queue, store } = memoryQueue(clock, [
+      { category: "marketing", commercial_consent: true },
+    ]);
+    const { adapter, sends } = scripted([]);
+    await runOnce(deps(clock, queue, adapter));
+    expect(sends).toHaveLength(0);
+    expect(store[0]).toMatchObject({
+      status: "dead",
+      lastCode: "commercial_frame_required",
+    });
   });
 
   it("never sends a commercial message without a recorded consent", async () => {

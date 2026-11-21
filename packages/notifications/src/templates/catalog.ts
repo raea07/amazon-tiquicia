@@ -170,6 +170,32 @@ export const TEMPLATES: Record<string, Template> = {
 
   payment_received: ({ vars: v, name, links }) => {
     const number = orderNumber(v);
+    // Cash is taken at the door, in the same moment as the delivery: there is
+    // nothing left to prepare or to wait for, and "shipment_delivered" follows.
+    if (s(v.payment_method) === "cash_on_delivery") {
+      return {
+        from: "orders",
+        subject: `Recibimos el pago de su pedido ${number}`,
+        preheader: "Gracias por su pago en efectivo.",
+        greeting: hello(name),
+        paragraphs: [
+          `Recibimos su pago en efectivo de ${colones(n(v.total_minor))} por el pedido ${number}. Gracias por comprar en Yuntera.`,
+          "Si algo de lo que recibió no está bien, puede reportarlo desde la página del pedido.",
+        ],
+        facts: [
+          ["Pedido", number],
+          ["Pagado", colones(n(v.total_minor))],
+          ["Forma de pago", PAYMENT_METHOD.cash_on_delivery ?? "—"],
+        ],
+        action: { label: "Ver el pedido", url: orderUrl(v, links) },
+        note: ORDER_FOOTER,
+        push: {
+          title: "Pago recibido",
+          body: `${number}: recibimos su pago en efectivo. Gracias.`,
+          url: `/pedidos/${number}`,
+        },
+      };
+    }
     return {
       from: "orders",
       subject: `Recibimos el pago de su pedido ${number}`,

@@ -6,7 +6,7 @@
  */
 
 import type { ChannelAdapter, OutboundMessage } from "../types.ts";
-import { type BirdSettings, sendToBird, tagValue } from "./bird.ts";
+import { type BirdSettings, generationOf, sendToBird, tagValue } from "./bird.ts";
 
 export interface BirdWhatsAppSettings extends BirdSettings {
   from: string;
@@ -29,7 +29,7 @@ export function birdWhatsApp(settings: BirdWhatsAppSettings): ChannelAdapter {
           parameters: message.content.parameters,
         },
         tags: [{ name: "template", value: tagValue(message.template) }],
-        metadata: { delivery_id: message.deliveryId },
+        metadata: { delivery_id: message.deliveryId, ...generationOf(message) },
         reference: message.deliveryId,
       });
     },

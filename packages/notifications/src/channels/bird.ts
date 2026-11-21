@@ -13,6 +13,10 @@
 import type { OutboundMessage, ProviderIo, SendResult } from "../types.ts";
 import { type HttpAnswer, parseJson, post, retryAfter, scrub } from "./http.ts";
 
+/** Echoed back on every webhook, so a report names the request it is about. */
+export const generationOf = (message: OutboundMessage) =>
+  message.generation === undefined ? {} : { generation: String(message.generation) };
+
 export interface BirdSettings {
   baseUrl: string;
   apiKey: string;

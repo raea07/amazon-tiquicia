@@ -23,6 +23,16 @@ function deliveryIdOf(data: Record<string, unknown>): string | undefined {
   return str(metadata?.delivery_id);
 }
 
+/** The request's generation we put in the metadata (a string; a number is accepted too). */
+function generationOf(
+  data: Record<string, unknown>,
+): { generation: number } | Record<string, never> {
+  const metadata = data.metadata as Record<string, unknown> | null | undefined;
+  const raw = metadata?.generation;
+  const value = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : Number.NaN;
+  return Number.isInteger(value) && value >= 0 && value < 100_000 ? { generation: value } : {};
+}
+
 const EMAIL: Record<string, DeliveryStatus> = {
   "email.delivered": "delivered",
   "email.bounced": "bounced",
@@ -64,6 +74,7 @@ export function parseBirdEvent(rawBody: string): DeliveryUpdate[] {
         channel: "email",
         providerMessageId: str(data.email_id),
         ...(deliveryId ? { deliveryId } : {}),
+        ...generationOf(data),
         status: emailStatus,
         permanent: emailStatus === "bounced" ? bounceType === "hard" : emailStatus !== "delivered",
         occurredAt,
@@ -100,6 +111,7 @@ export function parseBirdEvent(rawBody: string): DeliveryUpdate[] {
       channel: channel as Channel,
       providerMessageId: str(data[`${channel}_id`]) ?? str(data.id) ?? str(data.message_id),
       ...(deliveryId ? { deliveryId } : {}),
+      ...generationOf(data),
       status: MESSAGING[action] as DeliveryStatus,
       permanent: action === "rejected" || action === "failed",
       occurredAt,
@@ -113,6 +125,27 @@ export function parseBirdEvent(rawBody: string): DeliveryUpdate[] {
       ];
     }
     return [update];
+  }
+
+  // The phone itself asked to receive messages again (START, or an opt-in
+  // keyword): the one proof that whoever lifts an opt-out holds the number.
+  // Field names UNVERIFIED, as for preference.revoked.
+  if (type === "preference.granted") {
+    const prefChannel = str(data.channel);
+    const address = str(data.phone_number) ?? str(data.identifier);
+    if (address && (prefChannel === "whatsapp" || prefChannel === "sms")) {
+      return [
+        {
+          provider: "bird",
+          channel: prefChannel,
+          status: "opted_in",
+          permanent: false,
+          occurredAt,
+          recipientAddress: address,
+        },
+      ];
+    }
+    return [];
   }
 
   if (type === "preference.revoked") {

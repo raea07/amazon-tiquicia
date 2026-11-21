@@ -1,4 +1,4 @@
-import { verifyStandardWebhook } from "@yuntera/notifications";
+import { parseBirdEvent, verifyStandardWebhook } from "@yuntera/notifications";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFake } from "./fake.ts";
 
@@ -102,5 +102,62 @@ describe("the fake providers", () => {
       ).ok,
     ).toBe(true);
     expect(fake.messages()[0]?.status).toBe("delivered");
+  });
+
+  it("accepts and then reports a soft bounce or a failure when told to", async () => {
+    const received: string[] = [];
+    fake = createFake({
+      webhookUrl: "http://functions.test/bird-webhook",
+      webhookSecret: secret,
+      deliverAfterMs: 0,
+      fetch: (async (_url: string, init: RequestInit) => {
+        received.push(String(init.body));
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    await fake.handle(
+      new Request("http://fake.test/_fake/behaviour", {
+        method: "POST",
+        body: JSON.stringify({
+          rules: [
+            { mode: "bounce_later", channel: "email", times: 1 },
+            { mode: "fail_later", channel: "whatsapp", times: 1 },
+          ],
+        }),
+      }),
+    );
+    const withGeneration = {
+      ...email,
+      metadata: { delivery_id: "d1", generation: "1" },
+    };
+    expect((await post(fake, "/v1/email/messages", withGeneration)).status).toBe(202);
+    const whatsapp = {
+      to: "+50688881234",
+      from: "+50622223333",
+      template: { slug: "order_placed", language: "es", parameters: {} },
+      metadata: { delivery_id: "d2" },
+    };
+    expect((await post(fake, "/v1/whatsapp/messages", whatsapp, "k9")).status).toBe(202);
+    for (let i = 0; i < 100 && received.length < 3; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const updates = received.flatMap((body) => parseBirdEvent(body));
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          channel: "email",
+          status: "bounced",
+          permanent: false,
+          generation: 1,
+          deliveryId: "d1",
+        }),
+        expect.objectContaining({
+          channel: "whatsapp",
+          status: "failed",
+          permanent: true,
+        }),
+      ]),
+    );
+    expect(fake.messages().map((m) => m.status)).toEqual(["failed", "failed"]);
   });
 });

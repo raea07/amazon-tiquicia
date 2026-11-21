@@ -147,6 +147,69 @@ describe("Bird events", () => {
     expect(rejected[1]?.recipientAddress).toBe("+50688881234");
   });
 
+  it("reads a soft bounce as temporary, with the request's generation", () => {
+    const [update] = parseBirdEvent(
+      JSON.stringify({
+        type: "email.bounced",
+        timestamp: "2026-11-21T14:51:47.107Z",
+        data: {
+          email_id: "em_02",
+          recipient: "ana@correo.cr",
+          metadata: { delivery_id: "7b0c", generation: "2" },
+          bounce_type: "soft",
+        },
+      }),
+    );
+    expect(update).toMatchObject({
+      status: "bounced",
+      permanent: false,
+      generation: 2,
+      reason: "bounce_soft",
+    });
+    const [noGeneration] = parseBirdEvent(
+      JSON.stringify({
+        type: "whatsapp.failed",
+        timestamp: "t",
+        data: {
+          whatsapp_id: "wam_3",
+          metadata: { delivery_id: "d", generation: "x" },
+        },
+      }),
+    );
+    expect(noGeneration).not.toHaveProperty("generation");
+    expect(noGeneration).toMatchObject({ status: "failed", permanent: true });
+  });
+
+  it("reads a phone asking for messages again as an opt-in (unverified field names)", () => {
+    expect(
+      parseBirdEvent(
+        JSON.stringify({
+          type: "preference.granted",
+          timestamp: "t",
+          data: { channel: "whatsapp", phone_number: "+50688881234" },
+        }),
+      ),
+    ).toEqual([
+      {
+        provider: "bird",
+        channel: "whatsapp",
+        status: "opted_in",
+        permanent: false,
+        occurredAt: "t",
+        recipientAddress: "+50688881234",
+      },
+    ]);
+    expect(
+      parseBirdEvent(
+        JSON.stringify({
+          type: "preference.granted",
+          timestamp: "t",
+          data: { channel: "email", email: "a@b.cr" },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
   it("ignores what it does not act on", () => {
     expect(parseBirdEvent(JSON.stringify({ type: "email.opened", data: {} }))).toEqual([]);
     expect(parseBirdEvent("not json")).toEqual([]);

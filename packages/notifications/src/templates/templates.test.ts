@@ -182,6 +182,41 @@ describe("every template on every channel", () => {
     expect(email.text).toContain("desistir de la compra hasta el 7 de diciembre de 2026");
   });
 
+  it("thanks a cash-on-delivery shopper at the door instead of saying the order is being prepared", () => {
+    const cod = {
+      ...realistic,
+      payment_method: "cash_on_delivery",
+      paid: true,
+      order_status: "delivered",
+    };
+    for (const channel of ["email", "push"] as const) {
+      const text = allText(
+        render({
+          template: "payment_received",
+          channel,
+          vars: cod,
+          name: "Ana",
+          links,
+          sender,
+        }),
+      );
+      expect(text).toContain("efectivo");
+      expect(text).not.toMatch(/preparando|Le llega|tenga a mano/i);
+    }
+    // Paid ahead (SINPE Móvil, card): the order is still to be prepared and delivered.
+    const ahead = allText(
+      render({
+        template: "payment_received",
+        channel: "email",
+        vars: { ...realistic, paid: true },
+        name: "Ana",
+        links,
+        sender,
+      }),
+    );
+    expect(ahead).toContain("Ya lo estamos preparando");
+  });
+
   it("never asks for the delivery code, only tells the shopper to have it ready", () => {
     const sms = render({
       template: "shipment_out_for_delivery",
@@ -228,6 +263,22 @@ describe("account e-mails from the Auth hook", () => {
       "https://www.yuntera.cr/auth/confirm?token_hash=hash-a&type=email",
     );
     expect(mail?.rendered.text).toContain("305805");
+  });
+
+  it("always links the one verifying route, on the origin the person came from", () => {
+    const linkOf = (redirect_to: string) =>
+      /https?:\/\/\S+token_hash=\S+/.exec(
+        authEmails(payload("recovery", { redirect_to }), sender)[0]?.rendered.text ?? "",
+      )?.[0];
+    expect(linkOf("https://vender.yuntera.cr/cuenta?x=1")).toBe(
+      "https://vender.yuntera.cr/auth/confirm?token_hash=hash-a&type=recovery",
+    );
+    expect(linkOf("/pagar")).toBe(
+      "https://www.yuntera.cr/auth/confirm?token_hash=hash-a&type=recovery",
+    );
+    expect(linkOf("javascript:alert(1)")).toBe(
+      "https://www.yuntera.cr/auth/confirm?token_hash=hash-a&type=recovery",
+    );
   });
 
   it("crosses the hashes for a secure e-mail change", () => {

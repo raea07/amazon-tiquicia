@@ -1,8 +1,11 @@
 // Notifications journey: a shopper chooses WhatsApp, places and pays an order;
 // the worker sends the messages to the local fake providers; the fake reports
 // delivery through the signed webhook; staff see the messages as delivered.
-// Then the fake rejects the shopper's address, the message ends as a dead
-// letter, staff send it again once the fake recovers, and it arrives once.
+// The first WhatsApp message is accepted and then reported as not delivered:
+// staff find it among the stuck messages and send it again. Then the fake
+// rejects the shopper's address, the message ends as a dead letter, staff send
+// it again; that send soft-bounces, the worker retries it under a new key by
+// itself, and it is delivered once.
 //
 // Needs `tools/dev/stack.sh up <lane>`, which starts the worker (served as the
 // Edge Functions are) and the fake providers. Nothing here reaches a real
@@ -126,6 +129,29 @@ async function until(what, fn, seconds = 40) {
     fullPage: true,
   });
 
+  // A tab left open does not silently undo what another tab saved since.
+  await shopper.check("#aviso-commercial");
+  await shopper.click('main button:has-text("Guardar preferencias")');
+  await shopper.waitForSelector("text=Lo aceptó el");
+  await shopperPhone.uncheck("#aviso-whatsapp");
+  await shopperPhone.click('main button:has-text("Guardar preferencias")');
+  await shopperPhone.waitForSelector('main [role="alert"]');
+  check(
+    /cambiaron en otra ventana/.test(
+      await text(shopperPhone.locator('main [role="alert"]').first()),
+    ),
+    "a save from an out-of-date tab is refused, with a request to reload",
+  );
+  await shopperPhone.reload({ waitUntil: "networkidle" });
+  check(
+    (await shopperPhone.locator("#aviso-whatsapp").isChecked()) &&
+      (await shopperPhone.locator("#aviso-commercial").isChecked()),
+    "and nothing saved in the other tab was lost",
+  );
+  await shopper.uncheck("#aviso-commercial");
+  await shopper.click('main button:has-text("Guardar preferencias")');
+  await shopper.waitForSelector("text=Si no marca la casilla");
+
   // ── 2. The shopper orders, by SINPE Móvil ───────────────────────────────
   await shopper.goto(`${WEB}/p/cafe-molido-tarrazu-340g`, { waitUntil: "networkidle" });
   await shopper
@@ -135,6 +161,8 @@ async function until(what, fn, seconds = 40) {
   await shopper.goto(`${WEB}/pagar`, { waitUntil: "networkidle" });
   await shopper.waitForSelector("text=Resumen del pedido");
   await shopper.check('input[name="paymentMethod"][value="sinpe_movil"]');
+  // The provider will accept the first WhatsApp message and later report it undelivered.
+  await behave([{ mode: "fail_later", channel: "whatsapp", to: MOBILE, times: 1 }]);
   await shopper.click('button:has-text("Confirmar pedido")');
   await shopper.waitForURL((u) => /^\/pedidos\/YT-/.test(new URL(u).pathname));
   const orderNumber = new URL(shopper.url()).pathname.split("/").pop();
@@ -168,19 +196,19 @@ async function until(what, fn, seconds = 40) {
   check(placedWhatsApp.parameters.first_name === "María", "WhatsApp template parameters");
   check(placedWhatsApp.parameters.button_url === orderNumber, "WhatsApp button opens the order");
 
-  // The provider reports delivery through the signed webhook.
-  await until("delivery reports", async () => {
-    const mail = (await fakeGet(`?channel=email&template=order_placed&to=${SHOPPER}`)).find(
-      (m) => m.id === placedEmail.id,
-    );
-    const wa = (await fakeGet(`?channel=whatsapp&template=order_placed`)).find(
-      (m) => m.id === placedWhatsApp.id,
-    );
-    return mail?.status === "delivered" && wa?.status === "delivered";
-  });
-  log("webhooks:", placedEmail.id, "and", placedWhatsApp.id, "delivered");
+  // The provider reports through the signed webhook: the e-mail delivered,
+  // the WhatsApp message not.
+  const fakeMessage = async (channel, id) =>
+    (await fakeGet(`?channel=${channel}`)).find((m) => m.id === id);
+  await until(
+    "delivery reports",
+    async () =>
+      (await fakeMessage("email", placedEmail.id))?.status === "delivered" &&
+      (await fakeMessage("whatsapp", placedWhatsApp.id))?.status === "failed",
+  );
+  log("webhooks:", placedEmail.id, "delivered,", placedWhatsApp.id, "failed after sending");
 
-  // ── 4. Staff see them delivered ─────────────────────────────────────────
+  // ── 4. Staff find the undelivered message and send it again ─────────────
   const staff = await (await browser.newContext(desktop)).newPage();
   watch(staff);
   await staff.goto(`${OPS}/ingresar`, { waitUntil: "networkidle" });
@@ -192,6 +220,39 @@ async function until(what, fn, seconds = 40) {
     (await text(staff.locator("nav"))).includes("Mensajes"),
     "the console lists Mensajes for an admin",
   );
+  await staff.goto(`${OPS}/mensajes`, { waitUntil: "networkidle" });
+  const failedRow = staff
+    .locator("main li", { hasText: "Pedido recibido" })
+    .filter({ hasText: orderNumber })
+    .filter({ hasText: "WhatsApp" });
+  await until(
+    "the undelivered WhatsApp message among the stuck ones",
+    async () => {
+      await staff.reload({ waitUntil: "networkidle" });
+      return (await failedRow.count()) === 1;
+    },
+    20,
+  );
+  const failedText = await text(failedRow);
+  check(
+    /No entregado/.test(failedText) && /no llegó a la persona/.test(failedText),
+    `failed after sending: ${failedText}`,
+  );
+  check(!/message_undeliverable/.test(failedText), "no provider code on screen");
+  await failedRow.locator('button:has-text("Reenviar")').click();
+  await staff.waitForSelector("text=Lo enviamos de nuevo");
+  const resentWhatsApp = await until("the resent WhatsApp message", async () =>
+    (
+      await fakeGet(`?channel=whatsapp&template=order_placed&to=${encodeURIComponent(MOBILE)}`)
+    ).find(
+      (m) =>
+        m.parameters &&
+        m.parameters.order_number === orderNumber &&
+        /\/1$/.test(m.idempotencyKey) &&
+        m.status === "delivered",
+    ),
+  );
+  check(resentWhatsApp.id !== placedWhatsApp.id, "sent again as a new request, and delivered");
   const messagesOf = async () => {
     await staff.goto(`${OPS}/pedidos/${orderNumber}`, { waitUntil: "networkidle" });
     return (await staff.locator('section[aria-labelledby="mensajes"] li').allInnerTexts()).map(
@@ -201,6 +262,7 @@ async function until(what, fn, seconds = 40) {
   // One line of the list: this template, on this channel, to the shopper, delivered.
   const line = (lines, template, channel) =>
     lines.find((l) => l.startsWith(`${template} ${channel} · Cliente`) && l.endsWith("Entregado"));
+  // ── 5. Staff see them delivered ─────────────────────────────────────────
   const delivered = await until(
     "the console to show both delivered",
     async () => {
@@ -216,7 +278,7 @@ async function until(what, fn, seconds = 40) {
   check(!delivered.join(" ").includes(MOBILE), "nor the address");
   await staff.screenshot({ path: `${SHOTS}/n03-ops-order-messages.png`, fullPage: true });
 
-  // ── 5. The fake rejects the shopper's address; the message dies ─────────
+  // ── 6. The fake rejects the shopper's address; the message dies ─────────
   await behave([{ mode: "reject", channel: "email", to: SHOPPER }]);
   await shopper.goto(`${WEB}/pedidos/${orderNumber}`, { waitUntil: "networkidle" });
   await shopper.click('button:visible:has-text("Simular pago")');
@@ -250,25 +312,31 @@ async function until(what, fn, seconds = 40) {
   check(!/\b422\b/.test(deadText), "no error code on screen");
   await staff.screenshot({ path: `${SHOTS}/n04-ops-dead-letters.png`, fullPage: true });
 
-  // ── 6. The fake recovers; staff send it again; it arrives once ──────────
-  await behave([]);
+  // ── 7. The fake recovers; staff send it again; it soft-bounces once; ────
+  //       the worker retries by itself under a new key; it arrives once.
+  await behave([{ mode: "bounce_later", channel: "email", to: SHOPPER, times: 1 }]);
   await deadRow.locator('button:has-text("Reenviar")').click();
   await staff.waitForSelector("text=Lo enviamos de nuevo");
-  const paidEmail = await until("the resent e-mail", async () =>
-    (await fakeGet(`?channel=email&template=payment_received&to=${SHOPPER}`)).find((m) =>
+  const paidOf = async () =>
+    (await fakeGet(`?channel=email&template=payment_received&to=${SHOPPER}`)).filter((m) =>
       m.subject.includes(orderNumber),
-    ),
+    );
+  const paidEmail = await until(
+    "the e-mail sent again after the soft bounce",
+    async () => (await paidOf()).find((m) => m.status === "delivered"),
+    60,
   );
   check(paidEmail.subject === `Recibimos el pago de su pedido ${orderNumber}`, "payment e-mail");
-  check(
-    /\/1$/.test(paidEmail.idempotencyKey),
-    `sent as a new request: ${paidEmail.idempotencyKey}`,
-  );
   await new Promise((resolve) => setTimeout(resolve, 5000)); // a few more worker ticks
-  const accepted = (await fakeGet(`?channel=email&template=payment_received&to=${SHOPPER}`)).filter(
-    (m) => m.subject.includes(orderNumber),
+  const accepted = await paidOf();
+  check(
+    accepted.map((m) => `${m.idempotencyKey.split("/").pop()}:${m.status}`).join(" ") ===
+      "1:failed 2:delivered",
+    `staff's resend (/1) bounced softly, the worker's own retry (/2) arrived: ${accepted
+      .map((m) => `${m.idempotencyKey} ${m.status}`)
+      .join(", ")}`,
   );
-  check(accepted.length === 1, `delivered once (${accepted.length})`);
+  check(accepted.filter((m) => m.status === "delivered").length === 1, "delivered once");
 
   // No message about this order carries the delivery code.
   const all = (await fakeGet("")).filter(
@@ -296,7 +364,7 @@ async function until(what, fn, seconds = 40) {
   log("console after retry:", settled);
   await staff.screenshot({ path: `${SHOTS}/n05-ops-order-after-retry.png`, fullPage: true });
 
-  // ── 7. What the shopper received, as they would see it ─────────────────
+  // ── 8. What the shopper received, as they would see it ─────────────────
   const mail = await (await browser.newContext(phone)).newPage();
   await mail.goto(`${FAKE}/_fake/messages/${paidEmail.id}/html`, { waitUntil: "load" });
   check((await overflow(mail)) <= 0, "the e-mail fits a 390 px phone");
@@ -305,7 +373,7 @@ async function until(what, fn, seconds = 40) {
   await mailDesk.goto(`${FAKE}/_fake/messages/${placedEmail.id}/html`, { waitUntil: "load" });
   await mailDesk.screenshot({ path: `${SHOTS}/n07-email-desktop.png`, fullPage: true });
 
-  // ── 8. The shop's settings, and the console at phone width ─────────────
+  // ── 9. The shop's settings, and the console at phone width ─────────────
   const seller = await (await browser.newContext(phone)).newPage();
   watch(seller);
   await seller.goto(`${SELLER}/ingresar`, { waitUntil: "networkidle" });
@@ -316,6 +384,10 @@ async function until(what, fn, seconds = 40) {
   await seller.goto(`${SELLER}/cuenta/notificaciones`, { waitUntil: "networkidle" });
   await seller.waitForSelector('h1:has-text("Notificaciones")');
   check(await seller.locator("#aviso-email").isDisabled(), "a shop's e-mail is always on");
+  check(
+    (await seller.locator("#aviso-sms").count()) === 0,
+    "a shop is not offered SMS, which it would never get",
+  );
   await seller.check("#aviso-whatsapp");
   await seller.fill('main input[name="phone"]', "8702-3344");
   await seller.click('main button:has-text("Guardar preferencias")');

@@ -54,6 +54,11 @@ export interface OutboundMessage {
   deliveryId: string;
   /** "yt/<env>/<deliveryId>/<generation>". */
   idempotencyKey: string;
+  /**
+   * The request's generation, echoed in the provider's metadata so a late
+   * report about an earlier request is not applied to the one in flight.
+   */
+  generation?: number;
   category: Category;
   template: string;
   to: Recipient;
@@ -111,13 +116,17 @@ export type DeliveryStatus =
   | "rejected"
   | "complained"
   | "unsubscribed"
-  | "opted_out";
+  | "opted_out"
+  /** The phone itself asked to receive messages again (START): lifts an opt-out. */
+  | "opted_in";
 
 export interface DeliveryUpdate {
   provider: string;
   providerMessageId?: string;
   /** From echoed metadata. */
   deliveryId?: string;
+  /** From echoed metadata: which request of that message the report is about. */
+  generation?: number;
   channel?: Channel;
   status: DeliveryStatus;
   permanent: boolean;

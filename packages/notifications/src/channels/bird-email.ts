@@ -7,7 +7,7 @@
  */
 
 import type { ChannelAdapter, OutboundMessage } from "../types.ts";
-import { type BirdSettings, sendToBird, tagValue } from "./bird.ts";
+import { type BirdSettings, generationOf, sendToBird, tagValue } from "./bird.ts";
 
 export interface BirdEmailSettings extends BirdSettings {
   from: { orders: string; account: string; sellers: string };
@@ -38,7 +38,11 @@ export function birdEmail(settings: BirdEmailSettings): ChannelAdapter {
           { name: "template", value: tagValue(message.template) },
           { name: "env", value: tagValue(settings.env) },
         ],
-        metadata: { delivery_id: message.deliveryId, template: message.template },
+        metadata: {
+          delivery_id: message.deliveryId,
+          template: message.template,
+          ...generationOf(message),
+        },
         reference: message.deliveryId,
       });
     },

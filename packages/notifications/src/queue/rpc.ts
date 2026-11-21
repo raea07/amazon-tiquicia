@@ -99,6 +99,7 @@ export function rpcQueue(
           provider: update.provider,
           provider_message_id: update.providerMessageId ?? null,
           delivery_id: update.deliveryId ?? null,
+          generation: update.generation ?? null,
           channel: update.channel ?? null,
           status: update.status,
           occurred_at: update.occurredAt,
