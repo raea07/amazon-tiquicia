@@ -92,6 +92,9 @@ describe.skipIf(!available)("resolved app configuration", () => {
           expect.arrayContaining([
             "android.permission.POST_NOTIFICATIONS",
             "android.permission.RECEIVE_BOOT_COMPLETED",
+            // Asked for by androidx.biometric (expo-secure-store); no app uses it.
+            "android.permission.USE_BIOMETRIC",
+            "android.permission.USE_FINGERPRINT",
           ]),
         );
       }, 30_000);

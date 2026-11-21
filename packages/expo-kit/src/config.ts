@@ -110,12 +110,20 @@ export function fontsPlugin(): PluginEntry {
  * listed. Push is not built yet, so its permissions are removed here and its
  * iOS entitlement by `withoutUnbuiltCapabilities`. The push workstream deletes
  * both lines.
+ *
+ * expo-secure-store depends on androidx.biometric, whose manifest asks for
+ * USE_BIOMETRIC and USE_FINGERPRINT. No app unlocks anything with a
+ * fingerprint or face (the session key is stored without
+ * `requireAuthentication`), so both are removed and the stores do not list a
+ * biometric permission. An app that adds a biometric feature deletes them here.
  */
 const ALWAYS_BLOCKED = [
   "android.permission.RECORD_AUDIO",
   "android.permission.SYSTEM_ALERT_WINDOW",
   "android.permission.POST_NOTIFICATIONS",
   "android.permission.RECEIVE_BOOT_COMPLETED",
+  "android.permission.USE_BIOMETRIC",
+  "android.permission.USE_FINGERPRINT",
 ];
 
 /**
