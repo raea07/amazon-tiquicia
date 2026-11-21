@@ -78,6 +78,11 @@ const CORS = {
   "access-control-allow-headers":
     "authorization, apikey, content-type, x-client-info, prefer, x-supabase-api-version, content-profile, accept-profile, x-upsert, cache-control",
   "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  // Auth exposes its API version header to browsers (supabase/auth,
+  // internal/api/api.go: ExposedHeaders). Without it auth-js in a browser
+  // cannot read an error's code: in the native apps' web export a wrong
+  // second-step code read as an unknown failure.
+  "access-control-expose-headers": "x-supabase-api-version",
   "access-control-max-age": "600",
 };
 
