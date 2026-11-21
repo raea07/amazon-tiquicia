@@ -243,8 +243,17 @@ would merge strangers' records. Supabase Auth's own "soft delete" works the
 same way (it obfuscates the e-mail and phone and keeps the row). Deleting
 through Auth's admin API would also need a secret key, which no app holds.
 
-**To verify on the hosted project before relying on it** (not done; it has
-only run on a local imitation of the Auth tables):
+**Verified on the hosted preview on 21 November 2026** (details in the
+[runbook](../07-deployment/runbook-first-deploy.md#migrations-20261121082500-to-20261121082700)):
+points 1–3 below held, with three real deletions of throwaway accounts (one
+through the API, two from the shop's "Eliminar mi cuenta"), and a search of
+every row of every table in `public`, `private`, `auth` and `storage` found
+nothing personal of them afterwards. Point 4 was half done: Auth loaded the
+deleted row without error when its old token was presented, but its user
+listing and admin API need the secret key, which nothing uses, so the
+dashboard's user list is still to be opened once. Not covered by the deletion:
+`auth.flow_state` keeps the id (nothing personal) of an unfinished PKCE sign-in
+or reset.
 
 1. The function's owner may write the Auth tables:
    `select has_table_privilege(p.proowner, 'auth.users', 'UPDATE') from pg_proc p where p.proname = 'delete_my_account'`,
