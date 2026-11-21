@@ -1139,6 +1139,10 @@ select pg_temp.remember('expected_cafetal', (
   where f.seller_id = current_setting('t.cafetal')::uuid
     and private.cr_local(o.delivered_at)::date + 10 <= private.cr_local(now())::date));
 
+select pg_temp.remember('shops_with_money', (
+  select count(*)::text from private.seller_balances(current_setting('t.today')::date, 10) b
+  where b.payable_minor <> 0 or b.in_transit_minor <> 0 or b.available_minor <> 0));
+
 select pg_temp.login('central@yuntera.example');
 do $$
 declare
@@ -1150,8 +1154,11 @@ begin
      and (p ->> 'minimum_minor')::bigint = 500000
      and p ->> 'delivered_through' = (v_today - 10)::text and p ->> 'run' is null,
     format('today''s cut-off with its rules: %s', p - 'sellers');
-  -- Four shops have money in play; the one with no sales is not listed.
-  assert jsonb_array_length(p -> 'sellers') = 4, 'every shop with a balance';
+  -- Every shop with money in play is listed, and no other (on the seed, four:
+  -- the one with no sales is not). Counted from the ledger rather than fixed,
+  -- so the suite also passes on a shared preview where people have ordered since.
+  assert jsonb_array_length(p -> 'sellers') = current_setting('t.shops_with_money')::integer
+     and jsonb_array_length(p -> 'sellers') >= 4, 'every shop with a balance';
 
   s := (select x from jsonb_array_elements(p -> 'sellers') x
         where (x ->> 'seller_id')::uuid = current_setting('t.tecnocasa')::uuid);
@@ -1172,7 +1179,9 @@ begin
      and (s ->> 'details_request_pending')::boolean,
     format('nothing available yet, and a change of account is waiting: %s', s);
 
-  assert (p ->> 'to_pay_count')::integer = 3
+  assert (p ->> 'to_pay_count')::integer = (
+           select count(*) from jsonb_array_elements(p -> 'sellers') x where (x ->> 'will_pay')::boolean)
+     and (p ->> 'to_pay_count')::integer >= 3
      and (p ->> 'to_pay_minor')::bigint = (
        select sum((x ->> 'available_minor')::bigint) from jsonb_array_elements(p -> 'sellers') x
        where (x ->> 'will_pay')::boolean), 'the totals are of those who would be paid';
