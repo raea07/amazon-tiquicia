@@ -474,19 +474,7 @@ end
 $$;
 reset role;
 
--- No function in the API is left without an explicit decision about visitors.
-do $$
-declare
-  open_to_visitors text;
-begin
-  select string_agg(p.proname, ', ' order by p.proname) into open_to_visitors
-  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute');
-  assert open_to_visitors =
-    'cart_lines, checkout_quote, delivery_estimate, get_product, list_categories, list_districts, '
-    || 'report_content, reviewer_display_name, search_products, shop_path_exists, suggest_products',
-    format('functions open to visitors changed: %s', open_to_visitors);
-end
-$$;
+-- Which functions a visitor may execute is checked, against the list in
+-- docs/03-data/access-control.md, by 110_lockdown.sql.
 
 rollback;

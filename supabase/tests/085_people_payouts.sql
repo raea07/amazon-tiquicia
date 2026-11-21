@@ -4,6 +4,7 @@
 
 begin;
 \ir _helpers.sql
+select pg_temp.allow_inspection();
 
 select pg_temp.remember('tecnocasa', (select id::text from public.sellers where slug = 'tecnocasa'));
 select pg_temp.remember('cafetal', (select id::text from public.sellers where slug = 'cafetal-los-santos'));
@@ -233,9 +234,11 @@ begin
   for t in select * from (values
     ('select public.ops_set_staff(''central@yuntera.example'', ''admin'', false)'),
     ('select public.ops_set_staff(''central@yuntera.example'', ''ops'', true)'),
-    -- The rule is on the table, so a direct write cannot get round it either.
-    ('update public.staff_members set active = false where role = ''admin'''),
-    ('delete from public.staff_members where role = ''admin''')
+    -- The rule is on the table, so a write that does not go through the
+    -- function cannot get round it either. The API roles cannot write the
+    -- table at all; these run as its owner, with the administrator's identity.
+    ('set local role postgres; update public.staff_members set active = false where role = ''admin'''),
+    ('set local role postgres; delete from public.staff_members where role = ''admin''')
   ) v (stmt) loop
     begin
       execute t.stmt;
@@ -573,6 +576,8 @@ select current_setting('t.tecnocasa')::uuid, id, 'staff'
 from auth.users where email = 'comprador3@yuntera.example';
 
 -- The seller cannot write the payout account directly, or read it whole.
+-- (Checked without the suite's inspection grant: this is about privileges.)
+select pg_temp.stop_inspection();
 select pg_temp.login('vendedor@yuntera.example');
 do $$
 declare
@@ -585,6 +590,9 @@ begin
     -- Nor the phone and e-mail finance calls to confirm a change of account.
     ('update public.seller_private set contact_phone = ''+50687654321'''),
     ('update public.seller_private set contact_email = ''otra@example.com'''),
+    -- Since the lockdown, no column of the table is open to them at all.
+    ('update public.seller_private set postal_code = ''11802'''),
+    ('select legal_name from public.seller_private'),
     ('select payout_iban from public.seller_private'),
     ('select * from public.seller_private'),
     ('select 1 from public.payout_detail_requests'),
@@ -601,16 +609,10 @@ begin
       raise exception '%: % (expected permission denied)', t.stmt, sqlerrm;
     end;
   end loop;
-  -- The rest of their own record is still theirs to read and to keep current.
-  assert (select count(*) from public.seller_private where legal_name is not null) = 2,
-    'the other columns are still readable';
-  update public.seller_private set postal_code = '11802'
-  where seller_id = current_setting('t.tecnocasa')::uuid;
-  assert (select postal_code from public.seller_private
-          where seller_id = current_setting('t.tecnocasa')::uuid) = '11802', 'and writable';
 end
 $$;
 reset role;
+select pg_temp.allow_inspection();
 
 -- Who may ask: the shop's owner or administrator, nobody else.
 do $$
@@ -1660,6 +1662,7 @@ select pg_temp.check_balances('after a failed and a returned payout');
 -- Finance staff cannot write payouts except through the functions.
 insert into public.staff_members (user_id, role)
 select id, 'finance' from auth.users where email = 'comprador3@yuntera.example';
+select pg_temp.stop_inspection();
 select pg_temp.login('comprador3@yuntera.example');
 do $$
 declare
@@ -1685,6 +1688,7 @@ begin
 end
 $$;
 reset role;
+select pg_temp.allow_inspection();
 
 -- With no hold, only what is still on its way is pending.
 update public.app_settings set value = '0' where key = 'payout_hold_days';

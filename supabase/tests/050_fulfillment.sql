@@ -2,6 +2,7 @@
 
 begin;
 \ir _helpers.sql
+select pg_temp.allow_inspection();
 
 -- The seed leaves these orders at known stages.
 select pg_temp.remember('to_pick', (select id::text from public.orders where idempotency_key = 'seed-today-d2'));

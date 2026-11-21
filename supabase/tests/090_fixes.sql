@@ -4,6 +4,7 @@
 
 begin;
 \ir _helpers.sql
+select pg_temp.allow_inspection();
 
 select pg_temp.remember('buyer', (select id::text from auth.users where email = 'comprador@yuntera.example'));
 select pg_temp.remember('tecnocasa', (select id::text from public.sellers where slug = 'tecnocasa'));
@@ -620,11 +621,36 @@ $$;
 
 -- ── The review cannot be skipped through the tables ────────────────────────
 
--- Sellers keep column grants on products and skus for their drafts. On a
--- published listing those writes are refused, whatever the column: text,
--- category and tax rate (which set the referral fee), or the package (which
--- sets the warehouse fee). Adding a variant would put it on sale unreviewed.
+-- First lock: a seller holds no privilege on products or skus, so every
+-- direct write is refused before any rule is looked at (lockdown migration).
 select pg_temp.login('vendedor@yuntera.example');
+do $$
+declare
+  v_sku uuid := (select id from public.skus where product_id = current_setting('t.laptop')::uuid);
+begin
+  perform pg_temp.refused(format($q$update public.products set title = 'Título sin revisión' where id = %L$q$,
+    current_setting('t.laptop')), 'permission denied for table products');
+  perform pg_temp.refused(format($q$update public.products set tax_rate_bps = 0 where id = %L$q$,
+    current_setting('t.laptop')), 'permission denied for table products');
+  perform pg_temp.refused(format($q$update public.skus set weight_grams = 1 where id = %L$q$, v_sku),
+    'permission denied for table skus');
+  perform pg_temp.refused(format($q$update public.skus set active = false where id = %L$q$, v_sku),
+    'permission denied for table skus');
+  perform pg_temp.refused(format(
+    $q$insert into public.skus (product_id, code, weight_grams, length_cm, width_cm, height_cm)
+       values (%L, 'YT-SINREVISAR', 1, 1, 1, 1)$q$, current_setting('t.laptop')), 'permission denied for table skus');
+  perform pg_temp.refused(format($q$update public.products set title = 'Cambiado' where slug = %L$q$,
+    current_setting('t.draft_slug')), 'permission denied for table products');
+end
+$$;
+
+-- Second lock: the rule on the table itself. Whoever writes (here the owner,
+-- as any function would, with the seller's identity in the token), content
+-- changes to a published listing are refused unless the caller is catalogue
+-- staff: text, category and tax rate (which set the referral fee), or the
+-- package (which sets the warehouse fee). Adding a variant would put it on
+-- sale unreviewed.
+reset role;
 do $$
 declare
   v_sku uuid := (select id from public.skus where product_id = current_setting('t.laptop')::uuid);
@@ -654,16 +680,13 @@ begin
     $q$insert into public.skus (product_id, code, weight_grams, length_cm, width_cm, height_cm)
        values (%L, 'YT-SINREVISAR', 1, 1, 1, 1)$q$, current_setting('t.laptop')), 'published_listing_locked');
 
-  -- Switching a variant off and on again is still the seller's to do.
-  update public.skus set active = false where id = v_sku;
-  update public.skus set active = true where id = v_sku;
-  -- A listing that is not published yet is still theirs to shape directly.
+  -- A listing that is not published yet is not locked by the rule.
   update public.products set title = 'Producto de prueba en borrador, cambiado'
   where slug = current_setting('t.draft_slug');
-  assert found, 'a draft can be changed directly';
+  assert found, 'a draft is not locked';
 end
 $$;
-reset role; select pg_temp.logout();
+select pg_temp.logout();
 
 do $$
 begin
@@ -678,8 +701,11 @@ begin
 end
 $$;
 
--- Catalogue staff are not limited by this rule (they correct live listings).
+-- Catalogue staff are not limited by the rule (they correct live listings).
+-- Like everyone, they write through functions; this is the rule as a
+-- function owned by the table's owner meets it with their identity.
 select pg_temp.login('central@yuntera.example');
+reset role;
 do $$
 begin
   update public.products set warranty_months = warranty_months where id = current_setting('t.laptop')::uuid;
@@ -687,7 +713,7 @@ begin
   update public.products set made_in_cr = not made_in_cr where id = current_setting('t.laptop')::uuid;
 end
 $$;
-reset role; select pg_temp.logout();
+select pg_temp.logout();
 
 -- The shop keeps showing the published text.
 select pg_temp.login_anon();
@@ -1054,16 +1080,26 @@ begin
 end
 $$;
 
--- A seller still cannot publish anything themselves.
+-- A seller still cannot publish anything themselves: the table is closed to
+-- them, and the status rule refuses it even to a write made on their behalf.
 select pg_temp.login('vendedor@yuntera.example');
 do $$
 begin
   update public.products set status = 'active' where id = current_setting('t.draft')::uuid;
   raise exception 'a seller published their own listing';
+exception when insufficient_privilege then
+  null;
+end
+$$;
+reset role;
+do $$
+begin
+  update public.products set status = 'active' where id = current_setting('t.draft')::uuid;
+  raise exception 'a write with a seller''s identity published a listing';
 exception when others then
   if sqlerrm <> 'listing_needs_review' then raise; end if;
 end
 $$;
-reset role; select pg_temp.logout();
+select pg_temp.logout();
 
 rollback;

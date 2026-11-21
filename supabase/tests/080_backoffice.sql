@@ -4,6 +4,7 @@
 
 begin;
 \ir _helpers.sql
+select pg_temp.allow_inspection();
 
 select pg_temp.remember('tecnocasa', (select id::text from public.sellers where slug = 'tecnocasa'));
 select pg_temp.remember('depot', (select id::text from public.warehouses where code = 'SJO1'));
