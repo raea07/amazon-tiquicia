@@ -429,9 +429,9 @@ The same numbers are in `packages/core/src/fees.ts` and in the
 - The tested example: a ₡20,000 household item, shipped by the seller, paid by
   card, pays the seller ₡16,203.20
   ([worked through here](../04-algorithms/fees-and-settlement.md#worked-example)).
-- The fixed part of the payment fee is charged once per seller per order. An
-  order with items from two sellers charges it twice while the gateway charges
-  it once; see the limits in the fees document.
+- The fixed part of the payment fee is charged once per order, as the gateway
+  charges it, and shared between the order's sellers in proportion to what
+  each sold; see the fees document.
 
 ## 16. No cloud resources created without the owner
 

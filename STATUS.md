@@ -1,84 +1,131 @@
 # Status
 
-Written 21 November 2026, at the end of the first build session. This is the
-honest state of the project: what exists, how far it was checked, and what only
-the owner can do.
+Updated 21 November 2026, after people management, seller payouts and the
+fixes to known limitations were added. This is the honest state of the
+project: what exists, how far it was checked, and what only the owner can do.
 
 ## In one paragraph
 
 Yuntera is a marketplace with its own warehouse and delivery, designed for
 Costa Rica. The whole product works on a development machine: a shopper can
-search, buy and pay; a seller can register, list, stock and pack; staff can
-verify sellers, review products, plan routes, settle cash and refund returns;
-a driver can deliver against the customer's code; a warehouse worker can pick,
-pack and receive. **Nothing is deployed and no cloud resource was created.**
-Everything was verified against a local PostgreSQL and a local stand-in for the
-Supabase API — never against a real Supabase project.
+search, buy and pay; a seller can register, list, edit listings, stock, pack
+and see what they will be paid; staff can verify sellers, review products and
+listing edits, add staff, drivers and warehouse workers, plan routes, settle
+cash, refund returns and pay sellers; a driver can deliver against the
+customer's code; a warehouse worker can pick, pack and receive. **A hosted
+preview exists.** The database is a Supabase project in your separate free
+organisation, with 20 migrations applied and the demo data loaded; the two
+migrations added today (people and payouts, and the fixes) are **not applied
+there yet**. The four web apps are deployed as a preview on Vercel at
+`yuntera-web`, `yuntera-vende`, `yuntera-central` and `yuntera-campo` (each
+`.vercel.app`); every address is behind a Vercel login, and the projects are
+not connected to the Git repository. Payments, messages and invoices are still
+simulated or missing (see "Not built").
 
 ## What needs you
 
 In the order that unblocks the most.
 
-1. **Create the free Supabase organisation.** You chose to keep Yuntera out of
-   the paid organisation. Once the free one exists, tell me its name: I create
-   the project there, apply the migrations and follow
-   [`docs/07-deployment/runbook-first-deploy.md`](docs/07-deployment/runbook-first-deploy.md).
-   Until then nothing is deployed and the native apps cannot be tried against a
-   real backend.
-2. **Register `yuntera.cr` and do the trademark search.** `yuntera.com` and
+1. **Register `yuntera.cr` and do the trademark search.** `yuntera.com` and
    `yuntera.app` were bought on 21 November 2026 through your Vercel team
    (registrant: Astra Vier Solutions; auto-renew on; US$12.03 and US$9.99 for
    the first year). `yuntera.cr` cannot be bought there: register it at NIC
    Costa Rica or a reseller. The availability checks are **not** a trademark
    search; that has to be done at the Registro Nacional before the name is used
    in public. Details are in [`docs/brand/naming.md`](docs/brand/naming.md).
-3. **Have a Costa Rican lawyer and an accountant read the compliance
+2. **Have a Costa Rican lawyer and an accountant read the compliance
    documents.** They were written from public sources by an AI, not by a
    professional: consumer law, electronic invoicing, IVA on a marketplace,
    data protection, and how drivers are engaged. See
    [`docs/05-security-compliance/`](docs/05-security-compliance/) and the open
-   questions in [`docs/08-open-questions.md`](docs/08-open-questions.md).
-4. **Open a pull request for this branch** (`claude/vigilant-edison-lh64v2`)
+   questions in [`docs/08-open-questions.md`](docs/08-open-questions.md). The
+   four research notes in [`docs/research/`](docs/research/) were fact-checked
+   on 21 November 2026 and add these questions for them:
+   1. The central bank caps what a card acquirer may take from a merchant on
+      Costa Rican cards at 1.95%, but the gateways' published card prices
+      (3.9% + US$0.35 and 4.25% + US$0.35) are above it. The card cost in the
+      fee schedule is therefore an assumption.
+   2. Collecting shoppers' money and paying sellers out may require
+      registration with the financial supervisor (SUGEF) above a volume the
+      press puts at about US$400,000 in 12 months.
+   3. Strong customer authentication (3-D Secure) is required for online
+      payments with Costa Rican cards.
+   4. Whether a platform seller report was already due for 2025.
+   5. Store accounts in the company's name need a legal
+      entity, a D-U-N-S number, a public website and a work e-mail on the
+      company's own domain.
+3. **Open a pull request for this branch** (`claude/vigilant-edison-lh64v2`)
    when you want it on `main`. I did not open one because you had not asked.
    The CI workflow will run for the first time then; its steps were run by hand
    here but it has never run on GitHub.
-5. **Business set-up that only you can do:** the legal entity and its
+4. **Business set-up that only you can do:** the legal entity and its
    registration with Hacienda, a payment gateway contract (cards and SINPE
    Móvil), the electronic-invoicing provider, a bank account, and the support
    mailboxes the screens mention (`ayuda@yuntera.cr` does not exist yet).
+5. **Know what the preview costs.** The Vercel projects are on your Pro plan,
+   which bills by use. The Supabase project is in the free organisation.
 
 ## What is built
 
-| Part                 | Where                             | What it does                                                                                                                                                                                                                              |
-| -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shop                 | `apps/web`                        | Home, search with typo tolerance, categories, product pages with competing offers and a delivery date, cart, checkout with SINPE Móvil, card or cash on delivery, orders with tracking and delivery code, returns, reviews, account, help |
-| Seller centre        | `apps/seller`                     | Shop registration, listings with an itemised fee preview, prices, stock at the seller's own location, stock sent to the warehouse, packing, per-order statements                                                                          |
-| Internal console     | `apps/ops`                        | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product review, seller verification, drivers, audit trail                         |
-| Routes and warehouse | `apps/field`                      | Driver: the day's route, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with scan check, packing, receiving, stock lookup                                       |
-| Database             | `supabase/`                       | 19 migrations, 58 tables, 77 API functions, row-level security on every table, double-entry ledger, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                          |
-| Domain logic         | `packages/core`                   | Money and IVA, fees, featured-offer choice, search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, phones and Plus Codes                                                               |
-| Shared code          | `packages/{brand,ui,db,next-kit}` | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session, security headers, forms)                                                                                        |
-| Documentation        | `docs/`                           | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist                                 |
-| Brand                | `docs/brand/`, `packages/brand/`  | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files                                                        |
+| Part                 | Where                             | What it does                                                                                                                                                                                                                                                                                                |
+| -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shop                 | `apps/web`                        | Home, search with typo tolerance, categories, product pages with competing offers and a delivery date, cart, checkout with SINPE Móvil, card or cash on delivery, orders with tracking and delivery code, returns, reviews, account, help. An unknown product or category address answers "not found" (404) |
+| Seller centre        | `apps/seller`                     | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, and a request to change the payout account      |
+| Internal console     | `apps/ops`                        | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail         |
+| Routes and warehouse | `apps/field`                      | Driver: the day's route, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with scan check, packing, receiving, stock lookup                                                                                                         |
+| Database             | `supabase/`                       | 22 migrations, 61 tables, 101 API functions, row-level security on every table, double-entry ledger, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                           |
+| Domain logic         | `packages/core`                   | Money and IVA, fees, featured-offer choice, search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                          |
+| Shared code          | `packages/{brand,ui,db,next-kit}` | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session, security headers, forms)                                                                                                                                                          |
+| Documentation        | `docs/`                           | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase                                                                |
+| Brand                | `docs/brand/`, `packages/brand/`  | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files                                                                                                                          |
+
+How the new parts work, in short:
+
+- **Paying sellers.** What a shop is owed comes from the ledger and is split
+  three ways: _pending_ (on orders not delivered, or delivered fewer than 10
+  days ago), _in transit_ (in a payout run, not yet confirmed) and _available_.
+  Finance previews a cut-off date, creates a payout run, makes the transfers
+  by hand from the list the console gives (there is no bank connection), and
+  marks each payout paid with the bank's reference, or failed. Shops below
+  ₡5,000, suspended, or without a valid account are left out and told why.
+- **Payout accounts.** A seller cannot change the payout account directly: they
+  ask, and finance approves after checking. Nobody approves their own request
+  or one for a shop they belong to.
+- **Fees on an order from several sellers.** The fixed part of the payment fee
+  (₡180 on a card) is charged once per order and shared between the sellers in
+  proportion to what each sold.
+- **Stock in several places.** One order line can be filled from several
+  locations of the same offer; each location sends its own parcel.
 
 ## How it was checked
 
-| Check              | Result                                                                                                                                  |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit tests         | 237 pass (core 192, brand 19, API client 14, shared web code 12)                                                                        |
-| Database tests     | 8 files pass on PostgreSQL 16: access control per role, checkout, money, fulfilment, search, delivery promise, the API, the back office |
-| API contract tests | 13 pass: every screen's payload, called as each role, matches the types the apps use                                                    |
-| Browser journeys   | 4 pass in Chromium, each on a freshly seeded database: shopper, seller, staff, driver and warehouse (`pnpm e2e`)                        |
-| Lint and types     | Clean across the workspace                                                                                                              |
+On a development machine, on one freshly seeded database, after the last
+change:
+
+| Check              | Result                                                                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit tests         | 286 pass (core 239, brand 21, API client 14, shared web code 12)                                                                                                                                                              |
+| Database tests     | 11 files pass on PostgreSQL 16: access control per role, checkout, money, fulfilment, search, delivery promise, the API, the back office, people and payouts, the fixes, and one order from three sellers paid out end to end |
+| API contract tests | 32 pass: every screen's payload, called as each role, matches the types the apps use                                                                                                                                          |
+| Browser journeys   | 8 pass in Chromium on a freshly seeded database: shopper, seller, staff, driver and warehouse, people, payouts, listing edits, and the shop's 404 answers (`pnpm e2e`)                                                        |
+| Lint and types     | Clean across the workspace                                                                                                                                                                                                    |
+
+On the hosted preview (before today's two migrations): sign-in, sign-up and
+the 8 database test files that existed then passed on the real Supabase
+platform, with no difference in access control between local and hosted.
+E-mail confirmation is switched off on the preview, because the apps have no
+confirmation or password-reset screens yet.
 
 What these checks do **not** cover, stated plainly:
 
-- **No real Supabase.** Sign-in, sessions and function calls went through
-  `tools/dev-api`, a local program that imitates the parts of Supabase the apps
-  use. The real service will differ in details (e-mail confirmation, rate
-  limits, token refresh timing). Expect a day of fixes on first contact.
+- **Today's additions were not tried on the hosted project.** People
+  management, payouts, listing edits, the shared payment fee, lines from
+  several locations and the 404 answers were verified only locally, against
+  `tools/dev-api`, the local stand-in for the Supabase API.
 - **No real money, messages or invoices.** Payments are in sandbox mode; no
   gateway, e-mail, SMS, WhatsApp or electronic-invoicing provider is connected.
+  Payouts are bank transfers made by hand; the list the console produces is not
+  any bank's upload format.
 - **No real phones.** The drivers' app was tested in a phone-sized desktop
   browser with a simulated location.
 - **No load testing**, no security review by a third party.
@@ -100,10 +147,8 @@ These are missing, not hidden. The first group blocks a public launch.
 - A second factor for staff sign-in. The database can require it
   (`require_staff_mfa`); the console has no screen to enrol or enter it.
 - Product photos. Listings use placeholder drawings; there is no upload.
-- Screens to add staff, drivers and warehouse workers. Today that is done with
-  SQL; the runbook has the statements.
-- Payouts to sellers. What is owed is computed and shown; paying it and
-  recording the payment is not built.
+- A bank connection for payouts. Transfers are made by hand and recorded in
+  the console.
 
 **Later**
 
@@ -111,7 +156,7 @@ These are missing, not hidden. The first group blocks a public launch.
 - Native apps, background location and offline use for drivers; camera barcode
   scanning (a hand scanner works).
 - Sponsored listings, promotions and coupons, a map on the dispatch screen,
-  seller-side editing of listings after review, bulk listing upload.
+  bulk listing upload.
 
 ## Decisions I made for you
 
@@ -131,25 +176,36 @@ ones worth knowing about:
 - **Fees are assumptions.** Commission by category, warehouse fee by size and
   payment costs passed through at cost. The numbers come from public research
   on local gateways and are labelled as assumptions everywhere they appear.
+- **Sellers are paid 10 days after delivery, from ₡5,000.** Both are settings
+  an administrator can change.
 - **No billable cloud resources and no pull request without your say-so.**
 
 ## Things to know before trusting the numbers
 
 Found while building or reviewing; none is fixed by pretending otherwise.
 
-- The fixed part of a payment fee is charged once per seller in an order, not
-  once per payment. On an order with three sellers the platform recovers it
-  three times.
 - A refund returns the commission to the seller but not the payment and
   warehouse fees. That is a policy choice I made; confirm or change it.
-- Stock is added up across locations when shown, but a line of an order must
-  ship from one location. Two locations with one unit each can show "2
-  available" and refuse an order for two.
 - Unit economics, launch thresholds and data-retention periods in the strategy
   documents are estimates and say so.
-- An unknown product address returns the "not found" page with HTTP 200, not
-  404, because of how pages are streamed. Fine for people; worth fixing for
-  search engines.
+- Payout accounts that existed before today are not marked as approved by
+  finance. They are refused only if the account number fails its check.
+- A seller can no longer change the shop's contact phone or e-mail (finance
+  calls that phone to confirm a change of payout account). They need a
+  reviewed way to do it.
+- The photos of a published listing can still be changed directly, without
+  review. To be closed with the photo upload work.
+- A package above the largest warehouse size (120 cm or 30 kg) gets no
+  warehouse fee. It should be refused or priced.
+- Another shopper's order page shows "not found" but answers with status 200
+  rather than 404.
+- A visitor can file any number of content reports, including about things that
+  do not exist: there is no rate limit and no check that the target exists.
+  This must be fixed before production.
+- The shop refreshes its cached catalogue when a listing edit is approved or a
+  listing is archived, through a key (`SHOP_REFRESH_KEY`) that must be set to
+  the same value on the shop, the seller centre and the console. Without it,
+  changes still appear, within about a minute.
 
 ## Running it
 

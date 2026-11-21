@@ -69,7 +69,10 @@ What is then granted:
   columns, and only while the listing is not published: a trigger refuses
   content changes to a published listing, and new variants on it, unless the
   caller is catalogue staff. Edits to a published listing go through
-  `seller_update_listing` and wait for review. Orders,
+  `seller_update_listing` and wait for review (`product_change_requests`
+  is readable by the listing's seller and catalogue staff, and written only by
+  those functions). Not yet locked: the photos of a published listing
+  (`product_images`), which a seller can still change directly. Orders,
   payments, shipments, stock, ledger, routes and stops have **no** write grant
   at all: they change only inside functions.
 
