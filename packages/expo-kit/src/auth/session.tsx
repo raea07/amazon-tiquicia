@@ -1,6 +1,6 @@
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
-import { ApiError, type Api, createApi, type Roles } from "@yuntera/db";
+import { type Api, ApiError, createApi, type Roles } from "@yuntera/db";
 import {
   createContext,
   type ReactNode,
