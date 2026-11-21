@@ -295,6 +295,97 @@ describe("offline queue: storage", () => {
     await q.flush(api.send);
     expect(api.received).toEqual(["arrive:s1", "position:p3"]);
   });
+
+  it("never lets coalescing replace an entry that is being sent or was refused", async () => {
+    const q = queueOn(fakeStore());
+    await q.setOwner("ana");
+    await q.enqueue("position", "refused", { coalesce: "position" });
+    await q.flush(async () => ({ result: "rejected", message: "No." }));
+    await q.enqueue("position", "p1", { coalesce: "position" });
+    let release: (outcome: SendOutcome) => void = () => undefined;
+    let calls = 0;
+    const pass = q.flush((): Promise<SendOutcome> => {
+      calls += 1;
+      if (calls > 1) return Promise.resolve({ result: "offline" });
+      return new Promise<SendOutcome>((resolve) => {
+        release = resolve;
+      });
+    });
+    // p1 is on its way when p2 comes in.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await q.enqueue("position", "p2", { coalesce: "position" });
+    expect(q.snapshot().entries.map((e) => `${e.payload}:${e.status}`)).toEqual([
+      "refused:rejected",
+      "p1:sending",
+      "p2:pending",
+    ]);
+    release({ result: "done" });
+    await pass;
+    expect(q.snapshot().entries.map((e) => `${e.payload}:${e.status}`)).toEqual([
+      "refused:rejected",
+      "p2:pending",
+    ]);
+  });
+});
+
+describe("offline queue: age limits", () => {
+  function clocked(options: Partial<QueueOptions> = {}) {
+    const time = { now: 1_000_000 };
+    let id = 0;
+    const store = fakeStore();
+    const make = () =>
+      createOfflineQueue({
+        store,
+        key: KEY,
+        newId: () => `e${++id}`,
+        now: () => time.now,
+        ...options,
+      });
+    return { time, store, make };
+  }
+
+  it("checks each entry's own limit before every pass, not only at start-up", async () => {
+    const { time, make } = clocked({
+      maxAgeMs: (entry) => (entry.kind === "position" ? 5 * 60_000 : 36 * 3_600_000),
+    });
+    const q = make();
+    await q.setOwner("ana");
+    await q.enqueue("arrive", "s1");
+    await q.enqueue("position", "p1", { coalesce: "position" });
+    time.now += 10 * 60_000; // ten minutes without signal
+    const api = server();
+    await q.flush(api.send);
+    // The arrival still counts; a ten-minute-old position would mislead Central.
+    expect(api.received).toEqual(["arrive:s1"]);
+    expect(q.snapshot().entries).toEqual([]);
+  });
+
+  it("sets aside an action that waited too long, with a message, instead of dropping it silently", async () => {
+    const { time, store, make } = clocked({
+      maxAgeMs: 60_000,
+      expiredMessage: (entry) => (entry.kind === "position" ? null : "Nunca se envió."),
+    });
+    const q = make();
+    await q.setOwner("ana");
+    await q.enqueue("arrive", "s1");
+    await q.enqueue("position", "p1");
+    time.now += 61_000;
+    // Read again after a restart: still reported.
+    const restarted = make();
+    await restarted.setOwner("ana");
+    const api = server();
+    await restarted.flush(api.send);
+    expect(api.received).toEqual([]);
+    expect(restarted.snapshot().entries.map((e) => [e.payload, e.status, e.message])).toEqual([
+      ["s1", "rejected", "Nunca se envió."],
+    ]);
+    expect(store.map.get(KEY)).toContain("Nunca se envió.");
+
+    // Left without being dismissed for another full period, it goes.
+    time.now += 61_000;
+    await restarted.flush(api.send);
+    expect(restarted.snapshot().entries).toEqual([]);
+  });
 });
 
 describe("offline queue: accounts", () => {

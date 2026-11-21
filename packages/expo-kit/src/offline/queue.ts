@@ -28,6 +28,13 @@
  *   records who queued it. Only the signed-in account's entries are shown and
  *   sent; another account's stay stored, untouched, until that account signs
  *   in again on this phone or they expire (`maxAgeMs`).
+ * - **Nothing goes stale silently.** An entry waits at most `maxAgeMs`, which
+ *   may differ per entry (a position means nothing after a few minutes, an
+ *   arrival after a day). Past that it is not sent: it is dropped, or, when
+ *   `expiredMessage` gives a message for it, set aside as rejected so the
+ *   person learns it never arrived. A rejected entry is dropped once it has
+ *   been set aside for `maxAgeMs` without being dismissed. Ages are checked
+ *   when the queue is read and before every pass.
  * - **Coalescing.** An entry added with a `coalesce` key replaces a pending
  *   entry of the same account with the same key (only the latest position
  *   matters), so a long time offline does not pile up hundreds of reports.
@@ -57,6 +64,8 @@ export interface QueueEntry<P = unknown> {
   attempts: number;
   /** For a rejected entry: what to tell the person. */
   message?: string;
+  /** For a rejected entry: when it was set aside. */
+  settledAt?: number;
 }
 
 /** What happened when the app tried to send one entry. */
@@ -100,8 +109,14 @@ export interface QueueOptions {
   unknownOutcomeMessage?: string;
   /** Shown for an entry that failed in an unexpected way too many times. */
   failedMessage?: string;
-  /** Entries older than this are dropped when the queue is read. */
-  maxAgeMs?: number;
+  /** How long an entry may wait to be sent, for every entry or per entry. */
+  maxAgeMs?: number | ((entry: QueueEntry) => number);
+  /**
+   * For an entry that waited longer than `maxAgeMs`: the message to set it
+   * aside with, so the person learns it was never sent. Null (the default)
+   * drops it without a word, which suits a position report.
+   */
+  expiredMessage?: (entry: QueueEntry) => string | null;
   /** Times an entry may throw (a bug, not a lack of signal) before it is set aside. */
   maxAttempts?: number;
   now?: () => number;
@@ -153,6 +168,7 @@ export function createOfflineQueue(options: QueueOptions): OfflineQueue {
     unknownOutcomeMessage = "No sabemos si esta acción llegó. Revísela antes de repetirla.",
     failedMessage = "No pudimos enviar esta acción. Revísela antes de repetirla.",
     maxAgeMs = DAY,
+    expiredMessage = () => null,
     maxAttempts = 5,
     now = Date.now,
     newId = defaultId,
@@ -166,6 +182,28 @@ export function createOfflineQueue(options: QueueOptions): OfflineQueue {
   let writing: Promise<void> = Promise.resolve();
   let cached: QueueSnapshot | null = null;
   const listeners = new Set<() => void>();
+  const ageLimit = (entry: QueueEntry) =>
+    typeof maxAgeMs === "function" ? maxAgeMs(entry) : maxAgeMs;
+
+  /** Applies the age limits. Returns whether anything changed. */
+  const expire = (): boolean => {
+    const at = now();
+    let touched = false;
+    entries = entries.flatMap((entry): QueueEntry[] => {
+      if (entry.status === "sending") return [entry];
+      const limit = ageLimit(entry);
+      if (entry.status === "rejected") {
+        if (at - (entry.settledAt ?? entry.createdAt) <= limit) return [entry];
+        touched = true;
+        return [];
+      }
+      if (at - entry.createdAt <= limit) return [entry];
+      touched = true;
+      const message = expiredMessage(entry);
+      return message ? [{ ...entry, status: "rejected", message, settledAt: at }] : [];
+    });
+    return touched;
+  };
 
   const changed = () => {
     cached = null;
@@ -192,18 +230,17 @@ export function createOfflineQueue(options: QueueOptions): OfflineQueue {
       } catch {
         stored = [];
       }
-      const oldest = now() - maxAgeMs;
       const fromStore = (Array.isArray(stored) ? stored : []).filter(isEntry);
+      const at = now();
       // Entries added before the stored ones were read are newer: they go after.
-      entries = [...fromStore, ...entries]
-        .filter((entry) => entry.createdAt >= oldest)
-        .map((entry): QueueEntry => {
-          if (entry.status !== "sending") return entry;
-          // The app stopped while this was on its way: did it arrive?
-          return repeatable(entry)
-            ? { ...entry, status: "pending" }
-            : { ...entry, status: "rejected", message: unknownOutcomeMessage };
-        });
+      entries = [...fromStore, ...entries].map((entry): QueueEntry => {
+        if (entry.status !== "sending") return entry;
+        // The app stopped while this was on its way: did it arrive?
+        return repeatable(entry)
+          ? { ...entry, status: "pending" }
+          : { ...entry, status: "rejected", message: unknownOutcomeMessage, settledAt: at };
+      });
+      expire();
       await persist();
       changed();
     })();
@@ -221,6 +258,10 @@ export function createOfflineQueue(options: QueueOptions): OfflineQueue {
   async function pass(send: Send): Promise<FlushResult> {
     const result: FlushResult = { sent: 0, rejected: 0, offline: false, remaining: 0 };
     const account = owner;
+    if (expire()) {
+      await persist();
+      changed();
+    }
     while (account !== null && owner === account) {
       const next = entries.find((entry) => entry.owner === account && entry.status === "pending");
       if (!next) break;
@@ -241,7 +282,7 @@ export function createOfflineQueue(options: QueueOptions): OfflineQueue {
           ...sending,
           attempts,
           status: failed ? "rejected" : "pending",
-          ...(failed ? { message: failedMessage } : {}),
+          ...(failed ? { message: failedMessage, settledAt: now() } : {}),
         });
         await persist();
         changed();
@@ -257,7 +298,12 @@ export function createOfflineQueue(options: QueueOptions): OfflineQueue {
         replace(sending.id, null);
         result.sent += 1;
       } else if (outcome.result === "rejected") {
-        replace(sending.id, { ...sending, status: "rejected", message: outcome.message });
+        replace(sending.id, {
+          ...sending,
+          status: "rejected",
+          message: outcome.message,
+          settledAt: now(),
+        });
         result.rejected += 1;
       } else {
         replace(sending.id, { ...sending, status: "pending", attempts: sending.attempts + 1 });
