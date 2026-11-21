@@ -531,13 +531,7 @@ begin
     and not exists (select 1 from unnest(p.proconfig) c where c like 'search_path=%');
   assert missing is null, format('SECURITY DEFINER without search_path: %s', missing);
 
-  -- Nothing in `public` is executable by visitors except the three browsing functions.
-  select string_agg(p.proname, ', ') into missing
-  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public'
-    and has_function_privilege('anon', p.oid, 'execute')
-    and p.proname not in ('search_products', 'suggest_products', 'delivery_estimate');
-  assert missing is null, format('functions open to visitors: %s', missing);
+  -- (Which functions visitors may call is pinned, by name, in 070_api.sql.)
 
   -- Internal tables are unreachable through the API roles.
   assert not has_table_privilege('authenticated', 'private.audit_log', 'select'), 'audit log is private';

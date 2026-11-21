@@ -155,6 +155,67 @@ begin
 end;
 $$;
 
+-- ── Pricing ────────────────────────────────────────────────────────────────
+-- Validates and prices a basket from the database's own data. Nothing the
+-- client says about prices is trusted. Used by BOTH the pre-purchase quote and
+-- order placement, so the total a shopper confirms is the total they are charged.
+
+create or replace function private.price_items(p_items jsonb, p_max_units integer)
+returns table (
+  line_count bigint,
+  bad_quantity bigint,
+  unavailable_offer uuid,
+  items_total bigint,
+  items_tax bigint,
+  handling_days integer
+)
+language sql stable security definer
+set search_path = ''
+as $$
+  with requested as (
+    select (e ->> 'offer_id')::uuid as offer_id, sum((e ->> 'quantity')::integer) as quantity
+    from jsonb_array_elements(p_items) e
+    group by 1
+  ),
+  priced as (
+    select r.offer_id, r.quantity, o.price_minor, o.fulfillment, o.handling_days, p.tax_rate_bps,
+           (o.id is not null and o.status = 'active' and k.active
+            and p.status = 'active' and s.status = 'active') as buyable
+    from requested r
+    left join public.offers o on o.id = r.offer_id
+    left join public.skus k on k.id = o.sku_id
+    left join public.products p on p.id = k.product_id
+    left join public.sellers s on s.id = o.seller_id
+  )
+  select count(*),
+         count(*) filter (where quantity is null or quantity <= 0 or quantity > p_max_units),
+         (array_agg(offer_id) filter (where not coalesce(buyable, false)))[1],
+         coalesce(sum(price_minor * quantity) filter (where buyable), 0)::bigint,
+         coalesce(sum(
+           price_minor * quantity
+           - round((price_minor * quantity)::numeric * 10000 / (10000 + tax_rate_bps))
+         ) filter (where buyable), 0)::bigint,
+         coalesce(max(case when fulfillment = 'seller' then handling_days else 0 end), 0)::integer
+  from priced;
+$$;
+
+-- Shipping for a merchandise total in a zone, and the IVA contained in it.
+create or replace function private.shipping_for(p_zone_id text, p_items_total bigint)
+returns table (shipping_minor bigint, shipping_tax_minor bigint)
+language sql stable security definer
+set search_path = ''
+as $$
+  select fee, fee - round(fee::numeric * 10000 / 11300)::bigint
+  from (
+    select case
+             when z.free_shipping_threshold_minor is not null
+                  and p_items_total >= z.free_shipping_threshold_minor then 0
+             else z.shipping_fee_minor
+           end as fee
+    from public.delivery_zones z where z.id = p_zone_id
+  ) f;
+$$;
+
 -- ── Place an order ─────────────────────────────────────────────────────────
 
 create or replace function public.place_order(
@@ -222,34 +283,8 @@ begin
     perform private.fail('zone_not_served', v_addr.postal_code);
   end if;
 
-  -- Pass 1: validate every line and price the order from the database's own
-  -- data. Nothing the client says about prices is trusted.
-  with requested as (
-    select (e ->> 'offer_id')::uuid as offer_id, sum((e ->> 'quantity')::integer) as quantity
-    from jsonb_array_elements(p_items) e
-    group by 1
-  ),
-  priced as (
-    select r.offer_id, r.quantity, o.price_minor, o.fulfillment, o.handling_days, p.tax_rate_bps,
-           (o.id is not null and o.status = 'active' and k.active
-            and p.status = 'active' and s.status = 'active') as buyable
-    from requested r
-    left join public.offers o on o.id = r.offer_id
-    left join public.skus k on k.id = o.sku_id
-    left join public.products p on p.id = k.product_id
-    left join public.sellers s on s.id = o.seller_id
-  )
-  select count(*) as line_count,
-         count(*) filter (where quantity is null or quantity <= 0 or quantity > v_max_units) as bad_quantity,
-         (array_agg(offer_id) filter (where not coalesce(buyable, false)))[1] as unavailable_offer,
-         coalesce(sum(price_minor * quantity) filter (where buyable), 0)::bigint as items_total,
-         coalesce(sum(
-           price_minor * quantity
-           - round((price_minor * quantity)::numeric * 10000 / (10000 + tax_rate_bps))
-         ) filter (where buyable), 0)::bigint as items_tax,
-         coalesce(max(case when fulfillment = 'seller' then handling_days else 0 end), 0) as handling_days
-  into v_check
-  from priced;
+  -- Pass 1: validate every line and price the order (shared with checkout_quote).
+  select * into v_check from private.price_items(p_items, v_max_units);
 
   if v_check.line_count > v_max_lines then
     perform private.fail('too_many_lines');
@@ -261,12 +296,8 @@ begin
     perform private.fail('offer_unavailable', v_check.unavailable_offer::text);
   end if;
 
-  v_shipping := case
-    when v_zone.free_shipping_threshold_minor is not null
-         and v_check.items_total >= v_zone.free_shipping_threshold_minor then 0
-    else v_zone.shipping_fee_minor
-  end;
-  v_shipping_tax := v_shipping - round(v_shipping::numeric * 10000 / 11300)::bigint;
+  select shipping_minor, shipping_tax_minor into v_shipping, v_shipping_tax
+  from private.shipping_for(v_zone.id, v_check.items_total);
   v_total := v_check.items_total + v_shipping;
 
   if p_payment_method = 'cash_on_delivery'
