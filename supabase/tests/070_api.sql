@@ -21,6 +21,8 @@ select pg_temp.remember('pick_shipment',
 
 -- ── Visitor ────────────────────────────────────────────────────────────────
 
+-- Read as the owner: a visitor reads no table (082800).
+select pg_temp.remember('speaker', (select id::text from public.products where slug = 'parlante-bluetooth-nimbo-ola'));
 select pg_temp.login_anon();
 
 do $$
@@ -119,7 +121,7 @@ $$;
 do $$
 begin
   -- About a listing that exists and is public (120_limits.sql covers the rest).
-  perform public.report_content('product', (select id from public.products where slug = 'parlante-bluetooth-nimbo-ola'),
+  perform public.report_content('product', current_setting('t.speaker')::uuid,
                                 'unsafe', 'Se calienta demasiado.', 'ana@correo.example');
   begin
     perform public.report_content('product', gen_random_uuid(), 'unsafe');

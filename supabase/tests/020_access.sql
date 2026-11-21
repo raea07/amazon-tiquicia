@@ -102,6 +102,9 @@ grant execute on function pg_temp.no_direct_access(text) to anon, authenticated;
 
 -- ── Visitor (not signed in) ────────────────────────────────────────────────
 
+-- A listing that exists and is public, to report (read as the owner: a visitor
+-- reads no table).
+select pg_temp.remember('public_product', (select id::text from public.products where slug = 'parlante-bluetooth-nimbo-ola'));
 select pg_temp.login_anon();
 select pg_temp.no_direct_access('a visitor');
 
@@ -146,7 +149,10 @@ end
 $$;
 
 -- Anyone may report content, but must leave a way to be contacted.
-select public.report_content('product', gen_random_uuid(), 'counterfeit', null, 'alguien@correo.example');
+-- Since the limits migration (083000) the report must be about something that
+-- exists and is public; 120_limits.sql covers the refusals.
+select public.report_content('product', current_setting('t.public_product')::uuid, 'counterfeit', null,
+                             'alguien@correo.example');
 
 do $$
 begin

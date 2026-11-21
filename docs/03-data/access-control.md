@@ -394,6 +394,8 @@ name it here and in the test, and say why in the pull request.
 <!-- BEGIN visitor functions -->
 
 - `cart_lines`
+- `check_request` (the Data API runs it before every request, a visitor's
+  included; for a visitor it returns at once)
 - `checkout_quote`
 - `delivery_estimate`
 - `get_product`
@@ -445,8 +447,43 @@ the token:
 
 <!-- END policy helpers -->
 
-**PUBLIC** may execute nothing in `public` or `private`. `service_role` is the
-platform's own server-side role and is not managed here.
+**Storage policy helpers.** Only `authenticated` may execute these functions
+in `private`, which the rules on `storage.objects` for product photos call
+(the storage service runs each file operation as the signed-in caller). Each
+runs with its owner's rights and answers yes or no:
+
+<!-- BEGIN storage policy helpers -->
+
+- `photo_object_deletable`
+- `photo_object_insertable`
+- `photo_object_readable`
+
+<!-- END storage policy helpers -->
+
+**Server-side functions.** No API role may execute these functions in
+`public`; only a platform role does. The notification worker calls the
+`worker_*` functions with the server-side key (`service_role`), and Auth
+calls the hook (`supabase_auth_admin`):
+
+<!-- BEGIN server-side functions -->
+
+- `hook_mfa_verification_attempt` (Auth)
+- `worker_notify_apply_update`
+- `worker_notify_claim`
+- `worker_notify_defer`
+- `worker_notify_fail`
+- `worker_notify_freeze`
+- `worker_notify_plan`
+- `worker_notify_sent`
+- `worker_notify_skip`
+- `worker_push_disable`
+- `worker_push_receipts_due`
+
+<!-- END server-side functions -->
+
+**PUBLIC** may execute nothing in `public` or `private`. Beyond the
+server-side functions above, `service_role` is the platform's own role and is
+not managed here.
 
 ## Checklist: adding a function safely
 

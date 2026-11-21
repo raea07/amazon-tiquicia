@@ -684,6 +684,11 @@ revoke execute on function
   private.fail(text, text)
 from anon, authenticated;
 
+-- The photo migration (082700) granted this cast to signed-in users because
+-- its storage rules call helpers that use it. Those helpers run with their
+-- owner's rights, so the caller never needs it.
+revoke execute on function private.uuid_or_null(text) from anon, authenticated;
+
 -- What remains executable in `private` by the API roles is the short list of
 -- yes-or-no helpers that row-level-security policies call (here and, for
 -- example, on storage objects). The Data API does not expose `private`, so

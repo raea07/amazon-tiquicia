@@ -8,6 +8,9 @@
 
 begin;
 \ir _helpers.sql
+-- Reads below check what functions left behind (see _helpers.sql); access
+-- itself is tested in 020_access and 110_lockdown.
+select pg_temp.allow_inspection();
 
 -- Back to the superuser with nobody signed in.
 create function pg_temp.logout() returns void
@@ -202,8 +205,8 @@ select pg_temp.remember('first_stop', (
   select s.id::text from public.route_stops s
   where s.route_id = current_setting('t.live_route')::uuid and s.cod_amount_minor = 0));
 select pg_temp.remember('first_pin', (
-  select o.delivery_pin from public.route_stops s join public.shipments sh on sh.id = s.shipment_id
-  join public.orders o on o.id = sh.order_id where s.id = current_setting('t.first_stop')::uuid));
+  select c.code from public.route_stops s join public.shipments sh on sh.id = s.shipment_id
+  join private.delivery_codes c on c.order_id = sh.order_id where s.id = current_setting('t.first_stop')::uuid));
 
 select pg_temp.login('repartidor@yuntera.example');
 do $$
@@ -277,8 +280,8 @@ end
 $$;
 reset role; select pg_temp.logout();
 select pg_temp.remember('new_pin', (
-  select o.delivery_pin from public.route_stops s join public.shipments sh on sh.id = s.shipment_id
-  join public.orders o on o.id = sh.order_id where s.id = current_setting('t.new_stop')::uuid));
+  select c.code from public.route_stops s join public.shipments sh on sh.id = s.shipment_id
+  join private.delivery_codes c on c.order_id = sh.order_id where s.id = current_setting('t.new_stop')::uuid));
 select pg_temp.login('repartidor2@yuntera.example');
 do $$
 begin
@@ -847,6 +850,8 @@ reset role; select pg_temp.logout();
 
 -- ═══ FA-8: what a visitor sends is bounded ═════════════════════════════════
 
+-- (Read as the owner first: a visitor can read no table.)
+select pg_temp.remember('licuadora_offer', pg_temp.offer('licuadora-volcan-600w')::text);
 select pg_temp.login_anon();
 do $$
 declare
@@ -872,10 +877,10 @@ begin
   assert public.checkout_quote('[{"offer_id": "no-es-un-id", "quantity": 1}]', '10101') ->> 'issue' = 'offer_unavailable',
     'a malformed line is an issue, not a raw error';
   assert public.checkout_quote(jsonb_build_array(jsonb_build_object(
-           'offer_id', pg_temp.offer('licuadora-volcan-600w'), 'quantity', 1.5)), '10101') ->> 'issue' = 'invalid_quantity',
+           'offer_id', current_setting('t.licuadora_offer')::uuid, 'quantity', 1.5)), '10101') ->> 'issue' = 'invalid_quantity',
     'so is a fractional quantity';
   assert public.checkout_quote(jsonb_build_array(jsonb_build_object(
-           'offer_id', pg_temp.offer('licuadora-volcan-600w'), 'quantity', 1)), '10101') ->> 'issue' is null,
+           'offer_id', current_setting('t.licuadora_offer')::uuid, 'quantity', 1)), '10101') ->> 'issue' is null,
     'an ordinary cart is priced as before';
 end
 $$;
@@ -890,7 +895,15 @@ end $$;
 
 -- ═══ FA-9: reviewer names only for reviewers ═══════════════════════════════
 
+-- Since the lockdown (082800) no API role may call the function at all; only
+-- get_product, which runs with its owner's rights, does. What it answers is
+-- checked as the owner.
 select pg_temp.login_anon();
+select pg_temp.denied(format('select public.reviewer_display_name(%L)', current_setting('t.uid_central')));
+reset role;
+select pg_temp.login('comprador2@yuntera.example');
+select pg_temp.denied(format('select public.reviewer_display_name(%L)', current_setting('t.uid_central')));
+reset role; select pg_temp.logout();
 do $$
 begin
   assert public.reviewer_display_name(current_setting('t.uid_central')::uuid) = 'Cliente',

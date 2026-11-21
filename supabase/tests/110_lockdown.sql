@@ -30,8 +30,9 @@ create temporary table allowed (role text, schema text, fn text) on commit drop;
 insert into allowed (role, schema, fn)
 -- BEGIN visitor functions
 select 'anon', 'public', unnest(array[
-  'cart_lines', 'checkout_quote', 'delivery_estimate', 'get_product', 'list_categories',
-  'list_districts', 'report_content', 'search_products', 'shop_path_exists', 'suggest_products'
+  'cart_lines', 'check_request', 'checkout_quote', 'delivery_estimate', 'get_product',
+  'list_categories', 'list_districts', 'report_content', 'search_products', 'shop_path_exists',
+  'suggest_products'
 ])
 -- END visitor functions
 union all
@@ -43,13 +44,35 @@ select r, 'private', unnest(array[
   'seller_is_active', 'works_at', 'works_at_location'
 ])
 -- END policy helpers
-from unnest(array['anon', 'authenticated']) r;
+from unnest(array['anon', 'authenticated']) r
+union all
+-- BEGIN storage policy helpers
+select 'authenticated', 'private', unnest(array[
+  'photo_object_deletable', 'photo_object_insertable', 'photo_object_readable'
+])
+-- END storage policy helpers
+;
 -- Functions in `public` that no API role may execute.
 create temporary table internal (fn text) on commit drop;
 insert into internal (fn)
 -- BEGIN internal functions
 select unnest(array['reviewer_display_name'])
 -- END internal functions
+;
+-- Functions in `public` that only a platform role may execute: the
+-- notification worker (`service_role`) and the Auth server's hook
+-- (`supabase_auth_admin`).
+create temporary table worker_only (role text, fn text) on commit drop;
+insert into worker_only (role, fn)
+-- BEGIN server-side functions
+select 'service_role', unnest(array[
+  'worker_notify_apply_update', 'worker_notify_claim', 'worker_notify_defer', 'worker_notify_fail',
+  'worker_notify_freeze', 'worker_notify_plan', 'worker_notify_sent', 'worker_notify_skip',
+  'worker_push_disable', 'worker_push_receipts_due'
+])
+union all
+select 'supabase_auth_admin', unnest(array['hook_mfa_verification_attempt'])
+-- END server-side functions
 ;
 
 -- No privilege on any table, view, materialised view, foreign table or
@@ -158,8 +181,31 @@ begin
                   where a.role = g.grantee and a.schema = g.nspname and a.fn = g.proname)
           -- signed-in users: every API function, each of which checks its caller
           or (g.grantee = 'authenticated' and g.nspname = 'public' and not g.is_trigger
-              and g.proname not in (select fn from pg_temp.internal))));
+              and g.proname not in (select fn from pg_temp.internal)
+              and g.proname not in (select fn from pg_temp.worker_only))));
   assert found_ is null, format('functions executable beyond the documented list: %s', found_);
+
+  -- Every function in `public` that a signed-in user cannot execute is on one
+  -- of the two lists, so neither list hides a function that is simply missing
+  -- its grant.
+  select string_agg(p.proname, ', ' order by p.proname) into found_
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.prorettype <> 'trigger'::regtype
+    and not has_function_privilege('authenticated', p.oid, 'execute')
+    and p.proname not in (select fn from pg_temp.internal)
+    and p.proname not in (select fn from pg_temp.worker_only);
+  assert found_ is null, format('public functions no signed-in user may execute, on no list: %s', found_);
+
+  -- The worker and the Auth hook keep exactly what they need: their own
+  -- functions, which no API role may call.
+  select string_agg(w.fn, ', ') into found_
+  from pg_temp.worker_only w
+  where not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                    where n.nspname = 'public' and p.proname = w.fn
+                      and has_function_privilege(w.role, p.oid, 'execute')
+                      and not has_function_privilege('authenticated', p.oid, 'execute')
+                      and not has_function_privilege('anon', p.oid, 'execute'));
+  assert found_ is null, format('server-side functions not reserved to their role: %s', found_);
 
   -- And the lists name nothing that does not exist (a stale list hides drift).
   select string_agg(a.schema || '.' || a.fn, ', ') into found_
@@ -313,7 +359,9 @@ select pg_temp.remember('comprador3', (select id::text from auth.users where ema
 select pg_temp.remember('central', (select id::text from auth.users where email = 'central@yuntera.example'));
 select pg_temp.remember('buyer_order',
   (select o.order_number from public.orders o join auth.users u on u.id = o.user_id
-   where u.email = 'comprador@yuntera.example' and o.delivery_pin is not null
+   where u.email = 'comprador@yuntera.example'
+     and exists (select 1 from private.delivery_codes c where c.order_id = o.id)
+     and o.status in ('confirmed', 'processing', 'partially_shipped', 'shipped')
    order by o.placed_at desc limit 1));
 select pg_temp.remember('delivered_item', (
   select i.id::text
@@ -337,6 +385,9 @@ reset role;
 select pg_temp.staff_as('support');
 select pg_temp.login('comprador3@yuntera.example');
 select public.ops_decide_return(current_setting('t.return_id')::uuid, true, 'Foto recibida.');
+-- Since the integrity migration (082900) a return is refunded only after the
+-- goods are recorded back.
+select public.ops_receive_return(current_setting('t.return_id')::uuid, false, 'Recibido golpeado.');
 select public.ops_complete_return(current_setting('t.return_id')::uuid, 'Reembolso enviado.');
 select pg_temp.denied('DTA-3', format(
   $q$update public.return_requests set status = 'approved', resolved_at = null where id = %L$q$,
@@ -387,8 +438,11 @@ begin
   foreach v_role in array array['ops', 'support', 'finance', 'admin']::public.staff_role[] loop
     perform pg_temp.staff_as(v_role);
     perform pg_temp.login('comprador3@yuntera.example');
-    perform pg_temp.denied('DTA-2', 'select order_number, delivery_pin from public.orders');
-    perform pg_temp.denied('INT-4', 'select count(delivery_pin) from public.orders');
+    -- Since the integrity migration (082900) the code lives in its own private
+    -- table; the column the review read no longer exists.
+    perform pg_temp.denied('DTA-2', 'select order_id, code from private.delivery_codes');
+    perform pg_temp.denied('INT-4', 'select count(code) from private.delivery_codes');
+    perform pg_temp.denied('INT-4', 'select count(*) from private.delivery_code_attempts');
     -- The order functions staff use leave the code out.
     assert public.get_order(current_setting('t.buyer_order')) ->> 'delivery_pin' is null,
       format('WEB-1: %s staff see no delivery code through get_order', v_role);
@@ -396,7 +450,7 @@ begin
   end loop;
   -- A driver neither.
   perform pg_temp.login('repartidor@yuntera.example');
-  perform pg_temp.denied('WEB-1', 'select delivery_pin from public.orders');
+  perform pg_temp.denied('WEB-1', 'select code from private.delivery_codes');
   assert public.driver_today()::text not like '%delivery_pin%', 'WEB-1: no code on the driver''s route';
   reset role;
   -- The shopper still has theirs, through the function.

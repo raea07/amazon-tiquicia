@@ -31,12 +31,23 @@ function fromGuard(list: string): string[] {
   const part = between(guard, `-- BEGIN ${list}`, `-- END ${list}`);
   return [...part.matchAll(/'([a-z_]+)'/g)]
     .map((m) => m[1] ?? "")
-    .filter((name) => !["anon", "public", "private", "authenticated"].includes(name))
+    .filter(
+      (name) =>
+        !["anon", "public", "private", "authenticated", "service_role", "supabase_auth_admin"].includes(
+          name,
+        ),
+    )
     .sort();
 }
 
 describe("the documented execute lists", () => {
-  for (const list of ["visitor functions", "internal functions", "policy helpers"]) {
+  for (const list of [
+    "visitor functions",
+    "internal functions",
+    "policy helpers",
+    "storage policy helpers",
+    "server-side functions",
+  ]) {
     it(`match the guard test: ${list}`, () => {
       const documented = fromDoc(list);
       expect(documented.length).toBeGreaterThan(0);

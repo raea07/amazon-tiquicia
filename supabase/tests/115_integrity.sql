@@ -12,6 +12,9 @@
 
 begin;
 \ir _helpers.sql
+-- Reads below check what functions left behind (see _helpers.sql); access
+-- itself is tested in 020_access and 110_lockdown.
+select pg_temp.allow_inspection();
 
 create function pg_temp.logout() returns void
 language sql as $$ select set_config('request.jwt.claims', '', true) $$;
@@ -1373,8 +1376,18 @@ select pg_temp.check_invariants('INT-11');
 select pg_temp.login('vendedor@yuntera.example');
 select pg_temp.refused(format('select public.seller_update_offer(%L, 1, ''active'')',
                               pg_temp.offer('parlante-bluetooth-nimbo-ola')), 'price_below_fees');
+reset role;
+select pg_temp.remember('int13_offer', pg_temp.offer('parlante-bluetooth-nimbo-ola')::text);
+select pg_temp.login('vendedor@yuntera.example');
+-- A direct write is refused for lack of a privilege (082800); the same write
+-- made as the table's owner, with the seller's token, meets the floor's
+-- trigger, which holds on every path.
 select pg_temp.refused(format('update public.offers set price_minor = 1 where id = %L',
-                              pg_temp.offer('parlante-bluetooth-nimbo-ola')), 'price_below_fees');
+                              current_setting('t.int13_offer')), 'forbidden');
+reset role;
+select pg_temp.refused(format('update public.offers set price_minor = 1 where id = %L',
+                              current_setting('t.int13_offer')), 'price_below_fees');
+select pg_temp.login('vendedor@yuntera.example');
 -- A price that covers the fees is fine.
 select public.seller_update_offer(pg_temp.offer('parlante-bluetooth-nimbo-ola'), 2700000, 'active');
 reset role;

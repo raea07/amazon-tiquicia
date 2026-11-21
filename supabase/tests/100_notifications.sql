@@ -8,6 +8,9 @@
 
 begin;
 \ir _helpers.sql
+-- Reads below check what functions left behind (see _helpers.sql); access
+-- itself is tested in 020_access and 110_lockdown.
+select pg_temp.allow_inspection();
 
 -- The server-side worker, as Supabase runs a request made with a secret key.
 create function pg_temp.login_worker() returns void
@@ -264,6 +267,9 @@ select set_config('t.order', (public.place_order(
   jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.cafe'), 'quantity', 1)),
   (select id from public.addresses where is_default), 'sinpe_movil', 'test-notify-0001') ->> 'order_id'), true);
 reset role;
+-- The order's delivery code, kept in the private schema since 082900.
+select pg_temp.remember('order_code',
+  (select c.code from private.delivery_codes c where c.order_id = current_setting('t.order')::uuid));
 select pg_temp.login_worker();
 select public.worker_notify_plan(100);
 reset role;
@@ -303,7 +309,7 @@ begin
   assert not (m -> 'vars') ?| array['delivery_pin', 'ship_senas', 'ship_phone', 'sinpe_reference', 'id_number'],
     'never the delivery code, the address or payment details';
   assert not exists (select 1 from jsonb_each_text(m -> 'vars') e
-                     where e.value = (select delivery_pin from public.orders where id = current_setting('t.order')::uuid)),
+                     where e.value = current_setting('t.order_code')),
     'the PIN appears nowhere as a value';
   select x into m from jsonb_array_elements(c) x where x ->> 'channel' = 'whatsapp';
   assert m #>> '{to,phone}' = '+50688881234', 'the WhatsApp number';

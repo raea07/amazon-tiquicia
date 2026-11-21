@@ -6,6 +6,9 @@
 
 begin;
 \ir _helpers.sql
+-- Reads below check what functions left behind (see _helpers.sql); access
+-- itself is tested in 020_access and 110_lockdown.
+select pg_temp.allow_inspection();
 
 -- A second member of staff (support), with a verified factor and one open
 -- session, for the administrator to recover.
@@ -129,12 +132,24 @@ declare v_rows integer;
 begin
   assert not exists (select 1 from private.my_seller_ids()), 'no shops at aal1';
   -- The payout account itself is never written directly (082300: only an
-  -- approved request changes it); the columns a seller admin may still write
-  -- are refused at aal1 too.
-  update public.seller_private set fiscal_address = 'Dirección cambiada a aal1'
-  where seller_id = current_setting('t.shop')::uuid;
-  get diagnostics v_rows = row_count;
-  assert v_rows = 0, 'the shop''s fiscal details cannot be changed at aal1';
+  -- approved request changes it). Since the lockdown (082800) no column of the
+  -- table is writable directly, and the fiscal details change only through a
+  -- request (seller_request_shop_change, 083000), which is refused at aal1 too.
+  begin
+    update public.seller_private set fiscal_address = 'Dirección cambiada a aal1'
+    where seller_id = current_setting('t.shop')::uuid;
+    get diagnostics v_rows = row_count;
+    assert v_rows = 0, 'the shop''s fiscal details cannot be changed at aal1';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.seller_request_shop_change(current_setting('t.shop')::uuid, 'fiscal',
+      p_fiscal_address => 'Dirección cambiada a aal1');
+    raise exception 'a fiscal change was requested at aal1';
+  exception when others then
+    if sqlerrm <> 'forbidden' then raise; end if;
+  end;
   begin
     update public.seller_private set payout_iban = 'CR99999999999999999999'
     where seller_id = current_setting('t.shop')::uuid;
@@ -871,7 +886,8 @@ select pg_temp.remember('driver_needles', (
   where u.email = 'repartidor2@yuntera.example'));
 select pg_temp.remember('driver_user', (select id::text from auth.users where email = 'repartidor2@yuntera.example'));
 select pg_temp.login('central@yuntera.example', 'aal2');
-update public.drivers set status = 'offboarded' where user_id = current_setting('t.driver_user')::uuid;
+select public.ops_set_driver_status(
+  (select d.id from public.drivers d where d.user_id = current_setting('t.driver_user')::uuid), 'offboarded');
 reset role;
 select pg_temp.login('repartidor2@yuntera.example');
 do $$
