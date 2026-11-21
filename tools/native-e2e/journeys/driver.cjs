@@ -13,9 +13,13 @@
 // stopped: the screens say so; an arrival and a failed delivery are queued
 // ("2 acciones por enviar"), a delivery against the code is refused plainly
 // and the code is not stored; the route stays readable after a reload; a
-// position report waits too. The API comes back: the queue drains once, in
-// order, and nothing is sent twice. The driver finishes the route; sharing
-// stops. Fails on any console error, uncaught exception or 5xx, except the
+// position report waits too; a restart offline after the access token
+// expired still opens on the saved route, not on the sign-in screen. The API
+// comes back: the session renews itself, the queue drains once, in order, and
+// nothing is sent twice. Central suspends the driver mid-route: with the app
+// still open, it shows the no-access screen, stops sharing the position and
+// removes the saved route; reactivated, the driver is back. The driver
+// finishes the route; sharing stops. Fails on any console error, uncaught exception or 5xx, except the
 // browser's "could not connect" errors while the API is stopped.
 //
 // What this cannot prove (it is a browser, not a phone): the Android
@@ -161,6 +165,8 @@ async function newRoute() {
   const page = await context.newPage();
   const errors = [];
   let apiDown = false;
+  // While the driver is suspended, the server refuses the position report (400): expected.
+  let suspended = false;
   page.on("console", (m) => {
     if (m.type() !== "error") return;
     if (
@@ -168,6 +174,7 @@ async function newRoute() {
       /ERR_CONNECTION_REFUSED|ERR_FAILED|Failed to fetch|Failed to load resource/.test(m.text())
     )
       return;
+    if (suspended && /status of 400/.test(m.text())) return;
     errors.push(`console: ${m.text().slice(0, 300)}`);
   });
   page.on("pageerror", (e) => errors.push(`pageerror: ${String(e).slice(0, 300)}`));
@@ -265,6 +272,12 @@ async function newRoute() {
   const tracking1 = /paquete (YT\d+)/.exec(await page.locator("body").innerText())[1];
   const pin1 = await pinFor("comprador@yuntera.example", tracking1);
   check(/^\d{4}$/.test(pin1 ?? ""), "the shopper's order has a 4-digit code");
+  await byId("deliver-cash").fill("1000000");
+  check(
+    /Es mucho vuelto/.test(await textOf("deliver-change")) &&
+      (await byId("deliver-cash-confirm").count()) === 1,
+    "an amount with a 0 too many asks to be checked and confirmed",
+  );
   await byId("deliver-cash").fill("25000");
   check(
     (await textOf("deliver-change")) === "Dé ₡1 600 de vuelto.",
@@ -357,6 +370,10 @@ async function newRoute() {
     (await textOf("outbox")).startsWith("2 acciones por enviar"),
     "the queue shows '2 acciones por enviar'",
   );
+  check(
+    (await textOf("outbox")).includes(`Llegada a la parada 1 de la ruta ${B}`),
+    "each waiting action names its stop and route",
+  );
   await shot("08-queue");
 
   // Reloaded with no API: the route is still readable, and the queue still there.
@@ -376,12 +393,43 @@ async function newRoute() {
     "a queued arrival reads as done, 'Por enviar'",
   );
   check(/No entregado/.test(await textOf(`stop-${B}-2`)), "a queued failure reads as done");
+
+  // A start-up with no signal more than an hour after the last refresh: the
+  // access token has expired and cannot be renewed. The driver stays in, with
+  // the saved route, instead of facing a sign-in screen that needs signal.
+  const expired = await page.evaluate(() => {
+    let found = 0;
+    for (const key of Object.keys(localStorage)) {
+      if (!/^sb-.+-auth-token$/.test(key)) continue;
+      const session = JSON.parse(localStorage.getItem(key));
+      session.expires_at = Math.floor(Date.now() / 1000) - 3600;
+      localStorage.setItem(key, JSON.stringify(session));
+      found += 1;
+    }
+    return found;
+  });
+  check(expired === 1, "the stored session is made an hour past its expiry");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await byId(`stop-${B}-1`).waitFor({ timeout: 30_000 });
+  check(
+    !(await page.getByTestId("sign-in-email").filter({ visible: true }).count()),
+    "after a restart offline with an expired token, the driver is still in, not at the sign-in screen",
+  );
+  check(
+    /ruta guardada/.test(await textOf("offline-banner")) &&
+      (await textOf("outbox")).startsWith("2 acciones por enviar"),
+    "and the saved route and the queue are still there",
+  );
   // Sharing stopped with the reload; the driver turns it back on, and a position waits too.
   await byId("tracking-share").click();
   await page.waitForFunction(() => /Su última ubicación/.test(document.body.innerText), null, {
     timeout: 15_000,
   });
   check(true, "a position report made offline waits in the queue");
+  check(
+    /^Sin señal: su ubicación queda guardada en el teléfono/.test(await textOf("tracking")),
+    "sharing says plainly that nothing reaches Central without signal",
+  );
   log("    calls while the API was down:", JSON.stringify(calls));
   check(
     calls.driver_arrive > 0 && !calls.driver_fail_stop,
@@ -420,7 +468,49 @@ async function newRoute() {
     },
   );
   check(true, "the offline notice is gone");
+  check(
+    /^Compartiendo su ubicación con Central/.test(await textOf("tracking")),
+    "the session renewed itself once the signal returned, and sharing reads as on",
+  );
   await shot("10-drained");
+
+  // ── 6b. Central suspends the driver in the middle of the route ──
+  // Keep-awake holds the app on screen, so this is noticed while it stays open:
+  // the refused position report (or the next reading of the day) leads to the
+  // no-access screen, sharing stops and the saved route is removed.
+  const central0 = await as("central@yuntera.example");
+  const carlosId = (await central0("ops_drivers")).find((d) => d.full_name.startsWith("Carlos")).id;
+  suspended = true;
+  await central0("ops_set_driver_status", { p_driver_id: carlosId, p_status: "suspended" });
+  await page.waitForTimeout(16_000);
+  await context.setGeolocation({ latitude: 9.935, longitude: -84.049 });
+  await byId("no-access").waitFor({ timeout: 75_000 });
+  const suspendedText = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+  check(
+    /no tiene acceso a Yuntera Ruta/.test(suspendedText),
+    "a driver suspended mid-route sees the no-access screen, without leaving the app",
+  );
+  check(
+    !suspendedText.includes(`Ruta ${B}`) && !/María Fernández|Andrés/.test(suspendedText),
+    "no route or customer is shown any more",
+  );
+  check(
+    !(await page.evaluate(() => Object.keys(localStorage).some((k) => k.includes(".day.")))),
+    "the route saved on the phone is removed",
+  );
+  for (const fn of Object.keys(calls)) calls[fn] = 0;
+  await page.waitForTimeout(16_000);
+  await context.setGeolocation({ latitude: 9.936, longitude: -84.048 });
+  await page.waitForTimeout(2_000);
+  check(!calls.driver_report_position, "and the position is no longer shared");
+  await shot("10b-suspended");
+  // Central lifts the suspension; the driver checks again and is back on the route.
+  await central0("ops_set_driver_status", { p_driver_id: carlosId, p_status: "active" });
+  await central0.dispose();
+  await page.getByRole("button", { name: "Ya me dieron acceso: revisar de nuevo" }).click();
+  await byId(`stop-${B}-1`).waitFor({ timeout: 30_000 });
+  suspended = false;
+  check(true, "once active again, the route is back");
 
   // ── 7. Finish the route ──
   await byId(`stop-${B}-1`).click();
