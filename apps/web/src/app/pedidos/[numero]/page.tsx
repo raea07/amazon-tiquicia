@@ -1,5 +1,5 @@
 import { ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
-import { ApiError, type OrderDetail } from "@yuntera/db";
+import { ApiError, type MyOrderReturn, type OrderDetail } from "@yuntera/db";
 import {
   Alert,
   formatDate,
@@ -21,6 +21,7 @@ import {
   ReviewForm,
   SimulatePaymentForm,
 } from "@/components/order-actions";
+import { ReturnStatusList } from "@/components/return-status";
 import { requireViewer } from "@/lib/session";
 import { sessionApi } from "@/lib/supabase";
 
@@ -47,14 +48,17 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
   const [{ numero }, query] = await Promise.all([params, searchParams]);
   await requireViewer(`/pedidos/${numero}`);
 
+  const api = await sessionApi();
   let order: OrderDetail;
   try {
-    order = await (await sessionApi()).getOrder(numero);
+    order = await api.getOrder(numero);
   } catch (error) {
     // Someone else's order and a non-existent one look the same: not found.
     if (error instanceof ApiError && error.code === "order_not_found") notFound();
     throw error;
   }
+  // Where each return stands, so the page can say what happens next.
+  const returns: MyOrderReturn[] = await api.myOrderReturns(numero);
 
   await connection();
   const today = toCostaRicaTime(new Date()).date;
@@ -157,6 +161,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
             <ul className="mt-3 flex flex-col gap-3">
               {order.items.map((item) => {
                 const returnable = item.quantity - item.returned_quantity;
+                const itemReturns = returns.filter((entry) => entry.order_item_id === item.id);
                 return (
                   <li key={item.id} className="rounded-lg border border-border bg-surface p-4">
                     <div className="flex gap-4">
@@ -220,9 +225,12 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                               />
                             </div>
                           </details>
-                        ) : item.returned_quantity > 0 ? (
-                          <p className="text-sm text-ink-muted">Devolución en trámite.</p>
                         ) : null}
+                      </div>
+                    ) : null}
+                    {itemReturns.length > 0 ? (
+                      <div className="mt-4 border-t border-border pt-4">
+                        <ReturnStatusList returns={itemReturns} />
                       </div>
                     ) : null}
                   </li>
@@ -273,6 +281,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
               {PAYMENT_LABEL[order.payment_method]}
               {order.payment?.status === "captured" ? " · recibido" : ""}
               {order.payment?.status === "refunded" ? " · reembolsado" : ""}
+              {order.payment?.status === "partially_refunded" ? " · reembolsado en parte" : ""}
             </p>
           </div>
 

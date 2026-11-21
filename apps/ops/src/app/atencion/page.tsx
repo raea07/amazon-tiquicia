@@ -6,7 +6,7 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { completeReturn, decideReturn, resolveComplaint, resolveReport } from "@/app/actions";
-import { ReceiveReturnForm } from "@/components/integrity-forms";
+import { CloseReturnForm, ReceiveReturnForm } from "@/components/integrity-forms";
 import { COMPLAINT_CATEGORY, REPORT_REASON, RETURN_KIND, RETURN_STATUS } from "@/lib/labels";
 import { canSee, requireStaff } from "@/lib/staff";
 
@@ -105,7 +105,10 @@ async function Queues() {
                     ) : item.status === "approved" ? (
                       // The money goes back once the goods are back.
                       canDecide ? (
-                        <ReceiveReturnForm returnId={item.id} />
+                        <>
+                          <ReceiveReturnForm returnId={item.id} />
+                          <CloseReturnForm returnId={item.id} />
+                        </>
                       ) : (
                         <p className="text-ink-muted">
                           Atención al cliente registra cuándo llega el producto; después se

@@ -22,8 +22,10 @@
 
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { callRpc } from "@yuntera/dev-api/rpc";
 import pg from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { createApi } from "./api";
 
 const shared = process.env.DATABASE_URL;
 const racesName =
@@ -325,6 +327,134 @@ describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", (
     );
     expect(stops.rows.filter((row) => row.cod !== "0")).toHaveLength(1);
     expect(first).toBeTruthy();
+  });
+
+  it("REV-1: a parcel sent back while the other is at the door — the door waits, then asks for the lower cash", async () => {
+    const order = await place(
+      await shopper("rev1"),
+      { "parlante-bluetooth-nimbo-ola": 1, "bombillo-led-9w-4u": 1 },
+      "cash_on_delivery",
+      `rev1-${RUN}`,
+    );
+    const [platform, seller] = await shipments(order);
+    if (!platform || !seller) throw new Error("expected two parcels");
+    await pack(platform.id);
+    await pack(seller.id);
+    const driver = await lookup<string>(
+      "select d.id as r from public.drivers d join auth.users u on u.id = d.user_id where u.email = $1",
+      [DRIVER],
+    );
+    const route = await as<string>(STAFF, ROUTE, [[platform.id, seller.id], driver]);
+    await as(DRIVER, "select public.driver_start_route($1) as r", [route]);
+    const stopOf = (shipment: string) =>
+      lookup<string>(
+        "select id as r from public.route_stops where route_id = $1 and shipment_id = $2",
+        [route, shipment],
+      );
+    const [first, second] = [await stopOf(platform.id), await stopOf(seller.id)];
+    await as(DRIVER, "select public.driver_fail_stop($1, 'nobody_home') as r", [first]);
+    const total = Number(
+      await lookup<string>("select total_minor::text as r from public.orders where id = $1", [
+        order,
+      ]),
+    );
+    const speaker = Number(
+      await lookup<string>(
+        `select i.unit_price_minor::text as r from public.order_items i
+         join public.shipment_items si on si.order_item_id = i.id where si.shipment_id = $1`,
+        [platform.id],
+      ),
+    );
+    // The cash followed to the parcel still on the route.
+    expect(
+      Number(
+        await lookup<string>(
+          "select cod_amount_minor::text as r from public.route_stops where id = $1",
+          [second],
+        ),
+      ),
+    ).toBe(total);
+    const code = await lookup<string>(
+      "select code as r from private.delivery_codes where order_id = $1",
+      [order],
+    );
+    const door = "select public.driver_complete_stop($1, $2, 'Recibe Prueba', $3) as r";
+
+    const a = await open(STAFF);
+    await one(a, "select public.ops_return_shipment($1) as r", [platform.id]);
+    const b = await open(DRIVER);
+    const atDoor = one<{ ok: boolean; error?: string; expected_minor?: number }>(b, door, [
+      second,
+      code,
+      total,
+    ]);
+    expect(await blocked(b.pid)).toBe(true);
+    await end(a, "commit");
+    // It saw the parcel go back: the whole total is no longer owed.
+    expect(await atDoor).toEqual({
+      ok: false,
+      error: "cod_amount_mismatch",
+      expected_minor: total - speaker,
+    });
+    await end(b, "commit");
+
+    const done = await as<{ ok: boolean }>(DRIVER, door, [second, code, total - speaker]);
+    expect(done.ok).toBe(true);
+    expect(
+      await lookup<string>(
+        `select sum(rs.cod_collected_minor)::text as r from public.route_stops rs
+         join public.shipments s on s.id = rs.shipment_id where s.order_id = $1`,
+        [order],
+      ),
+    ).toBe(String(total - speaker));
+    expect(
+      await lookup<number>(
+        `select count(*)::int as r from private.refunds
+         where order_id = $1 and reason = 'parcel_returned' and source_id = $2`,
+        [order, platform.id],
+      ),
+    ).toBe(1);
+  });
+
+  it("REV-5 / REV-8: the shopper's returns and the warehouse's returning parcels, through the client", async () => {
+    // The client exactly as the apps use it, against this copy of the database.
+    const apiAs = (email: string) =>
+      createApi({
+        rpc: async (fn, args = {}) => {
+          const result = await callRpc(pool, fn, args, {
+            sub: ids.get(email) ?? "",
+            role: "authenticated",
+            aal: "aal2",
+          });
+          return result.ok
+            ? { data: result.data, error: null, status: 200 }
+            : { data: null, error: result.error, status: result.status };
+        },
+      });
+    const email = await shopper("rev5");
+    const order = await place(email, { "libreta-tapa-dura-a5": 1 }, "card", `rev5-${RUN}`);
+    await pay(email, order);
+    await deliver(order);
+    await as(email, "select public.request_return($1, 'withdrawal', 1) as r", [await item(order)]);
+    const number = await lookup<string>(
+      "select order_number as r from public.orders where id = $1",
+      [order],
+    );
+    const returns = await apiAs(email).myOrderReturns(number);
+    expect(returns).toHaveLength(1);
+    expect(returns[0]).toMatchObject({ kind: "withdrawal", status: "approved", quantity: 1 });
+    await expect(apiAs(buyer).myOrderReturns(number)).rejects.toMatchObject({
+      code: "order_not_found",
+    });
+
+    const warehouse = await lookup<string>(
+      "select id as r from public.warehouses where code = 'SJO1'",
+    );
+    const parcels = await apiAs("bodega@yuntera.example").wmsReturningShipments(warehouse);
+    expect(Array.isArray(parcels)).toBe(true);
+    await expect(apiAs(email).wmsReturningShipments(warehouse)).rejects.toMatchObject({
+      code: "forbidden",
+    });
   });
 
   it("INT-7: a transfer confirmed while the shopper cancels — the confirmation waits and is refused", async () => {

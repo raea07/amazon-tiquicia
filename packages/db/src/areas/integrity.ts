@@ -7,6 +7,8 @@
  *                 back undelivered; its units are restocked and refunded.
  *   Delivery code staff see whether an order's code is locked after too many
  *                 wrong attempts, and release it with a new code. Never the code.
+ *   Shopper       where each of their returns on an order stands.
+ *   Warehouse     the parcels on their way back, to check in at the dock.
  *
  * SQL: supabase/migrations/20261121082900_integrity.sql. The rules are written
  * down in docs/04-algorithms/returns-and-refunds.md.
@@ -39,6 +41,34 @@ export const returnedShipmentResult = z.object({
   order_status: orderStatus,
 });
 export type ReturnedShipmentResult = z.infer<typeof returnedShipmentResult>;
+
+/** One of the shopper's returns on an order, and where it stands. */
+export const myOrderReturn = z.object({
+  id,
+  order_item_id: id,
+  kind: z.enum(["withdrawal", "warranty", "damaged", "wrong_item"]),
+  status: z.enum(["requested", "approved", "received", "refunded", "rejected"]),
+  quantity: z.number().int().positive(),
+  refund_minor: z.number().int().nullable(),
+  /** Staff's note to the shopper (why it was refused or closed). */
+  resolution_note: z.string().nullable(),
+  created_at: timestamp,
+  received_at: timestamp.nullable(),
+  resolved_at: timestamp.nullable(),
+});
+export type MyOrderReturn = z.infer<typeof myOrderReturn>;
+
+/** A parcel on its way back to a warehouse. */
+export const returningShipment = z.object({
+  shipment_id: id,
+  tracking_code: z.string(),
+  order_number: z.string(),
+  package_count: z.number().int(),
+  attempt_count: z.number().int(),
+  units: z.number().int(),
+  lines: z.number().int(),
+});
+export type ReturningShipment = z.infer<typeof returningShipment>;
 
 export const integrityErrors = {
   // ── Returns and refunds ──
@@ -84,8 +114,13 @@ export const integrityErrors = {
   },
   too_many_held_units: {
     "es-CR":
-      "Ya tiene muchas unidades apartadas en pedidos sin pagar. Pague o cancele alguno de esos pedidos, o pida menos unidades.",
-    en: "You already hold many units in unpaid orders. Pay or cancel one of those orders, or order fewer units.",
+      "Ya tiene muchas unidades apartadas en otros pedidos que esperan el pago. Pague o cancele alguno de esos pedidos antes de hacer uno nuevo.",
+    en: "You already hold many units in other orders waiting for payment. Pay or cancel one of those orders before placing a new one.",
+  },
+  offer_held_limit: {
+    "es-CR":
+      "Ya tiene este producto apartado en otro pedido que espera el pago, y con este pasaría del máximo por producto. Pague ese pedido primero o pida menos unidades.",
+    en: "You already have this product in another order waiting for payment, and this one would take you over the limit per product. Pay that order first or order fewer units.",
   },
   cod_limit_reached: {
     "es-CR":
@@ -145,6 +180,12 @@ export const integrityApi = ({ call, run }: Caller) => ({
   /** Releases a locked code; the order gets a new one the shopper reads on their order. */
   opsReleaseDeliveryCode: (orderId: string, note: string) =>
     run("ops_release_delivery_code", { p_order_id: orderId, p_note: note }),
+  /** The signed-in shopper's returns on one of their orders. */
+  myOrderReturns: (orderNumber: string) =>
+    call("my_order_returns", { p_order_number: orderNumber }, z.array(myOrderReturn)),
+  /** Parcels on their way back to a warehouse, to check in when they arrive. */
+  wmsReturningShipments: (warehouseId: string) =>
+    call("wms_returning_shipments", { p_warehouse_id: warehouseId }, z.array(returningShipment)),
   /** Checks in a parcel that came back undelivered: restock (or record damage) and refund. */
   wmsReceiveReturnedShipment: (shipmentId: string, resellable = true, note: string | null = null) =>
     call(

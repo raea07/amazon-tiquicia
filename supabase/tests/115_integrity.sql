@@ -226,7 +226,8 @@ create function pg_temp.refunded_from_ledger(p_order uuid) returns bigint
 language sql as $$
   select coalesce(sum(case
     when t.kind = 'order_refund' then -e.amount_minor * (a.code in ('gateway_clearing', 'driver_cash'))::int
-    when t.kind = 'return_refund' then -e.amount_minor * (a.code = 'refunds_payable')::int
+    -- A refund settled at the door of a cash order leaves through the driver's cash.
+    when t.kind = 'return_refund' then -e.amount_minor * (a.code in ('refunds_payable', 'driver_cash'))::int
   end), 0)::bigint
   from public.ledger_transactions t
   join public.ledger_entries e on e.transaction_id = t.id
@@ -570,7 +571,7 @@ begin
                           'sinpe_movil', 'int-fa3-0002');
     raise exception 'FA-3: a second unpaid order took more of the same product';
   exception when others then
-    if sqlerrm <> 'too_many_held_units' then raise; end if;
+    if sqlerrm <> 'offer_held_limit' then raise; end if;
   end;
   assert (select available_quantity from public.offers where id = v_offer) = v_available - 10,
     'FA-3: the rest stays on sale';
@@ -593,7 +594,7 @@ begin
   perform pg_temp.pay((select id from public.orders where idempotency_key = 'int-fa3-0003'));
   perform pg_temp.place('integridad2@yuntera.example', pg_temp.items('cafe-molido-tarrazu-340g:1'),
                         'sinpe_movil', 'int-fa3-0006');
-  -- Never more than thirty units held in all, even in one order.
+  -- No further unpaid order on top of more than thirty units held in all.
   perform pg_temp.pay((select id from public.orders where idempotency_key = 'int-fa3-0006'));
   begin
     perform pg_temp.place('integridad2@yuntera.example',
@@ -602,6 +603,30 @@ begin
     raise exception 'FA-3: more than thirty units were held unpaid';
   exception when others then
     if sqlerrm <> 'too_many_held_units' then raise; end if;
+  end;
+end
+$$;
+-- REV-2: an honest first order of more than thirty units goes through, by
+-- card too (it waits for the gateway as 'pending_payment'): one order is held
+-- only to the per-order limits. A second unpaid order on top of it is refused,
+-- and the refusal names the units already held.
+select pg_temp.shopper('integridad-grande@yuntera.example', 'Prueba Pedido Grande');
+do $$
+declare
+  v_detail text;
+begin
+  assert pg_temp.place('integridad-grande@yuntera.example',
+    pg_temp.items('libreta-tapa-dura-a5:8', 'bombillo-led-9w-4u:8', 'parlante-bluetooth-nimbo-ola:8',
+                  'cafe-molido-tarrazu-340g:8'),
+    'card', 'int-rev2-0001') is not null, 'REV-2: a 32-unit first order by card is accepted';
+  begin
+    perform pg_temp.place('integridad-grande@yuntera.example', pg_temp.items('rompecabezas-volcanes-500:1'),
+                          'sinpe_movil', 'int-rev2-0002');
+    raise exception 'REV-2: a second unpaid order on top of 32 held units';
+  exception when others then
+    get stacked diagnostics v_detail = pg_exception_detail;
+    if sqlerrm <> 'too_many_held_units' then raise; end if;
+    assert v_detail = '32', format('REV-2: the detail is the units already held, got %s', v_detail);
   end;
 end
 $$;
@@ -792,7 +817,10 @@ begin
   assert v_result ->> 'error' = 'wrong_pin' and (v_result ->> 'attempts_left')::integer = 1,
     format('INT-9: the second parcel shares the order''s count: %s', v_result);
   v_result := pg_temp.door(pg_temp.stop(v_route, v_s2), v_wrong);
-  assert (v_result ->> 'attempts_left')::integer = 0, 'INT-9: none left';
+  -- REV-7: the attempt that locks the order says so at once, so the driver
+  -- is told to call Central instead of "0 attempts left".
+  assert v_result ->> 'error' = 'pin_locked' and (v_result ->> 'attempts_left')::integer = 0,
+    format('REV-7: the fifth wrong code reports the lock: %s', v_result);
   -- Locked: even the right code is refused now, at either parcel.
   assert pg_temp.door(pg_temp.stop(v_route, v_s1), pg_temp.code(v_order)) ->> 'error' = 'pin_locked',
     'INT-9: the order is locked';
@@ -943,6 +971,324 @@ begin
 end
 $$;
 select pg_temp.check_invariants('INT-12');
+
+-- ═══ REV-1: cash on delivery and a parcel that came back ══════════════════
+-- Cash is collected once, at the first parcel handed over, for what is owed
+-- then: the total less the goods of parcels already back or on their way
+-- back. Whatever the order of events, what the shopper ends up paying is the
+-- goods delivered plus shipping.
+
+-- The goods of the order that reached the shopper, plus shipping.
+create function pg_temp.owed_for_delivered(p_order uuid) returns bigint
+language sql as $$
+  select o.shipping_minor + coalesce((
+    select sum(i.unit_price_minor * si.quantity)
+    from public.shipments s join public.shipment_items si on si.shipment_id = s.id
+    join public.order_items i on i.id = si.order_item_id
+    where s.order_id = p_order and s.status = 'delivered'), 0)
+  from public.orders o where o.id = p_order
+$$;
+
+-- What the shopper paid in the end: cash collected less what went back.
+create function pg_temp.paid_in_the_end(p_order uuid) returns bigint
+language sql as $$
+  select coalesce((select sum(rs.cod_collected_minor) from public.route_stops rs
+                   join public.shipments s on s.id = rs.shipment_id where s.order_id = p_order), 0)
+       - private.refunded_minor(p_order)
+       + coalesce((select sum(f.amount_minor) from private.refunds f join public.ledger_entries e
+                   on e.transaction_id = f.ledger_transaction_id
+                   join public.ledger_accounts a on a.id = e.account_id
+                   where f.order_id = p_order and a.code = 'driver_cash'), 0)
+$$;
+
+-- (A) The first parcel fails and is checked back in; the second is then
+-- routed and delivered: it collects its own goods plus shipping, not the total.
+select pg_temp.shopper('integridad-cod-a@yuntera.example', 'Prueba Efectivo A');
+select pg_temp.remember('rev1a', pg_temp.place('integridad-cod-a@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1', 'bombillo-led-9w-4u:1'), 'cash_on_delivery', 'int-rev1a-001')::text);
+do $$
+declare
+  v_order uuid := current_setting('t.rev1a')::uuid;
+  v_s1 uuid := pg_temp.shipment(v_order, 'platform');
+  v_s2 uuid := pg_temp.shipment(v_order, 'seller');
+  v_speaker bigint := (select unit_price_minor from public.order_items
+                       where id = pg_temp.item(v_order, 'parlante-bluetooth-nimbo-ola'));
+  v_total bigint := (select total_minor from public.orders where id = v_order);
+  v_r1 uuid;
+  v_r2 uuid;
+  v_result jsonb;
+begin
+  perform pg_temp.pack(v_s1);
+  perform pg_temp.pack(v_s2);
+  v_r1 := pg_temp.route(v_s1);
+  assert (select cod_amount_minor from public.route_stops where route_id = v_r1) = v_total,
+    'REV-1A: the first stop plans the whole cash';
+  perform pg_temp.act('repartidor@yuntera.example');
+  perform public.driver_fail_stop(pg_temp.stop(v_r1, v_s1), 'nobody_home');
+  perform pg_temp.act('central@yuntera.example');
+  perform public.ops_return_shipment(v_s1);
+  perform pg_temp.act('bodega@yuntera.example');
+  v_result := public.wms_receive_returned_shipment(v_s1, true, null);
+  assert (v_result ->> 'refund_minor')::bigint = 0, 'REV-1A: nothing was paid, nothing is refunded';
+  v_r2 := pg_temp.route(v_s2);
+  assert (select cod_amount_minor from public.route_stops where route_id = v_r2) = v_total - v_speaker,
+    format('REV-1A: the second stop collects the total less the speaker that came back: %s',
+           (select cod_amount_minor from public.route_stops where route_id = v_r2));
+  v_result := pg_temp.door(pg_temp.stop(v_r2, v_s2), pg_temp.code(v_order));
+  assert (v_result ->> 'ok')::boolean, format('REV-1A: delivered: %s', v_result);
+  assert (select cod_collected_minor from public.route_stops where route_id = v_r2) = v_total - v_speaker,
+    'REV-1A: the driver took the bulb and shipping';
+  assert pg_temp.paid_in_the_end(v_order) = pg_temp.owed_for_delivered(v_order),
+    format('REV-1A: paid %s for goods delivered worth %s', pg_temp.paid_in_the_end(v_order),
+           pg_temp.owed_for_delivered(v_order));
+  -- The speaker is in the register, settled at the door: it can never be
+  -- refunded again, and nothing is sent to the shopper for it.
+  assert (select count(*) from private.refunds where order_id = v_order and reason = 'parcel_returned'
+          and source_id = v_s1 and amount_minor = v_speaker) = 1, 'REV-1A: the speaker is registered once';
+  assert not exists (select 1 from private.outbox_events where topic = 'refund.requested'
+                     and payload ->> 'order_id' = v_order::text), 'REV-1A: no money is sent back';
+  assert exists (select 1 from private.outbox_events where topic = 'refund.settled_at_door'
+                 and payload ->> 'order_id' = v_order::text), 'REV-1A: the settlement is recorded';
+  -- The driver's cash account holds exactly what they took for this order.
+  assert (select sum(e.amount_minor) from public.ledger_entries e
+          join public.ledger_transactions t on t.id = e.transaction_id
+          join public.ledger_accounts a on a.id = e.account_id
+          where t.order_id = v_order and a.code = 'driver_cash') = v_total - v_speaker,
+    'REV-1A: the books hold what the driver took';
+end
+$$;
+select pg_temp.check_invariants('REV-1A');
+
+-- (B) Both parcels on one route, the cash planned on the first. The driver
+-- delivers the second first: the cash moves there, and a wrong amount is
+-- answered with the right one. The first then fails and comes back: its
+-- goods are refunded. A parcel is never handed over for nothing.
+select pg_temp.shopper('integridad-cod-b@yuntera.example', 'Prueba Efectivo B');
+select pg_temp.remember('rev1b', pg_temp.place('integridad-cod-b@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1', 'bombillo-led-9w-4u:1'), 'cash_on_delivery', 'int-rev1b-001')::text);
+do $$
+declare
+  v_order uuid := current_setting('t.rev1b')::uuid;
+  v_s1 uuid := pg_temp.shipment(v_order, 'platform');
+  v_s2 uuid := pg_temp.shipment(v_order, 'seller');
+  v_total bigint := (select total_minor from public.orders where id = v_order);
+  v_speaker bigint := (select unit_price_minor from public.order_items
+                       where id = pg_temp.item(v_order, 'parlante-bluetooth-nimbo-ola'));
+  v_route uuid;
+  v_result jsonb;
+begin
+  perform pg_temp.pack(v_s1);
+  perform pg_temp.pack(v_s2);
+  v_route := pg_temp.route(v_s1, v_s2);
+  assert (select cod_amount_minor from public.route_stops where id = pg_temp.stop(v_route, v_s2)) = 0,
+    'REV-1B: the plan puts the cash on the first stop';
+  perform pg_temp.act('repartidor@yuntera.example');
+  v_result := public.driver_complete_stop(pg_temp.stop(v_route, v_s2), pg_temp.code(v_order), 'Recibe Prueba', 0);
+  perform pg_temp.logout();
+  assert v_result ->> 'error' = 'cod_amount_mismatch' and (v_result ->> 'expected_minor')::bigint = v_total,
+    format('REV-1B: the first parcel handed over carries the cash: %s', v_result);
+  assert (select cod_amount_minor from public.route_stops where id = pg_temp.stop(v_route, v_s1)) = 0
+     and (select cod_amount_minor from public.route_stops where id = pg_temp.stop(v_route, v_s2)) = v_total,
+    'REV-1B: the plan moved to the stop at the door';
+  v_result := pg_temp.door(pg_temp.stop(v_route, v_s2), pg_temp.code(v_order));
+  assert (v_result ->> 'ok')::boolean, format('REV-1B: delivered with the cash: %s', v_result);
+  assert (select status from public.payments where order_id = v_order) = 'captured', 'REV-1B: paid';
+  perform pg_temp.act('repartidor@yuntera.example');
+  perform public.driver_fail_stop(pg_temp.stop(v_route, v_s1), 'refused');
+  perform pg_temp.act('central@yuntera.example');
+  perform public.ops_return_shipment(v_s1);
+  perform pg_temp.act('bodega@yuntera.example');
+  v_result := public.wms_receive_returned_shipment(v_s1, true, null);
+  perform pg_temp.logout();
+  assert (v_result ->> 'refund_minor')::bigint = v_speaker, format('REV-1B: the speaker is refunded: %s', v_result);
+  assert pg_temp.paid_in_the_end(v_order) = pg_temp.owed_for_delivered(v_order),
+    format('REV-1B: paid %s for goods delivered worth %s', pg_temp.paid_in_the_end(v_order),
+           pg_temp.owed_for_delivered(v_order));
+end
+$$;
+select pg_temp.check_invariants('REV-1B');
+
+-- (C) The first parcel is on its way back (not yet checked in) when the
+-- second is delivered: the cash leaves it out, and checking it in afterwards
+-- refunds nothing more. The warehouse sees it in its list of parcels to receive.
+select pg_temp.shopper('integridad-cod-c@yuntera.example', 'Prueba Efectivo C');
+select pg_temp.remember('rev1c', pg_temp.place('integridad-cod-c@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1', 'bombillo-led-9w-4u:1'), 'cash_on_delivery', 'int-rev1c-001')::text);
+do $$
+declare
+  v_order uuid := current_setting('t.rev1c')::uuid;
+  v_s1 uuid := pg_temp.shipment(v_order, 'platform');
+  v_s2 uuid := pg_temp.shipment(v_order, 'seller');
+  v_total bigint := (select total_minor from public.orders where id = v_order);
+  v_speaker bigint := (select unit_price_minor from public.order_items
+                       where id = pg_temp.item(v_order, 'parlante-bluetooth-nimbo-ola'));
+  v_warehouse uuid := (select origin_warehouse_id from public.shipments where id = v_s1);
+  v_route uuid;
+  v_result jsonb;
+begin
+  perform pg_temp.pack(v_s1);
+  perform pg_temp.pack(v_s2);
+  v_route := pg_temp.route(v_s1, v_s2);
+  perform pg_temp.act('repartidor@yuntera.example');
+  perform public.driver_fail_stop(pg_temp.stop(v_route, v_s1), 'nobody_home');
+  -- The cash follows to the live stop as soon as the first one fails.
+  assert (select cod_amount_minor from public.route_stops where id = pg_temp.stop(v_route, v_s2)) = v_total,
+    'REV-1C: the cash moved to the parcel still on the route';
+  perform pg_temp.act('central@yuntera.example');
+  perform public.ops_return_shipment(v_s1);
+  assert (select cod_amount_minor from public.route_stops where id = pg_temp.stop(v_route, v_s2))
+         = v_total - v_speaker, 'REV-1C: and dropped by the goods on their way back';
+  -- The warehouse's list of parcels coming back.
+  perform pg_temp.act('bodega@yuntera.example');
+  assert exists (select 1 from jsonb_array_elements(public.wms_returning_shipments(v_warehouse)) x
+                 where x ->> 'shipment_id' = v_s1::text and (x ->> 'units')::integer = 1),
+    'REV-8: the warehouse sees the parcel it is to receive';
+  perform pg_temp.act('integridad-cod-c@yuntera.example');
+  begin
+    perform public.wms_returning_shipments(v_warehouse);
+    raise exception 'REV-8: a shopper read the warehouse list';
+  exception when others then
+    if sqlerrm <> 'forbidden' then raise; end if;
+  end;
+  perform pg_temp.logout();
+  v_result := pg_temp.door(pg_temp.stop(v_route, v_s2), pg_temp.code(v_order));
+  assert (v_result ->> 'ok')::boolean, format('REV-1C: delivered: %s', v_result);
+  perform pg_temp.act('bodega@yuntera.example');
+  v_result := public.wms_receive_returned_shipment(v_s1, true, null);
+  perform pg_temp.logout();
+  assert (v_result ->> 'refund_minor')::bigint = 0, format('REV-1C: settled at the door, not again: %s', v_result);
+  assert (select count(*) from private.refunds where order_id = v_order) = 1, 'REV-1C: one refund';
+  assert pg_temp.paid_in_the_end(v_order) = pg_temp.owed_for_delivered(v_order),
+    format('REV-1C: paid %s for goods delivered worth %s', pg_temp.paid_in_the_end(v_order),
+           pg_temp.owed_for_delivered(v_order));
+end
+$$;
+select pg_temp.check_invariants('REV-1C');
+
+-- ═══ REV-4: an approved return whose goods never come back ════════════════
+
+select pg_temp.remember('rev4', pg_temp.place('integridad1@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'int-rev4-0001')::text);
+select pg_temp.pay(current_setting('t.rev4')::uuid);
+select pg_temp.deliver(current_setting('t.rev4')::uuid);
+select pg_temp.login('integridad1@yuntera.example');
+select pg_temp.remember('rev4_ret', public.request_return(
+  pg_temp.item(current_setting('t.rev4')::uuid, 'libreta-tapa-dura-a5'), 'withdrawal', 1)::text);
+reset role;
+select pg_temp.login('central@yuntera.example');
+-- Closing needs a reason the shopper can read; approving twice is refused.
+select pg_temp.refused(format('select public.ops_decide_return(%L, false, ''no'')', current_setting('t.rev4_ret')),
+                       'reason_required');
+select pg_temp.refused(format('select public.ops_decide_return(%L, true, null)', current_setting('t.rev4_ret')),
+                       'invalid_return_state');
+select public.ops_decide_return(current_setting('t.rev4_ret')::uuid, false,
+                                'El cliente nunca entregó el producto para la recolección.');
+reset role;
+-- The unit is free for a later claim, and the shopper sees why the return closed.
+select pg_temp.login('integridad1@yuntera.example');
+select public.request_return(pg_temp.item(current_setting('t.rev4')::uuid, 'libreta-tapa-dura-a5'), 'damaged', 1,
+                             'La tapa llegó despegada y no cierra.') is not null as rev4_claim;
+do $$
+declare
+  v_returns jsonb := public.my_order_returns((select order_number from public.orders
+                                              where id = current_setting('t.rev4')::uuid));
+begin
+  assert jsonb_array_length(v_returns) = 2, format('REV-5: the shopper sees both returns: %s', v_returns);
+  assert exists (select 1 from jsonb_array_elements(v_returns) x where x ->> 'status' = 'rejected'
+                 and x ->> 'resolution_note' like 'El cliente nunca%'), 'REV-5: with the reason it closed';
+  assert exists (select 1 from jsonb_array_elements(v_returns) x where x ->> 'status' = 'requested'),
+    'REV-5: and the new claim';
+end
+$$;
+reset role;
+-- Nobody else reads a shopper's returns, staff included (they have the queue).
+select pg_temp.login('integridad2@yuntera.example');
+select pg_temp.refused(format('select public.my_order_returns(%L)',
+  (select order_number from public.orders where id = current_setting('t.rev4')::uuid)), 'order_not_found');
+reset role;
+select pg_temp.login('central@yuntera.example');
+select pg_temp.refused(format('select public.my_order_returns(%L)',
+  (select order_number from public.orders where id = current_setting('t.rev4')::uuid)), 'order_not_found');
+reset role;
+select pg_temp.check_invariants('REV-4');
+
+-- ═══ REV-3: the price floor through the package or the category ═══════════
+
+do $$
+declare
+  v_offer uuid;
+  v_product uuid;
+  v_sku uuid;
+  v_detail text;
+  v_min bigint;
+begin
+  select o.id, k.product_id, k.id into v_offer, v_product, v_sku
+  from public.offers o join public.skus k on k.id = o.sku_id
+  join public.sellers s on s.id = o.seller_id join public.products p on p.id = k.product_id
+  where s.slug = 'tecnocasa' and o.fulfillment = 'platform' and p.status = 'active' and o.status = 'active'
+  order by k.weight_grams, o.id limit 1;
+  perform pg_temp.remember('rev3_offer', v_offer::text);
+
+  -- The refusal says the lowest price that would be accepted, and that price is.
+  perform pg_temp.act('vendedor@yuntera.example');
+  begin
+    perform public.seller_update_offer(v_offer, 100, 'active');
+    raise exception 'REV-3: a price below the fees was accepted';
+  exception when others then
+    get stacked diagnostics v_detail = pg_exception_detail;
+    if sqlerrm <> 'price_below_fees' then raise; end if;
+  end;
+  v_min := v_detail::bigint;
+  assert v_min > 100 and v_min % 100 = 0, format('REV-3: the detail is a price in whole colones: %s', v_detail);
+  perform public.seller_update_offer(v_offer, v_min, 'active');
+  begin
+    perform public.seller_update_offer(v_offer, v_min - 100, 'active');
+    raise exception 'REV-3: the minimum is not the minimum';
+  exception when others then
+    if sqlerrm <> 'price_below_fees' then raise; end if;
+  end;
+
+  -- A heavier, bigger package proposed for the listing cannot be approved
+  -- while the price stays where it is.
+  perform public.seller_update_listing(v_product, (select title from public.products where id = v_product),
+    (select c.slug from public.categories c join public.products p on p.category_id = c.id where p.id = v_product),
+    (select description from public.products where id = v_product),
+    (select bullet_points from public.products where id = v_product),
+    29000, 100, 50, 50, v_sku, true);
+  perform pg_temp.act('central@yuntera.example');
+  begin
+    perform public.ops_review_listing_edit(
+      (select id from public.product_change_requests where product_id = v_product and status = 'pending'), true, null);
+    raise exception 'REV-3: a package change pushed the offer below its fees';
+  exception when others then
+    if sqlerrm <> 'price_below_fees' then raise; end if;
+  end;
+  perform pg_temp.logout();
+  -- Nor by any other path: the variant's package, or the product's category.
+  begin
+    update public.skus set weight_grams = 29000, length_cm = 100, width_cm = 50, height_cm = 50 where id = v_sku;
+    raise exception 'REV-3: a direct package change passed';
+  exception when others then
+    if sqlerrm <> 'price_below_fees' then raise; end if;
+  end;
+  -- A paused offer is checked when it is put back on sale.
+  update public.offers set status = 'paused' where id = v_offer;
+  update public.skus set weight_grams = 29000, length_cm = 100, width_cm = 50, height_cm = 50 where id = v_sku;
+  begin
+    update public.offers set status = 'active' where id = v_offer;
+    raise exception 'REV-3: an offer below its fees went back on sale';
+  exception when others then
+    if sqlerrm <> 'price_below_fees' then raise; end if;
+  end;
+  assert not exists (
+    select 1 from public.offers o join public.skus k on k.id = o.sku_id join public.products p on p.id = k.product_id
+    where o.status = 'active'
+      and private.worst_unit_payout(o.price_minor, o.fulfillment, p.category_id, k.weight_grams,
+                                    greatest(k.length_cm, k.width_cm, k.height_cm)) < 0),
+    'REV-3: no offer on sale pays less than its fees';
+end
+$$;
+select pg_temp.check_invariants('REV-3');
 
 -- ═══ INT-10: a payout paid after its order was refunded ════════════════════
 

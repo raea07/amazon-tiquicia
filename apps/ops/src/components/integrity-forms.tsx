@@ -1,7 +1,12 @@
 import type { DeliveryCodeState } from "@yuntera/db";
 import { ActionForm } from "@yuntera/next-kit/client";
-import { Alert, formatDateTime, SelectField, TextField } from "@yuntera/ui";
-import { receiveReturn, receiveReturnedParcel, releaseDeliveryCode } from "@/app/integrity-actions";
+import { Alert, formatDateTime, SelectField, TextAreaField, TextField } from "@yuntera/ui";
+import {
+  closeReturn,
+  receiveReturn,
+  receiveReturnedParcel,
+  releaseDeliveryCode,
+} from "@/app/integrity-actions";
 
 /** Nothing is chosen for the person: they say how the goods arrived. */
 function ConditionField({ what }: { what: "producto" | "paquete" }) {
@@ -32,6 +37,35 @@ export function ReceiveReturnForm({ returnId }: { returnId: string }) {
       <ConditionField what="producto" />
       <TextField label="Nota" name="note" optional hint="Por ejemplo, quién lo recibió." />
     </ActionForm>
+  );
+}
+
+/** An approved return whose goods never came back: close it, with a reason for the shopper. */
+export function CloseReturnForm({ returnId }: { returnId: string }) {
+  return (
+    <details className="mt-4">
+      <summary className="cursor-pointer font-semibold text-link">
+        El producto no llegó: cerrar la devolución
+      </summary>
+      <div className="mt-3">
+        <ActionForm
+          key="close-return"
+          action={closeReturn}
+          submit="Cerrar sin reembolso"
+          variant="danger"
+          pendingLabel="Cerrando…"
+          hideOnSuccess
+        >
+          <input type="hidden" name="returnId" value={returnId} />
+          <TextAreaField
+            label="Motivo para el cliente"
+            name="note"
+            rows={2}
+            hint="El cliente lo lee en su pedido. Por ejemplo: cuándo intentamos recogerlo y cómo lo contactamos."
+          />
+        </ActionForm>
+      </div>
+    </details>
   );
 }
 

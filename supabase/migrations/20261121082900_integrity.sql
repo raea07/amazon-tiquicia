@@ -166,11 +166,17 @@ $$;
 --
 -- p_units: [{"order_item_id": uuid, "quantity": n}, …]. The caller must hold
 -- the order's row lock.
+--
+-- p_at_door: the refund is settled at the door of a cash-on-delivery order,
+-- for a parcel that came back before the cash was collected. The driver took
+-- that much less, so the money "goes back" out of the driver's cash rather
+-- than being owed to the shopper, and nothing is sent to them.
 create or replace function private.refund_units(
   p_order_id uuid,
   p_reason text,
   p_source_id uuid,
-  p_units jsonb
+  p_units jsonb,
+  p_at_door boolean default false
 ) returns jsonb
 language plpgsql security definer
 set search_path = ''
@@ -250,7 +256,8 @@ begin
   end if;
 
   insert into public.ledger_entries (transaction_id, account_id, amount_minor)
-  values (v_tx, private.ledger_account('refunds_payable'), -v_total);
+  values (v_tx, private.ledger_account(case when p_at_door then 'driver_cash' else 'refunds_payable' end),
+          -v_total);
 
   insert into private.refunds (order_id, reason, source_id, amount_minor, ledger_transaction_id, created_by)
   values (p_order_id, p_reason, p_source_id, v_total, v_tx, (select auth.uid()))
@@ -267,7 +274,9 @@ begin
   where order_id = p_order_id and status in ('captured', 'partially_refunded');
 
   -- The money itself moves outside the database (gateway refund or transfer).
-  perform private.emit('refund.requested', jsonb_build_object(
+  -- A refund settled at the door moves nothing: it is only recorded.
+  perform private.emit(case when p_at_door then 'refund.settled_at_door' else 'refund.requested' end,
+                       jsonb_build_object(
     'order_id', p_order_id, 'refund_id', v_refund, 'reason', p_reason,
     'return_request_id', case when p_reason = 'return' then p_source_id end,
     'shipment_id', case when p_reason = 'parcel_returned' then p_source_id end,
@@ -538,7 +547,10 @@ begin
 end;
 $$;
 
--- Staff accept or refuse a claim (damaged, wrong item, warranty).
+-- Staff accept or refuse a claim (damaged, wrong item, warranty), or close an
+-- approved return whose goods never came back (any kind, a withdrawal too),
+-- with a written reason the shopper reads. Closing frees its units for a
+-- later return or claim.
 create or replace function public.ops_decide_return(
   p_return_id uuid,
   p_approve boolean,
@@ -564,7 +576,7 @@ begin
   end if;
   perform 1 from public.orders where id = v_order.id for update;
   select status into v_status from public.return_requests where id = p_return_id for update;
-  if v_status <> 'requested' then
+  if not (v_status = 'requested' or (v_status = 'approved' and not p_approve)) then
     perform private.fail('invalid_return_state', v_status);
   end if;
   -- A refusal has to be explained: the shopper is told why.
@@ -1066,7 +1078,7 @@ insert into public.app_settings (key, value, description) values
   ('max_unpaid_orders_per_account', '3',
    'Orders one account may have waiting for payment at the same time.'),
   ('max_held_units_per_account', '30',
-   'Units one account may hold reserved in orders not yet paid (and, for an account with no delivered order, in cash-on-delivery orders not yet delivered).'),
+   'Units one account may hold reserved in orders not yet paid (and, for an account with no delivered order, in cash-on-delivery orders not yet delivered) and still place another such order. One order on its own is held only to the per-order limits.'),
   ('max_open_cod_orders_new_account', '2',
    'Cash-on-delivery orders not yet delivered that an account with no delivered order may have.')
 on conflict (key) do nothing;
@@ -1139,6 +1151,7 @@ declare
   v_prices jsonb;
   v_price bigint;
   v_lines_total bigint;
+  v_held bigint;
 begin
   if v_user is null then
     perform private.fail('not_authenticated');
@@ -1232,20 +1245,28 @@ begin
             and o.status in ('confirmed', 'processing', 'partially_shipped', 'shipped')) >= v_max_new_cod then
     perform private.fail('cod_limit_reached', v_max_new_cod::text);
   end if;
+  -- Units held in OTHER orders not yet paid. The order being placed is held
+  -- to the per-order limits only (lines, and units per line): one honest
+  -- large order goes through, by card too, while it is waiting for its
+  -- payment. What one account cannot do is pile further unpaid orders on top
+  -- of many held units, or hold more of one product than one order may.
   if p_payment_method <> 'cash_on_delivery'
      or not exists (select 1 from public.orders o
                     where o.user_id = v_user and o.status in ('delivered', 'completed')) then
-    if (select coalesce(sum(h.quantity), 0) from private.held_units(v_user) h)
+    select coalesce(sum(h.quantity), 0) into v_held from private.held_units(v_user) h;
+    if v_held > 0 and v_held
        + (select coalesce(sum((e ->> 'quantity')::integer), 0) from jsonb_array_elements(p_items) e)
-       > v_max_held
-       or exists (
-         select 1
-         from (select (e ->> 'offer_id')::uuid as offer_id, sum((e ->> 'quantity')::integer) as quantity
-               from jsonb_array_elements(p_items) e group by 1) r
-         left join private.held_units(v_user) h on h.offer_id = r.offer_id
-         where r.quantity + coalesce(h.quantity, 0) > v_max_units
-       ) then
-      perform private.fail('too_many_held_units', v_max_units::text);
+       > v_max_held then
+      perform private.fail('too_many_held_units', v_held::text);
+    end if;
+    if exists (
+      select 1
+      from (select (e ->> 'offer_id')::uuid as offer_id, sum((e ->> 'quantity')::integer) as quantity
+            from jsonb_array_elements(p_items) e group by 1) r
+      join private.held_units(v_user) h on h.offer_id = r.offer_id
+      where r.quantity + h.quantity > v_max_units
+    ) then
+      perform private.fail('offer_held_limit', v_max_units::text);
     end if;
   end if;
 
@@ -1549,6 +1570,103 @@ from public.shipments s where s.id = rs.shipment_id and rs.cod_amount_minor > 0;
 create unique index route_stops_one_cash_stop_idx on public.route_stops (cod_order_id)
   where cod_amount_minor > 0 and status in ('pending', 'arrived', 'delivered');
 
+-- THE CASH OF A CASH-ON-DELIVERY ORDER. It is collected once, at the first
+-- parcel handed over, and it is what the shopper owes at that moment: the
+-- order total less the goods of every parcel that has already come back (or
+-- is on its way back) without being delivered. Shipping stays: something is
+-- being delivered. A parcel that comes back after the cash was collected is
+-- refunded through the register like any other.
+--
+-- The amount on the stops is a plan the driver reads; it is worked out again
+-- whenever a parcel fails, starts back or is checked in, and at the door
+-- itself, so that whichever parcel is handed over first carries the cash.
+create or replace function private.cod_due_minor(p_order_id uuid) returns bigint
+language sql stable security definer
+set search_path = ''
+as $$
+  select case
+    when o.payment_method = 'cash_on_delivery'
+         and exists (select 1 from public.payments p where p.order_id = o.id and p.status = 'pending')
+    then greatest(0, o.total_minor - coalesce((
+      select sum(i.unit_price_minor * si.quantity)
+      from public.shipments s
+      join public.shipment_items si on si.shipment_id = s.id
+      join public.order_items i on i.id = si.order_item_id
+      where s.order_id = o.id and s.status in ('returning', 'returned')), 0))
+    else 0
+  end::bigint
+  from public.orders o where o.id = p_order_id;
+$$;
+
+-- Puts the cash due on one live stop of the order (the preferred one if it is
+-- live, else the one that already carries it, else the earliest planned) and
+-- clears it from the others. The caller holds the order's row lock.
+create or replace function private.replan_cod(p_order_id uuid, p_prefer_stop uuid default null)
+returns bigint
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_due bigint := coalesce(private.cod_due_minor(p_order_id), 0);
+  v_stop uuid;
+begin
+  if v_due > 0 then
+    select rs.id into v_stop
+    from public.route_stops rs
+    join public.shipments s on s.id = rs.shipment_id
+    join public.routes r on r.id = rs.route_id
+    where s.order_id = p_order_id and rs.status in ('pending', 'arrived')
+    order by (rs.id = p_prefer_stop) desc, (rs.cod_amount_minor > 0) desc,
+             r.service_date, rs.sequence, rs.id
+    limit 1;
+  end if;
+
+  -- Cleared first, so that the one-cash-stop index never sees two.
+  update public.route_stops rs
+  set cod_amount_minor = 0
+  from public.shipments s
+  where s.id = rs.shipment_id and s.order_id = p_order_id
+    and rs.status in ('pending', 'arrived') and rs.cod_amount_minor > 0
+    and rs.id is distinct from v_stop;
+  if v_stop is not null then
+    update public.route_stops set cod_amount_minor = v_due
+    where id = v_stop and cod_amount_minor <> v_due;
+  end if;
+  return v_due;
+end;
+$$;
+
+-- Right after the cash was collected: the parcels that came back before it
+-- were not charged, so their units are recorded as refunded at the door,
+-- through the register (so they can never be refunded again), out of the
+-- driver's cash. The caller holds the order's row lock.
+create or replace function private.settle_returned_parcels_at_door(p_order_id uuid) returns bigint
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_total bigint := 0;
+  v_result jsonb;
+  r record;
+begin
+  for r in
+    select s.id,
+           jsonb_agg(jsonb_build_object('order_item_id', si.order_item_id, 'quantity', si.quantity)) as units
+    from public.shipments s
+    join public.shipment_items si on si.shipment_id = s.id
+    where s.order_id = p_order_id and s.status in ('returning', 'returned')
+      and not exists (select 1 from private.refunds f
+                      where f.reason = 'parcel_returned' and f.source_id = s.id)
+    group by s.id
+    order by s.id
+  loop
+    v_result := private.refund_units(p_order_id, 'parcel_returned', r.id, r.units, true);
+    v_total := v_total + (v_result ->> 'refund_minor')::bigint;
+  end loop;
+  return v_total;
+end;
+$$;
+
 -- Saves a planned route. Unchanged, except that each parcel's order is locked
 -- before the shipment (the order every other function uses), so two routes
 -- planned at once for parcels of the same cash order cannot both put the cash
@@ -1611,7 +1729,8 @@ begin
       perform private.fail('shipment_not_dispatchable', v_ship.tracking_code);
     end if;
 
-    -- Cash for the whole order is collected once, at the first parcel delivered.
+    -- The cash is collected once, at the first parcel delivered: what is due
+    -- then (private.cod_due_minor), on one stop.
     v_cod := 0;
     if v_order.payment_method = 'cash_on_delivery'
        and exists (select 1 from public.payments p where p.order_id = v_order.id and p.status = 'pending')
@@ -1621,7 +1740,7 @@ begin
          where s2.order_id = v_order.id and rs.cod_amount_minor > 0
            and rs.status in ('pending', 'arrived', 'delivered')
        ) then
-      v_cod := v_order.total_minor;
+      v_cod := private.cod_due_minor(v_order.id);
     end if;
 
     v_sequence := v_sequence + 1;
@@ -1671,10 +1790,17 @@ declare
   v_stop public.route_stops%rowtype;
   v_ship public.shipments%rowtype;
   v_code private.delivery_codes%rowtype;
+  v_order_id uuid;
+  v_method public.payment_method;
   v_route_done boolean;
   v_attempts smallint;
   c_max_attempts constant smallint := private.delivery_code_max_attempts();
 begin
+  -- The order first, as every function that changes an order's money does.
+  select s.order_id into v_order_id
+  from public.route_stops rs join public.shipments s on s.id = rs.shipment_id
+  where rs.id = p_stop_id;
+  select o.payment_method into v_method from public.orders o where o.id = v_order_id for update;
   select * into v_stop from public.route_stops where id = p_stop_id for update;
   if not found or not private.drives_route(v_stop.route_id) then
     perform private.fail('stop_not_found');
@@ -1707,7 +1833,8 @@ begin
     insert into private.delivery_code_attempts (order_id, stop_id, driver_id)
     values (v_ship.order_id, p_stop_id, private.my_driver_id());
     if v_attempts >= c_max_attempts then
-      -- Staff see it on the order; the shopper's code stays private.
+      -- Staff see it on the order; the shopper's code stays private. The
+      -- driver is told at once that the order is locked.
       insert into public.order_events (order_id, shipment_id, kind, note, visible_to_customer, actor_id)
       values (v_ship.order_id, v_ship.id, 'note',
               'Código de entrega bloqueado tras ' || c_max_attempts
@@ -1717,9 +1844,21 @@ begin
         'order_id', v_ship.order_id, 'stop_id', p_stop_id, 'driver_id', private.my_driver_id(),
         'attempts', v_attempts));
     end if;
+    if v_attempts >= c_max_attempts then
+      return jsonb_build_object('ok', false, 'error', 'pin_locked', 'attempts_left', 0);
+    end if;
     return jsonb_build_object(
       'ok', false, 'error', 'wrong_pin',
       'attempts_left', greatest(0, c_max_attempts - v_attempts));
+  end if;
+
+  -- Cash on delivery: the cash is due at whichever parcel is handed over
+  -- first, for what is owed now (see private.cod_due_minor). Moved here if it
+  -- was planned on another stop; if the driver typed another amount, the
+  -- answer below tells them how much, and the plan stays on this stop.
+  if v_method = 'cash_on_delivery' then
+    perform private.replan_cod(v_ship.order_id, p_stop_id);
+    select * into v_stop from public.route_stops where id = p_stop_id;
   end if;
 
   if v_stop.cod_amount_minor > 0 and coalesce(p_cod_collected_minor, 0) <> v_stop.cod_amount_minor then
@@ -1741,6 +1880,9 @@ begin
 
   if v_stop.cod_amount_minor > 0 then
     perform private.capture_payment(v_ship.order_id, 'cod:' || p_stop_id, true);
+    -- Parcels that came back before this were not charged: record them as
+    -- refunded at the door, so the books show what the driver really took.
+    perform private.settle_returned_parcels_at_door(v_ship.order_id);
   end if;
 
   perform private.sync_order_status(v_ship.order_id);
@@ -1748,6 +1890,82 @@ begin
   v_route_done := private.maybe_complete_route(v_stop.route_id);
 
   return jsonb_build_object('ok', true, 'route_completed', v_route_done);
+end;
+$$;
+
+-- A failed delivery. Unchanged, except that it takes the order's lock first
+-- and moves a cash-on-delivery order's cash to another live stop of the order,
+-- if there is one, so the driver sees where to collect it.
+create or replace function public.driver_fail_stop(
+  p_stop_id uuid,
+  p_reason text,
+  p_lat double precision default null,
+  p_lng double precision default null
+) returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_stop public.route_stops%rowtype;
+  v_order uuid;
+  v_route_done boolean;
+begin
+  select s.order_id into v_order
+  from public.route_stops rs join public.shipments s on s.id = rs.shipment_id
+  where rs.id = p_stop_id;
+  perform 1 from public.orders where id = v_order for update;
+  select * into v_stop from public.route_stops where id = p_stop_id for update;
+  if not found or not private.drives_route(v_stop.route_id) then
+    perform private.fail('stop_not_found');
+  end if;
+  if not exists (select 1 from public.routes r where r.id = v_stop.route_id and r.status = 'in_progress') then
+    perform private.fail('route_not_in_progress');
+  end if;
+  if v_stop.status not in ('pending', 'arrived') then
+    perform private.fail('invalid_stop_state', v_stop.status::text);
+  end if;
+  if p_reason not in ('nobody_home', 'wrong_address', 'refused', 'cannot_pay', 'unsafe', 'damaged', 'other') then
+    perform private.fail('invalid_failure_reason');
+  end if;
+
+  update public.route_stops
+  set status = 'failed', completed_at = now(), failure_reason = p_reason, pod_lat = p_lat, pod_lng = p_lng
+  where id = p_stop_id;
+
+  update public.shipments
+  set status = 'delivery_failed', attempt_count = attempt_count + 1
+  where id = v_stop.shipment_id;
+
+  perform private.replan_cod(v_order);
+  perform private.sync_order_status(v_order);
+  perform private.emit('shipment.delivery_failed',
+    jsonb_build_object('shipment_id', v_stop.shipment_id, 'reason', p_reason));
+  v_route_done := private.maybe_complete_route(v_stop.route_id);
+
+  return jsonb_build_object('ok', true, 'route_completed', v_route_done);
+end;
+$$;
+
+-- A failed parcel starts back. Unchanged, except that the order is locked and
+-- its cash on delivery is worked out again without this parcel's goods.
+create or replace function public.ops_return_shipment(p_shipment_id uuid) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_order uuid;
+begin
+  if not private.has_staff_role('ops') then
+    perform private.fail('forbidden');
+  end if;
+  select order_id into v_order from public.shipments where id = p_shipment_id;
+  perform 1 from public.orders where id = v_order for update;
+  update public.shipments set status = 'returning'
+  where id = p_shipment_id and status = 'delivery_failed';
+  if not found then
+    perform private.fail('shipment_not_returnable');
+  end if;
+  perform private.replan_cod(v_order);
 end;
 $$;
 
@@ -1974,9 +2192,14 @@ begin
 
   update public.shipments set status = 'returned' where id = p_shipment_id;
 
-  -- What was paid for these units goes back to the shopper.
+  -- What was paid for these units goes back to the shopper, unless it was
+  -- already settled (at the door of a cash order, when the parcel was on its
+  -- way back as the cash was collected). A cash order not paid yet is not
+  -- refunded: the cash still to collect drops by these goods instead.
   if exists (select 1 from public.payments p where p.order_id = v_order.id
-             and p.status in ('captured', 'partially_refunded')) then
+             and p.status in ('captured', 'partially_refunded'))
+     and not exists (select 1 from private.refunds f
+                     where f.reason = 'parcel_returned' and f.source_id = p_shipment_id) then
     select jsonb_agg(jsonb_build_object('order_item_id', si.order_item_id, 'quantity', si.quantity))
     into v_units
     from public.shipment_items si where si.shipment_id = p_shipment_id;
@@ -2003,6 +2226,7 @@ begin
     perform private.emit('order.cancelled', jsonb_build_object(
       'order_id', v_order.id, 'reason', 'Los paquetes regresaron sin entregarse'));
   else
+    perform private.replan_cod(v_order.id);
     perform private.sync_order_status(v_order.id);
   end if;
 
@@ -2216,35 +2440,189 @@ begin
 end;
 $$;
 
--- On every write of a price or of how the offer is fulfilled, whichever path
--- writes it (seller_update_offer, a listing, or a direct update).
-create or replace function private.guard_offer_price() returns trigger
+-- The lowest price whose worst payout is not negative, for the refusal to
+-- say what would be accepted. The payout grows with the price (every
+-- percentage fee is well under 100 %), so a binary search finds it.
+create or replace function private.min_price_covering_fees(
+  p_fulfillment public.fulfillment_type,
+  p_category_id uuid,
+  p_weight_grams integer,
+  p_longest_side_cm numeric
+) returns bigint
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  v_low bigint := 1;
+  v_high bigint := 100000000000; -- ₡1 000 000 000: far above any real price
+  v_mid bigint;
+begin
+  if private.worst_unit_payout(v_high, p_fulfillment, p_category_id, p_weight_grams, p_longest_side_cm) < 0 then
+    return null;
+  end if;
+  while v_low < v_high loop
+    v_mid := (v_low + v_high) / 2;
+    if private.worst_unit_payout(v_mid, p_fulfillment, p_category_id, p_weight_grams, p_longest_side_cm) >= 0 then
+      v_high := v_mid;
+    else
+      v_low := v_mid + 1;
+    end if;
+  end loop;
+  return v_low;
+end;
+$$;
+
+-- Refuses an offer whose worst payout would be negative. The detail is the
+-- lowest price that would be accepted, in céntimos, rounded up to whole colones.
+create or replace function private.assert_offer_covers_fees(p_offer_id uuid) returns void
 language plpgsql security definer
 set search_path = ''
 as $$
 declare
-  v_payout bigint;
+  v record;
+  v_min bigint;
 begin
-  if new.price_minor is null or new.price_minor <= 0 then
-    return null; -- the table's own check answers that
+  select o.price_minor, o.fulfillment, p.category_id, k.weight_grams,
+         greatest(k.length_cm, k.width_cm, k.height_cm) as longest
+  into v
+  from public.offers o
+  join public.skus k on k.id = o.sku_id
+  join public.products p on p.id = k.product_id
+  where o.id = p_offer_id;
+  if not found or v.price_minor is null or v.price_minor <= 0 then
+    return; -- the table's own check answers that
   end if;
-  select private.worst_unit_payout(new.price_minor, new.fulfillment, p.category_id, k.weight_grams,
-                                   greatest(k.length_cm, k.width_cm, k.height_cm))
-  into v_payout
-  from public.skus k join public.products p on p.id = k.product_id
-  where k.id = new.sku_id;
-  if v_payout < 0 then
-    perform private.fail('price_below_fees', (-v_payout)::text);
+  if private.worst_unit_payout(v.price_minor, v.fulfillment, v.category_id, v.weight_grams, v.longest) < 0 then
+    v_min := private.min_price_covering_fees(v.fulfillment, v.category_id, v.weight_grams, v.longest);
+    perform private.fail('price_below_fees', coalesce((((v_min + 99) / 100) * 100)::text, ''));
   end if;
+end;
+$$;
+
+-- On every write of a price, of how the offer is fulfilled or of its status,
+-- whichever path writes it (seller_update_offer, a listing, or a direct update).
+create or replace function private.guard_offer_price() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  -- Pausing an offer is always allowed; putting it on sale is checked.
+  if tg_op = 'UPDATE' and new.status <> 'active'
+     and (new.price_minor, new.fulfillment) is not distinct from (old.price_minor, old.fulfillment) then
+    return null;
+  end if;
+  perform private.assert_offer_covers_fees(new.id);
   return null;
 end;
 $$;
 
 -- After the row is written, so that the grants, the row-level policies and
 -- the table's own checks answer first for a write that was never allowed.
-create trigger offers_price_covers_fees after insert or update of price_minor, fulfillment
+create trigger offers_price_covers_fees after insert or update of price_minor, fulfillment, status
   on public.offers
   for each row execute function private.guard_offer_price();
+
+-- The fees also depend on the package (weight and size decide the warehouse
+-- fee) and on the category (it decides the commission). A change to either,
+-- through a listing edit, its approval or any other path, is checked against
+-- every offer on sale of the variant or product, so the floor cannot be
+-- passed by setting the price first and the package or category afterwards.
+-- (An offer that is paused is checked when it is put back on sale.)
+create or replace function private.guard_sku_fees() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_offer uuid;
+begin
+  for v_offer in
+    select o.id from public.offers o where o.sku_id = new.id and o.status = 'active' order by o.id
+  loop
+    perform private.assert_offer_covers_fees(v_offer);
+  end loop;
+  return null;
+end;
+$$;
+
+create trigger skus_price_covers_fees
+  after update of weight_grams, length_cm, width_cm, height_cm on public.skus
+  for each row execute function private.guard_sku_fees();
+
+create or replace function private.guard_product_fees() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_offer uuid;
+begin
+  if new.category_id is not distinct from old.category_id then
+    return null;
+  end if;
+  for v_offer in
+    select o.id from public.offers o join public.skus k on k.id = o.sku_id
+    where k.product_id = new.id and o.status = 'active' order by o.id
+  loop
+    perform private.assert_offer_covers_fees(v_offer);
+  end loop;
+  return null;
+end;
+$$;
+
+create trigger products_price_covers_fees after update of category_id on public.products
+  for each row execute function private.guard_product_fees();
+
+-- ═══ 12. What the shopper and the warehouse see ════════════════════════════
+
+-- The shopper's returns on one of their orders, with where each stands, so
+-- the order page can say what happens next (hand the product over, wait for
+-- the refund, how much went back). Only the owner of the order.
+create or replace function public.my_order_returns(p_order_number text) returns jsonb
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  v_order public.orders%rowtype;
+begin
+  select * into v_order from public.orders where order_number = p_order_number;
+  if not found or v_order.user_id is distinct from (select auth.uid()) then
+    perform private.fail('order_not_found');
+  end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'id', r.id, 'order_item_id', r.order_item_id, 'kind', r.kind, 'status', r.status,
+      'quantity', r.quantity, 'refund_minor', r.refund_minor,
+      'resolution_note', r.resolution_note, 'created_at', r.created_at,
+      'received_at', r.received_at, 'resolved_at', r.resolved_at
+    ) order by r.created_at, r.id)
+    from public.return_requests r
+    join public.order_items i on i.id = r.order_item_id
+    where i.order_id = v_order.id), '[]'::jsonb);
+end;
+$$;
+
+-- Parcels on their way back to a warehouse, for the people who receive them
+-- there: what to expect at the dock and check in.
+create or replace function public.wms_returning_shipments(p_warehouse_id uuid) returns jsonb
+language plpgsql stable security definer
+set search_path = ''
+as $$
+begin
+  if not (private.works_at(p_warehouse_id) or private.has_staff_role('ops')) then
+    perform private.fail('forbidden');
+  end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'shipment_id', s.id, 'tracking_code', s.tracking_code, 'order_number', o.order_number,
+      'package_count', s.package_count, 'attempt_count', s.attempt_count,
+      'units', (select coalesce(sum(si.quantity), 0) from public.shipment_items si
+                where si.shipment_id = s.id),
+      'lines', (select count(*) from public.shipment_items si where si.shipment_id = s.id)
+    ) order by s.tracking_code)
+    from public.shipments s
+    join public.orders o on o.id = s.order_id
+    where s.origin_warehouse_id = p_warehouse_id and s.status = 'returning'), '[]'::jsonb);
+end;
+$$;
 
 -- ═══ Grants ════════════════════════════════════════════════════════════════
 
@@ -2252,17 +2630,24 @@ revoke all on function
   private.order_collected_minor(uuid),
   private.refunded_minor(uuid),
   private.lock_seller_money(uuid),
-  private.refund_units(uuid, text, uuid, jsonb),
+  private.refund_units(uuid, text, uuid, jsonb, boolean),
   private.return_transition_allowed(text, text),
   private.delivered_units(uuid),
   private.order_returnable(public.orders),
   private.delivery_code_max_attempts(),
   private.new_delivery_code(),
   private.held_units(uuid),
-  private.worst_unit_payout(bigint, public.fulfillment_type, uuid, integer, numeric)
+  private.cod_due_minor(uuid),
+  private.replan_cod(uuid, uuid),
+  private.settle_returned_parcels_at_door(uuid),
+  private.worst_unit_payout(bigint, public.fulfillment_type, uuid, integer, numeric),
+  private.min_price_covering_fees(public.fulfillment_type, uuid, integer, numeric),
+  private.assert_offer_covers_fees(uuid)
 from public, anon, authenticated;
 
 revoke all on function
+  public.my_order_returns(text),
+  public.wms_returning_shipments(uuid),
   public.ops_receive_return(uuid, boolean, text),
   public.ops_delivery_code(uuid),
   public.ops_release_delivery_code(uuid, text),
@@ -2270,6 +2655,8 @@ revoke all on function
 from public, anon;
 
 grant execute on function
+  public.my_order_returns(text),
+  public.wms_returning_shipments(uuid),
   public.ops_receive_return(uuid, boolean, text),
   public.ops_delivery_code(uuid),
   public.ops_release_delivery_code(uuid, text),

@@ -2,13 +2,17 @@
 //
 //   1. A shopper with three orders waiting for payment is told, at checkout,
 //      to pay or cancel one before placing another.
-//   2. Staff record that a returned product reached the warehouse before they
-//      can refund it, then refund it once.
+//   2. The shopper's order page says what happens after a withdrawal (we
+//      collect the product; the money goes back once it is here). Staff close
+//      an approved return whose product never came, with a reason the shopper
+//      reads, and record that another returned product reached the warehouse
+//      before they can refund it, then refund it once.
 //   3. A delivery code locked after five wrong attempts (counted for the whole
 //      order) shows on the order in the console; staff release it, the shopper
 //      sees a new code, and the driver delivers with it.
-//   4. A parcel that came back undelivered is checked in from the order page;
-//      the shopper's money for it is refunded and the order is cancelled.
+//   4. A parcel that came back undelivered is listed on the warehouse board;
+//      it is checked in from the order page; the shopper's money for it is
+//      refunded and the order is cancelled.
 //   5. The console pages it touches fit a 390 px phone.
 //
 // Like every journey it runs against a freshly seeded database and fails on a
@@ -18,6 +22,7 @@ const { chromium, request } = require("playwright");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
 const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
+const FIELD = process.env.FIELD_URL || "http://127.0.0.1:3003";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
@@ -81,6 +86,15 @@ async function as(email) {
     p_quantity: 1,
   });
   log("withdrawal requested on", delivered.order_number, "for", detail.items[0].title);
+  // Another, by a second shopper, whose product will never come back.
+  const delivered2 = (await shopper2.rpc("my_orders")).find((o) => o.status === "delivered");
+  const detail2 = await shopper2.rpc("get_order", { p_order_number: delivered2.order_number });
+  await shopper2.rpc("request_return", {
+    p_order_item_id: detail2.items[0].id,
+    p_kind: "withdrawal",
+    p_quantity: 1,
+  });
+  log("withdrawal requested on", delivered2.order_number, "(the product will not come back)");
 
   // 3. The packed parcel of the seed goes out, and five wrong codes are typed.
   const board = await staff.rpc("ops_dispatch_board");
@@ -109,7 +123,10 @@ async function as(email) {
     });
   }
   log("after five wrong codes:", JSON.stringify(answer));
-  check(answer.attempts_left === 0, "the fifth wrong code leaves no attempts");
+  check(
+    answer.error === "pin_locked" && answer.attempts_left === 0,
+    "the fifth wrong code says at once that the order is locked",
+  );
   const locked = await driver.rpc("driver_complete_stop", {
     p_stop_id: stop.stop_id,
     p_pin: before.delivery_pin,
@@ -176,6 +193,17 @@ async function as(email) {
   check(/Pague o cancele/.test(refusal), "the refusal says what to do next");
   check(new URL(s.url()).pathname === "/pagar", "the shopper stays on checkout");
   await s.screenshot({ path: SHOTS + "/i1-checkout-limit.png", fullPage: true });
+
+  // The withdrawal on the shopper's order: what happens next, in their words.
+  await s.goto(WEB + `/pedidos/${delivered.order_number}`, { waitUntil: "networkidle" });
+  await s.waitForSelector("main:visible >> text=/Le contactaremos para recoger el producto/");
+  const next = await text(s.locator('main:visible li:has-text("Le contactaremos")').last());
+  log("shopper's order page says:", next.slice(0, 220));
+  check(
+    /cuando llegue a nuestra bodega le reembolsamos/.test(next),
+    "the refund waits for the product",
+  );
+  await s.screenshot({ path: SHOTS + "/i1b-return-next-step.png", fullPage: true });
   await shop.close();
 
   // 2. A return: received first, refunded after.
@@ -186,6 +214,30 @@ async function as(email) {
   const page = await console_.newPage();
   watch(page);
   await signIn(page, OPS, "central@yuntera.example", "/");
+  await page.goto(OPS + "/atencion", { waitUntil: "networkidle" });
+  // The product of the second withdrawal never came back: close it, with a reason.
+  const stuck = page
+    .locator('main:visible section[aria-labelledby="devoluciones"] li')
+    .filter({ hasText: delivered2.order_number });
+  await stuck.locator("summary:has-text('El producto no llegó')").click();
+  await stuck.locator('textarea[name="note"]').fill("corto");
+  await stuck.locator('button:has-text("Cerrar sin reembolso")').click();
+  await page.waitForSelector("main:visible >> text=/Explique al cliente por qué se cierra/");
+  check(
+    (await stuck.locator('textarea[name="note"]').inputValue()) === "corto",
+    "the typed reason is kept",
+  );
+  await stuck
+    .locator('textarea[name="note"]')
+    .fill("Intentamos recogerlo dos veces y el cliente no respondió las llamadas.");
+  await stuck.locator('button:has-text("Cerrar sin reembolso")').click();
+  // Closed, it leaves the queue.
+  await stuck.waitFor({ state: "detached" });
+  const closed = await shopper2.rpc("my_order_returns", {
+    p_order_number: delivered2.order_number,
+  });
+  log("the shopper's return now:", closed[0].status, "|", closed[0].resolution_note);
+  check(closed[0].status === "rejected", "the return is closed");
   await page.goto(OPS + "/atencion", { waitUntil: "networkidle" });
   const card = page
     .locator('main:visible section[aria-labelledby="devoluciones"] li')
@@ -268,7 +320,35 @@ async function as(email) {
   log("driver delivers with the new code:", JSON.stringify(delivered3));
   check(delivered3.ok === true, "the new code delivers");
 
-  // 4. The parcel that came back is checked in from its order.
+  // 4. The warehouse board lists the parcel on its way back.
+  const field = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    locale: "es-CR",
+  });
+  const f = await field.newPage();
+  watch(f);
+  await f.goto(FIELD + "/ingresar", { waitUntil: "networkidle" });
+  await f.fill('main input[name="email"]', "bodega@yuntera.example");
+  await f.fill('main input[name="password"]', PASSWORD);
+  await f.click('main form button[type="submit"]');
+  await f.waitForURL((u) => new URL(u).pathname !== "/ingresar");
+  await f.goto(FIELD + "/bodega", { waitUntil: "networkidle" });
+  await f.waitForSelector("main:visible >> text=/Paquetes devueltos por recibir \\(1\\)/");
+  const coming = await text(
+    f.locator('main:visible section[aria-labelledby="devueltos"] li').first(),
+  );
+  log("warehouse board:", coming.slice(0, 160));
+  check(coming.includes(shippedDetail.shipments[0].tracking_code), "the parcel is on the board");
+  log(
+    "warehouse board overflow px:",
+    await f.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+  );
+  await f.screenshot({ path: SHOTS + "/i5a-warehouse-returning.png", fullPage: true });
+  await field.close();
+
+  // It is checked in from its order.
   await page.goto(OPS + `/pedidos/${shipped.order_number}`, { waitUntil: "networkidle" });
   const back = page.locator('main:visible section[aria-labelledby="paquetes"] li').first();
   log("parcel:", (await text(back)).slice(0, 160));

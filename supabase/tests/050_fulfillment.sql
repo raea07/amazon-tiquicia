@@ -410,10 +410,13 @@ begin
   where rt.status = 'in_progress' and rs.status = 'pending' limit 1;
   perform set_config('request.jwt.claims', json_build_object(
     'sub', (select id from auth.users where email = 'repartidor@yuntera.example'))::text, true);
-  for i in 1 .. 5 loop
+  for i in 1 .. 4 loop
     r := public.driver_complete_stop(v_stop, 'xxxx', 'Alguien');
     assert r ->> 'error' = 'wrong_pin', format('attempt %s: %s', i, r);
   end loop;
+  -- The attempt that reaches the limit already says the order is locked.
+  r := public.driver_complete_stop(v_stop, 'xxxx', 'Alguien');
+  assert r ->> 'error' = 'pin_locked', format('fifth attempt: %s', r);
   r := public.driver_complete_stop(v_stop, 'xxxx', 'Alguien');
   assert r ->> 'error' = 'pin_locked', format('sixth attempt: %s', r);
   -- Even the right PIN no longer works once locked: support has to step in.
