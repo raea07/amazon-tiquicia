@@ -29,6 +29,29 @@ begin
 end;
 $$;
 
+-- Lets a suite look at what a function left behind while it is still signed in
+-- as the user who called it. The API roles hold no privilege on any table
+-- (20261121082800_lockdown.sql), so without this every check that reads a row
+-- would fail. The grant is SELECT only, exists only inside the suite's own
+-- rolled-back transaction, and row-level security still filters what the
+-- checks see. It is for the suites that test what functions do; the suites
+-- that test who can reach what (020_access, 110_lockdown) never call it.
+-- Visitors get nothing, so what a visitor is refused stays tested everywhere.
+create function pg_temp.allow_inspection() returns void
+language plpgsql as $$
+begin
+  grant select on all tables in schema public to authenticated;
+end;
+$$;
+
+-- Takes the inspection grant away again, for a step that checks privileges.
+create function pg_temp.stop_inspection() returns void
+language plpgsql as $$
+begin
+  revoke select on all tables in schema public from authenticated;
+end;
+$$;
+
 -- Remembers a value for later steps, readable under any role.
 create function pg_temp.remember(p_name text, p_value text) returns void
 language sql as $$

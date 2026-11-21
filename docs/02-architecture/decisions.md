@@ -43,9 +43,10 @@ missing policy exposes data.
 an action. One function returns one screen's payload as JSON
 (`get_product`, `my_orders`, `seller_overview`, `wms_board`, `driver_today`,
 `ops_dispatch_board`); one function performs one business action
-(`place_order`, `wms_pack_shipment`, `driver_complete_stop`). Tables keep
-row-level security underneath as a second lock, and table privileges are
-granted explicitly and narrowly.
+(`place_order`, `wms_pack_shipment`, `driver_complete_stop`). Since
+21 November 2026 this is enforced, not only followed: signed-in users and
+visitors hold no privilege on any table, view or sequence, so the functions
+are the only door. Tables keep row-level security underneath as a second lock.
 
 **Consequences.**
 
@@ -55,11 +56,16 @@ granted explicitly and narrowly.
   payload holds. A contract test checks that it does.
 - One round trip per screen, which matters on mobile data.
 - More SQL to write and maintain, and a new screen usually needs a migration.
-- Read functions run with the caller's rights where the caller's own row access
-  is exactly what the screen should show; functions that must combine data
-  across that boundary are `security definer` and check the caller themselves.
-  Getting that check wrong is the main risk of this design, which is why
-  [access control](../03-data/access-control.md) has a checklist for it.
+- Every function runs with its owner's rights (`security definer`) and checks
+  the caller itself; read functions write their visibility rules into their own
+  queries. Getting that check wrong is the main risk of this design, which is
+  why [access control](../03-data/access-control.md) has a checklist for it and
+  `supabase/tests/110_lockdown.sql` fails on any table privilege or unlisted
+  function a later migration adds.
+- An action that no function performs cannot be done through the API at all,
+  even by staff. The security review of November 2026 showed that the
+  alternative (narrow column grants plus policies) left holes that no single
+  reviewer saw; the price is writing a function for each new action.
 
 ## 2. No privileged key in any app; staff are ordinary users
 

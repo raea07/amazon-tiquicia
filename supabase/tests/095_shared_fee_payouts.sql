@@ -9,6 +9,7 @@
 
 begin;
 \ir _helpers.sql
+select pg_temp.allow_inspection();
 
 -- Steps that are not about access run as the test's superuser with a caller's
 -- identity in the claims, the way the seed does.

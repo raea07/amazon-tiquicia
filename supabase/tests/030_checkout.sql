@@ -2,6 +2,7 @@
 
 begin;
 \ir _helpers.sql
+select pg_temp.allow_inspection();
 
 select pg_temp.remember('cafe', pg_temp.offer('cafe-molido-tarrazu-340g')::text);
 select pg_temp.remember('laptop', pg_temp.offer('laptop-14-nimbo-libro')::text);
