@@ -69,7 +69,7 @@ export default function NewListingScreen() {
       // Back to the list underneath (not a second copy of it), saying what happened.
       router.dismissTo({
         pathname: "/productos",
-        params: { creado: draft ? "borrador" : "revision" },
+        params: { creado: draft ? "borrador" : "revision", tienda: shop.id },
       });
     } catch (cause) {
       setError(messageOf(cause));

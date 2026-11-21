@@ -80,8 +80,23 @@ export const OrderStatusBadge = ({ status }: { status: OrderStatus }) => (
   <Badge tone={ORDER_TONE[status]}>{orderLabel(status)}</Badge>
 );
 
-export const ShipmentStatusBadge = ({ status }: { status: ShipmentStatus }) => (
-  <Badge tone={SHIPMENT_TONE[status]}>{SHIPMENT_STATUS_LABEL[status]}</Badge>
+/**
+ * `prefix` names what the state is of ("Entrega") where it sits beside the
+ * order's badge; the web has column headings for that.
+ */
+
+export const ShipmentStatusBadge = ({
+  status,
+  prefix,
+}: {
+  status: ShipmentStatus;
+  prefix?: string;
+}) => (
+  <Badge tone={SHIPMENT_TONE[status]}>
+    {prefix
+      ? `${prefix}: ${SHIPMENT_STATUS_LABEL[status].toLowerCase()}`
+      : SHIPMENT_STATUS_LABEL[status]}
+  </Badge>
 );
 
 /**

@@ -58,7 +58,7 @@ export function StockForm({
         <Button
           variant="secondary"
           loading={save.isPending}
-          loadingLabel="…"
+          loadingLabel="Guardando…"
           // Beside the field, level with it (a button starts at the top otherwise).
           style={{ alignSelf: "flex-end" }}
           testID={`stock-save-${id}`}

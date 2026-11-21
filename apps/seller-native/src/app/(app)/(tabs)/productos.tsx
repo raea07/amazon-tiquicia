@@ -14,9 +14,11 @@ import {
   Stack,
   Text,
 } from "@yuntera/expo-kit/ui";
-import { Link, useLocalSearchParams } from "expo-router";
+import { Link, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
+import { useCallback } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { ProductThumb } from "@/components/parts";
+import { createdFlash, flashFor } from "@/lib/flash";
 import { FULFILLMENT_LABEL, PRODUCT_STATUS } from "@/lib/labels";
 import { shopKey, useShop } from "@/lib/shops";
 
@@ -27,8 +29,17 @@ import { shopKey, useShop } from "@/lib/shops";
  */
 export default function ListingsScreen() {
   const shop = useShop();
-  const params = useLocalSearchParams<{ creado?: string }>();
-  const created = oneParam(params.creado);
+  const params = useLocalSearchParams<{ creado?: string; tienda?: string }>();
+  // "Producto enviado a revisión" belongs to the shop it was created in, and
+  // is said once: leaving the tab clears it from the address.
+  const created = flashFor(createdFlash(oneParam(params.creado), oneParam(params.tienda)), shop.id);
+  const navigation = useNavigation();
+  useFocusEffect(
+    useCallback(
+      () => () => navigation.setParams({ creado: undefined, tienda: undefined } as never),
+      [navigation],
+    ),
+  );
   const listings = useApiQuery(shopKey(shop.id, "listings"), (api) => api.sellerListings(shop.id), {
     personal: true,
   });

@@ -21,6 +21,8 @@ import {
 import { useState } from "react";
 import { View } from "react-native";
 import { OrderStatusBadge, ShipmentStatusBadge } from "@/components/parts";
+import { flashFor, type ShopFlash } from "@/lib/flash";
+import { orderLabel, SHIPMENT_STATUS_LABEL } from "@/lib/labels";
 import { checkPacked } from "@/lib/rules";
 import { shopKey, useShop } from "@/lib/shops";
 
@@ -97,7 +99,9 @@ function PackForm({
  */
 export default function OrdersScreen() {
   const shop = useShop();
-  const [packed, setPacked] = useState<string | null>(null);
+  // Kept with its shop: the tab stays mounted when the person changes shop.
+  const [packedFlash, setPackedFlash] = useState<ShopFlash | null>(null);
+  const packed = flashFor(packedFlash, shop.id);
   const parcels = useApiQuery(shopKey(shop.id, "to-pack"), (api) => api.sellerToPack(shop.id), {
     personal: true,
   });
@@ -164,7 +168,10 @@ export default function OrdersScreen() {
                 Escriba <Text variant="smallStrong">{parcel.tracking_code}</Text> en el paquete,
                 bien visible. No incluya facturas con precios de otros pedidos.
               </Text>
-              <PackForm parcel={parcel} onPacked={setPacked} />
+              <PackForm
+                parcel={parcel}
+                onPacked={(value) => setPackedFlash({ shopId: shop.id, value })}
+              />
             </Card>
           ))
         )}
@@ -217,8 +224,10 @@ export default function OrdersScreen() {
               </Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
                 <OrderStatusBadge status={line.order_status} />
-                {line.shipment_status ? (
-                  <ShipmentStatusBadge status={line.shipment_status} />
+                {/* The delivery's state, named, and only when it says something the order's does not. */}
+                {line.shipment_status &&
+                SHIPMENT_STATUS_LABEL[line.shipment_status] !== orderLabel(line.order_status) ? (
+                  <ShipmentStatusBadge status={line.shipment_status} prefix="Entrega" />
                 ) : null}
               </View>
               <Text variant="small" tint="muted">
