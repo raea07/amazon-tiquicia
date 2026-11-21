@@ -91,6 +91,25 @@ phone number.
 Every staff view of personal data is logged. Staff access requires
 multi-factor authentication from Launch.
 
+### What a driver's phone holds, and for how long
+
+The drivers' app (Yuntera Ruta) keeps two things on the phone so a route
+still works without signal
+([decision 26](../02-architecture/decisions.md#26-a-drivers-offline-day-in-ordinary-app-storage-kept-small-and-short)).
+Both are in the app's ordinary storage, which the phone encrypts with its own
+keys and keeps to the app; the app adds no encryption of its own.
+
+| What                                                                                                                                                            | Removed                                                                                                                                                                                                                             |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The day's routes still to drive: for each stop the recipient's name, _señas_, map pin, Plus Code, parcels and cash, and the phone number while the stop is open | At sign-out, when the driver loses access or is suspended, when another account opens the app, and 24 hours after it was saved, even if nobody opens the app. Finished routes are never saved                                       |
+| Actions taken without signal: arrivals, failed deliveries (with the reason and the position at the door) and the driver's latest position                       | As soon as they are sent. Positions at sign-out or after 5 minutes; everything of an account when it loses access or another account signs in; an unsent arrival or failure after 36 hours, when the driver is told it was not sent |
+
+The delivery code is never written to the phone. Nothing of this goes into
+logs. The drivers' app is kept out of Android's cloud backup, and this storage
+is kept out of iPhone backups. Moving to a new Android phone with Google's
+device-to-device transfer can still copy it; the copy is at most a day old and
+is removed when the app next starts. Not yet checked on a phone.
+
 ### What Yuntera holds about drivers and staff
 
 Identity, licence and vehicle documents, insurance, bank details, and for
@@ -130,6 +149,7 @@ nothing is deleted automatically.
 | Delivery details on a completed route (as visible to the driver) | 24 hours                                  | Same-day issue resolution                                                                                                                                                                |
 | Proof-of-delivery photos                                         | 90 days                                   | Covers the warranty and dispute window. Photo capture is not built yet                                                                                                                   |
 | Driver position history                                          | Not kept                                  | Only each driver's latest position is stored, and it is overwritten; there is no history to retain (`driver_positions`)                                                                  |
+| A route kept on the driver's phone for a dead zone               | 24 hours, less at sign-out or lost access | Readable without signal; see [What a driver's phone holds](#what-a-drivers-phone-holds-and-for-how-long). Removed by the app itself, so this one is enforced, not proposed               |
 | Support conversations                                            | 2 years                                   | Dispute evidence, service quality                                                                                                                                                        |
 | Audit log                                                        | 5 years                                   | Accountability; matches financial records                                                                                                                                                |
 | Risk signals and decisions                                       | 1 year                                    | Fraud patterns; reviewability of decisions. Risk scoring is not wired in yet, so nothing is stored                                                                                       |
@@ -304,7 +324,8 @@ or reset.
 Staff enrol an authenticator app (time-based codes) from the console's
 account page; the QR code is drawn on Yuntera's own server and the key is also
 shown as text. Once enrolled, sign-in asks for a code after the password, in
-every app. When the setting `require_staff_mfa` is on, a member of staff with
+every web app and in the seller, driver and warehouse apps; the shopper app
+sends such an account to the website. The code is never stored on the phone. When the setting `require_staff_mfa` is on, a member of staff with
 no factor is taken to enrolment before anything else, and the database refuses
 staff functions to any session that has not passed the second step. Whatever
 the setting, an account that has a factor counts in the database only once its
