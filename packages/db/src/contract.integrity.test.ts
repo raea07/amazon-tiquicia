@@ -145,8 +145,10 @@ const offer = (slug: string) =>
     [slug],
   );
 
+// The session reads no table (20261121082800_lockdown.sql): the address comes
+// from my_addresses, as the shop's checkout gets it.
 const PLACE = `select public.place_order($1::jsonb,
-  (select id from public.addresses where user_id = auth.uid() and is_default), $2::public.payment_method,
+  (select a.id from public.my_addresses() a where a.is_default), $2::public.payment_method,
   $3) as r`;
 
 async function place(email: string, lines: Record<string, number>, method: string, key: string) {
@@ -194,12 +196,16 @@ const shipments = async (order: string) =>
     )
   ).rows;
 
+// The warehouse id is looked up first and passed, as the console does: the
+// session reads no table.
 const ROUTE = `select public.ops_create_route(
   ((now() at time zone 'UTC') - interval '6 hours')::date,
-  (select id from public.warehouses where code = 'SJO1'),
+  $3::uuid,
   (select jsonb_agg(jsonb_build_object('shipment_id', s, 'sequence', n))
    from unnest($1::uuid[]) with ordinality x (s, n)),
   $2::uuid) as r`;
+
+const depot = () => lookup<string>("select id as r from public.warehouses where code = 'SJO1'");
 
 /** Packs, routes and delivers an order with the shopper's code. */
 async function deliver(order: string) {
@@ -209,7 +215,7 @@ async function deliver(order: string) {
     "select d.id as r from public.drivers d join auth.users u on u.id = d.user_id where u.email = $1",
     [DRIVER],
   );
-  const route = await as<string>(STAFF, ROUTE, [parcels.map((p) => p.id), driver]);
+  const route = await as<string>(STAFF, ROUTE, [parcels.map((p) => p.id), driver, await depot()]);
   await as(DRIVER, "select public.driver_start_route($1) as r", [route]);
   const code = await lookup<string>(
     "select code as r from private.delivery_codes where order_id = $1",
@@ -306,19 +312,19 @@ describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", (
 
     // Draft routes, with no driver, so nobody's day changes.
     const a = await open(STAFF);
-    const first = await one<string>(a, ROUTE, [[platform.id], null]);
+    const first = await one<string>(a, ROUTE, [[platform.id], null, await depot()]);
     const b = await open(STAFF);
-    const second = one<string>(b, ROUTE, [[seller.id], null]);
+    const second = one<string>(b, ROUTE, [[seller.id], null, await depot()]);
     expect(await blocked(b.pid)).toBe(true);
     await end(a, "commit");
     const secondRoute = await second;
-    const cash = await one<string>(
-      b,
+    await end(b, "commit");
+    // Read as the owner once committed: the session itself reads no table.
+    const cash = await lookup<string>(
       "select cod_amount_minor::text as r from public.route_stops where route_id = $1",
       [secondRoute],
     );
     expect(cash).toBe("0");
-    await end(b, "commit");
 
     const stops = await pool.query<{ cod: string }>(
       `select rs.cod_amount_minor::text as cod from public.route_stops rs
@@ -344,7 +350,7 @@ describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", (
       "select d.id as r from public.drivers d join auth.users u on u.id = d.user_id where u.email = $1",
       [DRIVER],
     );
-    const route = await as<string>(STAFF, ROUTE, [[platform.id, seller.id], driver]);
+    const route = await as<string>(STAFF, ROUTE, [[platform.id, seller.id], driver, await depot()]);
     await as(DRIVER, "select public.driver_start_route($1) as r", [route]);
     const stopOf = (shipment: string) =>
       lookup<string>(

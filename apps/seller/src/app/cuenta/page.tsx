@@ -1,6 +1,6 @@
 import { parsePhone } from "@yuntera/core";
-import { AccountSecuritySection } from "@yuntera/next-kit/account";
 import type { SellerShopChanges, ShopChangeKind } from "@yuntera/db";
+import { AccountSecuritySection } from "@yuntera/next-kit/account";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Alert, Badge, formatDate, Skeleton } from "@yuntera/ui";

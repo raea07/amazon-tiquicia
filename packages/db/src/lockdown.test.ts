@@ -33,9 +33,14 @@ function fromGuard(list: string): string[] {
     .map((m) => m[1] ?? "")
     .filter(
       (name) =>
-        !["anon", "public", "private", "authenticated", "service_role", "supabase_auth_admin"].includes(
-          name,
-        ),
+        ![
+          "anon",
+          "public",
+          "private",
+          "authenticated",
+          "service_role",
+          "supabase_auth_admin",
+        ].includes(name),
     )
     .sort();
 }
