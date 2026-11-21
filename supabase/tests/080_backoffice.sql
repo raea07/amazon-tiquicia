@@ -379,6 +379,31 @@ end
 $$;
 reset role;
 
+-- ── Staff can open an order, but never see its delivery PIN ────────────────
+
+select pg_temp.login('central@yuntera.example');
+do $$
+declare
+  o jsonb := public.get_order(
+    (select order_number from public.orders where id = current_setting('t.card_order')::uuid));
+begin
+  assert o ->> 'status' in ('confirmed', 'processing'), format('a live order: %s', o ->> 'status');
+  assert o ->> 'delivery_pin' is null, 'staff do not see the delivery PIN';
+  assert o #>> '{address,senas}' is not null, 'they do see what they need to help';
+end
+$$;
+reset role;
+
+select pg_temp.login('comprador@yuntera.example');
+do $$
+begin
+  assert public.get_order(
+    (select order_number from public.orders where id = current_setting('t.card_order')::uuid)
+  ) ->> 'delivery_pin' ~ '^[0-9]{4}$', 'the shopper still sees their own PIN';
+end
+$$;
+reset role;
+
 -- ── Drivers ────────────────────────────────────────────────────────────────
 
 select pg_temp.login('vendedor@yuntera.example');

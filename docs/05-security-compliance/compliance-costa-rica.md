@@ -207,8 +207,13 @@ toward employment.
 
 How the plan hedges:
 
-1. **The cost model budgets drivers as employees**, including employer social
-   charges of 26.83%, so reclassification would not break the unit economics.
+1. **The cost model is meant to budget drivers as employees**, including
+   employer social charges of 26.83%, so that reclassification would not break
+   the unit economics. _Assumption to validate:_ the model's figure is a single
+   assumed ₡45,000 per fully loaded driver-day
+   ([business model](../00-strategy/business-model.md)); it has not been built
+   up from an actual wage, charges, vehicle and fuel, and must be before it is
+   relied on.
 2. **The Pilot uses very few drivers**, engaged on whatever basis the lawyer
    approves in writing. The founder can drive.
 3. **Carriers are the overflow and the fallback.** If own delivery becomes

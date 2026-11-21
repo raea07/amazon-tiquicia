@@ -514,8 +514,12 @@ begin
     'promise_latest', o.promise_latest,
     'withdrawal_deadline', o.withdrawal_deadline,
     'warranty_until', o.warranty_until,
-    -- The PIN is shown while there is still something to hand over.
-    'delivery_pin', case when o.status in ('confirmed', 'processing', 'partially_shipped', 'shipped')
+    -- The PIN is shown while there is still something to hand over, and only to
+    -- the shopper. It is their proof against a parcel being marked delivered
+    -- without them, so nobody on the platform's side may read it: not the
+    -- driver, and not staff looking at the order.
+    'delivery_pin', case when v_is_owner
+                          and o.status in ('confirmed', 'processing', 'partially_shipped', 'shipped')
                          then o.delivery_pin end,
     'can_cancel', v_is_staff and o.status in ('pending_payment', 'payment_review', 'confirmed', 'processing')
                   or (o.status in ('pending_payment', 'payment_review', 'confirmed')

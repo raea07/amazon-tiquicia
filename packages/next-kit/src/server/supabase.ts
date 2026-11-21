@@ -30,6 +30,18 @@ export function apiEnv(): { url: string; key: string } {
   return { url, key };
 }
 
+/**
+ * How session cookies are stored. No script in the page ever needs the token
+ * (every API call is made on the server), so the cookie is hidden from
+ * JavaScript: an injected script cannot read and send it elsewhere.
+ */
+export const SESSION_COOKIE = {
+  httpOnly: true,
+  sameSite: "lax",
+  secure: process.env.NODE_ENV === "production",
+  path: "/",
+} as const;
+
 const transportFor = (client: SupabaseClient): RpcTransport => ({
   rpc: (fn, args) => client.rpc(fn, args),
 });
@@ -61,7 +73,9 @@ export async function sessionClient(): Promise<SupabaseClient> {
       getAll: () => store.getAll(),
       setAll: (list) => {
         try {
-          for (const { name, value, options } of list) store.set(name, value, options);
+          for (const { name, value, options } of list) {
+            store.set(name, value, { ...options, ...SESSION_COOKIE });
+          }
         } catch {
           // Server Components cannot set cookies. The proxy refreshes the
           // session on every request, so a skipped write here is harmless.

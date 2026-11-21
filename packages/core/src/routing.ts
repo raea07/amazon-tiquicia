@@ -36,6 +36,21 @@ export interface Vehicle {
   speedKmh: number;
 }
 
+/**
+ * Planning assumptions per vehicle type on Gran Área Metropolitana streets.
+ * They are starting values, not measurements: replace them with the fleet's own
+ * averages once there are a few weeks of completed routes.
+ */
+export const VEHICLE_PRESETS = {
+  motorcycle: { maxStops: 30, speedKmh: 22, shiftMinutes: 480 },
+  car: { maxStops: 35, speedKmh: 18, shiftMinutes: 480 },
+  van: { maxStops: 45, speedKmh: 16, shiftMinutes: 480 },
+  bicycle: { maxStops: 15, speedKmh: 11, shiftMinutes: 360 },
+} as const satisfies Record<string, Pick<Vehicle, "maxStops" | "speedKmh" | "shiftMinutes">>;
+
+/** Minutes at the door used when a stop has no better estimate. */
+export const DEFAULT_SERVICE_MINUTES = 6;
+
 export interface RoutingOptions {
   circuity?: number;
   /** Whether the driver must return to the depot (cash and failed deliveries). */

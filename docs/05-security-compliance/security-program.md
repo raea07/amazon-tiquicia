@@ -164,49 +164,72 @@ ASVS is used as the checklist of record. The table maps its areas to where this
 program addresses them; it uses area names rather than chapter numbers because
 numbering differs between ASVS versions.
 
-| ASVS area                          | Addressed by                                                                                               | State                                                                       |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Architecture and threat modelling  | This document; `docs/02-architecture/`                                                                     | Designed                                                                    |
-| Authentication                     | Managed authentication service; staff multi-factor; leaked-password checks                                 | Designed; staff MFA enforcement is a Launch to-do                           |
-| Session management                 | Managed sessions; secure cookies; re-authentication for sensitive actions                                  | Designed                                                                    |
-| Access control                     | Row-level security; no privileged key in clients; role checks in server functions                          | Designed and being implemented with tests in the data layer                 |
-| Validation, sanitisation, encoding | Server-side validation; framework encoding; lint rules                                                     | Partly in the repo (lint rules, typed domain logic); the rest per app       |
-| Cryptography and secrets           | Platform-managed encryption at rest and in transit; secret stores; rotation                                | Designed; rotation schedule is a to-do                                      |
-| Error handling and logging         | Audit log; scrubbed error monitoring; alerts                                                               | Designed; alert thresholds are a to-do                                      |
-| Data protection and privacy        | [Privacy](privacy.md): minimisation, retention, consent                                                    | Designed; retention jobs are a to-do                                        |
-| Communications                     | TLS everywhere; strict transport security                                                                  | Provided by the hosting platforms; headers are a to-do per app              |
-| Business logic                     | Idempotent orders; atomic stock reservation; state machines (`packages/core/src/lifecycle.ts`); risk rules | In the repo for the domain logic; enforcement in the data layer in progress |
-| Files and resources                | Typed, size-limited uploads to access-controlled storage                                                   | Designed                                                                    |
-| API and web services               | Every exposed function checks the caller; rate limits at the edge                                          | Designed; edge rules are a to-do                                            |
-| Configuration and build            | Pinned dependencies; CI scanning; separate environments                                                    | Partly in the repo (lockfile, lint, tests); CI scanning being set up        |
+| ASVS area                          | Addressed by                                                                                               | State                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Architecture and threat modelling  | This document; `docs/02-architecture/`                                                                     | Designed                                                                         |
+| Authentication                     | Managed authentication service; staff multi-factor; leaked-password checks                                 | Designed; staff MFA enforcement is a Launch to-do                                |
+| Session management                 | Managed sessions; secure cookies; re-authentication for sensitive actions                                  | Designed                                                                         |
+| Access control                     | Row-level security; no privileged key in clients; role checks in server functions                          | Built and tested locally; not yet verified on the real platform                  |
+| Validation, sanitisation, encoding | Server-side validation; framework encoding; lint rules                                                     | Partly in the repo (lint rules, typed domain logic); the rest per app            |
+| Cryptography and secrets           | Platform-managed encryption at rest and in transit; secret stores; rotation                                | Designed; rotation schedule is a to-do                                           |
+| Error handling and logging         | Audit log; scrubbed error monitoring; alerts                                                               | Designed; alert thresholds are a to-do                                           |
+| Data protection and privacy        | [Privacy](privacy.md): minimisation, retention, consent                                                    | Designed; retention jobs are a to-do                                             |
+| Communications                     | TLS everywhere; strict transport security                                                                  | Provided by the hosting platforms; headers built in the shared app configuration |
+| Business logic                     | Idempotent orders; atomic stock reservation; state machines (`packages/core/src/lifecycle.ts`); risk rules | Built and tested locally; risk rules specified but not applied to orders         |
+| Files and resources                | Typed, size-limited uploads to access-controlled storage                                                   | Designed                                                                         |
+| API and web services               | Every exposed function checks the caller; rate limits at the edge                                          | Designed; edge rules are a to-do                                                 |
+| Configuration and build            | Pinned dependencies; CI scanning; separate environments                                                    | Partly in the repo (lockfile, lint, tests); CI and scanning not set up           |
 
 ## In the repository today, and not yet
 
-**In place by design, in code that exists now**
+Updated after the data layer and the storefront were built. Detail and
+evidence are in [access control](../03-data/access-control.md),
+[decisions](../02-architecture/decisions.md) and the
+[go-live checklist](../07-deployment/go-live-checklist.md).
 
+**Built and tested — on a local PostgreSQL, not yet on the real platform**
+
+- Row-level security on every table, least-privilege grants, and a caller
+  check inside every function, with test suites that run as each kind of user
+  and prove both what they can and cannot reach
+  (`supabase/tests/020_access.sql`, `070_api.sql`).
+- No privileged key in any app. Staff are ordinary accounts whose reach comes
+  from a revocable row; a setting can require a second factor for staff
+  sessions (it ships switched off).
+- Orders, stock, delivery confirmation and cash settlement happen only inside
+  database functions: idempotent order placement, atomic stock reservation,
+  enforced status transitions, a ledger that must balance.
+- An immutable audit log of changes to staff, sellers, drivers, settings, fees
+  and payouts.
+- The delivery PIN is never sent to the driver and locks after five wrong
+  attempts.
+- Security headers on the storefront, including a Content-Security-Policy —
+  with the known trade-off that it allows inline scripts
+  ([decision 7](../02-architecture/decisions.md#7-a-static-content-security-policy-with-unsafe-inline-scripts)).
 - Risk scoring with explainable rules and a test that forbids location and
-  identity inputs (`packages/core/src/risk.ts`).
-- Order and shipment state machines that reject invalid transitions
-  (`packages/core/src/lifecycle.ts`).
-- Money handled as integers with invariants tested to the céntimo
-  (`packages/core/src/money.ts`, `fees.ts`).
-- Strict typing and lint rules that ban unsafe patterns; environment files
-  excluded from version control.
+  identity inputs (`packages/core/src/risk.ts`) — specified, **not yet applied
+  to orders**.
+- Money as integers with invariants tested to the céntimo; strict typing; lint
+  rules that ban unsafe patterns; environment files excluded from version
+  control.
 
-**Designed, being built by the engineering workstream** (confirm against
-`docs/02-architecture/` and `docs/03-data/` before relying on it)
+**Known gaps in what is built**
 
-- Row-level security on every table with tests per role.
-- Server-side functions for orders, stock, delivery confirmation and payouts.
-- Audit log, CI security scanning, security headers.
+- No rate limiting beyond platform defaults.
+- No e-mail confirmation handling or password reset in the apps.
+- Nothing has been verified against a real Supabase project.
+- Continuous integration, dependency scanning and secret scanning are not set
+  up.
 
 **To do before Launch**
 
 - Gateway integration with hosted fields and signed notifications; PCI scope
   confirmed in writing.
-- Multi-factor authentication enforced for staff.
+- Multi-factor authentication enrolled and enforced for staff.
 - Edge firewall, rate limits and bot rules configured.
-- Alerting, the incident runbook with real contacts, and the first restore
-  drill.
+- Error monitoring, alerting, the incident runbook with real contacts, and the
+  first restore drill.
+- Storage buckets and policies before any upload feature.
+- Retention jobs, once the periods are confirmed.
 - Independent penetration test.
 - Lawyer-reviewed privacy notice and terms.

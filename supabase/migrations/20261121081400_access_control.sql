@@ -37,8 +37,10 @@ grant execute on function
   private.fail(text, text)
 to anon, authenticated;
 
--- Every table: RLS on, and forced, so even the table owner is subject to it
--- when acting through a non-bypass role.
+-- Every table: RLS on. It is enabled, not forced: the API's functions run as
+-- the table owner and are meant to see past it (each one checks the caller
+-- itself). What RLS stops is direct table access by the API roles, which is
+-- the path a mistake in a grant would otherwise open.
 do $$
 declare
   t record;

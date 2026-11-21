@@ -58,36 +58,50 @@ Pilot.
 
 ### Payment fee
 
-A percentage of the amount collected, by payment method, plus a flat handling
-charge for cash on delivery.
+A percentage of the amount collected for the seller, by payment method, plus a
+fixed amount per order where the method has one. It is meant to pass the cost
+of collecting the money through, not to earn margin.
 
-| Method           |         In code today | Gateway cost found in research                 |
-| ---------------- | --------------------: | ---------------------------------------------- |
-| SINPE Móvil      |                  1.0% | 1.5%–2% + up to US$0.35                        |
-| Card             |                  3.5% | 3.9%–4.25% + US$0.35                           |
-| Cash on delivery | 2.0% + ₡300 per order | No gateway; cost is cash handling and refusals |
-| Bank transfer    |                  0.5% | Not researched                                 |
+| Method           | In code today | Basis                                                                                        |
+| ---------------- | ------------: | -------------------------------------------------------------------------------------------- |
+| SINPE Móvil      |          1.5% | Published gateway price: 1.5% at the cheaper gateway found, 2% + US$0.35 at the other        |
+| Card             |   3.9% + ₡180 | Published gateway price: 3.9% + US$0.35 at the cheaper gateway, 4.25% + US$0.35 at the other |
+| Cash on delivery |   2.0% + ₡300 | **Assumption.** No gateway; the cost is handling cash and refused deliveries                 |
+| Bank transfer    |          0.5% | **Assumption.** Not researched                                                               |
 
-Gateway figures are published rates from the
+Gateway figures are published list prices from the
 [fact sheet, section 5](../research/costa-rica-fact-sheet.md#5-payments), at
-low-to-medium confidence. **The code values are below cost and are being
-revised** by the engineering workstream to match the gateway actually
-contracted, including the fixed per-transaction amount. Until a gateway is
-chosen ([open question](../08-open-questions.md)), quote sellers a range, not a
-figure.
+low-to-medium confidence. The code follows the cheaper of the two gateways
+found, and ₡180 stands for US$0.35 at an assumed exchange rate of about ₡515
+per dollar. These replace an earlier schedule (3.5% for cards, 1% for SINPE
+Móvil) that was below cost. They are still not contracted rates: until a
+gateway is chosen ([open question](../08-open-questions.md)), quote sellers a
+range, not a figure.
+
+One known flaw: the fixed amount is charged once per seller per order, while
+a gateway charges it once per payment. On an order with items from two
+sellers, each is charged ₡180. That must be fixed before real sellers are
+billed; see
+[fees and settlement](../04-algorithms/fees-and-settlement.md#what-the-database-does-and-where-it-differs-from-the-specification).
 
 ### A statement a seller can check
 
 For a ₡20,000 household item sold by a seller who ships it themselves, paid by
-card, the tested example in `packages/core/src/fees.test.ts` gives:
+card, the tested example in `packages/core/src/fees.test.ts` — replayed
+through a real order in `supabase/tests/040_money.sql` — gives:
 
-| Line                     |      Amount |
-| ------------------------ | ----------: |
-| Sale                     |     ₡20,000 |
-| Referral commission, 12% |     −₡2,400 |
-| Payment fee, 3.5%        |       −₡700 |
-| IVA on fees, 13%         |       −₡403 |
-| **Payout**               | **₡16,497** |
+| Line                               |         Amount |
+| ---------------------------------- | -------------: |
+| Sale                               |     ₡20,000.00 |
+| Referral commission, 12%           |     −₡2,400.00 |
+| Payment fee, 3.9% (₡780) plus ₡180 |       −₡960.00 |
+| IVA on fees, 13% of ₡3,360         |       −₡436.80 |
+| **Payout**                         | **₡16,203.20** |
+
+The same item stored in a Yuntera warehouse (tier _pequeño_, ₡1,400) and paid
+by SINPE Móvil pays the seller ₡15,367.00. More cases, and the full
+calculation, are in
+[fees and settlement](../04-algorithms/fees-and-settlement.md#worked-example).
 
 The engine guarantees that payout plus fees equals the money collected, to the
 céntimo, for every combination tested.

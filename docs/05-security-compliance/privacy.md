@@ -119,18 +119,20 @@ These are requirements. Each must have an automated test.
 
 ## Retention
 
-A proposal, to be confirmed by the lawyer and accountant. The only period taken
-from the research is the five-year retention of electronic invoicing records.
+**Every period below is an assumption** — a proposal to be confirmed by the
+lawyer and accountant — except the five-year retention of electronic invoicing
+records, which comes from the research. No retention job is built: today
+nothing is deleted automatically.
 
 | Data                                                             | Proposed retention                        | Reason                                                                                                                                                                                   |
 | ---------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Orders, payments, invoices, seller statements                    | 5 years                                   | Electronic invoicing records must be kept 5 years ([fact sheet, section 2](../research/costa-rica-fact-sheet.md#2-electronic-invoicing)); confirm whether other tax rules require longer |
 | Delivery details on a completed route (as visible to the driver) | 24 hours                                  | Same-day issue resolution                                                                                                                                                                |
-| Proof-of-delivery photos                                         | 90 days                                   | Covers the warranty and dispute window                                                                                                                                                   |
-| Driver position history                                          | 30 days                                   | Route disputes and planning                                                                                                                                                              |
+| Proof-of-delivery photos                                         | 90 days                                   | Covers the warranty and dispute window. Photo capture is not built yet                                                                                                                   |
+| Driver position history                                          | Not kept                                  | Only each driver's latest position is stored, and it is overwritten; there is no history to retain (`driver_positions`)                                                                  |
 | Support conversations                                            | 2 years                                   | Dispute evidence, service quality                                                                                                                                                        |
 | Audit log                                                        | 5 years                                   | Accountability; matches financial records                                                                                                                                                |
-| Risk signals and decisions                                       | 1 year                                    | Fraud patterns; reviewability of decisions                                                                                                                                               |
+| Risk signals and decisions                                       | 1 year                                    | Fraud patterns; reviewability of decisions. Risk scoring is not wired in yet, so nothing is stored                                                                                       |
 | Abandoned, unverified accounts                                   | 12 months of inactivity, then deleted     | No purpose                                                                                                                                                                               |
 | Marketing consent                                                | Until withdrawn                           |                                                                                                                                                                                          |
 | Seller identity documents                                        | Duration of the relationship plus 5 years | Platform reporting duty to Hacienda                                                                                                                                                      |
@@ -194,7 +196,8 @@ question for the lawyer
 >
 > Usted puede consultar, corregir o eliminar sus datos y retirar su
 > consentimiento en _Mi cuenta → Mis datos_ o escribiendo a
-> _privacidad@yuntera.cr_.
+> _[correo de privacidad: el buzón todavía no existe y debe crearse antes de
+> publicar este aviso]_.
 >
 > ☐ He leído el aviso de privacidad y autorizo el tratamiento de mis datos,
 > incluido su tratamiento por proveedores fuera de Costa Rica, para los fines

@@ -1,7 +1,10 @@
 # Scope by app
 
-Five apps, one platform. This document fixes what each app must do at three
-points: **Pilot** (the first real orders, with invited sellers and shoppers),
+Five audiences, four deployed apps, one platform. Drivers and warehouse staff
+share one mobile web app, `apps/field`, with an area each; the tables below
+still describe them separately because their jobs differ. This document fixes
+what each app must do at three points: **Pilot** (the first real orders, with
+invited sellers and shoppers),
 **Launch** (public opening in the GAM) and **Later**. The rule for placing a
 feature: if the first hundred orders cannot be fulfilled correctly and legally
 without it, it is Pilot; if a stranger would not trust the site without it, it
@@ -54,8 +57,16 @@ PYMEs. Web, usable on a phone.
 ## Yuntera Ruta — driver app
 
 **Purpose:** deliver the route, prove it, close the cash. **Users:** drivers.
-Native app (Android first), because it needs background location, the camera
-and offline operation.
+**Form:** the `/ruta` area of `apps/field`, an installable mobile web app. It
+runs in the phone's browser and can be added to the home screen; there is no
+app-store download.
+
+A native app was the original plan, because it can track location in the
+background, work offline and scan reliably. It is deferred: a web app works on
+any phone today with no store review, and native builds could not be verified
+where this was built. The costs of that choice are real and are listed below
+the table. See
+[decision 4](../02-architecture/decisions.md#4-one-mobile-web-app-for-drivers-and-warehouse-native-apps-deferred).
 
 | Pilot                                                          | Launch                                                         | Later                                            |
 | -------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------ |
@@ -63,32 +74,44 @@ and offline operation.
 | One-tap call or WhatsApp to the recipient                      | Photo proof of delivery when the PIN is unavailable, by policy | Earnings and history                             |
 | Deliver with the shopper's PIN                                 | Failed-delivery reasons with required evidence                 | Pickups from sellers on the same route           |
 | Record cash collected; running total                           | End-of-route cash close-out with variance                      | In-app incident reporting                        |
-| Mark a failed attempt with a reason                            | Location sharing while a route is active, with consent         | Multiple vehicle types                           |
+| Mark a failed attempt with a reason                            | Position shared while the app is open on a route, with consent | Native app: background location, offline queue   |
 
-**Offline behaviour.** The whole assigned route is stored on the phone when the
-driver starts it. Deliveries, failures and cash amounts are recorded locally
-with their time and position and sent when signal returns. The PIN must be
-verifiable without signal; how that is done securely is an engineering decision
-recorded in `docs/02-architecture/`. A driver must never be unable to complete
-a delivery because of coverage.
+**What the web app cannot do.**
+
+- **It needs signal to confirm a delivery.** The route is loaded when the
+  driver opens it, but completing a stop is a call to the server. Nothing is
+  queued and replayed. A driver in a dead spot must move to coverage.
+- **No background location.** Position is reported only while the app is open
+  on screen. Dispatch sees where a driver last used the app, not a live trail.
+- **The PIN is checked by the server, never on the phone.** The driver's app is
+  never sent the PIN, so there is no offline check — that is deliberate, since
+  a PIN the phone could verify is a PIN the driver could discover
+  ([decision 5](../02-architecture/decisions.md#5-the-driver-never-sees-the-delivery-pin)).
+  Five wrong attempts lock the stop.
+
+Whether this is good enough is a question for the dress rehearsal on real
+routes, and is on the [go-live checklist](../07-deployment/go-live-checklist.md).
 
 ## Yuntera Bodega — warehouse app
 
 **Purpose:** receive, store, pick, pack, hand over. **Users:** warehouse
-associates. Phone app using the camera as a barcode scanner in the Pilot;
-dedicated scanners are a Later decision.
+associates. **Form:** the `/bodega` area of the same mobile web app. Codes are
+scanned with the phone's camera where the browser supports it and typed by
+hand where it does not; dedicated scanners and a native app are Later
+decisions.
 
-| Pilot                                                                       | Launch                                       | Later                             |
-| --------------------------------------------------------------------------- | -------------------------------------------- | --------------------------------- |
-| Receive an inbound shipment against its notice; record shortages and damage | Label printing for units without barcodes    | Cycle counting                    |
-| Put away to a location by scanning                                          | Batch picking across orders                  | Slotting suggestions              |
-| Pick list per order, confirmed by scan                                      | Packing station flow with weight check       | Wave planning                     |
-| Pack and mark ready for dispatch                                            | Returns receiving and grading                | Multiple warehouses and transfers |
-| Hand over to a driver against a route                                       | Stock adjustments with a reason and approval | Handheld scanner support          |
+| Pilot                                                                       | Launch                                       | Later                                        |
+| --------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
+| Receive an inbound shipment against its notice; record shortages and damage | Label printing for units without barcodes    | Cycle counting                               |
+| Put away to a location by scanning or typing its code                       | Batch picking across orders                  | Slotting suggestions                         |
+| Pick list per order, in bin order, confirmed line by line                   | Packing station flow with weight check       | Wave planning                                |
+| Pack and mark ready for dispatch                                            | Returns receiving and grading                | Multiple warehouses and transfers            |
+| Hand over to a driver against a route                                       | Stock adjustments with a reason and approval | Handheld scanners; native app with fast scan |
 
-**Offline behaviour.** Warehouses have Wi-Fi, so the requirement is lighter:
-a scan that cannot be sent is queued and retried, and the associate sees that
-it is pending. Stock is only considered moved once the server confirms it.
+**Connectivity.** Warehouses have Wi-Fi, so the web app's need for a connection
+is a small cost here. Every action is confirmed by the server before the
+screen moves on; nothing is queued. Stock is only considered moved once the
+server says so.
 
 ## Yuntera Central — operations console
 

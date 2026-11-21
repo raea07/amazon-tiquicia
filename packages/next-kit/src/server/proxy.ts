@@ -30,7 +30,16 @@ export async function refreshSession(request: NextRequest) {
       setAll: (list) => {
         for (const { name, value } of list) request.cookies.set(name, value);
         response = NextResponse.next({ request });
-        for (const { name, value, options } of list) response.cookies.set(name, value, options);
+        for (const { name, value, options } of list) {
+          // Hidden from scripts, like every session cookie: see SESSION_COOKIE.
+          response.cookies.set(name, value, {
+            ...options,
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+            path: "/",
+          });
+        }
       },
     },
   });

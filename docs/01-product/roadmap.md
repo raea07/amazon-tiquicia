@@ -32,9 +32,18 @@ and the 60-day repeat rate; see the
 delivered and paid out, with the legal basics in place.
 
 **Built.** This repository: the domain logic (`packages/core`), the brand
-(`packages/brand`), the data model and access rules, the five apps to Pilot
-scope ([scope by app](scope-by-app.md)), automated checks, and a live preview
-environment with demonstration data.
+(`packages/brand`), the data model and access rules, and the apps to Pilot
+scope ([scope by app](scope-by-app.md)): a storefront, a seller centre, an
+operations console, and one mobile web app shared by drivers and the
+warehouse. Native driver and warehouse apps are deferred (see "Do not build
+yet"). A live preview environment with demonstration data is prepared as a
+[runbook](../07-deployment/runbook-first-deploy.md) but not created: that
+needs the owner's decision on cost.
+
+**State today.** The domain logic, the database and the storefront are built
+and tested locally; the other apps are in progress; nothing is deployed. The
+current truth is in the
+[architecture overview](../02-architecture/overview.md).
 
 **Done by hand on purpose.** Nothing operates yet.
 
@@ -49,7 +58,7 @@ lead times of weeks and gate Phase 1 more than the software does. See
 
 - The order journey in
   [personas and journeys](personas-and-journeys.md) completes end to end in the
-  preview environment, across all five apps, for SINPE Móvil and cash on
+  preview environment, across all the apps, for SINPE Móvil and cash on
   delivery.
 - Access rules are tested: a shopper, seller, driver and associate each see
   only what [privacy](../05-security-compliance/privacy.md) says they should.
@@ -154,7 +163,8 @@ consecutive months. The operation runs for two weeks without the founder.
 
 **Main risks.** Hiring ahead of volume. The courier employment question being
 settled by law or the courts in a way the cost model did not assume (the model
-already budgets drivers as employees; see
+intends to budget drivers as employees, on an assumed cost per driver-day that
+is still to be validated; see
 [compliance](../05-security-compliance/compliance-costa-rica.md)).
 
 ## Phase 4 — National via carrier partners
@@ -197,17 +207,18 @@ not exist yet.
 Each of these is a reasonable idea that would cost months and prove nothing the
 pilot needs to know.
 
-| Not yet                                                  | Build it when                                                                                     |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Native shopper app                                       | Repeat usage on the mobile web is established (Phase 3)                                           |
-| Sponsored listings and an ads system                     | There is traffic sellers would pay to reach                                                       |
-| Machine-learned ranking, recommendations or fraud models | There is enough labelled data; the rule-based versions in `packages/core` are in place until then |
-| A dedicated search engine                                | Measured relevance or latency in the database search is the bottleneck                            |
-| Microservices, queues, a data warehouse                  | A specific, measured load requires one                                                            |
-| Multiple warehouses and inventory transfers              | One warehouse is full                                                                             |
-| Own-courier fulfilment by sellers, with address sharing  | A seller segment needs it and the privacy consequences are designed                               |
-| Shopper–seller chat                                      | Support volume shows questions that only sellers can answer                                       |
-| Membership or loyalty programme                          | Order frequency per shopper is known                                                              |
-| Public API and third-party integrations                  | A seller with real volume asks                                                                    |
-| Credit, instalments, a wallet                            | A regulated partner offers it; never on Yuntera's own balance sheet without licensing advice      |
-| Cross-border imports, a second country                   | Phase 3 is stable                                                                                 |
+| Not yet                                                  | Build it when                                                                                                                                                          |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native shopper app                                       | Repeat usage on the mobile web is established (Phase 3)                                                                                                                |
+| Native driver and warehouse apps                         | Drivers regularly lose signal on real routes, dispatch needs live positions, or scanning speed is what limits the warehouse. Until then one mobile web app serves both |
+| Sponsored listings and an ads system                     | There is traffic sellers would pay to reach                                                                                                                            |
+| Machine-learned ranking, recommendations or fraud models | There is enough labelled data; the rule-based versions in `packages/core` are in place until then                                                                      |
+| A dedicated search engine                                | Measured relevance or latency in the database search is the bottleneck                                                                                                 |
+| Microservices, queues, a data warehouse                  | A specific, measured load requires one                                                                                                                                 |
+| Multiple warehouses and inventory transfers              | One warehouse is full                                                                                                                                                  |
+| Own-courier fulfilment by sellers, with address sharing  | A seller segment needs it and the privacy consequences are designed                                                                                                    |
+| Shopper–seller chat                                      | Support volume shows questions that only sellers can answer                                                                                                            |
+| Membership or loyalty programme                          | Order frequency per shopper is known                                                                                                                                   |
+| Public API and third-party integrations                  | A seller with real volume asks                                                                                                                                         |
+| Credit, instalments, a wallet                            | A regulated partner offers it; never on Yuntera's own balance sheet without licensing advice                                                                           |
+| Cross-border imports, a second country                   | Phase 3 is stable                                                                                                                                                      |

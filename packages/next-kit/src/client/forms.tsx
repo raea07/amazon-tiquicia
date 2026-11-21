@@ -1,7 +1,14 @@
 "use client";
 
-import { Alert, Button, type ButtonSize, type ButtonVariant, TextField } from "@yuntera/ui";
-import { type ReactNode, useActionState } from "react";
+import {
+  Alert,
+  Button,
+  type ButtonSize,
+  type ButtonVariant,
+  TextAreaField,
+  TextField,
+} from "@yuntera/ui";
+import { type ReactNode, useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import type { ActionState } from "../types";
 
@@ -55,6 +62,29 @@ export function FormMessage({ state }: { state: ActionState }) {
 const initial: ActionState = {};
 
 /**
+ * Browsers clear a form when its action finishes. For forms whose fields are
+ * rendered on the server (and so cannot read the action's state), this puts
+ * back what the person typed whenever the action reports an error.
+ */
+function useRestoredValues(state: ActionState) {
+  const form = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (!state.error || !state.values || !form.current) return;
+    for (const [name, value] of Object.entries(state.values)) {
+      const field = form.current.elements.namedItem(name);
+      if (
+        field instanceof HTMLInputElement ||
+        field instanceof HTMLTextAreaElement ||
+        field instanceof HTMLSelectElement
+      ) {
+        field.value = value;
+      }
+    }
+  }, [state]);
+  return form;
+}
+
+/**
  * A small form around one action: a button (plus any fields passed as
  * children) and the outcome underneath. Most back-office actions are this.
  */
@@ -79,9 +109,10 @@ export function ActionForm({
   hideOnSuccess?: boolean;
 }) {
   const [state, formAction] = useActionState(action, initial);
+  const form = useRestoredValues(state);
   if (hideOnSuccess && state.ok) return <FormMessage state={state} />;
   return (
-    <form action={formAction} className={className}>
+    <form ref={form} action={formAction} className={className}>
       {typeof children === "function" ? children(state) : children}
       <FormMessage state={state} />
       <div>
@@ -184,6 +215,60 @@ export function SignUpForm({
       <SubmitButton block size="lg" pendingLabel="Creando su cuenta…">
         Crear cuenta
       </SubmitButton>
+    </form>
+  );
+}
+
+/**
+ * A yes-or-no decision with a written note: approve or reject, act or dismiss.
+ * The chosen button is sent as `decision` ("yes" or "no"), the note as `note`.
+ */
+export function DecisionForm({
+  action,
+  children,
+  noteLabel,
+  noteHint,
+  noteOptional = true,
+  yes,
+  no,
+}: {
+  action: FormAction;
+  /** Hidden fields that say what is being decided. */
+  children?: ReactNode;
+  noteLabel: string;
+  noteHint?: string;
+  noteOptional?: boolean;
+  yes: string;
+  no: string;
+}) {
+  const [state, formAction] = useActionState(action, initial);
+  const form = useRestoredValues(state);
+  if (state.ok) return <FormMessage state={state} />;
+  return (
+    <form ref={form} action={formAction} className="flex flex-col gap-3">
+      {children}
+      <TextAreaField
+        label={noteLabel}
+        name="note"
+        rows={2}
+        hint={noteHint}
+        optional={noteOptional}
+      />
+      <FormMessage state={state} />
+      <div className="flex flex-wrap gap-2">
+        <SubmitButton size="sm" name="decision" value="yes" pendingLabel="Guardando…">
+          {yes}
+        </SubmitButton>
+        <SubmitButton
+          size="sm"
+          variant="secondary"
+          name="decision"
+          value="no"
+          pendingLabel="Guardando…"
+        >
+          {no}
+        </SubmitButton>
+      </div>
     </form>
   );
 }

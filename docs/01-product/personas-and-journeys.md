@@ -3,7 +3,7 @@
 Yuntera serves five people who never meet but depend on each other: the
 shopper, the seller, the driver, the warehouse associate and the operator. This
 document describes what each one is trying to get done, follows one order
-across all five apps, and fixes how the most common failures are handled. The
+across all the apps, and fixes how the most common failures are handled. The
 failure handling is policy: the apps and the support team must both follow it.
 
 ## Personas
@@ -41,13 +41,13 @@ motorcycle courier or Correos. Has no time and no developer.
 Rides a motorcycle. Knows the streets better than any map. Is paid per day or
 per delivery and loses money every time nobody answers the door.
 
-| Job to be done                         | What "done" looks like                                                        |
-| -------------------------------------- | ----------------------------------------------------------------------------- |
-| Finish the route without doubling back | Stops in a sensible order, grouped by area (`packages/core/src/routing.ts`)   |
-| Find the door                          | Pin, _señas_ and a one-tap call or WhatsApp to the recipient                  |
-| Prove the delivery happened            | The recipient's PIN, entered once; no argument later                          |
-| Hand in cash without being short       | A running total of cash collected and a clean close-out at the end of the day |
-| Keep working with no signal            | The app works offline and syncs later                                         |
+| Job to be done                                | What "done" looks like                                                                                                                                                                            |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Finish the route without doubling back        | Stops in a sensible order, grouped by area (`packages/core/src/routing.ts`)                                                                                                                       |
+| Find the door                                 | Pin, _señas_ and a one-tap call or WhatsApp to the recipient                                                                                                                                      |
+| Prove the delivery happened                   | The recipient's PIN, entered once; no argument later                                                                                                                                              |
+| Hand in cash without being short              | A running total of cash collected and a clean close-out at the end of the day                                                                                                                     |
+| Lose as little time as possible to bad signal | The route is on the phone once opened; confirming a delivery needs a connection, so the driver knows before leaving where coverage is poor. Working fully offline is deferred with the native app |
 
 ### The warehouse associate — bodeguero
 
