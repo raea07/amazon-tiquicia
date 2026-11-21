@@ -37,6 +37,7 @@ function fakeStore({ limit, checkNames = false, jitter = false }: FakeOptions = 
   let stopped = false;
   let largest = 0;
   let refuseDeletes = false;
+  let broken = false;
   const pause = () => (jitter ? new Promise((r) => setTimeout(r, Math.random() * 3)) : undefined);
   const checkName = (key: string) => {
     if (checkNames && !/^[\w.-]+$/.test(key)) throw new Error(`Invalid key: ${key}`);
@@ -44,6 +45,7 @@ function fakeStore({ limit, checkNames = false, jitter = false }: FakeOptions = 
   const mutate = async (action: () => void) => {
     await pause();
     if (stopped) throw new Error("stopped");
+    if (broken) throw new Error("store unavailable");
     const index = writes++;
     if (index === stopAt) {
       stopped = true;
@@ -56,6 +58,7 @@ function fakeStore({ limit, checkNames = false, jitter = false }: FakeOptions = 
     getItem: async (key) => {
       await pause();
       if (stopped) throw new Error("stopped");
+      if (broken) throw new Error("store unavailable");
       checkName(key);
       return data.get(key) ?? null;
     },
@@ -93,6 +96,10 @@ function fakeStore({ limit, checkNames = false, jitter = false }: FakeOptions = 
     /** Refuse every deletion from now on (a keychain that keeps failing). */
     refuseDeletes(on: boolean) {
       refuseDeletes = on;
+    },
+    /** Fail every call, reads included (a keychain that is locked or unavailable). */
+    breakAll(on: boolean) {
+      broken = on;
     },
     revive() {
       stopped = false;
@@ -263,6 +270,66 @@ describe("secure session storage: what is left behind", () => {
     expect(await start().getItem(KEY)).toBeNull();
     secure.refuseDeletes(false);
     await start().getItem(KEY); // the next start finishes the job
+    expect(sessionNames(secure)).toEqual([]);
+  });
+
+  it("attempts every piece in the same sign-out when one deletion fails", async () => {
+    const { secure, start } = phone();
+    const storage = start();
+    await storage.setItem(KEY, session(3000));
+    const pieces = sessionNames(secure).filter((name) => !name.endsWith("_m"));
+    expect(pieces.length).toBeGreaterThanOrEqual(4);
+    secure.failAt(1); // write 0 is the tombstone, write 1 deletes the first piece
+    await storage.removeItem(KEY);
+    // Straight after the call, before any restart: only the piece whose
+    // deletion failed is left, beside the tombstone that records the bounds.
+    const first = `${secureStoreKey(KEY)}_px0`;
+    expect(sessionNames(secure)).toEqual([first, `${secureStoreKey(KEY)}_m`].sort());
+    expect(await start().getItem(KEY)).toBeNull();
+    expect(sessionNames(secure)).toEqual([]);
+  });
+
+  it("reports a sign-out that left the session readable as failed", async () => {
+    const { secure, start } = phone();
+    const storage = start();
+    const value = session(3000);
+    await storage.setItem(KEY, value);
+    secure.failAt(0); // the tombstone write
+    secure.refuseDeletes(true); // and no piece, nor the manifest, can be deleted
+    await expect(storage.removeItem(KEY)).rejects.toThrow();
+    secure.refuseDeletes(false);
+    // Nothing was removed, so the value is still there, whole.
+    expect(await start().getItem(KEY)).toBe(value);
+  });
+
+  it("reports sign-out as failed when the store answers nothing, and keeps no false cache", async () => {
+    const { secure, start } = phone();
+    const storage = start();
+    const value = session(3000);
+    await storage.setItem(KEY, value);
+    const before = [...secure.data.entries()];
+    secure.breakAll(true); // reads, writes and deletions all throw
+    await expect(storage.removeItem(KEY)).rejects.toThrow();
+    // The adapter does not claim the session is gone while the store holds it.
+    await expect(storage.getItem(KEY)).rejects.toThrow();
+    secure.breakAll(false);
+    expect([...secure.data.entries()]).toEqual(before);
+    expect(await storage.getItem(KEY)).toBe(value);
+    // Once the store answers again, sign-out works.
+    await storage.removeItem(KEY);
+    expect(sessionNames(secure)).toEqual([]);
+    expect(await start().getItem(KEY)).toBeNull();
+  });
+
+  it("does not mark the installation as cleaned up when the store answered nothing", async () => {
+    const { secure, plain, start } = phone();
+    await start().setItem(KEY, session(1000));
+    plain.data.clear(); // a reinstall: the Keychain keeps the old session
+    secure.breakAll(true);
+    await expect(start().getItem(KEY)).rejects.toThrow();
+    expect(plain.data.has(markerKey(KEY))).toBe(false);
+    secure.breakAll(false);
+    expect(await start().getItem(KEY)).toBeNull();
     expect(sessionNames(secure)).toEqual([]);
   });
 

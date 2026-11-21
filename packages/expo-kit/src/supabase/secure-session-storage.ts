@@ -262,19 +262,32 @@ export function createSecureSessionStorage({
   /**
    * Removes everything stored for a key. With a readable manifest only the
    * pieces it may cover are deleted; without one, every possible piece.
-   * Resolves to whether the stored value is now unreadable.
+   * Resolves to whether the stored value is now unreadable: true only when
+   * that is known (nothing readable was there, or a tombstone, the value's
+   * own pieces or the manifest were actually removed), never because the
+   * store failed to answer.
    */
   async function purge(key: string, known?: Manifest | "invalid" | null): Promise<boolean> {
-    const manifest =
-      known === undefined ? await readManifest(key).catch(() => "invalid" as const) : known;
+    // "unknown": the manifest could not be read (the store failed), which is
+    // not the same as "not one of ours": a complete value may still be there.
+    const manifest: Manifest | "invalid" | "unknown" | null =
+      known === undefined ? await readManifest(key).catch(() => "unknown" as const) : known;
     const name = names(key);
     let unreadable = false;
-    if (manifest !== null && manifest !== "invalid" && manifest.s !== null) {
-      // Make the value unreadable first: a tombstone that keeps the bounds.
+    const tombstoneBounds =
+      manifest === "unknown"
+        ? { x: MAX_PIECES, y: MAX_PIECES }
+        : manifest !== null && manifest !== "invalid" && manifest.s !== null
+          ? manifest
+          : null;
+    if (tombstoneBounds) {
+      // Make the value unreadable first: a tombstone that keeps the bounds
+      // (every possible piece when the manifest could not be read).
+      const bounds = tombstoneBounds;
       try {
         await secure.setItem(
           name.manifest,
-          JSON.stringify({ ...manifest, s: null, n: 0, b: 0, h: "" }),
+          JSON.stringify({ v: 1, s: null, n: 0, b: 0, h: "", x: bounds.x, y: bounds.y }),
         );
         unreadable = true;
       } catch {
@@ -288,7 +301,7 @@ export function createSecureSessionStorage({
         ? (await strayPieces(key).catch(() => true))
           ? { x: MAX_PIECES, y: MAX_PIECES }
           : { x: 0, y: 0 }
-        : manifest === "invalid"
+        : manifest === "invalid" || manifest === "unknown"
           ? { x: MAX_PIECES, y: MAX_PIECES }
           : { x: manifest.x, y: manifest.y };
     const deleted = {
@@ -296,15 +309,18 @@ export function createSecureSessionStorage({
       y: await deletePieces(key, "y", 0, bounds.y),
     };
     if (deleted.x && deleted.y) {
+      // Every piece that may exist is gone, so no value can be read whatever
+      // the manifest says.
+      unreadable = true;
       try {
         await secure.removeItem(name.manifest);
-        unreadable = true;
       } catch {
         // the tombstone (if written) keeps the bounds for the next attempt
       }
     } else if (
       manifest !== null &&
       manifest !== "invalid" &&
+      manifest !== "unknown" &&
       manifest.s !== null &&
       deleted[manifest.s]
     ) {
