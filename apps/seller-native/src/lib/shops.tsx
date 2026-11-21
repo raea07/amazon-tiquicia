@@ -1,6 +1,6 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Roles } from "@yuntera/db";
 import { useSession } from "@yuntera/expo-kit/auth";
+import { appStorage } from "@yuntera/expo-kit/supabase";
 import {
   createContext,
   type ReactNode,
@@ -48,7 +48,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!userId) return;
     let active = true;
-    AsyncStorage.getItem(keyFor(userId))
+    appStorage
+      .getItem(keyFor(userId))
       .catch(() => null)
       .then((value) => {
         if (!active) return;
@@ -63,7 +64,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const choose = useCallback(
     async (shopId: string) => {
       setChosen(shopId);
-      if (userId) await AsyncStorage.setItem(keyFor(userId), shopId).catch(() => undefined);
+      if (userId) await appStorage.setItem(keyFor(userId), shopId).catch(() => undefined);
     },
     [userId],
   );

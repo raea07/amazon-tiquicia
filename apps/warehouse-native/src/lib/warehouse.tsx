@@ -1,6 +1,6 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Roles } from "@yuntera/db";
 import { useSession } from "@yuntera/expo-kit/auth";
+import { appStorage } from "@yuntera/expo-kit/supabase";
 import {
   createContext,
   type ReactNode,
@@ -26,7 +26,7 @@ const WarehouseContext = createContext<WarehouseValue | null>(null);
 
 /** Removes the saved choice: called when the worker signs out. */
 export function forgetWarehouse() {
-  AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+  appStorage.removeItem(STORAGE_KEY).catch(() => {});
 }
 
 /**
@@ -45,7 +45,8 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!userId) return;
     let live = true;
-    AsyncStorage.getItem(STORAGE_KEY)
+    appStorage
+      .getItem(STORAGE_KEY)
       .then((saved) => {
         const id = readChoice(saved, userId);
         if (live && id) setChosen(id);
@@ -60,7 +61,7 @@ export function WarehouseProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       setChosen(id);
       if (userId) {
-        AsyncStorage.setItem(STORAGE_KEY, writeChoice(userId, id)).catch(() => {});
+        appStorage.setItem(STORAGE_KEY, writeChoice(userId, id)).catch(() => {});
       }
     },
     [userId],

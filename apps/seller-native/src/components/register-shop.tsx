@@ -59,7 +59,9 @@ export function RegisterShopForm({ onRegistered }: { onRegistered?: (shopId: str
         // suffix. It only tells two public addresses apart, so it needs no
         // secure random source (and the app ships no crypto module).
         if (!(cause instanceof ApiError && cause.code === "slug_taken")) throw cause;
-        shopId = await create(`${checked.input.slug}-${Math.random().toString(36).slice(2, 6).padEnd(4, "0")}`);
+        shopId = await create(
+          `${checked.input.slug}-${Math.random().toString(36).slice(2, 6).padEnd(4, "0")}`,
+        );
       }
       await choose(shopId);
       setJustRegistered(shopId);

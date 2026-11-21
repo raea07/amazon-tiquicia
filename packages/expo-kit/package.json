@@ -13,6 +13,7 @@
     "./data": "./src/data/index.ts",
     "./ui": "./src/ui/index.ts",
     "./paths": "./src/paths.ts",
+    "./images": "./src/images.ts",
     "./offline": "./src/offline/index.ts",
     "./scanner": "./src/scanner/index.ts"
   },

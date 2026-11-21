@@ -105,7 +105,7 @@ export const ShipmentStatusBadge = ({
  * being built separately), so most listings show the placeholder.
  */
 export function ProductThumb({ path, size = 56 }: { path: string | null; size?: number }) {
-  const uri = imageUrl(path);
+  const uri = imageUrl(path, size);
   const [failedUri, setFailedUri] = useState<string | null>(null);
   return (
     <View style={[styles.thumb, { width: size, height: size }]}>
