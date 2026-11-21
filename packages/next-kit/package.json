@@ -13,7 +13,8 @@
     "./fonts": "./src/fonts.ts",
     "./config": "./config.mjs",
     "./base.css": "./styles/base.css",
-    "./shell": "./src/shell.tsx"
+    "./shell": "./src/shell.tsx",
+    "./listing-changes": "./src/listing-changes.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

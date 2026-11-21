@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { z } from "zod";
 import { startPicking } from "@/app/actions";
 import { PackForm, PickForm } from "@/components/warehouse-forms";
 import { requireWarehouse } from "@/lib/access";
@@ -32,7 +33,8 @@ export default function ShipmentPage({ params }: PageProps<"/bodega/paquete/[id]
 async function Shipment({ params }: Pick<PageProps<"/bodega/paquete/[id]">, "params">) {
   const { id } = await params;
   await requireWarehouse(`/bodega/paquete/${id}`);
-  if (!/^[0-9a-f-]{36}$/.test(id)) notFound();
+  // Anything that is not an id cannot be a parcel: not found, without asking.
+  if (!z.uuid().safeParse(id).success) notFound();
 
   const shipment = await (await sessionApi()).wmsShipment(id).catch((error: unknown) => {
     if (

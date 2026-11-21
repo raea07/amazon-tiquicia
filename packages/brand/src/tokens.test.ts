@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderTokensCss } from "./css";
-import { color, contrastRatio, semantic } from "./tokens";
+import { color, contrastRatio, semantic, themeColor } from "./tokens";
 
 describe("tokens.css", () => {
   it("is in sync with tokens.ts", () => {
@@ -46,5 +46,27 @@ describe("contrast (WCAG 2.2 AA)", () => {
   it("computes known ratios correctly", () => {
     expect(contrastRatio("#000000", "#ffffff")).toBeCloseTo(21, 5);
     expect(contrastRatio("#ffffff", "#ffffff")).toBeCloseTo(1, 5);
+  });
+});
+
+describe("theme colour", () => {
+  it("is the brand colour", () => {
+    expect(themeColor).toBe(semantic.brand);
+    expect(themeColor).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  it("is read from here by every app, never typed into a layout or manifest", () => {
+    const appsDir = fileURLToPath(new URL("../../../apps/", import.meta.url));
+    const files = readdirSync(appsDir)
+      .flatMap((app) =>
+        ["layout.tsx", "manifest.ts"].map((file) => `${appsDir}${app}/src/app/${file}`),
+      )
+      .filter((file) => existsSync(file));
+    expect(files.length).toBeGreaterThanOrEqual(4);
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      expect(source, file).not.toMatch(/#[0-9a-f]{6}\b/i);
+      expect(source, file).toContain("themeColor");
+    }
   });
 });

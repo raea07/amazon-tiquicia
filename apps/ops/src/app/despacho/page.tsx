@@ -34,6 +34,13 @@ export default function DispatchPage({ searchParams }: PageProps<"/despacho">) {
   );
 }
 
+/** True for a date that exists, written YYYY-MM-DD (so not "2026-13-45" or "2026-02-30"). */
+function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const time = Date.parse(`${value}T00:00:00Z`);
+  return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 10) === value;
+}
+
 /** Today's date in Costa Rica, as YYYY-MM-DD. */
 const todayInCostaRica = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "America/Costa_Rica" }).format(new Date());
@@ -43,7 +50,8 @@ async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParam
   const asked = (await searchParams).fecha;
   const requested = Array.isArray(asked) ? asked[0] : asked;
   await connection();
-  const date = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : todayInCostaRica();
+  // Anything that is not a real day of the calendar means "today".
+  const date = requested && isCalendarDate(requested) ? requested : todayInCostaRica();
 
   const board = await (await sessionApi()).opsDispatchBoard(date);
   const failed = board.ready.filter((shipment) => shipment.status === "delivery_failed");

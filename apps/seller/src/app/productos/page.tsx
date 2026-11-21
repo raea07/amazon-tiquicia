@@ -1,7 +1,7 @@
 import { sessionApi } from "@yuntera/next-kit/server";
 import { DataTable, PageHeader } from "@yuntera/next-kit/shell";
 import { Alert, Badge, buttonClass, EmptyState, formatPrice, Skeleton } from "@yuntera/ui";
-import type { Metadata } from "next";
+import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { OfferForm } from "@/components/forms";
@@ -34,7 +34,12 @@ export default function ListingsPage({ searchParams }: PageProps<"/productos">) 
 
 async function Listings({ searchParams }: Pick<PageProps<"/productos">, "searchParams">) {
   const { shop } = await requireShop("/productos");
-  const listings = await (await sessionApi()).sellerListings(shop.id);
+  const api = await sessionApi();
+  const [listings, edits] = await Promise.all([
+    api.sellerListings(shop.id),
+    api.sellerListingEdits(shop.id),
+  ]);
+  const editOf = new Map(edits.map((edit) => [edit.product_id, edit]));
   const created = (await searchParams).creado;
 
   if (listings.length === 0) {
@@ -73,6 +78,7 @@ async function Listings({ searchParams }: Pick<PageProps<"/productos">, "searchP
       >
         {listings.map((listing) => {
           const status = PRODUCT_STATUS[listing.product_status];
+          const edit = editOf.get(listing.product_id);
           return (
             <tr key={listing.offer_id}>
               <td className="max-w-xs">
@@ -84,12 +90,32 @@ async function Listings({ searchParams }: Pick<PageProps<"/productos">, "searchP
                 <p className="mt-0.5 text-xs text-ink-muted">
                   {FULFILLMENT_LABEL[listing.fulfillment]}
                 </p>
+                {edit?.editable ? (
+                  <p className="mt-1">
+                    <Link
+                      href={`/productos/${listing.product_id}?v=${listing.sku_id}` as Route}
+                      className="inline-flex min-h-11 items-center text-link underline"
+                    >
+                      Editar<span className="sr-only"> {listing.title}</span>
+                    </Link>
+                  </p>
+                ) : null}
               </td>
               <td>
                 <Badge tone={status.tone}>{status.label}</Badge>
                 {listing.rejection_reason ? (
                   <p className="mt-1 max-w-56 text-xs text-danger">
                     Motivo: {listing.rejection_reason}
+                  </p>
+                ) : null}
+                {edit?.edit_status === "pending" ? (
+                  <p className="mt-1">
+                    <Badge tone="warning">Cambios en revisión</Badge>
+                  </p>
+                ) : null}
+                {edit?.edit_status === "rejected" ? (
+                  <p className="mt-1 max-w-56 text-xs text-danger">
+                    Cambio no aprobado: {edit.edit_reason}
                   </p>
                 ) : null}
               </td>

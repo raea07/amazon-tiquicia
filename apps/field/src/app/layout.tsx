@@ -1,3 +1,4 @@
+import { themeColor } from "@yuntera/brand";
 import { fontClassName } from "@yuntera/next-kit/fonts";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
   icons: { icon: "/icon.svg", apple: "/icon.svg" },
 };
 
-export const viewport: Viewport = { themeColor: "#0b7f8e", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor, width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

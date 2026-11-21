@@ -1,3 +1,4 @@
+import { semantic, themeColor } from "@yuntera/brand";
 import type { MetadataRoute } from "next";
 
 /** Lets the app be added to a phone's home screen and opened full-screen. */
@@ -9,8 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     lang: "es-CR",
     start_url: "/",
     display: "standalone",
-    background_color: "#faf9f6",
-    theme_color: "#0b7f8e",
+    background_color: semantic.bg,
+    theme_color: themeColor,
     icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }],
   };
 }
