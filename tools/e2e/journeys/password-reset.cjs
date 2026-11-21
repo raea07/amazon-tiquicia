@@ -199,7 +199,9 @@ async function refreshTokenOf(context) {
   await go(fresh.page, BASE + "/recuperar/nueva");
   // The answer streams in after the page's frame: wait for it, whichever it is.
   await fresh.page
-    .locator('main:visible [role="status"], main:visible [role="alert"], main:visible input[name="password"]')
+    .locator(
+      'main:visible [role="status"], main:visible [role="alert"], main:visible input[name="password"]',
+    )
     .first()
     .waitFor();
   const ordinary = await text(fresh.page.locator("main:visible").first());
