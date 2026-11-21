@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bayesianRating,
+  composeTextScore,
   DEFAULT_RANKING,
   expandQuery,
   mergeSponsored,
@@ -9,6 +10,7 @@ import {
   rankResults,
   type SearchCandidate,
   scoreCandidate,
+  TEXT_RELEVANCE,
 } from "./search";
 
 const candidate = (over: Partial<SearchCandidate> = {}): SearchCandidate => ({
@@ -197,5 +199,48 @@ describe("sponsored placement", () => {
   it("ignores duplicate ads", () => {
     const merged = mergeSponsored(organic, [{ productId: "ad1" }, { productId: "ad1" }], [0, 1]);
     expect(merged.filter((m) => m.sponsored)).toHaveLength(1);
+  });
+});
+
+describe("text relevance", () => {
+  const match = (over: Partial<Parameters<typeof composeTextScore>[0]> = {}) =>
+    composeTextScore({
+      exact: true,
+      rank: 0.5,
+      headMatch: false,
+      categoryMatch: false,
+      wordSimilarity: 1,
+      ...over,
+    });
+
+  it("ranks the product that IS the thing above one that mentions it", () => {
+    // Measured on the demo catalogue for the query "laptop": the backpack that
+    // mentions a laptop has the higher raw rank, and must still lose.
+    const laptop = match({ rank: 0.5238, headMatch: true, categoryMatch: true });
+    const backpack = match({ rank: 0.5455 });
+    expect(laptop).toBeGreaterThan(backpack);
+    expect(laptop - backpack).toBeGreaterThan(0.15);
+  });
+
+  it("uses rank to order matches with the same structure", () => {
+    expect(match({ rank: 0.6 })).toBeGreaterThan(match({ rank: 0.1 }));
+  });
+
+  it("never lets a typo-only match outscore an exact one", () => {
+    const worstExact = match({ rank: 0 });
+    const bestFuzzy = match({ exact: false, wordSimilarity: 1 });
+    expect(worstExact).toBe(TEXT_RELEVANCE.exactFloor);
+    expect(bestFuzzy).toBe(TEXT_RELEVANCE.fuzzyCeiling);
+    expect(worstExact).toBeGreaterThan(bestFuzzy);
+  });
+
+  it("stays within 0–1 and tops out at exactly 1", () => {
+    expect(match({ rank: 9, headMatch: true, categoryMatch: true })).toBeCloseTo(1, 12);
+    expect(match({ exact: false, wordSimilarity: -3 })).toBe(0);
+    const t = TEXT_RELEVANCE;
+    expect(t.exactFloor + t.rankWeight + t.headMatchBonus + t.categoryMatchBonus).toBeCloseTo(
+      1,
+      12,
+    );
   });
 });

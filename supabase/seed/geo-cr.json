@@ -1,0 +1,2926 @@
+{
+ "provinces": [
+  {
+   "code": 1,
+   "name": "San José"
+  },
+  {
+   "code": 2,
+   "name": "Alajuela"
+  },
+  {
+   "code": 3,
+   "name": "Cartago"
+  },
+  {
+   "code": 4,
+   "name": "Heredia"
+  },
+  {
+   "code": 5,
+   "name": "Guanacaste"
+  },
+  {
+   "code": 6,
+   "name": "Puntarenas"
+  },
+  {
+   "code": 7,
+   "name": "Limón"
+  }
+ ],
+ "cantons": [
+  {
+   "code": "101",
+   "province": 1,
+   "name": "Central"
+  },
+  {
+   "code": "102",
+   "province": 1,
+   "name": "Escazú"
+  },
+  {
+   "code": "103",
+   "province": 1,
+   "name": "Desamparados"
+  },
+  {
+   "code": "104",
+   "province": 1,
+   "name": "Puriscal"
+  },
+  {
+   "code": "105",
+   "province": 1,
+   "name": "Tarrazú"
+  },
+  {
+   "code": "106",
+   "province": 1,
+   "name": "Aserrí"
+  },
+  {
+   "code": "107",
+   "province": 1,
+   "name": "Mora"
+  },
+  {
+   "code": "108",
+   "province": 1,
+   "name": "Goicoechea"
+  },
+  {
+   "code": "109",
+   "province": 1,
+   "name": "Santa Ana"
+  },
+  {
+   "code": "110",
+   "province": 1,
+   "name": "Alajuelita"
+  },
+  {
+   "code": "111",
+   "province": 1,
+   "name": "Vázquez De Coronado"
+  },
+  {
+   "code": "112",
+   "province": 1,
+   "name": "Acosta"
+  },
+  {
+   "code": "113",
+   "province": 1,
+   "name": "Tibás"
+  },
+  {
+   "code": "114",
+   "province": 1,
+   "name": "Moravia"
+  },
+  {
+   "code": "115",
+   "province": 1,
+   "name": "Montes De Oca"
+  },
+  {
+   "code": "116",
+   "province": 1,
+   "name": "Turrubares"
+  },
+  {
+   "code": "117",
+   "province": 1,
+   "name": "Dota"
+  },
+  {
+   "code": "118",
+   "province": 1,
+   "name": "Curridabat"
+  },
+  {
+   "code": "119",
+   "province": 1,
+   "name": "Pérez Zeledón"
+  },
+  {
+   "code": "120",
+   "province": 1,
+   "name": "León Cortés Castro"
+  },
+  {
+   "code": "201",
+   "province": 2,
+   "name": "Central"
+  },
+  {
+   "code": "202",
+   "province": 2,
+   "name": "San Ramón"
+  },
+  {
+   "code": "203",
+   "province": 2,
+   "name": "Grecia"
+  },
+  {
+   "code": "204",
+   "province": 2,
+   "name": "San Mateo"
+  },
+  {
+   "code": "205",
+   "province": 2,
+   "name": "Atenas"
+  },
+  {
+   "code": "206",
+   "province": 2,
+   "name": "Naranjo"
+  },
+  {
+   "code": "207",
+   "province": 2,
+   "name": "Palmares"
+  },
+  {
+   "code": "208",
+   "province": 2,
+   "name": "Poás"
+  },
+  {
+   "code": "209",
+   "province": 2,
+   "name": "Orotina"
+  },
+  {
+   "code": "210",
+   "province": 2,
+   "name": "San Carlos"
+  },
+  {
+   "code": "211",
+   "province": 2,
+   "name": "Zarcero"
+  },
+  {
+   "code": "212",
+   "province": 2,
+   "name": "Sarchí"
+  },
+  {
+   "code": "213",
+   "province": 2,
+   "name": "Upala"
+  },
+  {
+   "code": "214",
+   "province": 2,
+   "name": "Los Chiles"
+  },
+  {
+   "code": "215",
+   "province": 2,
+   "name": "Guatuso"
+  },
+  {
+   "code": "216",
+   "province": 2,
+   "name": "Río Cuarto"
+  },
+  {
+   "code": "301",
+   "province": 3,
+   "name": "Central"
+  },
+  {
+   "code": "302",
+   "province": 3,
+   "name": "Paraíso"
+  },
+  {
+   "code": "303",
+   "province": 3,
+   "name": "La Unión"
+  },
+  {
+   "code": "304",
+   "province": 3,
+   "name": "Jiménez"
+  },
+  {
+   "code": "305",
+   "province": 3,
+   "name": "Turrialba"
+  },
+  {
+   "code": "306",
+   "province": 3,
+   "name": "Alvarado"
+  },
+  {
+   "code": "307",
+   "province": 3,
+   "name": "Oreamuno"
+  },
+  {
+   "code": "308",
+   "province": 3,
+   "name": "El Guarco"
+  },
+  {
+   "code": "401",
+   "province": 4,
+   "name": "Central"
+  },
+  {
+   "code": "402",
+   "province": 4,
+   "name": "Barva"
+  },
+  {
+   "code": "403",
+   "province": 4,
+   "name": "Santo Domingo"
+  },
+  {
+   "code": "404",
+   "province": 4,
+   "name": "Santa Barbara"
+  },
+  {
+   "code": "405",
+   "province": 4,
+   "name": "San Rafael"
+  },
+  {
+   "code": "406",
+   "province": 4,
+   "name": "San Isidro"
+  },
+  {
+   "code": "407",
+   "province": 4,
+   "name": "Belén"
+  },
+  {
+   "code": "408",
+   "province": 4,
+   "name": "Flores"
+  },
+  {
+   "code": "409",
+   "province": 4,
+   "name": "San Pablo"
+  },
+  {
+   "code": "410",
+   "province": 4,
+   "name": "Sarapiquí"
+  },
+  {
+   "code": "501",
+   "province": 5,
+   "name": "Liberia"
+  },
+  {
+   "code": "502",
+   "province": 5,
+   "name": "Nicoya"
+  },
+  {
+   "code": "503",
+   "province": 5,
+   "name": "Santa Cruz"
+  },
+  {
+   "code": "504",
+   "province": 5,
+   "name": "Bagaces"
+  },
+  {
+   "code": "505",
+   "province": 5,
+   "name": "Carrillo"
+  },
+  {
+   "code": "506",
+   "province": 5,
+   "name": "Cañas"
+  },
+  {
+   "code": "507",
+   "province": 5,
+   "name": "Abangares"
+  },
+  {
+   "code": "508",
+   "province": 5,
+   "name": "Tilarán"
+  },
+  {
+   "code": "509",
+   "province": 5,
+   "name": "Nandayure"
+  },
+  {
+   "code": "510",
+   "province": 5,
+   "name": "La Cruz"
+  },
+  {
+   "code": "511",
+   "province": 5,
+   "name": "Hojancha"
+  },
+  {
+   "code": "601",
+   "province": 6,
+   "name": "Central"
+  },
+  {
+   "code": "602",
+   "province": 6,
+   "name": "Esparza"
+  },
+  {
+   "code": "603",
+   "province": 6,
+   "name": "Buenos Aires"
+  },
+  {
+   "code": "604",
+   "province": 6,
+   "name": "Montes De Oro"
+  },
+  {
+   "code": "605",
+   "province": 6,
+   "name": "Osa"
+  },
+  {
+   "code": "606",
+   "province": 6,
+   "name": "Quepos"
+  },
+  {
+   "code": "607",
+   "province": 6,
+   "name": "Golfito"
+  },
+  {
+   "code": "608",
+   "province": 6,
+   "name": "Coto Brus"
+  },
+  {
+   "code": "609",
+   "province": 6,
+   "name": "Parrita"
+  },
+  {
+   "code": "610",
+   "province": 6,
+   "name": "Corredores"
+  },
+  {
+   "code": "611",
+   "province": 6,
+   "name": "Garabito"
+  },
+  {
+   "code": "612",
+   "province": 6,
+   "name": "Monteverde"
+  },
+  {
+   "code": "613",
+   "province": 6,
+   "name": "Puerto Jiménez"
+  },
+  {
+   "code": "701",
+   "province": 7,
+   "name": "Central"
+  },
+  {
+   "code": "702",
+   "province": 7,
+   "name": "Pococí"
+  },
+  {
+   "code": "703",
+   "province": 7,
+   "name": "Siquirres"
+  },
+  {
+   "code": "704",
+   "province": 7,
+   "name": "Talamanca"
+  },
+  {
+   "code": "705",
+   "province": 7,
+   "name": "Matina"
+  },
+  {
+   "code": "706",
+   "province": 7,
+   "name": "Guácimo"
+  }
+ ],
+ "districts": [
+  {
+   "postal_code": "10101",
+   "canton": "101",
+   "name": "Carmen"
+  },
+  {
+   "postal_code": "10102",
+   "canton": "101",
+   "name": "Merced"
+  },
+  {
+   "postal_code": "10103",
+   "canton": "101",
+   "name": "Hospital"
+  },
+  {
+   "postal_code": "10104",
+   "canton": "101",
+   "name": "Catedral"
+  },
+  {
+   "postal_code": "10105",
+   "canton": "101",
+   "name": "Zapote"
+  },
+  {
+   "postal_code": "10106",
+   "canton": "101",
+   "name": "San Francisco De Dos Rios"
+  },
+  {
+   "postal_code": "10107",
+   "canton": "101",
+   "name": "Uruca"
+  },
+  {
+   "postal_code": "10108",
+   "canton": "101",
+   "name": "Mata Redonda"
+  },
+  {
+   "postal_code": "10109",
+   "canton": "101",
+   "name": "Pavas"
+  },
+  {
+   "postal_code": "10110",
+   "canton": "101",
+   "name": "Hatillo"
+  },
+  {
+   "postal_code": "10111",
+   "canton": "101",
+   "name": "San Sebastián"
+  },
+  {
+   "postal_code": "10201",
+   "canton": "102",
+   "name": "Escazú"
+  },
+  {
+   "postal_code": "10202",
+   "canton": "102",
+   "name": "San Antonio"
+  },
+  {
+   "postal_code": "10203",
+   "canton": "102",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "10301",
+   "canton": "103",
+   "name": "Desamparados"
+  },
+  {
+   "postal_code": "10302",
+   "canton": "103",
+   "name": "San Miguel"
+  },
+  {
+   "postal_code": "10303",
+   "canton": "103",
+   "name": "San Juan De Dios"
+  },
+  {
+   "postal_code": "10304",
+   "canton": "103",
+   "name": "San Rafael Arriba"
+  },
+  {
+   "postal_code": "10305",
+   "canton": "103",
+   "name": "San Antonio"
+  },
+  {
+   "postal_code": "10306",
+   "canton": "103",
+   "name": "Frailes"
+  },
+  {
+   "postal_code": "10307",
+   "canton": "103",
+   "name": "Patarra"
+  },
+  {
+   "postal_code": "10308",
+   "canton": "103",
+   "name": "San Cristobal"
+  },
+  {
+   "postal_code": "10309",
+   "canton": "103",
+   "name": "Rosario"
+  },
+  {
+   "postal_code": "10310",
+   "canton": "103",
+   "name": "Damas"
+  },
+  {
+   "postal_code": "10311",
+   "canton": "103",
+   "name": "San Rafael Abajo"
+  },
+  {
+   "postal_code": "10312",
+   "canton": "103",
+   "name": "Gravilias"
+  },
+  {
+   "postal_code": "10313",
+   "canton": "103",
+   "name": "Los Guido"
+  },
+  {
+   "postal_code": "10401",
+   "canton": "104",
+   "name": "Santiago"
+  },
+  {
+   "postal_code": "10402",
+   "canton": "104",
+   "name": "Mercedes Sur"
+  },
+  {
+   "postal_code": "10403",
+   "canton": "104",
+   "name": "Barbacoas"
+  },
+  {
+   "postal_code": "10404",
+   "canton": "104",
+   "name": "Grifo Alto"
+  },
+  {
+   "postal_code": "10405",
+   "canton": "104",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "10406",
+   "canton": "104",
+   "name": "Candelarita"
+  },
+  {
+   "postal_code": "10407",
+   "canton": "104",
+   "name": "Desamparaditos"
+  },
+  {
+   "postal_code": "10408",
+   "canton": "104",
+   "name": "San Antonio"
+  },
+  {
+   "postal_code": "10409",
+   "canton": "104",
+   "name": "Chires"
+  },
+  {
+   "postal_code": "10501",
+   "canton": "105",
+   "name": "San Marcos"
+  },
+  {
+   "postal_code": "10502",
+   "canton": "105",
+   "name": "San Lorenzo"
+  },
+  {
+   "postal_code": "10503",
+   "canton": "105",
+   "name": "San Carlos"
+  },
+  {
+   "postal_code": "10601",
+   "canton": "106",
+   "name": "Aserrí"
+  },
+  {
+   "postal_code": "10602",
+   "canton": "106",
+   "name": "Tarbaca"
+  },
+  {
+   "postal_code": "10603",
+   "canton": "106",
+   "name": "Vuelta De Jorco"
+  },
+  {
+   "postal_code": "10604",
+   "canton": "106",
+   "name": "San Gabriel"
+  },
+  {
+   "postal_code": "10605",
+   "canton": "106",
+   "name": "Legua"
+  },
+  {
+   "postal_code": "10606",
+   "canton": "106",
+   "name": "Monterrey"
+  },
+  {
+   "postal_code": "10607",
+   "canton": "106",
+   "name": "Salitrillos"
+  },
+  {
+   "postal_code": "10701",
+   "canton": "107",
+   "name": "Colón"
+  },
+  {
+   "postal_code": "10702",
+   "canton": "107",
+   "name": "Guayabo"
+  },
+  {
+   "postal_code": "10703",
+   "canton": "107",
+   "name": "Tabarcia"
+  },
+  {
+   "postal_code": "10704",
+   "canton": "107",
+   "name": "Piedras Negras"
+  },
+  {
+   "postal_code": "10705",
+   "canton": "107",
+   "name": "Picagres"
+  },
+  {
+   "postal_code": "10706",
+   "canton": "107",
+   "name": "Jaris"
+  },
+  {
+   "postal_code": "10707",
+   "canton": "107",
+   "name": "Quitirrisí"
+  },
+  {
+   "postal_code": "10801",
+   "canton": "108",
+   "name": "Guadalupe"
+  },
+  {
+   "postal_code": "10802",
+   "canton": "108",
+   "name": "San Francisco"
+  },
+  {
+   "postal_code": "10803",
+   "canton": "108",
+   "name": "Calle Blancos"
+  },
+  {
+   "postal_code": "10804",
+   "canton": "108",
+   "name": "Mata De Platano"
+  },
+  {
+   "postal_code": "10805",
+   "canton": "108",
+   "name": "Ipís"
+  },
+  {
+   "postal_code": "10806",
+   "canton": "108",
+   "name": "Rancho Redondo"
+  },
+  {
+   "postal_code": "10807",
+   "canton": "108",
+   "name": "Purral"
+  },
+  {
+   "postal_code": "10901",
+   "canton": "109",
+   "name": "Santa Ana"
+  },
+  {
+   "postal_code": "10902",
+   "canton": "109",
+   "name": "Salitral"
+  },
+  {
+   "postal_code": "10903",
+   "canton": "109",
+   "name": "Pozos"
+  },
+  {
+   "postal_code": "10904",
+   "canton": "109",
+   "name": "Uruca"
+  },
+  {
+   "postal_code": "10905",
+   "canton": "109",
+   "name": "Piedades"
+  },
+  {
+   "postal_code": "10906",
+   "canton": "109",
+   "name": "Brasil"
+  },
+  {
+   "postal_code": "11001",
+   "canton": "110",
+   "name": "Alajuelita"
+  },
+  {
+   "postal_code": "11002",
+   "canton": "110",
+   "name": "San Josecito"
+  },
+  {
+   "postal_code": "11003",
+   "canton": "110",
+   "name": "San Antonio"
+  },
+  {
+   "postal_code": "11004",
+   "canton": "110",
+   "name": "Concepción"
+  },
+  {
+   "postal_code": "11005",
+   "canton": "110",
+   "name": "San Felipe"
+  },
+  {
+   "postal_code": "11101",
+   "canton": "111",
+   "name": "San Isidro"
+  },
+  {
+   "postal_code": "11102",
+   "canton": "111",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "11103",
+   "canton": "111",
+   "name": "Dulce Nombre De Jesus"
+  },
+  {
+   "postal_code": "11104",
+   "canton": "111",
+   "name": "Patalillo"
+  },
+  {
+   "postal_code": "11105",
+   "canton": "111",
+   "name": "Cascajal"
+  },
+  {
+   "postal_code": "11201",
+   "canton": "112",
+   "name": "San Ignacio"
+  },
+  {
+   "postal_code": "11202",
+   "canton": "112",
+   "name": "Guaitil"
+  },
+  {
+   "postal_code": "11203",
+   "canton": "112",
+   "name": "Palmichal"
+  },
+  {
+   "postal_code": "11204",
+   "canton": "112",
+   "name": "Cangrejal"
+  },
+  {
+   "postal_code": "11205",
+   "canton": "112",
+   "name": "Sabanillas"
+  },
+  {
+   "postal_code": "11301",
+   "canton": "113",
+   "name": "San Juan"
+  },
+  {
+   "postal_code": "11302",
+   "canton": "113",
+   "name": "Cinco Esquinas"
+  },
+  {
+   "postal_code": "11303",
+   "canton": "113",
+   "name": "Anselmo Llorente"
+  },
+  {
+   "postal_code": "11304",
+   "canton": "113",
+   "name": "Leon Xiii"
+  },
+  {
+   "postal_code": "11305",
+   "canton": "113",
+   "name": "Colima"
+  },
+  {
+   "postal_code": "11401",
+   "canton": "114",
+   "name": "San Vicente"
+  },
+  {
+   "postal_code": "11402",
+   "canton": "114",
+   "name": "San Jeronimo"
+  },
+  {
+   "postal_code": "11403",
+   "canton": "114",
+   "name": "La Trinidad"
+  },
+  {
+   "postal_code": "11501",
+   "canton": "115",
+   "name": "San Pedro"
+  },
+  {
+   "postal_code": "11502",
+   "canton": "115",
+   "name": "Sabanilla"
+  },
+  {
+   "postal_code": "11503",
+   "canton": "115",
+   "name": "Mercedes"
+  },
+  {
+   "postal_code": "11504",
+   "canton": "115",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "11601",
+   "canton": "116",
+   "name": "San Pablo"
+  },
+  {
+   "postal_code": "11602",
+   "canton": "116",
+   "name": "San Pedro"
+  },
+  {
+   "postal_code": "11603",
+   "canton": "116",
+   "name": "San Juan De Mata"
+  },
+  {
+   "postal_code": "11604",
+   "canton": "116",
+   "name": "San Luis"
+  },
+  {
+   "postal_code": "11605",
+   "canton": "116",
+   "name": "Carara"
+  },
+  {
+   "postal_code": "11701",
+   "canton": "117",
+   "name": "Santa María"
+  },
+  {
+   "postal_code": "11702",
+   "canton": "117",
+   "name": "Jardin"
+  },
+  {
+   "postal_code": "11703",
+   "canton": "117",
+   "name": "Copey"
+  },
+  {
+   "postal_code": "11801",
+   "canton": "118",
+   "name": "Curridabat"
+  },
+  {
+   "postal_code": "11802",
+   "canton": "118",
+   "name": "Granadilla"
+  },
+  {
+   "postal_code": "11803",
+   "canton": "118",
+   "name": "Sanchez"
+  },
+  {
+   "postal_code": "11804",
+   "canton": "118",
+   "name": "Tirrases"
+  },
+  {
+   "postal_code": "11901",
+   "canton": "119",
+   "name": "San Isidro De El General"
+  },
+  {
+   "postal_code": "11902",
+   "canton": "119",
+   "name": "El General"
+  },
+  {
+   "postal_code": "11903",
+   "canton": "119",
+   "name": "Daniel Flores"
+  },
+  {
+   "postal_code": "11904",
+   "canton": "119",
+   "name": "Rivas"
+  },
+  {
+   "postal_code": "11905",
+   "canton": "119",
+   "name": "San Pedro"
+  },
+  {
+   "postal_code": "11906",
+   "canton": "119",
+   "name": "Platanares"
+  },
+  {
+   "postal_code": "11907",
+   "canton": "119",
+   "name": "Pejivalle"
+  },
+  {
+   "postal_code": "11908",
+   "canton": "119",
+   "name": "Cajon"
+  },
+  {
+   "postal_code": "11909",
+   "canton": "119",
+   "name": "Baru"
+  },
+  {
+   "postal_code": "11910",
+   "canton": "119",
+   "name": "Rio Nuevo"
+  },
+  {
+   "postal_code": "11911",
+   "canton": "119",
+   "name": "Páramo"
+  },
+  {
+   "postal_code": "11912",
+   "canton": "119",
+   "name": "La Amistad"
+  },
+  {
+   "postal_code": "12001",
+   "canton": "120",
+   "name": "San Pablo"
+  },
+  {
+   "postal_code": "12002",
+   "canton": "120",
+   "name": "San Andres"
+  },
+  {
+   "postal_code": "12003",
+   "canton": "120",
+   "name": "Llano Bonito"
+  },
+  {
+   "postal_code": "12004",
+   "canton": "120",
+   "name": "San Isidro"
+  },
+  {
+   "postal_code": "12005",
+   "canton": "120",
+   "name": "Santa Cruz"
+  },
+  {
+   "postal_code": "12006",
+   "canton": "120",
+   "name": "San Antonio"
+  },
+  {
+   "postal_code": "20101",
+   "canton": "201",
+   "name": "Alajuela"
+  },
+  {
+   "postal_code": "20102",
+   "canton": "201",
+   "name": "San José"
+  },
+  {
+   "postal_code": "20103",
+   "canton": "201",
+   "name": "Carrizal"
+  },
+  {
+   "postal_code": "20104",
+   "canton": "201",
+   "name": "San Antonio"
+  },
+  {
+   "postal_code": "20105",
+   "canton": "201",
+   "name": "Guácima"
+  },
+  {
+   "postal_code": "20106",
+   "canton": "201",
+   "name": "San Isidro"
+  },
+  {
+   "postal_code": "20107",
+   "canton": "201",
+   "name": "Sabanilla"
+  },
+  {
+   "postal_code": "20108",
+   "canton": "201",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "20109",
+   "canton": "201",
+   "name": "Rio Segundo"
+  },
+  {
+   "postal_code": "20110",
+   "canton": "201",
+   "name": "Desamparados"
+  },
+  {
+   "postal_code": "20111",
+   "canton": "201",
+   "name": "Turrucares"
+  },
+  {
+   "postal_code": "20112",
+   "canton": "201",
+   "name": "Tambor"
+  },
+  {
+   "postal_code": "20113",
+   "canton": "201",
+   "name": "Garita"
+  },
+  {
+   "postal_code": "20114",
+   "canton": "201",
+   "name": "Sarapiquí"
+  },
+  {
+   "postal_code": "20201",
+   "canton": "202",
+   "name": "San Ramón"
+  },
+  {
+   "postal_code": "20202",
+   "canton": "202",
+   "name": "Santiago"
+  },
+  {
+   "postal_code": "20203",
+   "canton": "202",
+   "name": "San Juan"
+  },
+  {
+   "postal_code": "20204",
+   "canton": "202",
+   "name": "Piedades Norte"
+  },
+  {
+   "postal_code": "20205",
+   "canton": "202",
+   "name": "Piedades Sur"
+  },
+  {
+   "postal_code": "20206",
+   "canton": "202",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "20207",
+   "canton": "202",
+   "name": "San Isidro"
+  },
+  {
+   "postal_code": "20208",
+   "canton": "202",
+   "name": "Angeles"
+  },
+  {
+   "postal_code": "20209",
+   "canton": "202",
+   "name": "Alfaro"
+  },
+  {
+   "postal_code": "20210",
+   "canton": "202",
+   "name": "Volio"
+  },
+  {
+   "postal_code": "20211",
+   "canton": "202",
+   "name": "Concepción"
+  },
+  {
+   "postal_code": "20212",
+   "canton": "202",
+   "name": "Zapotal"
+  },
+  {
+   "postal_code": "20213",
+   "canton": "202",
+   "name": "Peñas Blancas"
+  },
+  {
+   "postal_code": "20214",
+   "canton": "202",
+   "name": "San Lorenzo"
+  },
+  {
+   "postal_code": "20301",
+   "canton": "203",
+   "name": "Grecia"
+  },
+  {
+   "postal_code": "20302",
+   "canton": "203",
+   "name": "San Isidro"
+  },
+  {
+   "postal_code": "20303",
+   "canton": "203",
+   "name": "San José"
+  },
+  {
+   "postal_code": "20304",
+   "canton": "203",
+   "name": "San Roque"
+  },
+  {
+   "postal_code": "20305",
+   "canton": "203",
+   "name": "Tacares"
+  },
+  {
+   "postal_code": "20307",
+   "canton": "203",
+   "name": "Puente De Piedra"
+  },
+  {
+   "postal_code": "20308",
+   "canton": "203",
+   "name": "Bolivar"
+  },
+  {
+   "postal_code": "20401",
+   "canton": "204",
+   "name": "San Mateo"
+  },
+  {
+   "postal_code": "20402",
+   "canton": "204",
+   "name": "Desmonte"
+  },
+  {
+   "postal_code": "20403",
+   "canton": "204",
+   "name": "Jesús María"
+  },
+  {
+   "postal_code": "20404",
+   "canton": "204",
+   "name": "Labrador"
+  },
+  {
+   "postal_code": "20501",
+   "canton": "205",
+   "name": "Atenas"
+  },
+  {
+   "postal_code": "20502",
+   "canton": "205",
+   "name": "Jesús"
+  },
+  {
+   "postal_code": "20503",
+   "canton": "205",
+   "name": "Mercedes"
+  },
+  {
+   "postal_code": "20504",
+   "canton": "205",
+   "name": "San Isidro"
+  },
+  {
+   "postal_code": "20505",
+   "canton": "205",
+   "name": "Concepción"
+  },
+  {
+   "postal_code": "20506",
+   "canton": "205",
+   "name": "San José"
+  },
+  {
+   "postal_code": "20507",
+   "canton": "205",
+   "name": "Santa Eulalia"
+  },
+  {
+   "postal_code": "20508",
+   "canton": "205",
+   "name": "Escobal"
+  },
+  {
+   "postal_code": "20601",
+   "canton": "206",
+   "name": "Naranjo"
+  },
+  {
+   "postal_code": "20602",
+   "canton": "206",
+   "name": "San Miguel"
+  },
+  {
+   "postal_code": "20603",
+   "canton": "206",
+   "name": "San José"
+  },
+  {
+   "postal_code": "20604",
+   "canton": "206",
+   "name": "Cirrí Sur"
+  },
+  {
+   "postal_code": "20605",
+   "canton": "206",
+   "name": "San Jerónimo"
+  },
+  {
+   "postal_code": "20606",
+   "canton": "206",
+   "name": "San Juan"
+  },
+  {
+   "postal_code": "20607",
+   "canton": "206",
+   "name": "El Rosario"
+  },
+  {
+   "postal_code": "20608",
+   "canton": "206",
+   "name": "Palmitos"
+  },
+  {
+   "postal_code": "20701",
+   "canton": "207",
+   "name": "Palmares"
+  },
+  {
+   "postal_code": "20702",
+   "canton": "207",
+   "name": "Zaragoza"
+  },
+  {
+   "postal_code": "20703",
+   "canton": "207",
+   "name": "Buenos Aires"
+  },
+  {
+   "postal_code": "20704",
+   "canton": "207",
+   "name": "Santiago"
+  },
+  {
+   "postal_code": "20705",
+   "canton": "207",
+   "name": "Candelaria"
+  },
+  {
+   "postal_code": "20706",
+   "canton": "207",
+   "name": "Esquipulas"
+  },
+  {
+   "postal_code": "20707",
+   "canton": "207",
+   "name": "La Granja"
+  },
+  {
+   "postal_code": "20801",
+   "canton": "208",
+   "name": "San Pedro"
+  },
+  {
+   "postal_code": "20802",
+   "canton": "208",
+   "name": "San Juan"
+  },
+  {
+   "postal_code": "20803",
+   "canton": "208",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "20804",
+   "canton": "208",
+   "name": "Carrillos"
+  },
+  {
+   "postal_code": "20805",
+   "canton": "208",
+   "name": "Sabana Redonda"
+  },
+  {
+   "postal_code": "20901",
+   "canton": "209",
+   "name": "Orotina"
+  },
+  {
+   "postal_code": "20902",
+   "canton": "209",
+   "name": "El Mastate"
+  },
+  {
+   "postal_code": "20903",
+   "canton": "209",
+   "name": "Hacienda Vieja"
+  },
+  {
+   "postal_code": "20904",
+   "canton": "209",
+   "name": "Coyolar"
+  },
+  {
+   "postal_code": "20905",
+   "canton": "209",
+   "name": "La Ceiba"
+  },
+  {
+   "postal_code": "21001",
+   "canton": "210",
+   "name": "Quesada"
+  },
+  {
+   "postal_code": "21002",
+   "canton": "210",
+   "name": "Florencia"
+  },
+  {
+   "postal_code": "21003",
+   "canton": "210",
+   "name": "Buenavista"
+  },
+  {
+   "postal_code": "21004",
+   "canton": "210",
+   "name": "Aguas Zarcas"
+  },
+  {
+   "postal_code": "21005",
+   "canton": "210",
+   "name": "Venecia"
+  },
+  {
+   "postal_code": "21006",
+   "canton": "210",
+   "name": "Pital"
+  },
+  {
+   "postal_code": "21007",
+   "canton": "210",
+   "name": "La Fortuna"
+  },
+  {
+   "postal_code": "21008",
+   "canton": "210",
+   "name": "La Tigra"
+  },
+  {
+   "postal_code": "21009",
+   "canton": "210",
+   "name": "La Palmera"
+  },
+  {
+   "postal_code": "21010",
+   "canton": "210",
+   "name": "Venado"
+  },
+  {
+   "postal_code": "21011",
+   "canton": "210",
+   "name": "Cutris"
+  },
+  {
+   "postal_code": "21012",
+   "canton": "210",
+   "name": "Monterrey"
+  },
+  {
+   "postal_code": "21013",
+   "canton": "210",
+   "name": "Pocosol"
+  },
+  {
+   "postal_code": "21101",
+   "canton": "211",
+   "name": "Zarcero"
+  },
+  {
+   "postal_code": "21102",
+   "canton": "211",
+   "name": "Laguna"
+  },
+  {
+   "postal_code": "21103",
+   "canton": "211",
+   "name": "Tapesco"
+  },
+  {
+   "postal_code": "21104",
+   "canton": "211",
+   "name": "Guadalupe"
+  },
+  {
+   "postal_code": "21105",
+   "canton": "211",
+   "name": "Palmira"
+  },
+  {
+   "postal_code": "21106",
+   "canton": "211",
+   "name": "Zapote"
+  },
+  {
+   "postal_code": "21107",
+   "canton": "211",
+   "name": "Brisas"
+  },
+  {
+   "postal_code": "21201",
+   "canton": "212",
+   "name": "Sarchí Norte"
+  },
+  {
+   "postal_code": "21202",
+   "canton": "212",
+   "name": "Sarchí Sur"
+  },
+  {
+   "postal_code": "21203",
+   "canton": "212",
+   "name": "Toro Amarillo"
+  },
+  {
+   "postal_code": "21204",
+   "canton": "212",
+   "name": "San Pedro"
+  },
+  {
+   "postal_code": "21205",
+   "canton": "212",
+   "name": "Rodriguez"
+  },
+  {
+   "postal_code": "21301",
+   "canton": "213",
+   "name": "Upala"
+  },
+  {
+   "postal_code": "21302",
+   "canton": "213",
+   "name": "Aguas Claras"
+  },
+  {
+   "postal_code": "21303",
+   "canton": "213",
+   "name": "San José o Pizote"
+  },
+  {
+   "postal_code": "21304",
+   "canton": "213",
+   "name": "Bijagua"
+  },
+  {
+   "postal_code": "21305",
+   "canton": "213",
+   "name": "Delicias"
+  },
+  {
+   "postal_code": "21306",
+   "canton": "213",
+   "name": "Dos Rios"
+  },
+  {
+   "postal_code": "21307",
+   "canton": "213",
+   "name": "Yolillal"
+  },
+  {
+   "postal_code": "21308",
+   "canton": "213",
+   "name": "Canalete"
+  },
+  {
+   "postal_code": "21401",
+   "canton": "214",
+   "name": "Los Chiles"
+  },
+  {
+   "postal_code": "21402",
+   "canton": "214",
+   "name": "Caño Negro"
+  },
+  {
+   "postal_code": "21403",
+   "canton": "214",
+   "name": "El Amparo"
+  },
+  {
+   "postal_code": "21404",
+   "canton": "214",
+   "name": "San Jorge"
+  },
+  {
+   "postal_code": "21501",
+   "canton": "215",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "21502",
+   "canton": "215",
+   "name": "Buenavista"
+  },
+  {
+   "postal_code": "21503",
+   "canton": "215",
+   "name": "Cote"
+  },
+  {
+   "postal_code": "21504",
+   "canton": "215",
+   "name": "Katira"
+  },
+  {
+   "postal_code": "21601",
+   "canton": "216",
+   "name": "Río Cuarto"
+  },
+  {
+   "postal_code": "21602",
+   "canton": "216",
+   "name": "Santa Rita"
+  },
+  {
+   "postal_code": "21603",
+   "canton": "216",
+   "name": "Santa Isabel"
+  },
+  {
+   "postal_code": "30101",
+   "canton": "301",
+   "name": "Oriental"
+  },
+  {
+   "postal_code": "30102",
+   "canton": "301",
+   "name": "Occidental"
+  },
+  {
+   "postal_code": "30103",
+   "canton": "301",
+   "name": "Carmen"
+  },
+  {
+   "postal_code": "30104",
+   "canton": "301",
+   "name": "San Nicolás"
+  },
+  {
+   "postal_code": "30105",
+   "canton": "301",
+   "name": "Aguacaliente o San Francisco"
+  },
+  {
+   "postal_code": "30106",
+   "canton": "301",
+   "name": "Guadalupe o Arenilla"
+  },
+  {
+   "postal_code": "30107",
+   "canton": "301",
+   "name": "Corralillo"
+  },
+  {
+   "postal_code": "30108",
+   "canton": "301",
+   "name": "Tierra Blanca"
+  },
+  {
+   "postal_code": "30109",
+   "canton": "301",
+   "name": "Dulce Nombre"
+  },
+  {
+   "postal_code": "30110",
+   "canton": "301",
+   "name": "Llano Grande"
+  },
+  {
+   "postal_code": "30111",
+   "canton": "301",
+   "name": "Quebradilla"
+  },
+  {
+   "postal_code": "30201",
+   "canton": "302",
+   "name": "Paraiso"
+  },
+  {
+   "postal_code": "30202",
+   "canton": "302",
+   "name": "Santiago"
+  },
+  {
+   "postal_code": "30203",
+   "canton": "302",
+   "name": "Orosi"
+  },
+  {
+   "postal_code": "30204",
+   "canton": "302",
+   "name": "Cachí"
+  },
+  {
+   "postal_code": "30205",
+   "canton": "302",
+   "name": "Llanos de Santa Lucía"
+  },
+  {
+   "postal_code": "30206",
+   "canton": "302",
+   "name": "Birrisito"
+  },
+  {
+   "postal_code": "30301",
+   "canton": "303",
+   "name": "Tres Rios"
+  },
+  {
+   "postal_code": "30302",
+   "canton": "303",
+   "name": "San Diego"
+  },
+  {
+   "postal_code": "30303",
+   "canton": "303",
+   "name": "San Juan"
+  },
+  {
+   "postal_code": "30304",
+   "canton": "303",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "30305",
+   "canton": "303",
+   "name": "Concepción"
+  },
+  {
+   "postal_code": "30306",
+   "canton": "303",
+   "name": "Dulce Nombre"
+  },
+  {
+   "postal_code": "30307",
+   "canton": "303",
+   "name": "San Ramón"
+  },
+  {
+   "postal_code": "30308",
+   "canton": "303",
+   "name": "Rio Azul"
+  },
+  {
+   "postal_code": "30401",
+   "canton": "304",
+   "name": "Juan Viñas"
+  },
+  {
+   "postal_code": "30402",
+   "canton": "304",
+   "name": "Tucurrique"
+  },
+  {
+   "postal_code": "30403",
+   "canton": "304",
+   "name": "Pejibaye"
+  },
+  {
+   "postal_code": "30404",
+   "canton": "304",
+   "name": "La Victoria"
+  },
+  {
+   "postal_code": "30501",
+   "canton": "305",
+   "name": "Turrialba"
+  },
+  {
+   "postal_code": "30502",
+   "canton": "305",
+   "name": "La Suiza"
+  },
+  {
+   "postal_code": "30503",
+   "canton": "305",
+   "name": "Peralta"
+  },
+  {
+   "postal_code": "30504",
+   "canton": "305",
+   "name": "Santa Cruz"
+  },
+  {
+   "postal_code": "30505",
+   "canton": "305",
+   "name": "Santa Teresita"
+  },
+  {
+   "postal_code": "30506",
+   "canton": "305",
+   "name": "Pavones"
+  },
+  {
+   "postal_code": "30507",
+   "canton": "305",
+   "name": "Tuis"
+  },
+  {
+   "postal_code": "30508",
+   "canton": "305",
+   "name": "Tayutic"
+  },
+  {
+   "postal_code": "30509",
+   "canton": "305",
+   "name": "Santa Rosa"
+  },
+  {
+   "postal_code": "30510",
+   "canton": "305",
+   "name": "Tres Equis"
+  },
+  {
+   "postal_code": "30511",
+   "canton": "305",
+   "name": "La Isabel"
+  },
+  {
+   "postal_code": "30512",
+   "canton": "305",
+   "name": "Chirripó"
+  },
+  {
+   "postal_code": "30601",
+   "canton": "306",
+   "name": "Pacayas"
+  },
+  {
+   "postal_code": "30602",
+   "canton": "306",
+   "name": "Cervantes"
+  },
+  {
+   "postal_code": "30603",
+   "canton": "306",
+   "name": "Capellades"
+  },
+  {
+   "postal_code": "30701",
+   "canton": "307",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "30702",
+   "canton": "307",
+   "name": "Cot"
+  },
+  {
+   "postal_code": "30703",
+   "canton": "307",
+   "name": "Potrero Cerrado"
+  },
+  {
+   "postal_code": "30704",
+   "canton": "307",
+   "name": "Cipreses"
+  },
+  {
+   "postal_code": "30705",
+   "canton": "307",
+   "name": "Santa Rosa"
+  },
+  {
+   "postal_code": "30801",
+   "canton": "308",
+   "name": "El Tejar"
+  },
+  {
+   "postal_code": "30802",
+   "canton": "308",
+   "name": "San Isidro"
+  },
+  {
+   "postal_code": "30803",
+   "canton": "308",
+   "name": "Tobosi"
+  },
+  {
+   "postal_code": "30804",
+   "canton": "308",
+   "name": "Patio De Agua"
+  },
+  {
+   "postal_code": "40101",
+   "canton": "401",
+   "name": "Heredia"
+  },
+  {
+   "postal_code": "40102",
+   "canton": "401",
+   "name": "Mercedes"
+  },
+  {
+   "postal_code": "40103",
+   "canton": "401",
+   "name": "San Francisco"
+  },
+  {
+   "postal_code": "40104",
+   "canton": "401",
+   "name": "Ulloa"
+  },
+  {
+   "postal_code": "40105",
+   "canton": "401",
+   "name": "Varablanca"
+  },
+  {
+   "postal_code": "40201",
+   "canton": "402",
+   "name": "Barva"
+  },
+  {
+   "postal_code": "40202",
+   "canton": "402",
+   "name": "San Pedro"
+  },
+  {
+   "postal_code": "40203",
+   "canton": "402",
+   "name": "San Pablo"
+  },
+  {
+   "postal_code": "40204",
+   "canton": "402",
+   "name": "San Roque"
+  },
+  {
+   "postal_code": "40205",
+   "canton": "402",
+   "name": "Santa Lucía"
+  },
+  {
+   "postal_code": "40206",
+   "canton": "402",
+   "name": "San José de la Montaña"
+  },
+  {
+   "postal_code": "40207",
+   "canton": "402",
+   "name": "Puente Salas"
+  },
+  {
+   "postal_code": "40301",
+   "canton": "403",
+   "name": "Santo Domingo"
+  },
+  {
+   "postal_code": "40302",
+   "canton": "403",
+   "name": "San Vicente"
+  },
+  {
+   "postal_code": "40303",
+   "canton": "403",
+   "name": "San Miguel"
+  },
+  {
+   "postal_code": "40304",
+   "canton": "403",
+   "name": "Paracito"
+  },
+  {
+   "postal_code": "40305",
+   "canton": "403",
+   "name": "Santo Tomás"
+  },
+  {
+   "postal_code": "40306",
+   "canton": "403",
+   "name": "Santa Rosa"
+  },
+  {
+   "postal_code": "40307",
+   "canton": "403",
+   "name": "Tures"
+  },
+  {
+   "postal_code": "40308",
+   "canton": "403",
+   "name": "Para"
+  },
+  {
+   "postal_code": "40401",
+   "canton": "404",
+   "name": "Santa Bárbara"
+  },
+  {
+   "postal_code": "40402",
+   "canton": "404",
+   "name": "San Pedro"
+  },
+  {
+   "postal_code": "40403",
+   "canton": "404",
+   "name": "San Juan"
+  },
+  {
+   "postal_code": "40404",
+   "canton": "404",
+   "name": "Jesús"
+  },
+  {
+   "postal_code": "40405",
+   "canton": "404",
+   "name": "Santo Domingo"
+  },
+  {
+   "postal_code": "40406",
+   "canton": "404",
+   "name": "Puraba"
+  },
+  {
+   "postal_code": "40501",
+   "canton": "405",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "40502",
+   "canton": "405",
+   "name": "San Josecito"
+  },
+  {
+   "postal_code": "40503",
+   "canton": "405",
+   "name": "Santiago"
+  },
+  {
+   "postal_code": "40504",
+   "canton": "405",
+   "name": "Los Ángeles"
+  },
+  {
+   "postal_code": "40505",
+   "canton": "405",
+   "name": "Concepción"
+  },
+  {
+   "postal_code": "40601",
+   "canton": "406",
+   "name": "San Isidro"
+  },
+  {
+   "postal_code": "40602",
+   "canton": "406",
+   "name": "San José"
+  },
+  {
+   "postal_code": "40603",
+   "canton": "406",
+   "name": "Concepción"
+  },
+  {
+   "postal_code": "40604",
+   "canton": "406",
+   "name": "San Francisco"
+  },
+  {
+   "postal_code": "40701",
+   "canton": "407",
+   "name": "San Antonio"
+  },
+  {
+   "postal_code": "40702",
+   "canton": "407",
+   "name": "La Ribera"
+  },
+  {
+   "postal_code": "40703",
+   "canton": "407",
+   "name": "La Asuncion"
+  },
+  {
+   "postal_code": "40801",
+   "canton": "408",
+   "name": "San Joaquín"
+  },
+  {
+   "postal_code": "40802",
+   "canton": "408",
+   "name": "Barrantes"
+  },
+  {
+   "postal_code": "40803",
+   "canton": "408",
+   "name": "Llorente"
+  },
+  {
+   "postal_code": "40901",
+   "canton": "409",
+   "name": "San Pablo"
+  },
+  {
+   "postal_code": "40902",
+   "canton": "409",
+   "name": "Rincon De Sabanilla"
+  },
+  {
+   "postal_code": "41001",
+   "canton": "410",
+   "name": "Puerto Viejo"
+  },
+  {
+   "postal_code": "41002",
+   "canton": "410",
+   "name": "La Virgen"
+  },
+  {
+   "postal_code": "41003",
+   "canton": "410",
+   "name": "Las Horquetas"
+  },
+  {
+   "postal_code": "41004",
+   "canton": "410",
+   "name": "Llanuras Del Gaspar"
+  },
+  {
+   "postal_code": "41005",
+   "canton": "410",
+   "name": "Cureña"
+  },
+  {
+   "postal_code": "50101",
+   "canton": "501",
+   "name": "Liberia"
+  },
+  {
+   "postal_code": "50102",
+   "canton": "501",
+   "name": "Cañas Dulces"
+  },
+  {
+   "postal_code": "50103",
+   "canton": "501",
+   "name": "Mayorga"
+  },
+  {
+   "postal_code": "50104",
+   "canton": "501",
+   "name": "Nacascolo"
+  },
+  {
+   "postal_code": "50105",
+   "canton": "501",
+   "name": "Curubande"
+  },
+  {
+   "postal_code": "50201",
+   "canton": "502",
+   "name": "Nicoya"
+  },
+  {
+   "postal_code": "50202",
+   "canton": "502",
+   "name": "Mansión"
+  },
+  {
+   "postal_code": "50203",
+   "canton": "502",
+   "name": "San Antonio"
+  },
+  {
+   "postal_code": "50204",
+   "canton": "502",
+   "name": "Quebrada Honda"
+  },
+  {
+   "postal_code": "50205",
+   "canton": "502",
+   "name": "Sámara"
+  },
+  {
+   "postal_code": "50206",
+   "canton": "502",
+   "name": "Nosara"
+  },
+  {
+   "postal_code": "50207",
+   "canton": "502",
+   "name": "Belén De Nosarita"
+  },
+  {
+   "postal_code": "50301",
+   "canton": "503",
+   "name": "Santa Cruz"
+  },
+  {
+   "postal_code": "50302",
+   "canton": "503",
+   "name": "Bolson"
+  },
+  {
+   "postal_code": "50303",
+   "canton": "503",
+   "name": "Veintisiete de Abril"
+  },
+  {
+   "postal_code": "50304",
+   "canton": "503",
+   "name": "Tempate"
+  },
+  {
+   "postal_code": "50305",
+   "canton": "503",
+   "name": "Cartagena"
+  },
+  {
+   "postal_code": "50306",
+   "canton": "503",
+   "name": "Cuajiniquil"
+  },
+  {
+   "postal_code": "50307",
+   "canton": "503",
+   "name": "Diria"
+  },
+  {
+   "postal_code": "50308",
+   "canton": "503",
+   "name": "Cabo Velas"
+  },
+  {
+   "postal_code": "50309",
+   "canton": "503",
+   "name": "Tamarindo"
+  },
+  {
+   "postal_code": "50401",
+   "canton": "504",
+   "name": "Bagaces"
+  },
+  {
+   "postal_code": "50402",
+   "canton": "504",
+   "name": "La Fortuna"
+  },
+  {
+   "postal_code": "50403",
+   "canton": "504",
+   "name": "Mogote"
+  },
+  {
+   "postal_code": "50404",
+   "canton": "504",
+   "name": "Rio Naranjo"
+  },
+  {
+   "postal_code": "50405",
+   "canton": "504",
+   "name": "Pijije"
+  },
+  {
+   "postal_code": "50501",
+   "canton": "505",
+   "name": "Filadelfia"
+  },
+  {
+   "postal_code": "50502",
+   "canton": "505",
+   "name": "Palmira"
+  },
+  {
+   "postal_code": "50503",
+   "canton": "505",
+   "name": "Sardinal"
+  },
+  {
+   "postal_code": "50504",
+   "canton": "505",
+   "name": "Belen"
+  },
+  {
+   "postal_code": "50601",
+   "canton": "506",
+   "name": "Cañas"
+  },
+  {
+   "postal_code": "50602",
+   "canton": "506",
+   "name": "Palmira"
+  },
+  {
+   "postal_code": "50603",
+   "canton": "506",
+   "name": "San Miguel"
+  },
+  {
+   "postal_code": "50604",
+   "canton": "506",
+   "name": "Bebedero"
+  },
+  {
+   "postal_code": "50605",
+   "canton": "506",
+   "name": "Porozal"
+  },
+  {
+   "postal_code": "50701",
+   "canton": "507",
+   "name": "Las Juntas"
+  },
+  {
+   "postal_code": "50702",
+   "canton": "507",
+   "name": "Sierra"
+  },
+  {
+   "postal_code": "50703",
+   "canton": "507",
+   "name": "San Juan"
+  },
+  {
+   "postal_code": "50704",
+   "canton": "507",
+   "name": "Colorado"
+  },
+  {
+   "postal_code": "50801",
+   "canton": "508",
+   "name": "Tilarán"
+  },
+  {
+   "postal_code": "50802",
+   "canton": "508",
+   "name": "Quebrada Grande"
+  },
+  {
+   "postal_code": "50803",
+   "canton": "508",
+   "name": "Tronadora"
+  },
+  {
+   "postal_code": "50804",
+   "canton": "508",
+   "name": "Santa Rosa"
+  },
+  {
+   "postal_code": "50805",
+   "canton": "508",
+   "name": "Líbano"
+  },
+  {
+   "postal_code": "50806",
+   "canton": "508",
+   "name": "Tierras Morenas"
+  },
+  {
+   "postal_code": "50807",
+   "canton": "508",
+   "name": "Arenal"
+  },
+  {
+   "postal_code": "50808",
+   "canton": "508",
+   "name": "Cabeceras"
+  },
+  {
+   "postal_code": "50901",
+   "canton": "509",
+   "name": "Carmona"
+  },
+  {
+   "postal_code": "50902",
+   "canton": "509",
+   "name": "Santa Rita"
+  },
+  {
+   "postal_code": "50903",
+   "canton": "509",
+   "name": "Zapotal"
+  },
+  {
+   "postal_code": "50904",
+   "canton": "509",
+   "name": "San Pablo"
+  },
+  {
+   "postal_code": "50905",
+   "canton": "509",
+   "name": "Porvenir"
+  },
+  {
+   "postal_code": "50906",
+   "canton": "509",
+   "name": "Bejuco"
+  },
+  {
+   "postal_code": "51001",
+   "canton": "510",
+   "name": "La Cruz"
+  },
+  {
+   "postal_code": "51002",
+   "canton": "510",
+   "name": "Santa Cecilia"
+  },
+  {
+   "postal_code": "51003",
+   "canton": "510",
+   "name": "La Garita"
+  },
+  {
+   "postal_code": "51004",
+   "canton": "510",
+   "name": "Santa Elena"
+  },
+  {
+   "postal_code": "51101",
+   "canton": "511",
+   "name": "Hojancha"
+  },
+  {
+   "postal_code": "51102",
+   "canton": "511",
+   "name": "Monte Romo"
+  },
+  {
+   "postal_code": "51103",
+   "canton": "511",
+   "name": "Puerto Carrillo"
+  },
+  {
+   "postal_code": "51104",
+   "canton": "511",
+   "name": "Huacas"
+  },
+  {
+   "postal_code": "51105",
+   "canton": "511",
+   "name": "Matambú"
+  },
+  {
+   "postal_code": "60101",
+   "canton": "601",
+   "name": "Puntarenas"
+  },
+  {
+   "postal_code": "60102",
+   "canton": "601",
+   "name": "Pitahaya"
+  },
+  {
+   "postal_code": "60103",
+   "canton": "601",
+   "name": "Chomes"
+  },
+  {
+   "postal_code": "60104",
+   "canton": "601",
+   "name": "Lepanto"
+  },
+  {
+   "postal_code": "60105",
+   "canton": "601",
+   "name": "Paquera"
+  },
+  {
+   "postal_code": "60106",
+   "canton": "601",
+   "name": "Manzanillo"
+  },
+  {
+   "postal_code": "60107",
+   "canton": "601",
+   "name": "Guacimal"
+  },
+  {
+   "postal_code": "60108",
+   "canton": "601",
+   "name": "Barranca"
+  },
+  {
+   "postal_code": "60110",
+   "canton": "601",
+   "name": "Isla Del Coco"
+  },
+  {
+   "postal_code": "60111",
+   "canton": "601",
+   "name": "Cóbano"
+  },
+  {
+   "postal_code": "60112",
+   "canton": "601",
+   "name": "Chacarita"
+  },
+  {
+   "postal_code": "60113",
+   "canton": "601",
+   "name": "Chira"
+  },
+  {
+   "postal_code": "60114",
+   "canton": "601",
+   "name": "Acapulco"
+  },
+  {
+   "postal_code": "60115",
+   "canton": "601",
+   "name": "El Roble"
+  },
+  {
+   "postal_code": "60116",
+   "canton": "601",
+   "name": "Arancibia"
+  },
+  {
+   "postal_code": "60201",
+   "canton": "602",
+   "name": "Espíritu Santo"
+  },
+  {
+   "postal_code": "60202",
+   "canton": "602",
+   "name": "San Juan Grande"
+  },
+  {
+   "postal_code": "60203",
+   "canton": "602",
+   "name": "Macacona"
+  },
+  {
+   "postal_code": "60204",
+   "canton": "602",
+   "name": "San Rafael"
+  },
+  {
+   "postal_code": "60205",
+   "canton": "602",
+   "name": "San Jerónimo"
+  },
+  {
+   "postal_code": "60206",
+   "canton": "602",
+   "name": "Caldera"
+  },
+  {
+   "postal_code": "60301",
+   "canton": "603",
+   "name": "Buenos Aires"
+  },
+  {
+   "postal_code": "60302",
+   "canton": "603",
+   "name": "Volcán"
+  },
+  {
+   "postal_code": "60303",
+   "canton": "603",
+   "name": "Potrero Grande"
+  },
+  {
+   "postal_code": "60304",
+   "canton": "603",
+   "name": "Boruca"
+  },
+  {
+   "postal_code": "60305",
+   "canton": "603",
+   "name": "Pilas"
+  },
+  {
+   "postal_code": "60306",
+   "canton": "603",
+   "name": "Colinas"
+  },
+  {
+   "postal_code": "60307",
+   "canton": "603",
+   "name": "Changuena"
+  },
+  {
+   "postal_code": "60308",
+   "canton": "603",
+   "name": "Biolley"
+  },
+  {
+   "postal_code": "60309",
+   "canton": "603",
+   "name": "Brunka"
+  },
+  {
+   "postal_code": "60310",
+   "canton": "603",
+   "name": "Cabagra"
+  },
+  {
+   "postal_code": "60401",
+   "canton": "604",
+   "name": "Miramar"
+  },
+  {
+   "postal_code": "60402",
+   "canton": "604",
+   "name": "La Unión"
+  },
+  {
+   "postal_code": "60403",
+   "canton": "604",
+   "name": "San Isidro"
+  },
+  {
+   "postal_code": "60501",
+   "canton": "605",
+   "name": "Puerto Cortés"
+  },
+  {
+   "postal_code": "60502",
+   "canton": "605",
+   "name": "Palmar"
+  },
+  {
+   "postal_code": "60503",
+   "canton": "605",
+   "name": "Sierpe"
+  },
+  {
+   "postal_code": "60504",
+   "canton": "605",
+   "name": "Bahía Ballena"
+  },
+  {
+   "postal_code": "60505",
+   "canton": "605",
+   "name": "Piedras Blancas"
+  },
+  {
+   "postal_code": "60506",
+   "canton": "605",
+   "name": "Bahía Drake"
+  },
+  {
+   "postal_code": "60601",
+   "canton": "606",
+   "name": "Quepos"
+  },
+  {
+   "postal_code": "60602",
+   "canton": "606",
+   "name": "Savegre"
+  },
+  {
+   "postal_code": "60603",
+   "canton": "606",
+   "name": "Naranjito"
+  },
+  {
+   "postal_code": "60701",
+   "canton": "607",
+   "name": "Golfito"
+  },
+  {
+   "postal_code": "60703",
+   "canton": "607",
+   "name": "Guaycara"
+  },
+  {
+   "postal_code": "60704",
+   "canton": "607",
+   "name": "Pavón"
+  },
+  {
+   "postal_code": "60801",
+   "canton": "608",
+   "name": "San Vito"
+  },
+  {
+   "postal_code": "60802",
+   "canton": "608",
+   "name": "Sabalito"
+  },
+  {
+   "postal_code": "60803",
+   "canton": "608",
+   "name": "Aguabuena"
+  },
+  {
+   "postal_code": "60804",
+   "canton": "608",
+   "name": "Limoncito"
+  },
+  {
+   "postal_code": "60805",
+   "canton": "608",
+   "name": "Pittier"
+  },
+  {
+   "postal_code": "60806",
+   "canton": "608",
+   "name": "Gutiérrez Braun"
+  },
+  {
+   "postal_code": "60901",
+   "canton": "609",
+   "name": "Parrita"
+  },
+  {
+   "postal_code": "61001",
+   "canton": "610",
+   "name": "Corredor"
+  },
+  {
+   "postal_code": "61002",
+   "canton": "610",
+   "name": "La Cuesta"
+  },
+  {
+   "postal_code": "61003",
+   "canton": "610",
+   "name": "Canoas"
+  },
+  {
+   "postal_code": "61004",
+   "canton": "610",
+   "name": "Laurel"
+  },
+  {
+   "postal_code": "61101",
+   "canton": "611",
+   "name": "Jacó"
+  },
+  {
+   "postal_code": "61102",
+   "canton": "611",
+   "name": "Tárcoles"
+  },
+  {
+   "postal_code": "61103",
+   "canton": "611",
+   "name": "Lagunillas"
+  },
+  {
+   "postal_code": "61201",
+   "canton": "612",
+   "name": "Monteverde"
+  },
+  {
+   "postal_code": "61301",
+   "canton": "613",
+   "name": "Puerto Jiménez"
+  },
+  {
+   "postal_code": "70101",
+   "canton": "701",
+   "name": "Limón"
+  },
+  {
+   "postal_code": "70102",
+   "canton": "701",
+   "name": "Valle La Estrella"
+  },
+  {
+   "postal_code": "70103",
+   "canton": "701",
+   "name": "Rio Blanco"
+  },
+  {
+   "postal_code": "70104",
+   "canton": "701",
+   "name": "Matama"
+  },
+  {
+   "postal_code": "70201",
+   "canton": "702",
+   "name": "Guapiles"
+  },
+  {
+   "postal_code": "70202",
+   "canton": "702",
+   "name": "Jiménez"
+  },
+  {
+   "postal_code": "70203",
+   "canton": "702",
+   "name": "Rita"
+  },
+  {
+   "postal_code": "70204",
+   "canton": "702",
+   "name": "Roxana"
+  },
+  {
+   "postal_code": "70205",
+   "canton": "702",
+   "name": "Cariari"
+  },
+  {
+   "postal_code": "70206",
+   "canton": "702",
+   "name": "Colorado"
+  },
+  {
+   "postal_code": "70207",
+   "canton": "702",
+   "name": "La Colonia"
+  },
+  {
+   "postal_code": "70301",
+   "canton": "703",
+   "name": "Siquirres"
+  },
+  {
+   "postal_code": "70302",
+   "canton": "703",
+   "name": "Pacuarito"
+  },
+  {
+   "postal_code": "70303",
+   "canton": "703",
+   "name": "Florida"
+  },
+  {
+   "postal_code": "70304",
+   "canton": "703",
+   "name": "Germania"
+  },
+  {
+   "postal_code": "70305",
+   "canton": "703",
+   "name": "El Cairo"
+  },
+  {
+   "postal_code": "70306",
+   "canton": "703",
+   "name": "Alegría"
+  },
+  {
+   "postal_code": "70307",
+   "canton": "703",
+   "name": "Reventazón"
+  },
+  {
+   "postal_code": "70401",
+   "canton": "704",
+   "name": "Bratsi"
+  },
+  {
+   "postal_code": "70402",
+   "canton": "704",
+   "name": "Sixaola"
+  },
+  {
+   "postal_code": "70403",
+   "canton": "704",
+   "name": "Cahuita"
+  },
+  {
+   "postal_code": "70404",
+   "canton": "704",
+   "name": "Telire"
+  },
+  {
+   "postal_code": "70501",
+   "canton": "705",
+   "name": "Matina"
+  },
+  {
+   "postal_code": "70502",
+   "canton": "705",
+   "name": "Batán"
+  },
+  {
+   "postal_code": "70503",
+   "canton": "705",
+   "name": "Carrandi"
+  },
+  {
+   "postal_code": "70601",
+   "canton": "706",
+   "name": "Guácimo"
+  },
+  {
+   "postal_code": "70602",
+   "canton": "706",
+   "name": "Mercedes"
+  },
+  {
+   "postal_code": "70603",
+   "canton": "706",
+   "name": "Pocora"
+  },
+  {
+   "postal_code": "70604",
+   "canton": "706",
+   "name": "Rio Jiménez"
+  },
+  {
+   "postal_code": "70605",
+   "canton": "706",
+   "name": "Duacari"
+  }
+ ]
+}

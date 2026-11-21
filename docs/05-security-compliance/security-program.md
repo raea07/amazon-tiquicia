@@ -1,0 +1,212 @@
+# Security program
+
+This is the security baseline for Yuntera, sized so that one person can
+actually run it. It names what is being protected and from whom, the controls
+that answer each threat, the routine that keeps them working, and what to do
+when something goes wrong. The target standard is OWASP ASVS Level 2. Nothing
+here is a certification or an audit result: it separates what the design
+already provides from what is still to do.
+
+## What is being protected
+
+| Asset                                                       | Why it matters                                 |
+| ----------------------------------------------------------- | ---------------------------------------------- |
+| Shoppers' identity, phone, address and map pin              | Physical-world risk: this is where people live |
+| Money in flight: payments, cash on delivery, seller payouts | Direct loss                                    |
+| Seller identity and bank details                            | Fraud and regulatory exposure                  |
+| Stock records                                               | Wrong stock means broken promises and disputes |
+| The integrity of prices, rankings and reviews               | The marketplace's credibility                  |
+| Staff and administrative access                             | The key to everything above                    |
+
+## Threat model
+
+| Threat                                  | Actor                         | How it would happen                                                                  | Primary controls                                                                                                                                            |
+| --------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Account takeover                        | Outsider                      | Reused passwords, phishing, SIM swap                                                 | Passwordless or strong sign-in, leaked-password checks, rate limits, re-authentication before changing phone, address or payout details, sign-in alerts     |
+| Payment fraud                           | Outsider                      | Stolen cards, card testing                                                           | Hosted payment fields (no card data touches Yuntera), 3-D Secure, velocity rules in `packages/core/src/risk.ts`                                             |
+| Cash-on-delivery abuse                  | Shopper                       | Ordering with no intention to pay; repeated refusals                                 | Risk rules require prepayment for first-time high-value and repeat-refusal orders; refusal history per account                                              |
+| Seller fraud and fake listings          | Seller                        | Selling goods they do not have, counterfeit or prohibited items, review manipulation | Identity verification at onboarding, manual approval, payouts only after delivery, reviews only from verified purchases, report button and moderation queue |
+| Payout diversion                        | Outsider or insider           | Changing a seller's bank account                                                     | Re-authentication, a waiting period after a change, notification to the seller, audit trail                                                                 |
+| Insider misuse                          | Staff                         | Looking up people, altering orders or payouts                                        | Least-privilege roles, multi-factor authentication, every staff action logged, two-person rule for payouts and refunds above a threshold                    |
+| Personal data exposure through partners | Driver or seller              | Harvesting addresses and phone numbers                                               | Data minimisation by design ([privacy](privacy.md)): drivers see only their active route, sellers never see contact details while Yuntera delivers          |
+| Proof-of-delivery fraud                 | Driver                        | Marking as delivered without delivering                                              | Delivery PIN known only to the shopper, attempt limits, position recorded at completion                                                                     |
+| Cash theft or shortfall                 | Driver                        | Under-reporting cash collected                                                       | Expected cash known per route, same-day reconciliation, variance history                                                                                    |
+| Scraping and bots                       | Outsider                      | Price scraping, inventory hoarding, credential stuffing                              | Edge rate limiting and bot rules, short reservation windows, purchase limits                                                                                |
+| Supply-chain compromise                 | Outsider                      | Malicious dependency or build step                                                   | Lockfile, pinned versions, dependency and secret scanning in CI, minimal install scripts, protected main branch                                             |
+| Secret leakage                          | Anyone with repository access | Keys committed or exposed to the browser                                             | No privileged database key in any web or mobile app; secrets only in platform secret stores; environment files ignored by git                               |
+| Data loss                               | Accident                      | Bad migration, deleted project                                                       | Automated backups, point-in-time recovery when on a paid tier, restore drills                                                                               |
+
+## Controls
+
+### Access control
+
+- **The database enforces who can see what.** Row-level security on every
+  table is the design, with access decided by the signed-in person's role and
+  ownership, so that a bug in an app cannot expose another person's data. The
+  rules are specified in [privacy](privacy.md) and implemented and tested in
+  the data layer (see `docs/03-data/`).
+- **No privileged key in client-facing apps.** The web and mobile apps act only
+  with the signed-in user's own permissions. Operations that need more run as
+  narrowly scoped server-side functions that check the caller first.
+- **Staff access** requires multi-factor authentication from Launch, is
+  role-scoped, and is reviewed monthly. There are no shared accounts.
+- **Sensitive actions re-authenticate:** changing payout details, phone number
+  or email; issuing refunds; changing a staff role.
+
+### Payments and card data
+
+- Card numbers are entered into fields hosted by the payment gateway and never
+  reach Yuntera's servers. This keeps the platform in the smallest PCI DSS
+  self-assessment scope (SAQ A). The scope must be confirmed with the chosen
+  gateway before cards go live.
+- 3-D Secure is used wherever the gateway supports it; the research found that
+  one large acquirer's terms shift fraud chargebacks to merchants that do not
+  use it ([fact sheet, section 5](../research/costa-rica-fact-sheet.md#5-payments)).
+- Payment confirmations are accepted only from the gateway's signed
+  notifications, never from the browser.
+- Orders and payments are idempotent: a retried request cannot create a second
+  order or a second charge.
+
+### Fraud and abuse
+
+- Order risk is scored by published, explainable rules
+  (`packages/core/src/risk.ts`). The score decides between approve, step-up
+  (verify phone, prepay, or 3-D Secure), manual review and decline.
+- The rules deliberately do **not** use the delivery district, name,
+  nationality or type of identification. Judging people by where they live is
+  discriminatory; risk is judged on behaviour. A test guards this.
+- Seller performance (`packages/core/src/sellers.ts`) limits what an
+  unreliable seller can do before a person reviews them.
+
+### Secrets and configuration
+
+- Secrets live only in the hosting platforms' secret stores. Nothing secret is
+  committed; environment files are git-ignored and only example files are
+  tracked.
+- Keys are rotated on a schedule and immediately on any suspicion of exposure.
+- Production and preview environments use separate projects and separate keys.
+
+### Software supply chain and build
+
+- Dependencies are pinned through the lockfile; install scripts that are not
+  needed are disabled.
+- CI runs lint, type checks, unit tests, dependency vulnerability scanning and
+  secret scanning on every change; the main branch accepts changes only through
+  reviewed pull requests with passing checks (see `docs/07-deployment/`).
+- Static rules ban raw HTML injection and untyped escape hatches in code.
+
+### Edge and application hardening
+
+- All traffic over TLS; strict transport security; a content security policy;
+  cookies that are HTTP-only, secure and same-site.
+- A web application firewall, rate limiting and bot rules at the edge, tighter
+  on sign-in, checkout, PIN entry and search.
+- Input is validated at the server boundary; output is encoded by the
+  framework; file uploads are type- and size-checked and stored outside the
+  web root in access-controlled storage.
+
+### Logging, audit and monitoring
+
+- An append-only audit log records every staff action and every change to
+  money, seller status, roles and prices: who, what, when, from where.
+- Application errors go to error monitoring with personal data scrubbed.
+- Alerts exist for the events that matter: repeated failed sign-ins, payment
+  failure spikes, refund volume, PIN failures, cash variance.
+
+### Backups and recovery
+
+- Daily automated database backups; point-in-time recovery once on a tier that
+  offers it (a cost decision, see [open questions](../08-open-questions.md)).
+- A **restore drill** every quarter: restore the latest backup into a scratch
+  project and place a test order. A backup that has never been restored is not
+  a backup.
+- Targets (assumptions to validate): lose no more than 24 hours of data in the
+  Pilot, no more than 5 minutes from Launch; be back in service within 4 hours.
+
+## The routine
+
+Security that depends on remembering does not happen. This is the calendar.
+
+| When                | What                                                                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Every change        | CI checks pass; a second look at anything touching access rules, money or personal data                                             |
+| Weekly (15 minutes) | Review dependency and secret-scan alerts; skim the audit log for staff actions; check error monitoring for new patterns             |
+| Monthly             | Review who has staff, seller-team and warehouse access and remove what is not needed; review risk-rule outcomes and false positives |
+| Quarterly           | Restore drill; rotate keys; re-read this document against reality; walk through the incident runbook                                |
+| Before Launch       | Independent penetration test of the public apps and the access rules; fix findings before opening                                   |
+| Yearly              | Re-assess against ASVS Level 2; update the threat model                                                                             |
+
+## Incident response
+
+A personal-data breach must be notified to the people affected within **5
+business days** ([fact sheet, section 4](../research/costa-rica-fact-sheet.md#4-personal-data)).
+The clock starts when the incident is known, so the first step is always to
+write down the time.
+
+1. **Record** the time, what was observed and who noticed.
+2. **Contain**: revoke sessions and keys, disable the affected feature or
+   account, preserve logs. Containment comes before diagnosis.
+3. **Assess**: what data, whose, how many people, is it still happening.
+4. **Notify**: affected people and PRODHAB with the nature of the incident, the
+   data involved, what has been done and a contact; the payment gateway if
+   payments are involved; the lawyer in every case.
+5. **Recover**: fix the cause, restore from backup if needed, rotate anything
+   that might have been exposed.
+6. **Review** within two weeks: a written account without blame, and the one
+   change that would have prevented it.
+
+A one-page version of this runbook, with phone numbers, is kept outside the
+systems it describes.
+
+## Mapping to OWASP ASVS Level 2
+
+ASVS is used as the checklist of record. The table maps its areas to where this
+program addresses them; it uses area names rather than chapter numbers because
+numbering differs between ASVS versions.
+
+| ASVS area                          | Addressed by                                                                                               | State                                                                       |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Architecture and threat modelling  | This document; `docs/02-architecture/`                                                                     | Designed                                                                    |
+| Authentication                     | Managed authentication service; staff multi-factor; leaked-password checks                                 | Designed; staff MFA enforcement is a Launch to-do                           |
+| Session management                 | Managed sessions; secure cookies; re-authentication for sensitive actions                                  | Designed                                                                    |
+| Access control                     | Row-level security; no privileged key in clients; role checks in server functions                          | Designed and being implemented with tests in the data layer                 |
+| Validation, sanitisation, encoding | Server-side validation; framework encoding; lint rules                                                     | Partly in the repo (lint rules, typed domain logic); the rest per app       |
+| Cryptography and secrets           | Platform-managed encryption at rest and in transit; secret stores; rotation                                | Designed; rotation schedule is a to-do                                      |
+| Error handling and logging         | Audit log; scrubbed error monitoring; alerts                                                               | Designed; alert thresholds are a to-do                                      |
+| Data protection and privacy        | [Privacy](privacy.md): minimisation, retention, consent                                                    | Designed; retention jobs are a to-do                                        |
+| Communications                     | TLS everywhere; strict transport security                                                                  | Provided by the hosting platforms; headers are a to-do per app              |
+| Business logic                     | Idempotent orders; atomic stock reservation; state machines (`packages/core/src/lifecycle.ts`); risk rules | In the repo for the domain logic; enforcement in the data layer in progress |
+| Files and resources                | Typed, size-limited uploads to access-controlled storage                                                   | Designed                                                                    |
+| API and web services               | Every exposed function checks the caller; rate limits at the edge                                          | Designed; edge rules are a to-do                                            |
+| Configuration and build            | Pinned dependencies; CI scanning; separate environments                                                    | Partly in the repo (lockfile, lint, tests); CI scanning being set up        |
+
+## In the repository today, and not yet
+
+**In place by design, in code that exists now**
+
+- Risk scoring with explainable rules and a test that forbids location and
+  identity inputs (`packages/core/src/risk.ts`).
+- Order and shipment state machines that reject invalid transitions
+  (`packages/core/src/lifecycle.ts`).
+- Money handled as integers with invariants tested to the céntimo
+  (`packages/core/src/money.ts`, `fees.ts`).
+- Strict typing and lint rules that ban unsafe patterns; environment files
+  excluded from version control.
+
+**Designed, being built by the engineering workstream** (confirm against
+`docs/02-architecture/` and `docs/03-data/` before relying on it)
+
+- Row-level security on every table with tests per role.
+- Server-side functions for orders, stock, delivery confirmation and payouts.
+- Audit log, CI security scanning, security headers.
+
+**To do before Launch**
+
+- Gateway integration with hosted fields and signed notifications; PCI scope
+  confirmed in writing.
+- Multi-factor authentication enforced for staff.
+- Edge firewall, rate limits and bot rules configured.
+- Alerting, the incident runbook with real contacts, and the first restore
+  drill.
+- Independent penetration test.
+- Lawyer-reviewed privacy notice and terms.

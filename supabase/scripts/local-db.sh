@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Builds and tests the database on a plain PostgreSQL 16 (local machine or CI).
+#
+#   local-db.sh up      start the system PostgreSQL if it is not running (dev machines)
+#   local-db.sh reset   drop and recreate the database, apply shim + migrations + seed
+#   local-db.sh test    run every file in supabase/tests against the database
+#   local-db.sh psql    open a shell on the database
+#
+# Connection settings come from the environment so CI can point at a service container:
+#   PG_ADMIN_URL  superuser connection to the maintenance database
+#   PG_DB_NAME    database to (re)create
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ADMIN_URL="${PG_ADMIN_URL:-postgres://postgres:postgres@127.0.0.1:5432/postgres}"
+DB_NAME="${PG_DB_NAME:-yuntera_local}"
+DB_URL="${ADMIN_URL%/*}/${DB_NAME}"
+
+run() { psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 "$@"; }
+
+case "${1:-}" in
+  up)
+    if pg_isready -q -d "$ADMIN_URL"; then
+      echo "PostgreSQL is already accepting connections."
+    elif command -v pg_ctlcluster >/dev/null 2>&1; then
+      pg_ctlcluster 16 main start
+      echo "Started the local PostgreSQL 16 cluster."
+    else
+      echo "PostgreSQL is not reachable at $ADMIN_URL and no local cluster was found." >&2
+      exit 1
+    fi
+    ;;
+
+  reset)
+    psql "$ADMIN_URL" -X -q -v ON_ERROR_STOP=1 \
+      -c "drop database if exists \"$DB_NAME\" with (force)" \
+      -c "create database \"$DB_NAME\""
+    run -f "$ROOT/scripts/local-shim.sql"
+    for file in "$ROOT"/migrations/*.sql; do
+      echo "migrate  $(basename "$file")"
+      run -f "$file"
+    done
+    if [ -f "$ROOT/seed.sql" ]; then
+      echo "seed     seed.sql"
+      run -f "$ROOT/seed.sql"
+    fi
+    echo "Database $DB_NAME is ready."
+    ;;
+
+  test)
+    failed=0
+    for file in "$ROOT"/tests/[0-9]*.sql; do
+      if run -f "$file" >/tmp/yuntera-db-test.log 2>&1; then
+        echo "pass  $(basename "$file")"
+      else
+        echo "FAIL  $(basename "$file")"
+        sed 's/^/      /' /tmp/yuntera-db-test.log
+        failed=1
+      fi
+    done
+    exit "$failed"
+    ;;
+
+  psql)
+    shift
+    psql "$DB_URL" "$@"
+    ;;
+
+  *)
+    echo "usage: $0 {up|reset|test|psql}" >&2
+    exit 2
+    ;;
+esac

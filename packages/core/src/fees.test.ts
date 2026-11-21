@@ -36,13 +36,13 @@ describe("fulfilment tiers", () => {
 describe("seller statement", () => {
   it("itemises a seller-fulfilled card order", () => {
     const s = computeSellerStatement({ lines: [line()], paymentMethod: "card" });
-    // ₡20 000 × 12% = ₡2 400 referral; card 3.5% = ₡700; fees net ₡3 100 + 13% IVA ₡403.
+    // ₡20 000 × 12% = ₡2 400 referral; card 3.9% + ₡180 = ₡960; fees net ₡3 360 + 13% IVA ₡437.
     expect(s.referralFee).toEqual(fromMajor(2_400));
     expect(s.fulfillmentFee).toEqual(fromMajor(0));
-    expect(s.paymentFee).toEqual(fromMajor(700));
-    expect(s.feesNet).toEqual(fromMajor(3_100));
-    expect(s.feesTax).toEqual(fromMajor(403));
-    expect(s.payout).toEqual(fromMajor(16_497));
+    expect(s.paymentFee).toEqual(fromMajor(960));
+    expect(s.feesNet).toEqual(fromMajor(3_360));
+    expect(s.feesTax).toEqual(money(43_680));
+    expect(s.payout).toEqual(money(1_620_320));
   });
 
   it("adds pick-pack-ship fees when the platform fulfils", () => {
@@ -52,7 +52,7 @@ describe("seller statement", () => {
     });
     expect(s.lines[0]?.fulfillmentTierId).toBe("pequeno");
     expect(s.fulfillmentFee).toEqual(fromMajor(2_800)); // 2 × ₡1 400
-    expect(s.paymentFee).toEqual(fromMajor(400)); // 1% of ₡40 000
+    expect(s.paymentFee).toEqual(fromMajor(600)); // 1.5% of ₡40 000
   });
 
   it("uses the category rate, falling back to the default", () => {

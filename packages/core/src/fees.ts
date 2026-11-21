@@ -29,9 +29,10 @@ export interface FeeSchedule {
   minReferralFeePerUnitMinor: number;
   /** Pick-pack-ship fee per unit when the platform fulfils. Ordered smallest first. */
   fulfillmentTiers: readonly SizeTier[];
+  /** Cost of collecting the money, passed through at cost: a rate on what was collected… */
   paymentBpsByMethod: Readonly<Record<PaymentMethod, BasisPoints>>;
-  /** Flat handling charge per order paid in cash on delivery. */
-  cashOnDeliveryHandlingMinor: number;
+  /** …plus a flat amount per order (the gateway's fixed fee, or cash handling). */
+  paymentFixedMinorByMethod: Readonly<Record<PaymentMethod, number>>;
   /** IVA charged on the platform's fees. */
   feeTaxBps: BasisPoints;
 }
@@ -62,13 +63,20 @@ export const DEFAULT_FEE_SCHEDULE: FeeSchedule = {
     { id: "mediano", maxWeightGrams: 10_000, maxLongestSideCm: 60, feeMinor: 240_000 },
     { id: "grande", maxWeightGrams: 30_000, maxLongestSideCm: 120, feeMinor: 490_000 },
   ],
+  // Grounded on published gateway prices (docs/research/costa-rica-fact-sheet.md §5):
+  // cards 3.9% + US$0.35, SINPE Móvil 1.5%. Cash carries counting and deposit costs.
   paymentBpsByMethod: {
-    card: 350,
-    sinpe_movil: 100,
+    card: 390,
+    sinpe_movil: 150,
     cash_on_delivery: 200,
     bank_transfer: 50,
   },
-  cashOnDeliveryHandlingMinor: 30_000, // ₡300
+  paymentFixedMinorByMethod: {
+    card: 18_000, // ₡180 ≈ US$0.35
+    sinpe_movil: 0,
+    cash_on_delivery: 30_000, // ₡300
+    bank_transfer: 0,
+  },
   feeTaxBps: 1300,
 };
 
@@ -187,10 +195,7 @@ export function computeSellerStatement(
   );
   const paymentFee = add(
     percentage(collected, schedule.paymentBpsByMethod[input.paymentMethod]),
-    money(
-      input.paymentMethod === "cash_on_delivery" ? schedule.cashOnDeliveryHandlingMinor : 0,
-      currency,
-    ),
+    money(schedule.paymentFixedMinorByMethod[input.paymentMethod], currency),
   );
 
   const feesNet = sum([referralFee, fulfillmentFee, paymentFee], currency);

@@ -1,0 +1,163 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { DEFAULT_FEE_SCHEDULE } from "../fees";
+import {
+  ORDER_STATUSES,
+  ORDER_TRANSITIONS,
+  SHIPMENT_STATUSES,
+  SHIPMENT_TRANSITIONS,
+} from "../lifecycle";
+import { DEFAULT_RANKING, TEXT_RELEVANCE } from "../search";
+import {
+  addBusinessDays,
+  CONSUMER_LAW,
+  HACIENDA_PAYMENT_CODE,
+  legalWarrantyEnds,
+  withdrawalDeadline,
+} from "./compliance";
+
+const migration = (name: string) =>
+  readFileSync(
+    fileURLToPath(new URL(`../../../../supabase/migrations/${name}`, import.meta.url)),
+    "utf8",
+  );
+
+describe("business days", () => {
+  it("skips weekends", () => {
+    expect(addBusinessDays("2026-11-27", 1)).toBe("2026-11-30"); // Friday → Monday
+    expect(addBusinessDays("2026-11-28", 1)).toBe("2026-11-30"); // Saturday → Monday
+    expect(addBusinessDays("2026-11-23", 5)).toBe("2026-11-30"); // Monday + 5
+    expect(addBusinessDays("2026-11-23", 0)).toBe("2026-11-23");
+  });
+
+  it("skips holidays", () => {
+    // Tuesday 1 Dec 2026 is a holiday.
+    expect(addBusinessDays("2026-11-30", 1, ["2026-12-01"])).toBe("2026-12-02");
+  });
+
+  it("rejects negative or fractional day counts", () => {
+    expect(() => addBusinessDays("2026-11-23", -1)).toThrow(RangeError);
+    expect(() => addBusinessDays("2026-11-23", 1.5)).toThrow(RangeError);
+  });
+});
+
+describe("consumer-law periods", () => {
+  it("gives eight business days to withdraw, counted from delivery", () => {
+    // Delivered Monday 23 Nov 2026 → Thursday 3 Dec (1 Dec is not passed in here).
+    expect(withdrawalDeadline("2026-11-23")).toBe("2026-12-03");
+    expect(CONSUMER_LAW.withdrawalBusinessDays).toBe(8);
+  });
+
+  it("gives thirty business days of legal warranty", () => {
+    expect(legalWarrantyEnds("2026-11-23")).toBe("2027-01-04");
+  });
+});
+
+describe("Hacienda payment codes", () => {
+  it("maps every payment method, with SINPE Móvil as 06", () => {
+    expect(HACIENDA_PAYMENT_CODE).toEqual({
+      cash_on_delivery: "01",
+      card: "02",
+      bank_transfer: "04",
+      sinpe_movil: "06",
+    });
+  });
+});
+
+// ── The database and the clients must agree ─────────────────────────────────
+// These tests read the SQL migrations as text, so they run without a database.
+
+function sqlPairs(sql: string, block: string): string[] {
+  const start = sql.indexOf(`-- BEGIN ${block}`);
+  const end = sql.indexOf(`-- END ${block}`);
+  expect(start, `block ${block} not found`).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  return [...sql.slice(start, end).matchAll(/\('([a-z_]+)',\s*'([a-z_]+)'\)/g)]
+    .map((m) => `${m[1]}>${m[2]}`)
+    .sort();
+}
+
+const tsPairs = (table: Readonly<Record<string, readonly string[]>>) =>
+  Object.entries(table)
+    .flatMap(([from, tos]) => tos.map((to) => `${from}>${to}`))
+    .sort();
+
+describe("lifecycle rules match the database", () => {
+  const orders = migration("20261121080600_orders.sql");
+  const foundation = migration("20261121080000_foundation.sql");
+
+  it("allows exactly the same order transitions", () => {
+    expect(sqlPairs(orders, "order_transitions")).toEqual(tsPairs(ORDER_TRANSITIONS));
+  });
+
+  it("allows exactly the same shipment transitions", () => {
+    expect(sqlPairs(orders, "shipment_transitions")).toEqual(tsPairs(SHIPMENT_TRANSITIONS));
+  });
+
+  it("declares the same statuses in the same order", () => {
+    const enumValues = (name: string) => {
+      const match = new RegExp(`create type public\\.${name} as enum \\(([^;]+)\\);`).exec(
+        foundation,
+      );
+      expect(match, `enum ${name} not found`).not.toBeNull();
+      return [...(match?.[1] ?? "").matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+    };
+    expect(enumValues("order_status")).toEqual([...ORDER_STATUSES]);
+    expect(enumValues("shipment_status")).toEqual([...SHIPMENT_STATUSES]);
+  });
+});
+
+describe("fee schedule matches the database", () => {
+  const finance = migration("20261121080800_finance.sql");
+
+  it("uses the same payment fees", () => {
+    for (const [method, bps] of Object.entries(DEFAULT_FEE_SCHEDULE.paymentBpsByMethod)) {
+      const fixed =
+        DEFAULT_FEE_SCHEDULE.paymentFixedMinorByMethod[
+          method as keyof typeof DEFAULT_FEE_SCHEDULE.paymentFixedMinorByMethod
+        ];
+      expect(finance).toContain(`'${method}', ${bps}, ${fixed})`);
+    }
+  });
+
+  it("uses the same fulfilment tiers", () => {
+    DEFAULT_FEE_SCHEDULE.fulfillmentTiers.forEach((tier, index) => {
+      expect(finance).toContain(
+        `'${tier.id}', ${tier.maxWeightGrams}, ${tier.maxLongestSideCm}, ${tier.feeMinor}, ${index + 1})`,
+      );
+    });
+  });
+
+  it("uses the same defaults and version", () => {
+    expect(finance).toContain(
+      `('${DEFAULT_FEE_SCHEDULE.version}', true, ${DEFAULT_FEE_SCHEDULE.defaultReferralBps}, ` +
+        `${DEFAULT_FEE_SCHEDULE.minReferralFeePerUnitMinor}, ${DEFAULT_FEE_SCHEDULE.feeTaxBps},`,
+    );
+  });
+});
+
+describe("search ranking matches the database", () => {
+  const search = migration("20261121081200_search.sql");
+
+  it("composes text relevance from the same constants", () => {
+    const t = TEXT_RELEVANCE;
+    expect(search).toContain(
+      `${t.exactFloor} + ${t.rankWeight} * c.rank + ${t.headMatchBonus} * c.head_match::integer ` +
+        `+ ${t.categoryMatchBonus} * c.category_match::integer`,
+    );
+    expect(search).toContain(`${t.fuzzyCeiling} * c.word_similarity`);
+    expect(search).toContain(`c.exact_total < ${t.fuzzyFallbackBelow}`);
+  });
+
+  it("weights quality with the same numbers", () => {
+    const w = DEFAULT_RANKING.weights;
+    for (const [signal, weight] of Object.entries(w)) {
+      expect(search, `weight for ${signal}`).toContain(`${weight.toFixed(2)} * `);
+    }
+    expect(search).toContain(`power(s.text_score, ${DEFAULT_RANKING.relevanceExponent})`);
+    expect(search).toContain(`else ${DEFAULT_RANKING.outOfStockPenalty} end`);
+    expect(search).toContain(`then ${DEFAULT_RANKING.newListingBoost} else 1 end`);
+    expect(search).toContain(`interval '${DEFAULT_RANKING.newListingDays} days'`);
+  });
+});

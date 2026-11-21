@@ -99,6 +99,54 @@ export function bayesianRating(
   return (prior.mean * prior.weight + ratingSum) / (prior.weight + ratingCount);
 }
 
+/**
+ * Text relevance: how well a product matches the words typed, before any
+ * business signal is considered.
+ *
+ * Term frequency alone cannot tell a product that IS the thing searched for
+ * from one that merely mentions it: for "laptop", a backpack "con compartimento
+ * para laptop" out-scores the laptop itself. Two structural signals fix that,
+ * and both are visible to a seller writing a listing:
+ *   headMatch     — the title begins with the query (Spanish product titles
+ *                   lead with the noun: "Laptop …", "Café …", "Cargador …")
+ *   categoryMatch — the query matches the product's category name
+ *
+ * Exact matches always score at least `exactFloor`; a product found only by
+ * typo tolerance scores below that, so a near miss never outranks a hit on
+ * text alone.
+ */
+export const TEXT_RELEVANCE = {
+  exactFloor: 0.55,
+  rankWeight: 0.25,
+  headMatchBonus: 0.12,
+  categoryMatchBonus: 0.08,
+  fuzzyCeiling: 0.5,
+  /** Typo-only matches are shown only when fewer exact matches than this exist. */
+  fuzzyFallbackBelow: 4,
+} as const;
+
+export interface TextMatch {
+  /** True when the product matched the query's words; false when found only by typo tolerance. */
+  exact: boolean;
+  /** Normalised full-text rank, 0–1. */
+  rank: number;
+  headMatch: boolean;
+  categoryMatch: boolean;
+  /** Word-level trigram similarity between the query and the title, 0–1. */
+  wordSimilarity: number;
+}
+
+export function composeTextScore(m: TextMatch): number {
+  const t = TEXT_RELEVANCE;
+  if (!m.exact) return t.fuzzyCeiling * clamp01(m.wordSimilarity);
+  return (
+    t.exactFloor +
+    t.rankWeight * clamp01(m.rank) +
+    (m.headMatch ? t.headMatchBonus : 0) +
+    (m.categoryMatch ? t.categoryMatchBonus : 0)
+  );
+}
+
 export interface SearchCandidate {
   productId: string;
   /** Text relevance from retrieval, 0–1. */
@@ -160,7 +208,9 @@ export interface RankedResult {
   };
 }
 
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+function clamp01(v: number): number {
+  return Math.min(1, Math.max(0, v));
+}
 
 /**
  * Price competitiveness from a price index (this price ÷ typical price).
