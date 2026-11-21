@@ -676,9 +676,50 @@ insert into auth.sessions (id, user_id, created_at, updated_at, aal)
 values (gen_random_uuid(), current_setting('t.gone')::uuid, now(), now(), 'aal1');
 insert into auth.one_time_tokens (id, user_id, token_type, token_hash, relates_to)
 values (gen_random_uuid(), current_setting('t.gone')::uuid, 'recovery_token', 'abc', 'comprador2@yuntera.example');
+-- The person has had messages (20261121082600_notifications.sql): channel
+-- choices with a WhatsApp number, a commercial consent, a phone registered for
+-- push, messages planned for an event about one of the orders, one of them on
+-- its way with its frozen text, and suppressions for the e-mail and the number.
+select pg_temp.login('comprador2@yuntera.example', 'aal2');
+select public.set_my_notification_settings(true, true, false, true, '8777 4321', true, 'comercial-2026-11');
+select public.register_push_token('shop', 'ExponentPushToken[cuentaBorrada0001]', 'android', 'telefono-de-prueba');
+reset role;
+insert into private.outbox_events (topic, payload)
+select 'order.placed', jsonb_build_object('order_id', o.id)
+from public.orders o where o.user_id = current_setting('t.gone')::uuid and o.status = 'delivered'
+order by o.placed_at limit 1;
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+select public.worker_notify_plan(100);
+select public.worker_notify_claim('prueba-borrado', 100);
+reset role;
+select pg_temp.remember('frozen', (
+  select d.id::text || '|' || d.generation from private.notification_deliveries d
+  where d.recipient_user_id = current_setting('t.gone')::uuid and d.channel = 'email' and d.status = 'sending'
+  limit 1));
+set local role service_role;
+select public.worker_notify_freeze(split_part(current_setting('t.frozen'), '|', 1)::uuid, 'prueba-borrado',
+  split_part(current_setting('t.frozen'), '|', 2)::int,
+  '{"to":"comprador2@yuntera.example","whatsapp":"+50687774321"}');
+reset role;
+insert into private.notification_suppressions (channel, address, reason)
+values ('whatsapp', '+50687774321', 'opt_out'), ('email', 'comprador2@yuntera.example', 'complaint');
+do $$
+begin
+  assert (select count(*) from private.notification_deliveries
+          where recipient_user_id = current_setting('t.gone')::uuid) >= 3,
+    'messages were planned for the person';
+  assert exists (select 1 from private.notification_deliveries
+                 where recipient_user_id = current_setting('t.gone')::uuid and request_body is not null),
+    'one of them holds its frozen text';
+  assert exists (select 1 from private.commercial_consent_log where user_id = current_setting('t.gone')::uuid),
+    'the commercial consent is on record';
+end
+$$;
 -- What identifies the person, to search for afterwards in every table.
 select pg_temp.remember('needles', (
-  select jsonb_build_array(u.email, p.full_name, a.phone, a.senas, a.recipient_name)::text
+  select jsonb_build_array(u.email, p.full_name, a.phone, a.senas, a.recipient_name,
+                           '+50687774321', 'cuentaBorrada0001')::text
   from auth.users u join public.profiles p on p.id = u.id
   join public.addresses a on a.user_id = u.id
   where u.id = current_setting('t.gone')::uuid limit 1));
@@ -731,6 +772,19 @@ begin
   assert not exists (select 1 from public.addresses where user_id = v_user), 'addresses';
   assert not exists (select 1 from public.consents where user_id = v_user), 'consents';
   assert not exists (select 1 from private.mfa_failures where user_id = v_user), 'mfa failures';
+  -- What the notifications held (20261121082600).
+  assert not exists (select 1 from private.notification_preferences where user_id = v_user),
+    'notification preferences';
+  assert not exists (select 1 from private.commercial_consent_log where user_id = v_user),
+    'the commercial-consent history';
+  assert not exists (select 1 from private.push_tokens where user_id = v_user), 'push tokens';
+  assert not exists (select 1 from private.notification_suppressions
+                     where address in ('+50687774321', 'comprador2@yuntera.example')),
+    'suppressions of addresses only the person used';
+  assert not exists (select 1 from private.notification_deliveries
+                     where recipient_user_id = v_user
+                       and (status in ('pending', 'sending') or request_body is not null)),
+    'nothing left to send to the person, and no frozen text';
   assert not exists (select 1 from public.orders where user_id = v_user
                      and (ship_recipient_name <> 'Cuenta eliminada' or ship_phone <> ''
                           or ship_senas <> '' or ship_plus_code is not null)),
@@ -979,7 +1033,14 @@ begin
       -- or decided a listing change
       'payout_detail_requests.requested_by', 'payout_detail_requests.decided_by',
       'payout_runs.created_by', 'payouts.paid_by', 'payouts.failed_by',
-      'product_change_requests.submitted_by', 'product_change_requests.decided_by');
+      'product_change_requests.submitted_by', 'product_change_requests.decided_by',
+      -- erased by notify_forget_person (082600)
+      'private.notification_preferences.user_id', 'private.commercial_consent_log.user_id',
+      'private.push_tokens.user_id',
+      -- kept without a message body: what was sent to the person, and who
+      -- changed a shop's settings, recorded consent or retried a message
+      'private.notification_deliveries.recipient_user_id', 'private.notification_preferences.updated_by',
+      'private.commercial_consent_log.actor_id', 'private.notification_deliveries.retried_by');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end
 $$;

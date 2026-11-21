@@ -206,8 +206,12 @@ create table private.commercial_consent_log (
 create index commercial_consent_log_user_idx on private.commercial_consent_log (user_id, at);
 create index commercial_consent_log_seller_idx on private.commercial_consent_log (seller_id, at);
 
+-- Append-only, except that deleting an account removes that person's rows
+-- (private.notify_forget_person sets yuntera.erasing_account for the length of
+-- its transaction; no app role can reach this table at all).
 create trigger commercial_consent_log_immutable before update or delete on private.commercial_consent_log
-  for each row when (pg_trigger_depth() = 0)
+  for each row when (pg_trigger_depth() = 0
+                     and coalesce(current_setting('yuntera.erasing_account', true), '') <> 'on')
   execute function private.forbid_change();
 
 -- Expo push tokens, one Expo project per app (section 4.2). Bearer credentials:
@@ -872,8 +876,11 @@ begin
 
   if v_kind = 'user' then
     select * into v_pref from private.notification_preferences where user_id = d.recipient_user_id;
+    -- A deleted account (20261121082500) keeps its id with a placeholder
+    -- address; nothing is sent to it.
     select u.email, split_part(trim(p.full_name), ' ', 1) into v_email, v_name
-    from auth.users u left join public.profiles p on p.id = u.id where u.id = d.recipient_user_id;
+    from auth.users u left join public.profiles p on p.id = u.id
+    where u.id = d.recipient_user_id and u.deleted_at is null;
     if not found then
       return jsonb_build_object('skip', 'no_recipient');
     end if;
@@ -2028,4 +2035,219 @@ begin
 exception when others then
   raise notice 'Could not schedule the notification sweep: %', sqlerrm;
 end
+$$;
+
+-- ═══ 13. Deleting an account ═══════════════════════════════════════════════
+--
+-- delete_my_account (20261121082500_account_security.sql) was written before
+-- these tables existed. What they hold about a person goes with the account:
+--   erased    channel preferences (with the WhatsApp and SMS number), the
+--             commercial-consent history (public.consents is erased there too),
+--             push tokens, the frozen text of any message still on its way to
+--             the person or about the person's orders, and the suppression
+--             entries for the person's e-mail and numbers that no one else
+--             uses;
+--   kept      the delivery rows themselves (template, channel, status, times,
+--             a bare id), as the order history is kept; every message not yet
+--             sent to the person is skipped, and nothing is ever sent to the
+--             placeholder address the account is left with (notify_resolve).
+-- A suppression of an address someone else still uses stays: it protects that
+-- person too.
+create or replace function private.notify_forget_person(p_user uuid) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_addresses text[];
+begin
+  -- Where the person could be reached, read before anything is erased.
+  select array_remove(array[
+           lower(u.email::text), u.phone::text,
+           case when u.phone is not null and u.phone::text !~ '^\+' then '+' || u.phone::text end,
+           p.phone, np.phone], null)
+  into v_addresses
+  from auth.users u
+  left join public.profiles p on p.id = u.id
+  left join private.notification_preferences np on np.user_id = u.id
+  where u.id = p_user;
+
+  delete from private.notification_suppressions ns
+  where (ns.address = any (v_addresses) or lower(ns.address) = any (v_addresses))
+    and not exists (select 1 from auth.users o
+                    where o.id <> p_user and lower(o.email::text) = lower(ns.address))
+    and not exists (select 1 from public.profiles o where o.id <> p_user and o.phone = ns.address)
+    and not exists (select 1 from private.notification_preferences o
+                    where o.user_id is distinct from p_user and o.phone = ns.address)
+    and not exists (select 1 from public.seller_private o
+                    where lower(o.contact_email) = lower(ns.address) or o.contact_phone = ns.address
+                       or o.sinpe_movil_number = ns.address);
+
+  -- Messages to the person: whatever has not gone yet never will, and no
+  -- frozen text (which carries the address and the name) is kept.
+  update private.notification_deliveries d
+  set status = case when d.status in ('pending', 'sending') then 'skipped' else d.status end,
+      skip_reason = case when d.status in ('pending', 'sending') then 'no_recipient' else d.skip_reason end,
+      locked_by = null, locked_until = null, request_body = null, last_error = null
+  where d.recipient_user_id = p_user
+     or d.recipient in (select 'report:' || cr.id::text from public.content_reports cr
+                        where cr.reporter_id = p_user);
+  -- Messages to others (the shop, a team) about the person's orders: their
+  -- frozen text may name the person; the worker renders it again, from the
+  -- anonymised order, under the same idempotency key.
+  update private.notification_deliveries d
+  set request_body = null
+  where d.status in ('pending', 'sending') and d.request_body is not null
+    and d.context ->> 'order_id' in (select o.id::text from public.orders o where o.user_id = p_user);
+
+  delete from private.push_tokens t where t.user_id = p_user;
+  delete from private.notification_preferences np where np.user_id = p_user;
+  perform set_config('yuntera.erasing_account', 'on', true);
+  delete from private.commercial_consent_log l where l.user_id = p_user;
+  perform set_config('yuntera.erasing_account', '', true);
+end;
+$$;
+
+revoke execute on function private.notify_forget_person(uuid) from public, anon, authenticated, service_role;
+
+-- The same function as in 20261121082500_account_security.sql, with one
+-- addition: the call to notify_forget_person above, after the shop
+-- memberships go. Keep the two in step if either changes again.
+create or replace function public.delete_my_account() returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_user uuid := (select auth.uid());
+  v_blockers text[];
+  v_orders integer;
+  v_reviews integer;
+  v_shop uuid;
+begin
+  if v_user is null then
+    perform private.fail('not_authenticated');
+  end if;
+  -- An account with a second factor is deleted only from a session that passed it.
+  if not private.factor_ok() then
+    perform private.fail('second_factor_required');
+  end if;
+  -- One deletion at a time per account, and none for an account already gone.
+  -- Requests of this account in flight hold this row FOR KEY SHARE (see
+  -- check_request), so the deletion waits for them and they cannot follow it.
+  perform 1 from auth.users u where u.id = v_user and u.deleted_at is null for update;
+  if not found then
+    perform private.fail('not_authenticated');
+  end if;
+
+  v_blockers := private.account_deletion_blockers(v_user);
+  -- The first reason wins; each is spelled out so the client's list of
+  -- messages can be checked against this file.
+  case v_blockers[1]
+    when 'account_is_staff' then perform private.fail('account_is_staff');
+    when 'account_is_driver' then perform private.fail('account_is_driver');
+    when 'account_is_warehouse_staff' then perform private.fail('account_is_warehouse_staff');
+    when 'account_has_open_orders' then perform private.fail('account_has_open_orders');
+    when 'account_has_open_returns' then perform private.fail('account_has_open_returns');
+    when 'account_has_pending_refund' then perform private.fail('account_has_pending_refund');
+    when 'account_has_open_complaints' then perform private.fail('account_has_open_complaints');
+    when 'account_runs_open_shop' then perform private.fail('account_runs_open_shop');
+    when 'account_shop_has_stock' then perform private.fail('account_shop_has_stock');
+    when 'account_shop_has_open_orders' then perform private.fail('account_shop_has_open_orders');
+    when 'account_shop_has_balance' then perform private.fail('account_shop_has_balance');
+    else null; -- nothing in the way
+  end case;
+
+  select count(*) into v_orders from public.orders o where o.user_id = v_user;
+  select count(*) into v_reviews from public.reviews r where r.user_id = v_user;
+
+  -- Personal data the platform holds for the person.
+  update public.profiles
+  set full_name = null, phone = null, phone_verified_at = null,
+      marketing_opt_in = false, locale = 'es-CR'
+  where id = v_user;
+  delete from public.addresses a where a.user_id = v_user;
+  delete from public.consents c where c.user_id = v_user;
+
+  -- Kept records, without the person in them. The district stays (it decided
+  -- the shipping fee); the pin is rounded to about a kilometre.
+  update public.orders o
+  set ship_recipient_name = 'Cuenta eliminada', ship_phone = '', ship_senas = '',
+      ship_lat = round(o.ship_lat::numeric, 2)::double precision,
+      ship_lng = round(o.ship_lng::numeric, 2)::double precision,
+      ship_plus_code = null
+  where o.user_id = v_user;
+  update public.route_stops rs
+  set recipient_name = 'Cuenta eliminada', phone = '', senas = '',
+      lat = round(rs.lat::numeric, 2)::double precision,
+      lng = round(rs.lng::numeric, 2)::double precision,
+      plus_code = null, pod_recipient_name = null,
+      pod_lat = null, pod_lng = null
+  where rs.shipment_id in (
+    select sh.id from public.shipments sh
+    join public.orders o on o.id = sh.order_id
+    where o.user_id = v_user);
+  update public.return_requests r set reason = null where r.user_id = v_user;
+  update public.complaints c
+  set description = 'Texto eliminado junto con la cuenta.'
+  where c.user_id = v_user;
+  update public.content_reports cr set reporter_email = null
+  where cr.reporter_id = v_user;
+
+  -- Roles that ended earlier: an inactive staff row, a former driver, shops
+  -- left behind with nothing pending (the blockers above guarantee that). The
+  -- audit trail never held a driver's or a shop's personal columns (see
+  -- private.audit), so nothing of them is left there either.
+  delete from public.staff_members s where s.user_id = v_user and not s.active;
+  update public.drivers d
+  set full_name = 'Repartidor retirado', phone = '+50650000000', id_number = '000000000',
+      plate = null, license_class = null, license_expires_on = null,
+      inspection_expires_on = null, insurance_expires_on = null
+  where d.user_id = v_user;
+  -- Shops (already suspended or closed: see account_runs_open_shop) this
+  -- person leaves with nobody in charge.
+  for v_shop in
+    select m.seller_id from public.seller_members m
+    where m.user_id = v_user
+      and not exists (select 1 from public.seller_members o
+                      where o.seller_id = m.seller_id and o.user_id <> v_user
+                        and o.role in ('owner', 'admin'))
+  loop
+    perform private.close_abandoned_shop(v_shop);
+  end loop;
+  delete from public.seller_members m where m.user_id = v_user;
+  delete from private.mfa_failures f where f.user_id = v_user;
+  -- What the notifications add about the person (this file).
+  perform private.notify_forget_person(v_user);
+
+  -- The sign-in record: every session ends (and with check_request, every
+  -- access token issued for them stops working at once), no way to sign in
+  -- remains, and the e-mail address is free for a new account. The ban is
+  -- finite, as Auth's own bans are: Auth reads banned_until into a Go time
+  -- value, which has no 'infinity'.
+  delete from auth.sessions s where s.user_id = v_user;
+  delete from auth.mfa_factors f where f.user_id = v_user;
+  delete from auth.one_time_tokens t where t.user_id = v_user;
+  delete from auth.identities i where i.user_id = v_user;
+  update auth.users u
+  set email = v_user::text || '@cuenta-eliminada.invalid',
+      encrypted_password = '',
+      phone = null,
+      email_change = '', phone_change = '',
+      confirmation_token = '', recovery_token = '', email_change_token_new = '',
+      email_change_token_current = '', phone_change_token = '', reauthentication_token = '',
+      raw_user_meta_data = '{}'::jsonb,
+      last_sign_in_at = null,
+      banned_until = now() + interval '100 years',
+      deleted_at = now(),
+      updated_at = now()
+  where u.id = v_user;
+  -- Auth's own log of sign-ins, where the project still keeps one in the database.
+  begin
+    delete from auth.audit_log_entries l where l.payload ->> 'actor_id' = v_user::text;
+  exception when undefined_table then
+    null;
+  end;
+
+  insert into private.account_deletions (orders_kept, reviews_kept) values (v_orders, v_reviews);
+  return jsonb_build_object('orders_kept', v_orders, 'reviews_kept', v_reviews);
+end;
 $$;
