@@ -112,6 +112,16 @@ jobs:
             done
           done
 
+      - name: Start the notification worker and the fake providers
+        run: |
+          nohup pnpm --filter @yuntera/dev-notify fake > fake-providers.log 2>&1 &
+          nohup pnpm --filter @yuntera/dev-notify functions > functions.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -sf -o /dev/null http://127.0.0.1:54323/_fake/messages && \
+              curl -sf -o /dev/null http://127.0.0.1:54322/health && break
+            sleep 1
+          done
+
       - name: Install the browser
         run: pnpm --filter @yuntera/e2e exec playwright install --with-deps chromium
 
