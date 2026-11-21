@@ -184,6 +184,64 @@ commit;
 The person then signs in with the password and enrols again at once. Record
 the incident as above; the audit row is the trace.
 
+## Internal security review, 21 November 2026
+
+**Scope.** The database (every migration up to product photos), the four web
+apps, the local API stand-in and the notification worker, as they stood on
+21 November 2026. Native apps were in scope only as callers of the same
+functions.
+
+**Method.** Three reviewers worked from the code alone: one on what each kind
+of caller could reach through the Data API, one on money and state
+(refunds, returns, payments, cash on delivery, payouts, stock), one on abuse
+(floods, enumeration, oversized input, accounts that should have lost
+access). Every finding was reproduced on a local copy before it counted. Each
+class of problem was then fixed by a separate workstream; each fix was
+reviewed twice (security and behaviour), the review findings were fixed, and
+the three were merged and tested together.
+
+**What was found,** in classes (about fifty findings in all):
+
+- _Direct table access._ Column grants and write policies let a seller attach
+  an offer to another shop's listing, set a listing's tax rate, add a member
+  to a shop or reopen a refunded return, and let staff read every delivery
+  code.
+- _Money that could move twice._ Concurrent or repeated calls could approve
+  two returns of the last unit, refund a cancelled order and a return of it,
+  or collect cash on delivery for goods that had come back.
+- _Missing limits._ One account could fill the review queue, the dock or the
+  report queue, take a product off sale with unpaid orders, or send inputs
+  large enough to slow the database; a suspended driver kept reading
+  recipients' addresses.
+- _Disclosure by answer._ Shop registration said whether an identification
+  number was already registered; reviewer names could be looked up for any
+  account.
+
+**What was fixed, and how it is kept fixed.** No app role holds a table
+privilege; the guard suite fails if one comes back, if a function is not
+owner's-rights with an empty search path, if a role may execute a function the
+documented list does not name, or if a policy reads a table directly. Refunds
+go through one register with database constraints and a commit-time check;
+returns have a state machine; money-moving functions lock the order. The
+delivery code is private and locked per order. Limits are settings tested at
+their edge and on the honest path. Each finding has a test named after it in
+`supabase/tests/110_lockdown.sql`, `115_integrity.sql` or `120_limits.sql`, or
+in the two-session race tests (`packages/db/src/contract.integrity.test.ts`),
+and all of them pass on the merged database.
+
+**What remains open.**
+
+- Actions that existed only as direct writes now have no function: a seller
+  offering on another shop's existing listing, switching a variant off,
+  editing the shop's description or logo, moderating reviews, editing
+  categories, brands, synonyms, fees, zones, the calendar and settings, and
+  ops creating warehouse locations.
+- Nothing limits one person using many free accounts, and there is no edge
+  rate limit.
+- The hardening is verified locally only; it is not applied to the hosted
+  preview yet.
+- A new fee schedule does not re-check offers against the price floor.
+
 ## Mapping to OWASP ASVS Level 2
 
 ASVS is used as the checklist of record. The table maps its areas to where this
@@ -215,10 +273,13 @@ evidence are in [access control](../03-data/access-control.md),
 
 **Built and tested — on a local PostgreSQL, not yet on the real platform**
 
-- Row-level security on every table, least-privilege grants, and a caller
-  check inside every function, with test suites that run as each kind of user
-  and prove both what they can and cannot reach
-  (`supabase/tests/020_access.sql`, `070_api.sql`).
+- Functions are the only door: signed-in users and visitors hold no privilege
+  on any table, view or sequence, every function checks its caller, and
+  row-level security on every table is the second lock. Test suites run as
+  each kind of user and prove both what they can and cannot reach
+  (`supabase/tests/020_access.sql`, `070_api.sql`), and a guard
+  (`110_lockdown.sql`) fails if a later migration brings a table privilege
+  back or adds a function outside the documented lists.
 - No privileged key in any app. Staff are ordinary accounts whose reach comes
   from a revocable row. A second factor for staff and sellers (TOTP), enforced
   in the database: an account with a factor counts only after its code, and a
@@ -240,8 +301,15 @@ evidence are in [access control](../03-data/access-control.md),
 - An immutable audit log of changes to staff, sellers, drivers, settings, fees
   and payouts, holding no bank account number (last four digits only) and no
   personal column of a driver or a shop (only the names of those that changed).
-- The delivery PIN is never sent to the driver and locks after five wrong
-  attempts.
+- The delivery PIN is kept where no app role can read it, is shown only to
+  the shopper, and locks the order after five wrong attempts across all its
+  parcels; staff release it with a new code. Each wrong attempt is logged
+  with the driver.
+- One register for every refund, which refuses to refund the same thing twice
+  or more than was paid; returns follow an enforced state machine; functions
+  that move an order's money take its lock first.
+- Limits per account and per target on everything that fills a queue or
+  holds stock, and bounded inputs for visitors (see the review below).
 - Security headers on the storefront, including a Content-Security-Policy —
   with the known trade-off that it allows inline scripts
   ([decision 7](../02-architecture/decisions.md#7-a-static-content-security-policy-with-unsafe-inline-scripts)).
@@ -254,10 +322,11 @@ evidence are in [access control](../03-data/access-control.md),
 
 **Known gaps in what is built**
 
-- No rate limiting beyond platform defaults.
-- Nothing from 21 November 2026 on (second factor, per-request check,
-  deletion, notifications, photos) has been verified against a real Supabase
-  project; the earlier database was.
+- No limit on calls per minute or on request size beyond platform defaults;
+  the database's own limits are per account and per target.
+- The hardening of 21 November 2026 (migrations `082800` to `083100`) is
+  verified on a local PostgreSQL only and is not applied to the hosted
+  preview yet.
 - Phone numbers for WhatsApp and SMS are not verified by a code.
 - Continuous integration, dependency scanning and secret scanning are not set
   up.

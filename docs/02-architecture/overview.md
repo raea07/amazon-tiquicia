@@ -84,7 +84,9 @@ platform's backups and by keeping the door open to a split (see
 
 Clients never read or write tables directly to build a screen. They call
 functions: one function returns one screen's whole payload as JSON, and one
-function performs one business action. This is recorded as
+function performs one business action. Since the security review of
+21 November 2026 they cannot do otherwise: signed-in users and visitors hold
+no privilege on any table, view or sequence. This is recorded as
 [decision 1](decisions.md#1-database-functions-are-the-public-api).
 
 ```mermaid
@@ -263,8 +265,11 @@ These are not built. They are listed here so that no reader assumes otherwise.
   only way to mark a transfer as received is by hand: finance staff call
   `ops_confirm_payment` with the bank's reference. A real gateway needs a
   server-side webhook handler that calls `private.capture_payment`.
-- **Refunds are booked, not paid.** Cancellations and returns post to the
-  ledger; nothing sends money back to a shopper.
+- **Refunds are booked, not paid.** Cancellations, returns and parcels that
+  come back post to the ledger and to one refund register
+  ([decision 26](decisions.md#26-one-register-for-every-refund)), which
+  refuses to refund the same thing twice or more than was paid; nothing sends
+  money back to a shopper.
 - **One consumer for the outbox, and it sends nothing real yet.** The
   notification worker (`packages/notifications`, run as Edge Functions under
   `supabase/functions`) plans and sends messages, but no provider account is
@@ -273,7 +278,11 @@ These are not built. They are listed here so that no reader assumes otherwise.
 - **Uploads are product photos only.** Proof-of-delivery photos and photos
   from the phone apps are not built, and nothing deletes unused photo files on
   a schedule.
-- **No rate limiting** beyond what the platforms provide by default.
+- **No limit per minute or on request size.** The database limits what each
+  account may have open and bounds every input
+  ([decision 27](decisions.md#27-limits-are-per-account-and-per-target-never-per-address));
+  nothing limits calls per minute beyond what the platforms provide by
+  default.
 - **No English interface.** The schema and error messages carry English; the
   apps render Spanish only.
 - **Not run on real Supabase.** See the status note at the top.
