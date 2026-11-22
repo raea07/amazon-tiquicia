@@ -197,7 +197,7 @@ create table private.payment_attempts (
   -- Bare ids of people (here and below): they stay as the trail of who did
   -- what and lead to no one once an account is deleted.
   created_by uuid,
-  created_at timestamptz not null default now(),
+  created_at timestamptz not null default clock_timestamp(), -- ordered even within one transaction
   updated_at timestamptz not null default now(),
   finished_at timestamptz
 );
@@ -305,7 +305,7 @@ create table private.gateway_refunds (
   work_after timestamptz not null default now(),
   locked_until timestamptz,
   locked_by text,
-  requested_at timestamptz not null default now(),
+  requested_at timestamptz not null default clock_timestamp(),
   sent_at timestamptz,
   completed_at timestamptz,
   failed_at timestamptz,
@@ -1123,7 +1123,11 @@ begin
   end if;
 
   if v_attempt_id is null then
-    if v_type = 'payment.succeeded' then
+    -- A card's intent event can come before its session event has told us
+    -- the intent's id (ONVO does not say the intent inherits the session's
+    -- metadata): the session event, or a check, settles it. Only a session
+    -- nobody knows, or an intent carrying our own metadata, is money to keep.
+    if v_type = 'payment.succeeded' and (v_session is not null or v_meta_attempt is not null) then
       perform private.payment_review_add('unknown_reference', p_row, v_provider, v_env,
         (select id from public.orders where v_meta_order ~ '^[0-9a-f-]{36}$' and id = v_meta_order::uuid),
         null, coalesce(v_intent, v_session), v_amount, v_currency,

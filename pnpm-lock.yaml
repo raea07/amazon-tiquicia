@@ -1086,6 +1086,9 @@ importers:
       '@yuntera/notifications':
         specifier: workspace:*
         version: link:../../packages/notifications
+      '@yuntera/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
     devDependencies:
       '@types/node':
         specifier: ^22
