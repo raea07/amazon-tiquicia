@@ -22,7 +22,13 @@ import {
 } from "@yuntera/expo-kit/ui";
 import { type ReactNode, useState } from "react";
 import { View } from "react-native";
-import { ChangeStatus, ContactForm, FiscalForm, ShopNameForm } from "@/components/shop-changes";
+import {
+  ChangeStatus,
+  ContactForm,
+  FiscalForm,
+  ShopFaceCard,
+  ShopNameForm,
+} from "@/components/shop-changes";
 import { KYC_STATUS, SHOP_STATUS } from "@/lib/labels";
 import {
   checkPayoutRequest,
@@ -236,6 +242,8 @@ export default function AccountScreen() {
           </Stack>
         ) : null}
       </Card>
+
+      <ShopFaceCard />
 
       <Card>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>

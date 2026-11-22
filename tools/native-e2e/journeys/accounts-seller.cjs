@@ -16,6 +16,9 @@
 //    account declines its invitation in the app.
 // 5. The owner asks to rename the shop (a name too short first; offline,
 //    nothing is sent) and withdraws the request.
+// 5b. A description the owner asked for (in the seller centre) shows on the
+//    account screen with the seller centre's words, says where the
+//    description and the logo are changed, and is withdrawn from the app.
 // 6. The owner saves the shop's notification settings, the consent recorded
 //    as given in the app; a save after a change elsewhere is refused and the
 //    screen shows what is stored now.
@@ -311,6 +314,33 @@ const OWNER = "vendedor@yuntera.example";
   check(
     !changes.requests.some((r) => r.kind === "shop_name" && r.status === "pending"),
     "the request is withdrawn",
+  );
+
+  // ── 5b. The shop's description and logo ────────────────────────────────
+  await rpcAs(OWNER, "seller_request_shop_description", {
+    p_seller_id: shop.id,
+    p_description: "Muebles de cenízaro hechos a mano en Sarchí.",
+  });
+  await o.page.goto(`${BASE}/cuenta`, { waitUntil: "networkidle" });
+  await o.on("shop-face-description-status").waitFor();
+  check(
+    /Descripción nueva en revisión/.test(await o.said("shop-face-description-status")) &&
+      /la tienda muestra la que ya tenía/.test(await o.said("shop-face-description-status")),
+    "a description waiting for review shows with the seller centre's words",
+  );
+  check(
+    /logotipo/i.test(await o.said("shop-face-logo")) &&
+      /«Tienda»/.test(await o.said("shop-face-elsewhere")),
+    "the logo's state shows, and the card says where the description and logo are changed",
+  );
+  await o.shot("accounts-seller-06b-shop-face");
+  await o.on("shop-face-withdraw").click();
+  await o.on("shop-face-withdraw").waitFor({ state: "detached" });
+  check(
+    !(await rpcAs(OWNER, "seller_shop_changes", { p_seller_id: shop.id })).requests.some(
+      (r) => r.kind === "description" && r.status === "pending",
+    ),
+    "the description request is withdrawn from the app",
   );
 
   // ── 6. The shop's notification settings ────────────────────────────────

@@ -13,12 +13,15 @@ import {
   checkFiscal,
   checkInvite,
   checkShopName,
+  descriptionStatus,
   INVITATION_REVOKED,
   invitationSent,
   LEAVE_UNTICKED,
+  logoStatus,
   MEMBER_REMOVED,
   memberActions,
   ROLE_LABEL,
+  SHOP_FACE_ELSEWHERE,
 } from "./team";
 
 const centre = (path: string) =>
@@ -208,5 +211,90 @@ describe("requests to change the shop's details", () => {
     ]) {
       has(actions, text);
     }
+  });
+});
+
+describe("the shop's description and logo", () => {
+  const page = centre("app/tienda/page.tsx");
+  const day = (value: string) => `día ${value.slice(0, 10)}`;
+  const request = (status: "pending" | "approved" | "rejected", description: string | null) => ({
+    id: "6f0a2f5e-2222-4c1a-9d7a-2f1e8a6b4c3d",
+    kind: "description" as const,
+    status,
+    proposed: { description },
+    requested_at: "2026-11-20T10:00:00Z",
+    requested_by_name: "Ana",
+    decided_at: status === "pending" ? null : "2026-11-21T10:00:00Z",
+    note: status === "rejected" ? "Tiene un número de teléfono." : null,
+  });
+  const logo = (state: "pending" | "approved" | "rejected") => ({
+    logo_id: "6f0a2f5e-3333-4c1a-9d7a-2f1e8a6b4c3d",
+    state,
+    format: "png" as const,
+    width: 400,
+    height: 400,
+    template: "logos/x/{w}.webp",
+    published: false,
+    rejection_reason: state === "rejected" ? "No se lee." : null,
+    created_at: "2026-11-20T10:00:00Z",
+    decided_at: null,
+  });
+
+  it("says where a description request stands, with the seller centre's titles", () => {
+    assert.equal(descriptionStatus(null, day), null);
+    const asked = descriptionStatus(request("pending", "Muebles de cenízaro."), day);
+    assert.ok(asked && "title" in asked);
+    assert.equal(asked.title, "Descripción nueva en revisión");
+    assert.match(asked.body, /^La envió el día 2026-11-20\. /);
+    const removal = descriptionStatus(request("pending", null), day);
+    assert.ok(removal && "title" in removal);
+    assert.equal(removal.title, "Pidió quitar la descripción; está en revisión");
+    const refused = descriptionStatus(request("rejected", "x"), day);
+    assert.ok(refused && "title" in refused);
+    assert.equal(refused.tone, "danger");
+    assert.match(refused.body, /^Motivo: Tiene un número de teléfono\./);
+    assert.deepEqual(descriptionStatus(request("approved", "x"), day), {
+      note: "Última descripción aprobada el día 2026-11-21.",
+    });
+    for (const text of [
+      "Descripción nueva en revisión",
+      "Pidió quitar la descripción; está en revisión",
+      "Mientras la revisamos, la tienda muestra la que ya tenía.",
+      "Mientras lo revisamos, la tienda sigue mostrando la descripción que tiene.",
+      "No aprobamos la última descripción",
+      "La tienda sigue mostrando la anterior.",
+      "Última descripción aprobada el",
+    ]) {
+      has(page, text);
+    }
+  });
+
+  it("says where the logo stands, with the seller centre's words", () => {
+    const none = logoStatus({ logo: null, logo_waiting: null, logo_rejected: null });
+    assert.equal(none.waiting, null);
+    assert.equal(none.rejected, null);
+    has(page, none.current);
+    const waiting = logoStatus({
+      logo: "x/{w}",
+      logo_waiting: logo("pending"),
+      logo_rejected: null,
+    });
+    assert.equal(waiting.waiting?.title, "Logotipo en revisión");
+    has(page, waiting.waiting?.body ?? "");
+    const approved = logoStatus({
+      logo: null,
+      logo_waiting: logo("approved"),
+      logo_rejected: null,
+    });
+    assert.equal(approved.waiting?.title, "Logotipo aprobado");
+    has(page, approved.waiting?.body ?? "");
+    const refused = logoStatus({ logo: null, logo_waiting: null, logo_rejected: logo("rejected") });
+    assert.equal(refused.rejected?.body, "Motivo: No se lee.");
+    has(page, "No aprobamos el último logotipo");
+  });
+
+  it("sends the seller to the seller centre's page for what the app does not do", () => {
+    has(SHOP_FACE_ELSEWHERE, "«Tienda»");
+    has(centre("app/layout.tsx"), '{ href: "/tienda", label: "Tienda" }');
   });
 });

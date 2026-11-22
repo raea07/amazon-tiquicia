@@ -1,17 +1,21 @@
 import { parsePhone } from "@yuntera/core";
 import type { SellerShopChanges, ShopChangeKind } from "@yuntera/db";
 import { messageOf } from "@yuntera/expo-kit/api";
-import { useApiMutation } from "@yuntera/expo-kit/data";
+import { useApiMutation, useApiQuery } from "@yuntera/expo-kit/data";
 import {
   Alert,
   Button,
+  Card,
   ChoiceList,
+  ErrorState,
   FormMessage,
   formatDate,
+  LoadingState,
   Stack,
   Text,
   TextField,
 } from "@yuntera/expo-kit/ui";
+import type React from "react";
 import { useState } from "react";
 import { shopKey, useShop } from "@/lib/shops";
 import {
@@ -22,7 +26,12 @@ import {
   checkContact,
   checkFiscal,
   checkShopName,
+  descriptionStatus,
   latestRequest,
+  logoStatus,
+  SHOP_FACE_ADMIN_ONLY,
+  SHOP_FACE_ELSEWHERE,
+  type StatusText,
 } from "@/lib/team";
 
 const longDay = (value: string) =>
@@ -49,7 +58,13 @@ function useShopChange() {
   );
 }
 
-function WithdrawButton({ requestId }: { requestId: string }) {
+function WithdrawButton({
+  requestId,
+  testID = "shop-change-withdraw",
+}: {
+  requestId: string;
+  testID?: string;
+}) {
   const shop = useShop();
   const [error, setError] = useState<string | null>(null);
   const withdraw = useApiMutation((api) => api.sellerWithdrawShopChange(requestId), {
@@ -61,7 +76,7 @@ function WithdrawButton({ requestId }: { requestId: string }) {
         variant="secondary"
         loading={withdraw.isPending}
         loadingLabel="Retirando…"
-        testID="shop-change-withdraw"
+        testID={testID}
         onPress={async () => {
           setError(null);
           try {
@@ -297,5 +312,76 @@ export function FiscalForm({
         Pedir el cambio de datos fiscales
       </Button>
     </Stack>
+  );
+}
+
+function StatusAlert({
+  status,
+  testID,
+  children,
+}: {
+  status: StatusText;
+  testID: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Alert tone={status.tone} title={status.title} testID={testID}>
+      <Stack gap={2}>
+        <Text variant="small">{status.body}</Text>
+        {children}
+      </Stack>
+    </Alert>
+  );
+}
+
+/**
+ * The shop's description and logo, as the seller centre's "Tienda" page shows
+ * where they stand. A pending description can be withdrawn here; writing one
+ * and uploading a logo are done in the seller centre, and the card says so.
+ */
+export function ShopFaceCard() {
+  const shop = useShop();
+  const front = useApiQuery(shopKey(shop.id, "front"), (api) => api.sellerShopFront(shop.id), {
+    personal: true,
+  });
+  if (front.isPending) return <LoadingState />;
+  if (front.isError) return <ErrorState error={front.error} onRetry={() => void front.refetch()} />;
+  const data = front.data;
+  const description = descriptionStatus(data.description_request, longDay);
+  const logo = logoStatus(data);
+  return (
+    <Card testID="shop-face">
+      <Text variant="heading">Descripción y logotipo</Text>
+      <Text variant="bodyStrong">Descripción</Text>
+      {data.description ? (
+        <Text testID="shop-face-description">{data.description}</Text>
+      ) : (
+        <Text variant="small" tint="muted">
+          Todavía no tiene descripción.
+        </Text>
+      )}
+      {description && "note" in description ? (
+        <Text variant="small" tint="muted">
+          {description.note}
+        </Text>
+      ) : description ? (
+        <StatusAlert status={description} testID="shop-face-description-status">
+          {description.tone === "info" && data.can_edit && data.description_request ? (
+            <WithdrawButton requestId={data.description_request.id} testID="shop-face-withdraw" />
+          ) : null}
+        </StatusAlert>
+      ) : null}
+      <Text variant="bodyStrong">Logotipo</Text>
+      {logo.waiting ? <StatusAlert status={logo.waiting} testID="shop-face-logo-waiting" /> : null}
+      {logo.rejected ? (
+        <StatusAlert status={logo.rejected} testID="shop-face-logo-rejected" />
+      ) : null}
+      <Text variant="small" tint="muted" testID="shop-face-logo">
+        {logo.current}
+      </Text>
+      <Text variant="small" testID="shop-face-elsewhere">
+        {data.can_edit ? SHOP_FACE_ELSEWHERE : SHOP_FACE_ADMIN_ONLY}
+      </Text>
+    </Card>
   );
 }

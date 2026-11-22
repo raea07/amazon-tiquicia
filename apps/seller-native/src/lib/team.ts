@@ -8,8 +8,9 @@
  * Pure: `team.test.ts` runs it in Node and reads the seller centre's files.
  */
 
+import { apps } from "@yuntera/brand";
 import { parsePhone } from "@yuntera/core";
-import type { SellerShopChanges, SellerTeam, ShopChangeKind } from "@yuntera/db";
+import type { SellerShopChanges, SellerShopFront, SellerTeam, ShopChangeKind } from "@yuntera/db";
 
 type Member = SellerTeam["members"][number];
 type Invitation = SellerTeam["invitations"][number];
@@ -140,6 +141,7 @@ export const CHANGE_KIND: Record<ShopChangeKind, string> = {
   shop_name: "nombre de la tienda",
   fiscal: "datos fiscales",
   contact: "correo y teléfono",
+  description: "descripción",
 };
 
 type Request = SellerShopChanges["requests"][number];
@@ -151,9 +153,91 @@ export function askedFor(request: Request): string {
     const phone = request.proposed.contact_phone ?? "";
     return `${request.proposed.contact_email} y ${parsePhone(phone)?.formatted ?? phone}`;
   }
+  if (request.kind === "description") {
+    return request.proposed.description ? "una descripción nueva" : "quitar la descripción";
+  }
   return "los datos fiscales nuevos";
 }
 
 /** The latest request of one kind, if any. */
 export const latestRequest = (changes: SellerShopChanges, kind: ShopChangeKind) =>
   changes.requests.find((item) => item.kind === kind) ?? null;
+
+// ── The shop's face: description and logo ──────────────────────────────────
+//
+// The seller centre's words (apps/seller/src/app/tienda/page.tsx). The app
+// shows where each one stands and lets a pending description be withdrawn;
+// writing a description and uploading a logo are done in the seller centre.
+
+export interface StatusText {
+  tone: "info" | "danger";
+  title: string;
+  body: string;
+}
+
+/** Where the latest description request stands; `day` formats a date as the seller centre does. */
+export function descriptionStatus(
+  request: SellerShopFront["description_request"],
+  day: (value: string) => string,
+): StatusText | { note: string } | null {
+  if (!request) return null;
+  if (request.status === "pending") {
+    // An empty proposal asks to remove the description.
+    return request.proposed.description
+      ? {
+          tone: "info",
+          title: "Descripción nueva en revisión",
+          body: `La envió el ${day(request.requested_at)}. Mientras la revisamos, la tienda muestra la que ya tenía.`,
+        }
+      : {
+          tone: "info",
+          title: "Pidió quitar la descripción; está en revisión",
+          body: `Lo pidió el ${day(request.requested_at)}. Mientras lo revisamos, la tienda sigue mostrando la descripción que tiene.`,
+        };
+  }
+  if (request.status === "rejected") {
+    return {
+      tone: "danger",
+      title: "No aprobamos la última descripción",
+      body: `Motivo: ${request.note ?? ""}\nLa tienda sigue mostrando la anterior. Puede corregirla y enviarla de nuevo.`,
+    };
+  }
+  return request.decided_at
+    ? { note: `Última descripción aprobada el ${day(request.decided_at)}.` }
+    : null;
+}
+
+/** Where the shop's logo stands: one waiting, the last one refused, and what the shop shows. */
+export function logoStatus(
+  front: Pick<SellerShopFront, "logo" | "logo_waiting" | "logo_rejected">,
+) {
+  const waiting = front.logo_waiting;
+  return {
+    waiting: waiting
+      ? ({
+          tone: "info",
+          title: waiting.state === "pending" ? "Logotipo en revisión" : "Logotipo aprobado",
+          body:
+            waiting.state === "pending"
+              ? "Lo revisamos normalmente en un día hábil. Mientras tanto la tienda muestra el que tenía."
+              : "Lo estamos publicando; en unos minutos aparece en la tienda.",
+        } satisfies StatusText)
+      : null,
+    rejected: front.logo_rejected
+      ? ({
+          tone: "danger",
+          title: "No aprobamos el último logotipo",
+          body: `Motivo: ${front.logo_rejected.rejection_reason ?? ""}`,
+        } satisfies StatusText)
+      : null,
+    current: front.logo
+      ? "Publicado: la tienda muestra su logotipo."
+      : "Sin logotipo, la tienda muestra la inicial de su nombre.",
+  };
+}
+
+/** The app does not write the description or upload a logo: this says where it is done. */
+export const SHOP_FACE_ELSEWHERE = `Para escribir la descripción o subir el logotipo, ingrese a ${apps.seller.name} desde el navegador (${apps.seller.host}), en «Tienda». Lo revisamos antes de mostrarlo.`;
+
+export const SHOP_FACE_ADMIN_ONLY =
+  "Solo la persona dueña o administradora de la tienda puede cambiar la descripción y el logotipo.";
