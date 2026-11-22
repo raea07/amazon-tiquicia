@@ -19,6 +19,7 @@ export {
   passwordSignUp,
   typed,
 } from "./actions";
+export { invoiceFileResponse } from "./invoices";
 export { deleteUnneededPhotoFiles, photoPreviews } from "./photos";
 export {
   getRoles,

@@ -22,6 +22,7 @@ import {
   ReviewForm,
   SimulatePaymentForm,
 } from "@/components/order-actions";
+import { OrderInvoices } from "@/components/order-invoices";
 import { ReturnStatusList } from "@/components/return-status";
 import { requireViewer } from "@/lib/session";
 import { sessionApi } from "@/lib/supabase";
@@ -237,6 +238,14 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
               })}
             </ul>
           </section>
+
+          <Suspense fallback={<Skeleton className="h-24" />}>
+            <OrderInvoices
+              orderNumber={order.order_number}
+              paid={!awaitingPayment && order.status !== "payment_review"}
+              shippingMinor={order.shipping_minor}
+            />
+          </Suspense>
 
           <section aria-labelledby="historial">
             <h2 id="historial" className="text-xl font-bold">

@@ -22,6 +22,7 @@ export const SECTIONS = [
   { href: "/repartidores", label: "Repartidores", roles: ["ops"] },
   { href: "/bodegas", label: "Bodegas", roles: ["ops"] },
   { href: "/pagos-vendedores", label: "Pagos a vendedores", roles: ["finance"] },
+  { href: "/comprobantes", label: "Comprobantes", roles: ["finance"] },
   { href: "/cambios-tienda", label: "Cambios de tienda", roles: ["ops", "finance"] },
   { href: "/personal", label: "Personal", roles: [] },
   { href: "/auditoria", label: "Auditoría", roles: [] },

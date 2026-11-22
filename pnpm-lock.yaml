@@ -975,6 +975,9 @@ importers:
       '@yuntera/db':
         specifier: workspace:*
         version: link:../db
+      '@yuntera/invoicing':
+        specifier: workspace:*
+        version: link:../invoicing
       '@yuntera/ui':
         specifier: workspace:*
         version: link:../ui

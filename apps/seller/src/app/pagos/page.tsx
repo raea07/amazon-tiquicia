@@ -13,6 +13,7 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { FeeInvoices } from "@/components/fee-invoices";
 import { requireShop } from "@/lib/shop";
 
 export const metadata: Metadata = { title: "Pagos" };
@@ -243,6 +244,10 @@ async function Payouts() {
           productos ya está dentro del precio de venta: usted lo recibe aquí y lo declara.
         </p>
       </section>
+
+      <Suspense fallback={<Skeleton className="h-40" />}>
+        <FeeInvoices shopId={shop.id} />
+      </Suspense>
     </div>
   );
 }

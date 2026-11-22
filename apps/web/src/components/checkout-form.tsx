@@ -4,8 +4,9 @@ import type { Address } from "@yuntera/db";
 import type { ActionState } from "@yuntera/next-kit/client";
 import { formatPrice } from "@yuntera/ui";
 import { useActionState } from "react";
-import { placeOrder } from "@/app/actions";
+import { placeOrderWithInvoice } from "@/app/invoice-actions";
 import { FormMessage, SubmitButton } from "./forms";
+import { InvoiceRequestFields } from "./invoice-request-fields";
 
 const initial: ActionState = {};
 
@@ -43,7 +44,7 @@ export function CheckoutForm({
   codAvailable: boolean;
   idempotencyKey: string;
 }) {
-  const [state, action] = useActionState(placeOrder, initial);
+  const [state, action] = useActionState(placeOrderWithInvoice, initial);
   const deliverable = addresses.filter((address) => address.zone_active);
   const preferred = deliverable.find((address) => address.is_default) ?? deliverable[0];
 
@@ -123,6 +124,8 @@ export function CheckoutForm({
           })}
         </div>
       </fieldset>
+
+      <InvoiceRequestFields values={state.values} />
 
       <FormMessage state={state} />
 
