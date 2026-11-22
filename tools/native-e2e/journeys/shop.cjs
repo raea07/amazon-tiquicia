@@ -277,23 +277,22 @@ async function deliveredOrder() {
   await page.goto(`${BASE}/pedidos/${delivered.order_number}`, { waitUntil: "networkidle" });
   await page.getByText("Devolver o reclamar garantía").filter({ visible: true }).first().click();
   await page.getByText("Solicitar devolución").filter({ visible: true }).first().click();
-  const approved = page
-    .getByText(/cuando llegue a nuestra bodega le reembolsamos/)
-    .filter({ visible: true });
-  await approved.first().waitFor();
-  const approvedText = (await approved.first().innerText()).replace(/\s+/g, " ");
-  log("   ", approvedText);
-  check(
-    /Devolución aprobada/.test(approvedText) &&
-      /recoger el producto/.test(approvedText) &&
-      !/8 días/.test(approvedText),
-    "the withdrawal is approved, to be collected and refunded once it is back",
-  );
+  // The line is fully returned, so its form gives way to where the return
+  // stands, which says what happens next.
   await visible("return-status").waitFor({ timeout: 15_000 });
   const standing = (await visible("return-status").innerText()).replace(/\s+/g, " ");
+  log("   ", standing);
   check(
-    /Devolución de 1 unidad/.test(standing) && /Aprobada\. Le contactaremos/.test(standing),
-    "the order shows where the return stands",
+    /Devolución de 1 unidad/.test(standing) &&
+      /Aprobada\. Le contactaremos para recoger el producto/.test(standing) &&
+      /cuando llegue a nuestra bodega le reembolsamos/.test(standing),
+    "the withdrawal is approved, to be collected first and refunded once it is back",
+  );
+  check(
+    !/reembolsamos en un máximo de 8 días|Devolución en trámite/.test(
+      await page.locator("body").innerText(),
+    ),
+    "nothing promises a refund within 8 days any more",
   );
   check((await overflow()) <= 0, "the order with a return has no sideways scrolling");
   await shot("10b-return");

@@ -398,6 +398,7 @@ async function rpcAs(email, calls) {
   );
   await shot("08a-receive-over");
   await byId("receive-good").fill("10");
+  await byId("receive-damaged").fill("1");
   await noSideways("receiving");
   await shot("08-receive");
   await byId("receive-submit").click();
