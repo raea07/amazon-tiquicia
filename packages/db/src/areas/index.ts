@@ -22,6 +22,7 @@ import { limitsApi, limitsErrors } from "./limits";
 import { listingsApi, listingsErrors } from "./listings";
 import { nativeAccountsApi, nativeAccountsErrors } from "./native-accounts";
 import * as notifications from "./notifications";
+import { operationsApi, operationsErrors } from "./operations";
 import { paymentsApi, paymentsErrors } from "./payments";
 import * as peoplePayouts from "./people-payouts";
 import { photosApi, photosErrors } from "./photos";
@@ -29,7 +30,7 @@ import { sellerListingsApi, sellerListingsErrors } from "./seller-listings";
 import type { Caller, Messages } from "./types";
 import { webFollowupsApi, webFollowupsErrors } from "./web-followups";
 
-// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue and native-accounts areas name their exports uniquely, so
+// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, native-accounts and operations areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
 // would clash with each other, so their schemas and types are re-exported by
 // name.
@@ -73,6 +74,7 @@ export {
   type SellerNotificationSettings,
   type ShopChannelChoicesInput,
 } from "./notifications";
+export * from "./operations";
 export * from "./payments";
 export type {
   AuditTrailEntry,
@@ -112,6 +114,7 @@ export const areaErrors = {
   ...sellerListingsErrors,
   ...catalogueErrors,
   ...nativeAccountsErrors,
+  ...operationsErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -131,6 +134,7 @@ export const areaApi = (caller: Caller) => ({
   // Replaces the core searchProducts with one that also filters by brand.
   ...catalogueApi(caller),
   ...nativeAccountsApi(caller),
+  ...operationsApi(caller),
   // Last: some of its methods replace core ones (see followups.ts).
   ...followupsApi(caller),
 });

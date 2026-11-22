@@ -5,6 +5,23 @@
 
 begin;
 
+-- Staff change zones and the calendar from the console (084000). The cases
+-- below are about the arithmetic, so they run on the seeded service levels,
+-- with the real holiday of 1 December and nothing else closed in their window.
+update public.delivery_zones
+set cutoff_hour = 14, processing_weekdays = '{1,2,3,4,5,6}', delivery_weekdays = '{1,2,3,4,5,6}',
+    transit_min_days = 1, transit_max_days = 1
+where id = 'gam-core';
+update public.delivery_zones
+set cutoff_hour = 12, processing_weekdays = '{1,2,3,4,5}', delivery_weekdays = '{1,2,3,4,5}',
+    transit_min_days = 2, transit_max_days = 5
+where id = 'national';
+delete from public.zone_closures
+where zone_id in ('gam-core', 'national') and day between '2026-11-23' and '2026-12-10';
+delete from public.holidays where day between '2026-11-23' and '2026-12-10' and day <> '2026-12-01';
+insert into public.holidays (day, name) values ('2026-12-01', 'Día de la Abolición del Ejército')
+on conflict (day) do nothing;
+
 -- Builds an instant from a Costa Rican wall-clock time (UTC−6).
 create function pg_temp.cr(p_local timestamp) returns timestamptz
 language sql as $$ select (p_local + interval '6 hours') at time zone 'UTC' $$;

@@ -53,7 +53,8 @@ export const SHIPMENT_TRANSITIONS: Readonly<Record<ShipmentStatus, readonly Ship
   pending: ["picking", "cancelled"],
   picking: ["packed", "pending", "cancelled"],
   packed: ["ready_for_dispatch", "cancelled"],
-  ready_for_dispatch: ["out_for_delivery", "cancelled"],
+  // Back to packed when dispatch takes it off a route before it left.
+  ready_for_dispatch: ["out_for_delivery", "packed", "cancelled"],
   out_for_delivery: ["delivered", "delivery_failed"],
   // A failed attempt is retried or the parcel starts its way back.
   delivery_failed: ["ready_for_dispatch", "returning"],

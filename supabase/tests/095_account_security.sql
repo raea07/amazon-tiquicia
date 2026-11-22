@@ -1489,7 +1489,11 @@ begin
       -- kept as a bare id: who added a search synonym, hid a review or a
       -- seller's reply, or took a product down (083700)
       'search_synonyms.created_by', 'reviews.hidden_by', 'reviews.reply_hidden_by',
-      'products.taken_down_by');
+      'products.taken_down_by',
+      -- kept as a bare id: who opened or ended a zone closure, took a stop
+      -- off a route or closed a route (084000)
+      'zone_closure_periods.created_by', 'zone_closure_periods.ended_early_by',
+      'route_stops.removed_by', 'routes.closed_by');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end
 $$;
