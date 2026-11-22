@@ -376,6 +376,12 @@ const overflow = (page) =>
     .update(`activity:${sessionId}:${then}`)
     .digest("hex")
     .slice(0, 32);
+  // Leave the console first: a link prefetch still in flight from /pedidos
+  // passes the proxy, which renews the activity cookie, and could overwrite
+  // the old one set below (the step then timed out now and then, more often
+  // since the console has more sections to prefetch).
+  await staff.page.goto("about:blank");
+  await staff.page.waitForTimeout(1000);
   // Replaces the proxy's own cookie, which is Secure and HttpOnly like every one of ours.
   await staff.context.addCookies([
     { ...activity, value: `${then}.${mark}`, expires: Math.floor(Date.now() / 1000) + 600 },
