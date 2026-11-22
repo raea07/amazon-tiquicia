@@ -1,128 +1,123 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_OFFER_CONFIG, type OfferCandidate, selectFeaturedOffer } from "./offers";
+import { compareOffers, type OfferCandidate, selectFeaturedOffer, totalForShopper } from "./offers";
 
 const offer = (over: Partial<OfferCandidate> = {}): OfferCandidate => ({
-  offerId: "o1",
+  offerId: "00000000-0000-4000-8000-000000000001",
   sellerId: "s1",
   priceMinor: 2_000_000,
   shippingMinor: 0,
   availableQuantity: 5,
-  promiseDays: 1,
-  fulfilledByPlatform: false,
-  sellerScore: 90,
-  sellerStatus: "active",
   condition: "new",
-  listedAt: "2026-01-01T00:00:00Z",
+  listedAt: "2026-01-01T00:00:00+00:00",
   ...over,
 });
 
-describe("featured offer", () => {
-  it("returns nothing when there are no candidates", () => {
-    expect(selectFeaturedOffer([])).toEqual({ featured: null, ranked: [] });
-  });
+const ids = (list: OfferCandidate[]) => list.map((o) => o.offerId);
 
-  it("prefers the lower landed price, counting shipping", () => {
+/**
+ * The same cases as block "offer order" of supabase/tests/155_seller_listings.sql,
+ * which builds these offers in the database and checks the listing summary
+ * and get_product against them. Change one, change both.
+ */
+const ORDER_CASES: { name: string; offers: OfferCandidate[]; expected: string[] }[] = [
+  {
+    name: "in stock before out of stock, even when dearer",
+    offers: [
+      offer({ offerId: "a1", priceMinor: 1_500_000, availableQuantity: 0 }),
+      offer({ offerId: "a2", priceMinor: 2_500_000, availableQuantity: 3 }),
+    ],
+    expected: ["a2", "a1"],
+  },
+  {
+    name: "then the lower price",
+    offers: [
+      offer({ offerId: "b1", priceMinor: 2_100_000 }),
+      offer({ offerId: "b2", priceMinor: 1_990_000 }),
+      offer({ offerId: "b3", priceMinor: 2_000_000 }),
+    ],
+    expected: ["b2", "b3", "b1"],
+  },
+  {
+    name: "then the older offer",
+    offers: [
+      offer({ offerId: "c1", listedAt: "2026-03-01T10:00:00+00:00" }),
+      offer({ offerId: "c2", listedAt: "2026-02-01T10:00:00+00:00" }),
+    ],
+    expected: ["c2", "c1"],
+  },
+  {
+    name: "then the id, for offers listed in the same instant",
+    offers: [offer({ offerId: "d2" }), offer({ offerId: "d1" })],
+    expected: ["d1", "d2"],
+  },
+];
+
+describe("the order of a variant's offers", () => {
+  for (const c of ORDER_CASES) {
+    it(c.name, () => {
+      expect(ids(selectFeaturedOffer(c.offers).ranked)).toEqual(c.expected);
+    });
+  }
+
+  it("counts shipping when it differs by offer", () => {
     const { featured } = selectFeaturedOffer([
       offer({ offerId: "cheap-item", priceMinor: 1_900_000, shippingMinor: 250_000 }),
       offer({ offerId: "free-ship", priceMinor: 2_000_000, shippingMinor: 0 }),
     ]);
-    expect(featured?.offer.offerId).toBe("free-ship");
-    expect(featured?.landedMinor).toBe(2_000_000);
+    expect(featured?.offerId).toBe("free-ship");
+    expect(totalForShopper(featured as OfferCandidate)).toBe(2_000_000);
   });
 
-  it("lets a much faster, platform-fulfilled offer beat a slightly cheaper one", () => {
-    const { featured } = selectFeaturedOffer([
-      offer({ offerId: "slow", priceMinor: 1_960_000, promiseDays: 5 }),
-      offer({ offerId: "fast", priceMinor: 2_000_000, promiseDays: 1, fulfilledByPlatform: true }),
-    ]);
-    expect(featured?.offer.offerId).toBe("fast");
+  it("keeps the microseconds the database returns", () => {
+    const earlier = offer({ offerId: "z9", listedAt: "2026-01-01T00:00:00.000101+00:00" });
+    const later = offer({ offerId: "a0", listedAt: "2026-01-01T00:00:00.000102+00:00" });
+    expect(compareOffers(earlier, later)).toBeLessThan(0);
   });
 
-  it("does not let speed excuse a clearly worse price", () => {
-    const { featured, ranked } = selectFeaturedOffer([
-      offer({ offerId: "fair", priceMinor: 2_000_000, promiseDays: 3 }),
-      offer({
-        offerId: "pricey",
-        priceMinor: 2_400_000,
-        promiseDays: 0,
-        fulfilledByPlatform: true,
-      }),
-    ]);
-    expect(featured?.offer.offerId).toBe("fair");
-    expect(ranked.find((r) => r.offer.offerId === "pricey")?.ineligibleReason).toBe(
-      "price_not_competitive",
-    );
+  it("compares ids as PostgreSQL orders uuids, whatever their case", () => {
+    const a = offer({ offerId: "0A000000-0000-4000-8000-000000000000" });
+    const b = offer({ offerId: "09000000-0000-4000-8000-000000000000" });
+    expect(ids(selectFeaturedOffer([a, b]).ranked)).toEqual([b.offerId, a.offerId]);
   });
 
-  it("never features out-of-stock, suspended, low-score or used offers", () => {
-    const { featured, ranked } = selectFeaturedOffer([
-      offer({ offerId: "oos", priceMinor: 1_000_000, availableQuantity: 0 }),
-      offer({ offerId: "suspended", priceMinor: 1_000_000, sellerStatus: "suspended" }),
-      offer({ offerId: "low", priceMinor: 1_000_000, sellerScore: 40 }),
-      offer({ offerId: "used", priceMinor: 1_000_000, condition: "used" }),
-      offer({ offerId: "ok", priceMinor: 2_000_000 }),
-    ]);
-    expect(featured?.offer.offerId).toBe("ok");
-    const reasons = Object.fromEntries(ranked.map((r) => [r.offer.offerId, r.ineligibleReason]));
-    expect(reasons).toEqual({
-      ok: null,
-      oos: "out_of_stock",
-      suspended: "seller_suspended",
-      low: "seller_score_too_low",
-      used: "not_new",
-    });
-  });
-
-  it("judges price competitiveness against eligible offers only", () => {
-    // The out-of-stock bargain must not disqualify the offer people can actually buy.
-    const { featured } = selectFeaturedOffer([
-      offer({ offerId: "ghost", priceMinor: 1_000_000, availableQuantity: 0 }),
-      offer({ offerId: "real", priceMinor: 2_000_000 }),
-    ]);
-    expect(featured?.offer.offerId).toBe("real");
-  });
-
-  it("returns no featured offer when every candidate is ineligible", () => {
-    const { featured, ranked } = selectFeaturedOffer([offer({ availableQuantity: 0 })]);
-    expect(featured).toBeNull();
-    expect(ranked).toHaveLength(1);
-  });
-
-  it("breaks exact ties by listing date, then id", () => {
-    const { ranked } = selectFeaturedOffer([
-      offer({ offerId: "b", listedAt: "2026-03-01T00:00:00Z" }),
-      offer({ offerId: "a", listedAt: "2026-03-01T00:00:00Z" }),
-      offer({ offerId: "c", listedAt: "2026-02-01T00:00:00Z" }),
-    ]);
-    expect(ranked.map((r) => r.offer.offerId)).toEqual(["c", "a", "b"]);
-  });
-
-  it("is independent of input order", () => {
-    const offers = [
-      offer({ offerId: "x", priceMinor: 2_050_000, promiseDays: 1, sellerScore: 95 }),
-      offer({ offerId: "y", priceMinor: 2_000_000, promiseDays: 3, sellerScore: 80 }),
-      offer({ offerId: "z", priceMinor: 2_100_000, promiseDays: 1, fulfilledByPlatform: true }),
+  it("is the same whatever order the offers arrive in", () => {
+    const list = [
+      offer({ offerId: "e1", priceMinor: 1_000_000, availableQuantity: 0 }),
+      offer({ offerId: "e2", priceMinor: 2_000_000 }),
+      offer({ offerId: "e3", priceMinor: 1_500_000 }),
+      offer({ offerId: "e4", priceMinor: 1_500_000, listedAt: "2025-12-01T00:00:00+00:00" }),
     ];
-    const forward = selectFeaturedOffer(offers).ranked.map((r) => r.offer.offerId);
-    const backward = selectFeaturedOffer([...offers].reverse()).ranked.map((r) => r.offer.offerId);
-    expect(backward).toEqual(forward);
+    const expected = ["e4", "e3", "e2", "e1"];
+    expect(ids(selectFeaturedOffer(list).ranked)).toEqual(expected);
+    expect(ids(selectFeaturedOffer([...list].reverse()).ranked)).toEqual(expected);
+  });
+});
+
+describe("the offer shown first", () => {
+  it("is nothing when there are no offers", () => {
+    expect(selectFeaturedOffer([])).toEqual({ featured: null, ranked: [] });
   });
 
-  it("exposes a breakdown that sums to the score", () => {
-    const { featured } = selectFeaturedOffer([offer({ fulfilledByPlatform: true })]);
-    expect(featured).not.toBeNull();
-    if (!featured) return;
-    const { price, speed, seller, platformFulfillment } = featured.breakdown;
-    expect(price + speed + seller + platformFulfillment).toBeCloseTo(featured.score, 12);
-    expect(featured.score).toBeLessThanOrEqual(1);
+  it("is the first new offer: a cheaper used one is listed, not shown first", () => {
+    const { featured, ranked } = selectFeaturedOffer([
+      offer({ offerId: "used", priceMinor: 1_000_000, condition: "used" }),
+      offer({ offerId: "new", priceMinor: 2_000_000 }),
+    ]);
+    expect(featured?.offerId).toBe("new");
+    expect(ids(ranked)).toEqual(["used", "new"]);
   });
 
-  it("rejects weights that do not sum to one", () => {
-    expect(() =>
-      selectFeaturedOffer([offer()], {
-        ...DEFAULT_OFFER_CONFIG,
-        weights: { price: 0.9, speed: 0.9, seller: 0, platformFulfillment: 0 },
-      }),
-    ).toThrow(RangeError);
+  it("is an out-of-stock new offer when no offer has stock, so the page can say so", () => {
+    const { featured } = selectFeaturedOffer([
+      offer({ offerId: "x", availableQuantity: 0, priceMinor: 3_000_000 }),
+      offer({ offerId: "y", availableQuantity: 0, priceMinor: 2_000_000 }),
+    ]);
+    expect(featured?.offerId).toBe("y");
+  });
+
+  it("does not change the list it was given", () => {
+    const list = [offer({ offerId: "f2", priceMinor: 2 }), offer({ offerId: "f1", priceMinor: 1 })];
+    selectFeaturedOffer(list);
+    expect(ids(list)).toEqual(["f2", "f1"]);
   });
 });

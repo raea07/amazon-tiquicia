@@ -114,6 +114,7 @@ async function Sections() {
       items={[
         { href: "/", label: "Resumen" },
         { href: "/productos", label: "Productos" },
+        { href: "/tienda", label: "Tienda" },
         { href: "/inventario", label: "Inventario" },
         { href: "/pedidos", label: "Pedidos", count: overview.counts.to_pack },
         { href: "/pagos", label: "Pagos" },

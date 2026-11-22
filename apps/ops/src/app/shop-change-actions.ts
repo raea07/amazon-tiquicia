@@ -12,6 +12,7 @@ import {
   GENERIC_ERROR,
   messageOf,
   redirectTo,
+  refreshShopCatalog,
   sessionApi,
   signInPath,
   typed,
@@ -43,6 +44,8 @@ export async function decideShopChange(
   if (!(await currentStaff())) redirectTo(signInPath("/cambios-tienda"));
   try {
     await (await sessionApi()).opsDecideShopChange(requestId.data, approve, note || null);
+    // A name or a description shoppers read changed: the shop shows it now.
+    if (approve) await refreshShopCatalog();
   } catch (error) {
     return { error: messageOf(error), values: typed(formData, "note") };
   }

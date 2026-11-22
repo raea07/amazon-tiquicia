@@ -133,8 +133,8 @@ export const listingsErrors = {
   },
   listing_shared: {
     "es-CR":
-      "Otro vendedor también vende desde esta publicación, así que no se puede archivar. Ponga su oferta en pausa.",
-    en: "Another seller also sells from this listing, so it cannot be archived. Pause your offer instead.",
+      "Otra tienda también vende desde esta publicación, así que no se puede archivar ni volver a borrador. Si usted ya no la vende, ponga su oferta en pausa.",
+    en: "Another shop also sells from this listing, so it cannot be archived or taken back to draft. If you no longer sell it, pause your offer instead.",
   },
   published_listing_locked: {
     "es-CR":

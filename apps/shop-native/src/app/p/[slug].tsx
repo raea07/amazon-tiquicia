@@ -366,10 +366,10 @@ export default function ProductScreen() {
         <Stack gap={3}>
           <SectionHeader title="Otras ofertas de este producto" />
           <Text variant="small" tint="muted">
-            Destacamos la oferta con la mejor combinación de precio, rapidez de entrega y desempeño
-            del vendedor.
+            Mostramos primero la oferta nueva con existencias y el precio más bajo; si cuestan lo
+            mismo, la que se publicó antes. Puede comprar cualquiera de estas.
           </Text>
-          <TextLink href="/ayuda">Cómo la elegimos</TextLink>
+          <TextLink href="/ayuda">Cómo las ordenamos</TextLink>
           {others.map((offer) => (
             <Card key={offer.offer_id} testID="other-offer">
               <Money amountMinor={offer.price_minor} listAmountMinor={offer.list_price_minor} />

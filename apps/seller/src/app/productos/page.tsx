@@ -1,10 +1,20 @@
+import type { PausedOffer } from "@yuntera/db";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { DataTable, PageHeader } from "@yuntera/next-kit/shell";
-import { Alert, Badge, buttonClass, EmptyState, formatPrice, Skeleton } from "@yuntera/ui";
+import {
+  Alert,
+  Badge,
+  buttonClass,
+  EmptyState,
+  formatDate,
+  formatPrice,
+  Skeleton,
+} from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { OfferForm } from "@/components/forms";
+import { ResumeOfferForm, WithdrawOfferForm } from "@/components/seller-listing-forms";
 import { FULFILLMENT_LABEL, PRODUCT_STATUS } from "@/lib/labels";
 import { requireShop } from "@/lib/shop";
 
@@ -16,9 +26,14 @@ export default function ListingsPage({ searchParams }: PageProps<"/productos">) 
       <PageHeader
         title="Productos"
         actions={
-          <Link href="/productos/nuevo" className={buttonClass()}>
-            Publicar un producto
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/productos/nuevo" className={buttonClass()}>
+              Publicar un producto
+            </Link>
+            <Link href="/productos/ofrecer" className={buttonClass({ variant: "secondary" })}>
+              Vender uno que ya existe
+            </Link>
+          </div>
         }
       >
         Sus publicaciones, su precio y si están a la venta.
@@ -35,9 +50,10 @@ export default function ListingsPage({ searchParams }: PageProps<"/productos">) 
 async function Listings({ searchParams }: Pick<PageProps<"/productos">, "searchParams">) {
   const { shop } = await requireShop("/productos");
   const api = await sessionApi();
-  const [listings, edits] = await Promise.all([
+  const [listings, edits, paused] = await Promise.all([
     api.sellerListings(shop.id),
     api.sellerListingEdits(shop.id),
+    api.sellerPausedOffers(shop.id),
   ]);
   const editOf = new Map(edits.map((edit) => [edit.product_id, edit]));
   const created = (await searchParams).creado;
@@ -72,6 +88,8 @@ async function Listings({ searchParams }: Pick<PageProps<"/productos">, "searchP
         </Alert>
       ) : null}
 
+      {paused.length > 0 ? <PausedOffers offers={paused} /> : null}
+
       <DataTable
         caption="Sus productos"
         head={["Producto", "Estado", "Existencias", "Oferta destacada", "Precio y venta"]}
@@ -90,6 +108,15 @@ async function Listings({ searchParams }: Pick<PageProps<"/productos">, "searchP
                 <p className="mt-0.5 text-xs text-ink-muted">
                   {FULFILLMENT_LABEL[listing.fulfillment]}
                 </p>
+                {edit && !edit.editable && listing.product_status !== "archived" ? (
+                  <div className="mt-1">
+                    <Badge tone="info">De otra tienda</Badge>
+                    <p className="mt-1 max-w-64 text-xs text-ink-muted">
+                      Usted cambia su precio y sus existencias; el texto, las fotos y el paquete los
+                      cambia la tienda que lo publicó.
+                    </p>
+                  </div>
+                ) : null}
                 {edit?.editable ? (
                   <p className="mt-1">
                     <Link
@@ -153,6 +180,15 @@ async function Listings({ searchParams }: Pick<PageProps<"/productos">, "searchP
                   <div className="mt-3">
                     <OfferForm listing={listing} />
                   </div>
+                  {edit && !edit.editable ? (
+                    <div className="mt-4 border-t border-border pt-3">
+                      <WithdrawOfferForm
+                        offerId={listing.offer_id}
+                        priceMinor={listing.price_minor}
+                        label={`${listing.title}${listing.variant_name ? `, ${listing.variant_name}` : ""}`}
+                      />
+                    </div>
+                  ) : null}
                 </details>
               </td>
             </tr>
@@ -160,10 +196,76 @@ async function Listings({ searchParams }: Pick<PageProps<"/productos">, "searchP
         })}
       </DataTable>
       <p className="max-w-3xl text-sm text-ink-muted">
-        Cuando varios vendedores ofrecen el mismo producto, destacamos la oferta con la mejor
-        combinación de precio, rapidez de entrega y desempeño del vendedor. Las demás siguen
-        visibles en la página del producto.
+        Cuando varias tiendas venden el mismo producto, la oferta destacada es la nueva que tiene
+        existencias y el precio más bajo; si cuestan lo mismo, la que se publicó antes. Las demás
+        siguen visibles en la página del producto y se pueden comprar.
       </p>
     </div>
+  );
+}
+
+const PAUSED_REASON: Record<PausedOffer["reason"], (offer: PausedOffer) => string> = {
+  fee_change: (offer) =>
+    `Las tarifas cambiaron el ${formatDate(offer.paused_at, { day: "numeric", month: "long" })} y, con su precio actual, cada venta le costaría más en comisiones y cobros de lo que recibe. Por eso la pusimos en pausa.`,
+  listing_edit: (offer) =>
+    `El ${formatDate(offer.paused_at, { day: "numeric", month: "long" })} se aprobó un cambio del paquete o de la categoría de esta publicación y, con su precio actual, cada venta le costaría más en tarifas de lo que recibe. Por eso la pusimos en pausa.`,
+};
+
+/**
+ * Offers paused because their price no longer covers the fees: why, the
+ * lowest price that does, and the way back on sale (a new price and on sale
+ * again, in one step).
+ */
+function PausedOffers({ offers }: { offers: PausedOffer[] }) {
+  return (
+    <section
+      aria-labelledby="en-pausa"
+      className="rounded-lg border-2 border-warning bg-surface p-5"
+      data-testid="paused-offers"
+    >
+      <h2 id="en-pausa" className="text-lg font-bold">
+        {offers.length === 1
+          ? "Una oferta en pausa porque su precio ya no cubre las tarifas"
+          : `${offers.length} ofertas en pausa porque su precio ya no cubre las tarifas`}
+      </h2>
+      <p className="mt-1 text-sm text-ink-muted">
+        Para venderla otra vez, ponga un precio que cubra las tarifas y guárdelo: vuelve a la venta
+        en el mismo paso.
+      </p>
+      <ul className="mt-4 flex flex-col gap-4">
+        {offers.map((offer) => {
+          const label = `${offer.title}${offer.variant_name ? `, ${offer.variant_name}` : ""}`;
+          return (
+            <li key={offer.offer_id} className="border-t border-border pt-4">
+              <p className="font-semibold break-words">{label}</p>
+              <p className="mt-0.5 text-xs text-ink-muted">
+                {offer.sku_code} · precio en pausa {formatPrice(offer.price_minor)}
+              </p>
+              <p className="mt-2 text-sm">{PAUSED_REASON[offer.reason](offer)}</p>
+              {offer.min_price_minor ? (
+                <p className="mt-1 text-sm font-semibold">
+                  El precio más bajo que cubre las tarifas es {formatPrice(offer.min_price_minor)}.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm font-semibold">
+                  Con las tarifas actuales ningún precio cubre el costo de venderlo así. Escríbanos
+                  y lo revisamos con usted.
+                </p>
+              )}
+              {offer.min_price_minor ? (
+                <div className="mt-3">
+                  <ResumeOfferForm
+                    offerId={offer.offer_id}
+                    label={label}
+                    suggestedMinor={offer.min_price_minor}
+                    listPriceMinor={offer.list_price_minor}
+                  />
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

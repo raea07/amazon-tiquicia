@@ -1,6 +1,11 @@
 import "server-only";
 import type { SearchInput } from "@yuntera/db";
-import { CATALOG_TAG, productPageTags, suggestionTags } from "@yuntera/next-kit/cache-tags";
+import {
+  CATALOG_TAG,
+  productPageTags,
+  shopPageTags,
+  suggestionTags,
+} from "@yuntera/next-kit/cache-tags";
 import { cacheLife, cacheTag } from "next/cache";
 import { publicApi } from "./supabase";
 
@@ -58,4 +63,12 @@ export async function getSuggestions(prefix: string) {
   // Tagged so a take-down drops the suggestions too (WEB-6).
   cacheTag(...suggestionTags());
   return publicApi().suggestProducts(prefix, 6);
+}
+
+/** A shop's public page: dropped with the catalogue (a logo or description approved, a shop suspended). */
+export async function getShopPage(slug: string) {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag(...shopPageTags(slug));
+  return publicApi().getShop(slug);
 }

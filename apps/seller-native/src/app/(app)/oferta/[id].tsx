@@ -209,6 +209,13 @@ export default function OfferScreen() {
         </Text>
       ) : null}
 
+      {edit && !edit.editable && listing.product_status !== "archived" ? (
+        <Alert tone="info" title="Publicación de otra tienda" testID="shared-listing">
+          Usted vende en esta publicación, que creó otra tienda: aquí cambia su precio, si está a la
+          venta y sus existencias. El título, las fotos y la descripción los cambia esa tienda.
+        </Alert>
+      ) : null}
+
       <PriceForm key={listing.offer_id} listing={listing} />
 
       <Card>

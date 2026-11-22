@@ -26,6 +26,12 @@ export function productPageTags(slug: string, offerIds: readonly string[] = []):
   return [CATALOG_TAG, productTag(slug), ...offerIds.filter((id) => UUID.test(id)).map(offerTag)];
 }
 
+/** A shop's public page: the whole catalogue and the shop. */
+export const shopTag = (slug: string) => `shop:${slug}`;
+export function shopPageTags(slug: string): string[] {
+  return SAFE.test(slug) ? [CATALOG_TAG, shopTag(slug)] : [CATALOG_TAG];
+}
+
 /** Search suggestions: dropped with the catalogue, never by a shopper's action. */
 export const suggestionTags = () => [CATALOG_TAG, SUGGESTIONS_TAG];
 

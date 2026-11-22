@@ -1,5 +1,5 @@
 import { brand } from "@yuntera/brand";
-import { DEFAULT_OFFER_CONFIG, DEFAULT_RANKING } from "@yuntera/core";
+import { DEFAULT_RANKING } from "@yuntera/core";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -15,10 +15,10 @@ const percent = (value: number) => `${Math.round(value * 100)} %`;
  * The texts under "Términos" and "Privacidad" are working drafts so the product
  * is honest about what it does; they must be reviewed by a Costa Rican lawyer
  * before launch. The ranking explanation reads its numbers from the same
- * constants the code uses, so it cannot drift from what actually happens.
+ * constants the code uses, so it cannot drift from what actually happens; the
+ * offer order is described in words (packages/core/src/offers.ts).
  */
 export default function HelpPage() {
-  const offer = DEFAULT_OFFER_CONFIG.weights;
   const ranking = DEFAULT_RANKING.weights;
   return (
     <div className="shell max-w-3xl py-8">
@@ -130,11 +130,12 @@ export default function HelpPage() {
             <li>Los productos agotados o con muchas devoluciones bajan.</li>
           </ul>
           <p>
-            Cuando varios vendedores ofrecen el mismo producto, destacamos una oferta según el
-            precio ({percent(offer.price)}), la rapidez de entrega ({percent(offer.speed)}), el
-            desempeño del vendedor ({percent(offer.seller)}) y si sale de nuestra bodega (
-            {percent(offer.platformFulfillment)}). Las demás ofertas siempre se muestran. Los
-            resultados pagados, cuando existan, llevarán la etiqueta “Patrocinado”.
+            Cuando varias tiendas venden el mismo producto, mostramos primero la oferta nueva que
+            tiene existencias y el precio más bajo para usted. Si dos cuestan lo mismo, va primero
+            la que se publicó antes. No pesa nada más: ni el tamaño de la tienda ni lo que le paga a{" "}
+            {brand.name}. Las demás ofertas siempre se muestran debajo, cada una con la tienda que
+            la vende, y usted puede comprar la que prefiera. Los resultados pagados, cuando existan,
+            llevarán la etiqueta “Patrocinado”.
           </p>
         </section>
 

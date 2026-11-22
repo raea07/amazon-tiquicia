@@ -1266,3 +1266,46 @@ says so: locally, never on a real project.
   account is deleted, with access closed (privacy.md).
 - Only proven against a local fake of Hacienda; signature acceptance needs
   the sandbox credentials.
+
+## 39. One offer order everywhere, and shared listings without review
+
+**Context.** The lockdown closed the table writes through which a shop could
+offer on another shop's listing, switch a variant off, take a listing back to
+draft, or change its description and logo. Bringing an offer on an existing
+product back raised three questions: which offer a shopper sees first, whether
+such an offer needs review, and who owns a listing several shops sell.
+
+**Decision.**
+
+- One deterministic order for a variant's offers, in SQL and TypeScript: in
+  stock first, then the lowest total for the shopper, then the older offer,
+  then the id. The weighted featured-offer score is retired: it disagreed with
+  what search showed, could not run in the database, and its seller part was
+  a constant. A parity test reads the SQL order (`offers.parity.test.ts`).
+- An offer on another shop's product needs no review (its content was
+  reviewed); only verified, active shops may add one, at most 30 a day.
+- The creating shop keeps the content and edits it through review; nobody
+  else does. It cannot archive or draft a listing on which another active
+  shop has an offer on sale; a paused offer holds nothing back (a forgotten
+  pause would otherwise block the creating shop for good), and the offering
+  shop can withdraw its offer for good. When the creating shop closes, each
+  listing another active shop offers passes to the shop with the oldest offer
+  on sale (the oldest paused one when none is), with its published photos.
+- A package or category edit that would leave other shops' offers below the
+  price floor is not refused for prices the creating shop does not set, but
+  staff see those offers in the review and must confirm; the offers are then
+  paused and their shops are told.
+- When the offer in a cart can no longer be bought, the cart names another
+  shop's offer of the same variant (the first in the same order) and offers
+  to swap the line; it never swaps silently.
+- The shop's description is a reviewed shop change; its logo goes through the
+  photo pipeline; both are shown as text or images only, never markup.
+
+**Consequences.**
+
+- A faster offer no longer beats a slightly cheaper one; every offer's
+  delivery date is shown next to its price. Bringing speed back is a change to
+  both sides and the help page.
+- A shop that takes over a listing cannot remove the photos the closed shop
+  uploaded; staff can.
+- Details: [offers and the product page](../04-algorithms/featured-offer.md).
