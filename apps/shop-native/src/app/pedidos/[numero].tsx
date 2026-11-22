@@ -24,6 +24,12 @@ import { Link, Stack as Nav, Redirect, useLocalSearchParams } from "expo-router"
 import { StyleSheet, View } from "react-native";
 import { OrderStatusBadge, ShipmentStatusBadge } from "@/components/badges";
 import {
+  GATEWAY_STAGES,
+  GatewayPayment,
+  RefundList,
+  WAITING_STAGES,
+} from "@/components/gateway-payment";
+import {
   CancelOrder,
   Expandable,
   ReturnForm,
@@ -114,6 +120,15 @@ export default function OrderScreen() {
     personal: true,
     enabled: order.isSuccess,
   });
+  // How its payment stands at the gateway; asked again while it changes on its own.
+  const payment = useApiQuery(["order-payment", number], (api) => api.orderPayment(number), {
+    personal: true,
+    enabled: order.isSuccess,
+    refetchInterval: (query) => {
+      const stage = query.state.data?.stage;
+      return stage && WAITING_STAGES.includes(stage) ? 3000 : false;
+    },
+  });
 
   if (status === "signedOut") return <Redirect href={signInPath(`/pedidos/${number}`)} />;
   if (order.isPending) return <LoadingState label="Cargando su pedido…" />;
@@ -160,7 +175,12 @@ export default function OrderScreen() {
         </Text>
       </Stack>
 
-      {awaitingPayment ? <PaymentInstructions order={o} /> : null}
+      {awaitingPayment && payment.data && GATEWAY_STAGES.includes(payment.data.stage) ? (
+        <GatewayPayment payment={payment.data} />
+      ) : awaitingPayment && payment.data ? (
+        <PaymentInstructions order={o} />
+      ) : null}
+      {payment.data ? <RefundList payment={payment.data} /> : null}
 
       {o.delivery_pin ? (
         <View style={styles.pin} testID="delivery-code">
