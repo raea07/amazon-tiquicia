@@ -113,6 +113,7 @@ async function Checkout() {
           codAvailable={quote.cod_available ?? false}
           throughGateway={quote.payments_mode !== "sandbox"}
           idempotencyKey={idempotencyKey}
+          shippingMinor={quote.shipping_minor ?? 0}
         />
         <p className="mt-6 text-sm">
           <Link href="/cuenta#direcciones" className="text-link underline">
@@ -126,7 +127,7 @@ async function Checkout() {
         aria-label="Resumen del pedido"
         className="h-fit rounded-lg border border-border bg-surface p-5"
       >
-        <h2 className="text-lg font-bold">3. Resumen del pedido</h2>
+        <h2 className="text-lg font-bold">4. Resumen del pedido</h2>
         <ul className="mt-4 space-y-3 text-sm">
           {lines.map((line) => (
             <li key={line.offer_id} className="flex justify-between gap-3">

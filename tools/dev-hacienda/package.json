@@ -1,0 +1,22 @@
+{
+  "name": "@yuntera/dev-hacienda",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local only: a fake of Hacienda's token and reception API that records what it is sent and answers as the API reference documents (accept, reject, late, twice, down, callbacks), and a host that serves the invoicing Edge Functions from Node. Never deployed; nothing here talks to Hacienda.",
+  "scripts": {
+    "fake": "tsx src/fake-hacienda.ts",
+    "functions": "tsx src/functions-host.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@yuntera/invoicing": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.1.1"
+  }
+}

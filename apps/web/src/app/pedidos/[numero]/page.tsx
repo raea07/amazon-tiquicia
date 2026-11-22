@@ -22,6 +22,7 @@ import {
   ReviewForm,
   SimulatePaymentForm,
 } from "@/components/order-actions";
+import { OrderInvoices } from "@/components/order-invoices";
 import { MoneyInReview, PaymentPanel, RefundList } from "@/components/payment-panel";
 import { ReturnStatusList } from "@/components/return-status";
 import { requireViewer } from "@/lib/session";
@@ -268,6 +269,20 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
               })}
             </ul>
           </section>
+
+          <Suspense fallback={<Skeleton className="h-24" />}>
+            <OrderInvoices
+              orderNumber={order.order_number}
+              paid={["captured", "partially_refunded", "refunded"].includes(
+                order.payment?.status ?? "",
+              )}
+              payOnDelivery={
+                order.payment_method === "cash_on_delivery" &&
+                !["cancelled", "refunded"].includes(order.status)
+              }
+              shippingMinor={order.shipping_minor}
+            />
+          </Suspense>
 
           <section aria-labelledby="historial">
             <h2 id="historial" className="text-xl font-bold">

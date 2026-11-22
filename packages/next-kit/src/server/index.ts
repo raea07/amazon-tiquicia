@@ -20,6 +20,7 @@ export {
   typed,
 } from "./actions";
 export { endedSessionNotice } from "./auth-guard";
+export { invoiceFileResponse } from "./invoices";
 export { deleteUnneededPhotoFiles, photoPreviews } from "./photos";
 export {
   getRoles,

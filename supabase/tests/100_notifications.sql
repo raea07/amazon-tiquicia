@@ -1180,7 +1180,8 @@ begin
     update private.outbox_jobs set status = 'pending', attempts = 0, done_at = null, last_error = null
     where consumer = 'notify';
   $q$);
-  assert (select count(*) from pending_jobs) = (select count(*) from private.outbox_jobs where status = 'pending'),
+  assert (select count(*) from pending_jobs)
+         = (select count(*) from private.outbox_jobs where consumer = 'notify' and status = 'pending'),
     'restored';
 
   perform dblink_disconnect('a');

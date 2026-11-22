@@ -1,0 +1,22 @@
+{
+  "name": "@yuntera/invoicing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Electronic invoices for Hacienda (v4.4): the document XML, its clave and consecutive number, the XAdES-EPES signature, the client for Hacienda's token and reception API, and the worker that signs and sends. Web-standard TypeScript that runs under Node (tests, local stack) and as a Supabase Edge Function.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./codes": "./src/codes.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "5.9.3",
+    "vitest": "5.1.1"
+  }
+}

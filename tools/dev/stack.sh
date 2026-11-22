@@ -4,9 +4,11 @@
 # one machine) can each have their own without colliding.
 #
 #   tools/dev/stack.sh up [lane]              database + API + build + start the apps,
-#                                             plus the notification and payments workers against the
-#                                             local fake providers and the fake payment gateway
-#   tools/dev/stack.sh notify [lane]          (re)start only the workers (the functions host) and the fakes
+#                                             plus the notification, payments and invoice workers against
+#                                             the local fake providers, the fake payment gateway and the
+#                                             fake of Hacienda
+#   tools/dev/stack.sh notify [lane]          (re)start only the notification and payments workers and their fakes
+#   tools/dev/stack.sh invoicing [lane]       (re)start only the invoice worker and the fake of Hacienda
 #   tools/dev/stack.sh api [lane]             database + API only (enough for most tests)
 #   tools/dev/stack.sh env [lane]             print the lane's settings as `export` lines
 #   tools/dev/stack.sh e2e [lane] [journey…]  run browser journeys against the lane
@@ -20,9 +22,10 @@
 # on :544<N>0 and apps on :3<N>00–:3<N>03. Lanes 10–19 use database
 # yuntera_lane<N>, API on :546<N-10>0 and apps on :4<N-10>00–:4<N-10>03.
 # The functions (notifications and payments) listen on the API port + 1, the
-# fake providers on the API port + 2 and the fake payment gateway on the API
-# port + 3 (lane 0 :54322–:54324, lane 5 :54451–:54453, lane 12
-# :54621–:54623); API ports are ten apart, so no lane reaches another's.
+# fake providers on the API port + 2, the fake payment gateway on the API port
+# + 3, the fake of Hacienda on the API port + 4 and the invoicing functions on
+# the API port + 5 (lane 0 :54322–:54326, lane 5 :54451–:54455, lane 12
+# :54621–:54625); API ports are ten apart, so no lane reaches another's.
 #
 # The apps read the API address when they are BUILT, so each lane builds its own
 # copy; `up` writes apps/*/.env.local for the lane before building.
@@ -53,6 +56,7 @@ ADMIN_URL="${PG_ADMIN_URL:-postgres://postgres:postgres@127.0.0.1:5432/postgres}
 DB_URL="${ADMIN_URL%/*}/${DB_NAME}"
 API_URL="http://127.0.0.1:${API_PORT}"
 FUNCTIONS_PORT=$((API_PORT + 1)); FAKE_PORT=$((API_PORT + 2)); FAKE_PAY_PORT=$((API_PORT + 3))
+HACIENDA_PORT=$((API_PORT + 4)); INVOICE_FUNCTIONS_PORT=$((API_PORT + 5))
 API_KEY="sb_publishable_local_development_only"
 # Lets the seller centre, the console and the journeys ask the shop to drop its cached
 # catalogue (apps/web/src/app/api/catalogo/refrescar). A local value, not a secret.
@@ -111,6 +115,10 @@ export FUNCTIONS_URL=http://127.0.0.1:$FUNCTIONS_PORT
 export FAKE_PROVIDERS_URL=http://127.0.0.1:$FAKE_PORT
 export DEV_FAKE_PAY_PORT=$FAKE_PAY_PORT
 export FAKE_PAY_URL=http://127.0.0.1:$FAKE_PAY_PORT
+export DEV_HACIENDA_PORT=$HACIENDA_PORT
+export DEV_INVOICE_FUNCTIONS_PORT=$INVOICE_FUNCTIONS_PORT
+export HACIENDA_FAKE_URL=http://127.0.0.1:$HACIENDA_PORT
+export INVOICE_FUNCTIONS_URL=http://127.0.0.1:$INVOICE_FUNCTIONS_PORT
 ENV
 }
 
@@ -170,6 +178,21 @@ start_notify() {
   echo "lane $LANE: functions $FUNCTIONS_URL, fake providers $FAKE_PROVIDERS_URL, fake gateway $FAKE_PAY_URL"
 }
 
+# The electronic-invoice worker (served as the Edge Functions would be, with a
+# throwaway signing key) and the fake of Hacienda it sends to. Nothing here can
+# reach Hacienda.
+start_invoicing() {
+  eval "$(print_env)"
+  for name in hacienda invoicing; do
+    [ -e "$STATE/$name.pid" ] && { kill -- "-$(cat "$STATE/$name.pid")" 2>/dev/null || true; rm -f "$STATE/$name.pid"; }
+  done
+  start hacienda "$ROOT/tools/dev-hacienda" pnpm exec tsx src/fake-hacienda.ts
+  start invoicing "$ROOT/tools/dev-hacienda" pnpm exec tsx src/functions-host.ts
+  wait_for "$HACIENDA_FAKE_URL/_fake/documents" 40
+  wait_for "$INVOICE_FUNCTIONS_URL/health" 40
+  echo "lane $LANE: invoicing $INVOICE_FUNCTIONS_URL, fake Hacienda $HACIENDA_FAKE_URL"
+}
+
 case "$COMMAND" in
   env)
     print_env
@@ -219,11 +242,17 @@ case "$COMMAND" in
       echo "lane $LANE: $app on http://127.0.0.1:$(app_port "$app")"
     done
     start_notify
+    start_invoicing
     ;;
 
   notify)
     mkdir -p "$STATE"
     start_notify
+    ;;
+
+  invoicing)
+    mkdir -p "$STATE"
+    start_invoicing
     ;;
 
   e2e)
