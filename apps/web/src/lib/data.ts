@@ -1,6 +1,11 @@
 import "server-only";
 import type { CatalogSearchInput } from "@yuntera/db";
-import { CATALOG_TAG, productPageTags, suggestionTags } from "@yuntera/next-kit/cache-tags";
+import {
+  CATALOG_TAG,
+  CATEGORIES_TAG,
+  productPageTags,
+  suggestionTags,
+} from "@yuntera/next-kit/cache-tags";
 import { cacheLife, cacheTag } from "next/cache";
 import { publicApi } from "./supabase";
 
@@ -9,7 +14,7 @@ import { publicApi } from "./supabase";
  *
  * Lifetimes are chosen by how wrong a stale answer can be:
  *   - Categories and districts change by deploy or by staff action: hours/days
- *     (categories are dropped with the catalogue when staff change them).
+ *     (the refresh endpoint drops categories when staff change them).
  *   - Prices, stock and search results: the `minutes` profile (revalidated every
  *     minute in the background). A shopper can briefly see a price or "in stock"
  *     that just changed; that is safe because checkout re-prices and re-checks
@@ -26,9 +31,10 @@ import { publicApi } from "./supabase";
 export async function getCategories() {
   "use cache";
   cacheLife("hours");
-  // Also the catalogue tag: when staff add, move, rename or hide a category the
-  // console asks the shop to drop it, and the menu follows at once.
-  cacheTag("categories", CATALOG_TAG);
+  // Not the catalogue tag: the menu is part of every page's prepared shell, which
+  // must survive an ordinary catalogue refresh. When staff change categories the
+  // console asks the refresh endpoint to drop this tag as well.
+  cacheTag(CATEGORIES_TAG);
   return publicApi().listCategories();
 }
 

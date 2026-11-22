@@ -41,6 +41,16 @@ describe("refreshShopCatalog", () => {
     expect(errorLog).not.toHaveBeenCalled();
   });
 
+  it("asks for the category menu too, only when categories changed", async () => {
+    fetchMock.mockResolvedValue(answer(204));
+    await refreshShopCatalog({ categories: true });
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(init.headers).toEqual({
+      "x-refresh-key": "a-shared-key",
+      "x-refresh-scope": "categories",
+    });
+  });
+
   it("counts a redirect to a login page as a failure, and says where it led", async () => {
     fetchMock.mockResolvedValue(
       answer(302, { location: "https://vercel.com/sso-api?url=https%3A%2F%2Fshop&nonce=secret" }),

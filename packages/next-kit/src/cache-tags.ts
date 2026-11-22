@@ -12,6 +12,8 @@
 
 export const CATALOG_TAG = "catalog";
 export const SUGGESTIONS_TAG = "suggestions";
+/** The category menu; dropped by the refresh endpoint only when staff changed categories. */
+export const CATEGORIES_TAG = "categories";
 /** At most this many tags are dropped by one action; a cart has at most 20 lines. */
 const MAX_TAGS = 40;
 

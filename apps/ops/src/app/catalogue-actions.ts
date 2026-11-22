@@ -34,8 +34,11 @@ async function catalogueAction(
   if (!(await currentStaff())) redirectTo(signInPath(returnTo));
   const state = await attempt(async () => {
     const message = await run(await sessionApi());
-    // What shoppers see changed: menus, category pages, search, ratings.
-    await refreshShopCatalog();
+    // What shoppers see changed: category pages, search, ratings, and (for a
+    // category, or a product moving between categories) the menu.
+    await refreshShopCatalog({
+      categories: returnTo === "/catalogo/categorias" || returnTo === "/catalogo/productos",
+    });
     return message;
   }, values);
   if (state.ok) refresh();

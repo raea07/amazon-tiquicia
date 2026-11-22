@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { CATALOG_TAG } from "@yuntera/next-kit/cache-tags";
+import { CATALOG_TAG, CATEGORIES_TAG } from "@yuntera/next-kit/cache-tags";
 import { checkSecret } from "@yuntera/next-kit/guard";
 import { revalidateTag } from "next/cache";
 
@@ -40,6 +40,11 @@ export async function POST(request: Request) {
     return new Response(null, { status: 401 });
   }
   revalidateTag(CATALOG_TAG, { expire: 0 });
+  // Staff changed categories: the menu, which is part of every page's prepared
+  // shell, is dropped too. Only then, so other refreshes keep the shells.
+  if (request.headers.get("x-refresh-scope") === "categories") {
+    revalidateTag(CATEGORIES_TAG, { expire: 0 });
+  }
   return new Response(null, { status: 204 });
 }
 
