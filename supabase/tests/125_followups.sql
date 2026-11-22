@@ -974,6 +974,11 @@ $$;
 select pg_temp.remember('live', pg_temp.place('seguimiento1@yuntera.example',
   pg_temp.items('cafetera-electrica-volcan-12-tazas:1'), 'card', 'seg-live-0001')::text);
 select pg_temp.pay(current_setting('t.live')::uuid);
+-- Real money: taken by the gateway in live (20261121083400). Simulated money
+-- (the sandbox payment above as it stands) is refunded as a simulation in any
+-- mode, so it would confirm itself at commit.
+update public.payments set provider = 'onvo', environment = 'live', gateway_reference = 'pi_seg_live_0001'
+where order_id = current_setting('t.live')::uuid;
 select pg_temp.deliver(current_setting('t.live')::uuid);
 select pg_temp.login('seguimiento1@yuntera.example');
 select pg_temp.remember('live_ret', public.request_return(
@@ -1000,6 +1005,9 @@ begin
   assert not exists (select 1 from private.refund_confirmations
                      where refund_id = current_setting('t.refund_live')::uuid),
     'refund_confirmed_live: not confirmed';
+  assert (select g.channel = 'gateway' and g.status = 'requested' from private.gateway_refunds g
+          where g.refund_id = current_setting('t.refund_live')::uuid),
+    'refund_confirmed_live: waiting at the gateway';
   assert private.confirm_refund(current_setting('t.refund_live')::uuid, 'gw-ref-123'),
     'refund_confirmed_live: the gateway confirms';
   assert not private.confirm_refund(current_setting('t.refund_live')::uuid, 'gw-ref-123'),
@@ -1007,6 +1015,13 @@ begin
   assert (select count(*) from private.outbox_events where topic = 'refund.completed'
           and payload ->> 'refund_id' = current_setting('t.refund_live')) = 1,
     'refund_confirmed_live: announced once';
+  -- The confirmation is the money's: the gateway refund settled with it, once.
+  assert (select g.status = 'succeeded' and g.completion_tx is not null from private.gateway_refunds g
+          where g.refund_id = current_setting('t.refund_live')::uuid),
+    'refund_confirmed_live: the gateway refund completed';
+  assert (select count(*) from public.ledger_transactions
+          where order_id = current_setting('t.live')::uuid and kind = 'refund_paid') = 1,
+    'refund_confirmed_live: the money booked out once';
   update public.app_settings set value = '"sandbox"' where key = 'payments_mode';
 end
 $$;

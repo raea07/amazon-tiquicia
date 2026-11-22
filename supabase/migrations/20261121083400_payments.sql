@@ -463,13 +463,15 @@ begin
 end;
 $$;
 
--- A refund has reached the shopper (the gateway confirmed it, finance made
--- the transfer, or sandbox simulated it). Books the money leaving, updates
--- the payment and tells the shopper. Safe to call twice.
-create or replace function private.complete_gateway_refund(
+-- The money of one gateway refund has reached the shopper's side (the
+-- gateway confirmed it, finance made the transfer, or nothing real had to
+-- move): books it leaving refunds_payable, marks the gateway refund
+-- succeeded and updates the payment's status. Nothing is announced here.
+-- Answers false, and does nothing, when it was settled already.
+create or replace function private.settle_gateway_refund(
   p_id uuid,
   p_bank_reference text default null
-) returns void
+) returns boolean
 language plpgsql security definer
 set search_path = ''
 as $$
@@ -481,12 +483,12 @@ declare
 begin
   select * into g from private.gateway_refunds where id = p_id for update;
   if not found or g.status = 'succeeded' then
-    return;
+    return false;
   end if;
   if g.refund_id is not null then
     select reason into v_reason from private.refunds where id = g.refund_id;
-    -- A cancelled order's reversal already took the money out of the gateway
-    -- account in sandbox; every other refund waits in refunds_payable.
+    -- A cancelled order's reversal of simulated money already took it out of
+    -- the gateway account; every other refund waits in refunds_payable.
     if not (g.channel = 'simulated' and v_reason = 'order_cancelled') then
       select order_number into v_number from public.orders where id = g.order_id;
       insert into public.ledger_transactions (kind, order_id, memo, created_by)
@@ -513,18 +515,114 @@ begin
     perform private.payments_refresh_refund_status(g.order_id);
     insert into public.order_events (order_id, kind, note, actor_id)
     values (g.order_id, 'payment', 'Reembolso completado', (select auth.uid()));
-    perform private.emit('refund.completed', jsonb_build_object(
-      'order_id', g.order_id, 'refund_id', g.refund_id, 'amount_minor', g.amount_minor));
   else
     update private.payment_reviews set status = 'refunded' where id = g.review_id;
   end if;
+  return true;
+end;
+$$;
+
+-- A gateway refund is complete (the gateway confirmed it, or finance made the
+-- transfer): its money is settled, and a refund of the register is confirmed
+-- through private.confirm_refund (20261121083200), the one place that records
+-- the confirmation and announces `refund.completed`, once. A simulated
+-- refund completes in the transaction that booked it, before that booking's
+-- own `refund.requested`; its confirmation therefore waits for the commit
+-- (refunds_confirm_when_nothing_moves), so the two messages keep their order.
+-- Safe to call twice.
+create or replace function private.complete_gateway_refund(
+  p_id uuid,
+  p_bank_reference text default null
+) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  g private.gateway_refunds%rowtype;
+begin
+  perform private.settle_gateway_refund(p_id, p_bank_reference);
+  select * into g from private.gateway_refunds where id = p_id;
+  if g.refund_id is not null and g.status = 'succeeded' and g.channel <> 'simulated' then
+    perform private.confirm_refund(g.refund_id,
+      coalesce(g.provider_refund_reference, g.bank_reference, g.channel));
+  end if;
+end;
+$$;
+
+-- Replaces the version in 20261121083200 so that a confirmation and the money
+-- are one thing: confirming a refund whose gateway refund has not completed
+-- settles it first (the money went out: the gateway or the bank says so),
+-- and only then records the confirmation and announces it. Called by
+-- complete_gateway_refund, and by any server-side handler that learns that
+-- the money of a refund went out. A second call does nothing and answers
+-- false.
+create or replace function private.confirm_refund(p_refund_id uuid, p_reference text) returns boolean
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  f private.refunds%rowtype;
+  v_gateway uuid;
+begin
+  select * into f from private.refunds where id = p_refund_id;
+  if not found then
+    perform private.fail('refund_not_found');
+  end if;
+  perform 1 from public.orders where id = f.order_id for update;
+  select g.id into v_gateway from private.gateway_refunds g
+  where g.refund_id = p_refund_id and g.status <> 'succeeded';
+  if v_gateway is not null then
+    perform private.settle_gateway_refund(v_gateway, null);
+  end if;
+  insert into private.refund_confirmations (refund_id, reference)
+  values (p_refund_id, left(coalesce(nullif(trim(p_reference), ''), 'confirmed'), 200))
+  on conflict (refund_id) do nothing;
+  if not found then
+    return false;
+  end if;
+  perform private.emit('refund.completed', jsonb_build_object(
+    'order_id', f.order_id, 'refund_id', f.id, 'amount_minor', f.amount_minor, 'reason', f.reason));
+  return true;
+end;
+$$;
+
+-- Replaces the version in 20261121083200. At commit, after the booking's own
+-- `refund.requested`: a refund settled at the door moved no money and is
+-- confirmed silently, as before; a refund whose money was never real (its
+-- gateway refund is simulated and already settled) is confirmed and
+-- announced. Every other refund waits for its gateway refund to complete.
+-- What decides is the refund's own channel, no longer the mode at the time:
+-- real money taken in live and refunded while the mode is sandbox is still
+-- paid back, and confirmed, by transfer.
+create or replace function private.refund_confirm_when_nothing_moves() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  g private.gateway_refunds%rowtype;
+begin
+  if exists (
+    select 1 from public.ledger_entries e
+    where e.transaction_id = new.ledger_transaction_id
+      and e.account_id = private.ledger_account('driver_cash')
+  ) then
+    -- Settled at the door: no money to send, nothing to announce.
+    insert into private.refund_confirmations (refund_id, reference)
+    values (new.id, 'at_door') on conflict do nothing;
+    return null;
+  end if;
+  select * into g from private.gateway_refunds where refund_id = new.id;
+  if g.channel = 'simulated' and g.status = 'succeeded' then
+    perform private.confirm_refund(new.id, case when g.provider = 'sandbox' then 'sandbox' else 'simulated' end);
+  end if;
+  return null;
 end;
 $$;
 
 -- Every refund the register books gets its way back to the shopper. A refund
 -- settled at the door of a cash order sends nothing: the driver simply took
 -- less, so it counts as done at once.
-create or replace function private.gateway_refund_for_register() returns trigger
+create or replace function private.open_gateway_refund(p_refund private.refunds) returns void
 language plpgsql security definer
 set search_path = ''
 as $$
@@ -536,14 +634,14 @@ declare
   v_id uuid;
 begin
   if exists (select 1 from public.ledger_entries e
-             where e.transaction_id = new.ledger_transaction_id
+             where e.transaction_id = p_refund.ledger_transaction_id
                and e.account_id = private.ledger_account('driver_cash')) then
-    perform private.payments_refresh_refund_status(new.order_id);
-    return null;
+    perform private.payments_refresh_refund_status(p_refund.order_id);
+    return;
   end if;
 
   select * into v_payment from public.payments
-  where order_id = new.order_id and status in ('captured', 'partially_refunded', 'refunded')
+  where order_id = p_refund.order_id and status in ('captured', 'partially_refunded', 'refunded')
   order by created_at limit 1;
 
   -- Through the gateway only in the environment that took the payment, and
@@ -565,15 +663,15 @@ begin
 
   -- A cancelled order's reversal took the money straight off the gateway
   -- account. Until the money has really gone, it is owed to the shopper.
-  if new.reason = 'order_cancelled' and v_channel <> 'simulated' then
+  if p_refund.reason = 'order_cancelled' and v_channel <> 'simulated' then
     select -coalesce(sum(e.amount_minor), 0) into v_pending
     from public.ledger_entries e
-    where e.transaction_id = new.ledger_transaction_id
+    where e.transaction_id = p_refund.ledger_transaction_id
       and e.account_id = private.ledger_account('gateway_clearing');
     if v_pending > 0 then
       insert into public.ledger_transactions (kind, order_id, memo, created_by)
-      values ('refund_pending', new.order_id, 'Reembolso por enviar, pedido '
-                || (select order_number from public.orders where id = new.order_id),
+      values ('refund_pending', p_refund.order_id, 'Reembolso por enviar, pedido '
+                || (select order_number from public.orders where id = p_refund.order_id),
               (select auth.uid()))
       returning id into v_tx;
       insert into public.ledger_entries (transaction_id, account_id, amount_minor) values
@@ -586,21 +684,59 @@ begin
     (refund_id, order_id, payment_id, provider, environment, channel, amount_minor, currency,
      payment_reference, note)
   values
-    (new.id, new.order_id, v_payment.id, v_payment.provider, v_payment.environment, v_channel,
-     new.amount_minor, coalesce(v_payment.currency, 'CRC'), v_payment.gateway_reference,
+    (p_refund.id, p_refund.order_id, v_payment.id, v_payment.provider, v_payment.environment, v_channel,
+     p_refund.amount_minor, coalesce(v_payment.currency, 'CRC'), v_payment.gateway_reference,
      case when v_channel = 'simulated' and private.payments_mode() <> 'sandbox'
           then 'Pago de prueba (sin dinero real): el reembolso se da por hecho sin mover dinero.' end)
   returning id into v_id;
 
+  -- Nothing real to send: settled now. Its confirmation follows at commit
+  -- (refund_confirm_when_nothing_moves), after `refund.requested`.
   if v_channel = 'simulated' then
-    perform private.complete_gateway_refund(v_id);
+    perform private.settle_gateway_refund(v_id);
   end if;
+end;
+$$;
+
+create or replace function private.gateway_refund_for_register() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  perform private.open_gateway_refund(new);
   return null;
 end;
 $$;
 
 create trigger refunds_gateway_refund after insert on private.refunds
   for each row execute function private.gateway_refund_for_register();
+
+-- Refunds booked before this migration that are still unconfirmed (booked in
+-- test or live mode after 20261121083200, waiting for a gateway that did not
+-- exist): each gets its way back now, by the same rule as a new one. Money
+-- that was never real is settled and confirmed at once (its booking was
+-- announced long ago); any other waits for finance (a transfer) or the
+-- gateway. Refunds already confirmed (before_confirmations, sandbox, at_door)
+-- need nothing: their money is accounted for. On a fresh database, and on a
+-- project that stayed in sandbox mode, this changes nothing.
+do $$
+declare
+  f private.refunds;
+begin
+  for f in
+    select r.* from private.refunds r
+    where not exists (select 1 from private.refund_confirmations c where c.refund_id = r.id)
+      and not exists (select 1 from private.gateway_refunds g where g.refund_id = r.id)
+    order by r.created_at, r.id
+  loop
+    perform private.open_gateway_refund(f);
+    if exists (select 1 from private.gateway_refunds g
+               where g.refund_id = f.id and g.channel = 'simulated' and g.status = 'succeeded') then
+      perform private.confirm_refund(f.id, 'simulated');
+    end if;
+  end loop;
+end
+$$;
 
 -- When an order stops waiting for its money (paid another way, cancelled or
 -- expired), whatever the shopper could still pay at the gateway is stopped
@@ -662,42 +798,9 @@ $$;
 create trigger payments_stop_payment_attempts after update of status on public.payments
   for each row execute function private.payments_stop_attempts();
 
--- The "refund completed" message is sent when each refund completes
--- (complete_gateway_refund), so a payment turning `refunded` announces it
--- only where no gateway refund speaks for the order (direct changes by an
--- administrator, older data). Otherwise unchanged from 20261121082600.
-create or replace function private.emit_logistics_events() returns trigger
-language plpgsql security definer
-set search_path = ''
-as $$
-begin
-  if tg_table_name = 'route_stops' then
-    perform private.emit('shipment.scheduled',
-      jsonb_build_object('shipment_id', new.shipment_id, 'route_id', new.route_id));
-  elsif tg_table_name = 'shipments' then
-    if new.status = 'out_for_delivery' and old.status is distinct from 'out_for_delivery' then
-      perform private.emit('shipment.out_for_delivery', jsonb_build_object(
-        'shipment_id', new.id,
-        'route_id', (select rs.route_id from public.route_stops rs
-                     where rs.shipment_id = new.id and rs.status in ('pending', 'arrived')
-                     order by rs.id limit 1)));
-    end if;
-  elsif tg_table_name = 'routes' then
-    if new.driver_id is not null
-       and (tg_op = 'INSERT' or new.driver_id is distinct from old.driver_id) then
-      perform private.emit('route.assigned',
-        jsonb_build_object('route_id', new.id, 'driver_id', new.driver_id));
-    end if;
-  elsif tg_table_name = 'payments' then
-    if new.status = 'refunded' and old.status is distinct from 'refunded'
-       and not exists (select 1 from private.gateway_refunds g where g.order_id = new.order_id) then
-      perform private.emit('refund.completed',
-        jsonb_build_object('order_id', new.order_id, 'amount_minor', new.amount_minor));
-    end if;
-  end if;
-  return new;
-end;
-$$;
+-- private.emit_logistics_events stays as 20261121083200 left it: a payment
+-- turning `refunded` announces nothing; `refund.completed` is announced by
+-- private.confirm_refund alone, once per refund.
 
 -- ═══ 5. The refund register no longer marks the payment refunded itself ════
 -- Unchanged from 20261121082900_integrity.sql except at the end: the
@@ -806,6 +909,122 @@ begin
 
   return jsonb_build_object('refund_id', v_refund, 'refund_minor', v_total,
                             'seller_debit_minor', v_seller_debit);
+end;
+$$;
+
+-- ═══ 5b. A cancelled order's refund follows its money ══════════════════════
+-- Unchanged from 20261121082900_integrity.sql except at the end. The mode no
+-- longer decides whether money moved: a cancellation in sandbox mode of a
+-- payment taken with real money (in live, before the mode changed) used to
+-- mark the payment refunded at once and announce nothing. Now the refund's
+-- channel decides, as for every other refund: a simulated refund is settled
+-- by the register's trigger, any other waits for its money, and
+-- `refund.requested` (now with the refund's id) is announced for those.
+create or replace function private.cancel_order_internal(p_order_id uuid, p_reason text) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  r record;
+  v_paid boolean;
+  v_refund_minor bigint := 0;
+  v_refund_id uuid;
+begin
+  perform 1 from public.orders where id = p_order_id for update;
+  if exists (
+    select 1 from public.shipments s
+    where s.order_id = p_order_id and s.status not in ('pending', 'picking', 'cancelled')
+  ) then
+    perform private.fail('too_late_to_cancel', 'packed');
+  end if;
+
+  -- Open returns of this order have nothing left to return.
+  update public.return_requests rr
+  set status = 'rejected', resolved_at = now(),
+      resolution_note = 'Cerrada: el pedido se canceló.'
+  from public.order_items i
+  where i.id = rr.order_item_id and i.order_id = p_order_id and rr.status in ('requested', 'approved');
+
+  -- Units already taken off a shelf go back to the shelf they came from.
+  for r in
+    select m.warehouse_id, m.sku_id, m.seller_id, m.from_location_id, m.reference_id,
+           sum(m.quantity)::integer as quantity
+    from public.stock_movements m
+    join public.shipments s on s.id = m.reference_id
+    where s.order_id = p_order_id and s.status = 'picking'
+      and m.reason = 'pick' and m.reference_type = 'shipment' and m.from_location_id is not null
+    group by m.warehouse_id, m.sku_id, m.seller_id, m.from_location_id, m.reference_id
+    order by m.sku_id, m.from_location_id
+  loop
+    insert into public.bin_stock (location_id, sku_id, seller_id, quantity)
+    values (r.from_location_id, r.sku_id, r.seller_id, r.quantity)
+    on conflict (location_id, sku_id, seller_id)
+    do update set quantity = public.bin_stock.quantity + excluded.quantity;
+    insert into public.stock_movements
+      (warehouse_id, sku_id, seller_id, to_location_id, on_hand_delta, quantity, reason,
+       reference_type, reference_id, note, actor_id)
+    values
+      (r.warehouse_id, r.sku_id, r.seller_id, r.from_location_id, 0, r.quantity, 'putaway',
+       'shipment', r.reference_id, 'Pedido cancelado durante la preparación', (select auth.uid()));
+  end loop;
+
+  update public.pick_tasks t
+  set status = 'cancelled'
+  from public.shipments s
+  where s.id = t.shipment_id and s.order_id = p_order_id and t.status in ('open', 'in_progress', 'short');
+
+  update public.shipments
+  set status = 'cancelled'
+  where order_id = p_order_id and status in ('pending', 'picking');
+
+  for r in
+    select res.id, res.warehouse_id, res.sku_id, res.seller_id, res.quantity
+    from public.inventory_reservations res
+    join public.order_items i on i.id = res.order_item_id
+    where i.order_id = p_order_id and res.status = 'active'
+    order by res.sku_id, res.warehouse_id
+    for update of res
+  loop
+    update public.stock_levels
+    set reserved = reserved - r.quantity
+    where warehouse_id = r.warehouse_id and sku_id = r.sku_id and seller_id = r.seller_id;
+    update public.inventory_reservations
+    set status = 'released', resolved_at = now() where id = r.id;
+  end loop;
+
+  update public.orders
+  set status = 'cancelled', cancelled_at = now(), cancel_reason = left(p_reason, 500)
+  where id = p_order_id;
+
+  select exists (
+    select 1 from public.payments where order_id = p_order_id and status = 'captured'
+  ) into v_paid;
+
+  if v_paid then
+    -- The refund is booked and registered now, in every mode, so it can
+    -- never be booked a second time by another path.
+    perform private.post_order_refund(p_order_id);
+    select id, amount_minor into v_refund_id, v_refund_minor
+    from private.refunds where order_id = p_order_id and reason = 'order_cancelled';
+    -- The register's trigger opened the refund's way back
+    -- (private.open_gateway_refund). Money that was never real is settled
+    -- already (the payment is refunded, the order too) and is confirmed at
+    -- commit; real money goes back through the gateway or by transfer, and
+    -- the payment and the order follow when it has gone.
+    if not exists (select 1 from private.gateway_refunds g
+                   where g.refund_id = v_refund_id and g.channel = 'simulated') then
+      perform private.emit('refund.requested', jsonb_build_object(
+        'order_id', p_order_id, 'refund_id', v_refund_id, 'reason', 'order_cancelled',
+        'amount_minor', v_refund_minor));
+    end if;
+  else
+    update public.payments
+    set status = 'cancelled'
+    where order_id = p_order_id and status in ('pending', 'authorized');
+  end if;
+
+  perform private.emit('order.cancelled',
+    jsonb_build_object('order_id', p_order_id, 'reason', p_reason));
 end;
 $$;
 
@@ -2548,8 +2767,13 @@ revoke all on function
   private.expected_gateway_fee(public.payment_method, bigint),
   private.record_gateway_fee(uuid, bigint, text, text),
   private.payments_refresh_refund_status(uuid),
+  private.settle_gateway_refund(uuid, text),
   private.complete_gateway_refund(uuid, text),
+  private.open_gateway_refund(private.refunds),
   private.gateway_refund_for_register(),
+  private.confirm_refund(uuid, text),
+  private.refund_confirm_when_nothing_moves(),
+  private.cancel_order_internal(uuid, text),
   private.payment_attempts_stop(uuid, uuid),
   private.orders_stop_attempts(),
   private.payments_stop_attempts(),

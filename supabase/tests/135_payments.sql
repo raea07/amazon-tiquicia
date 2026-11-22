@@ -135,8 +135,10 @@ begin
   if v_kind = 'platform' then
     perform pg_temp.act('central@yuntera.example');
     perform public.wms_start_picking(p_shipment);
-    for t in select id, quantity from public.pick_tasks where shipment_id = p_shipment loop
-      perform public.wms_confirm_pick(t.id, t.quantity);
+    -- The picker scans each product's code (083200 checks it).
+    for t in select pt.id, pt.quantity, k.code from public.pick_tasks pt
+             join public.skus k on k.id = pt.sku_id where pt.shipment_id = p_shipment loop
+      perform public.wms_confirm_pick(t.id, t.quantity, null, t.code);
     end loop;
     perform public.wms_pack_shipment(p_shipment, 900, 1::smallint);
   else
