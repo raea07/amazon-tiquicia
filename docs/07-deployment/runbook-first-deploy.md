@@ -926,6 +926,12 @@ in headless Chromium, the Management API through the network proxy.
    1 to 7 run before it and pass). Locally all 24 pass with the changes
    (lane 19, fresh reset). Row counts were identical before and after the
    runs (134 tables, 2 555 rows), and the digest was unchanged afterwards.
+   Run again after the browser checks of point 8, `140_invoicing` fails as
+   well ("every job planned"): it counts every invoice job and document in
+   the database, and the three simulated purchases and one cancellation those
+   checks left are counted with the seed's. That is a fault in the test, not
+   in what the database allows; the suites are being changed to assert on
+   their own fixtures.
 7. **Redeploy.** One at a time from the repository root with `vercel deploy
    --prod --yes --token dummy`, 30 to 40 s each: web
    `dpl_12nCw68ahpdAfkvuEMhwrTrVxc8h` (ready 06:19:20), vende
