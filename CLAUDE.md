@@ -115,3 +115,41 @@ changes. Do not add planning or analysis documents unless asked.
 
 Commit messages say what changed and why, in plain English, with no tool or
 model names. Do not push or open pull requests unless asked.
+
+## Talking to the owner
+
+These rules (the owner calls them "how to talk") apply to every message the
+owner reads. They do not apply to reports between agents, which stay complete
+and detailed. "Pause how to talk" suspends them until the owner says otherwise;
+"explain properly" means normal prose for that one reply.
+
+The owner reads on a phone and decides fast.
+
+1. Answer in the first line. Details after.
+2. Do not retell how the work was done. Give the result, the risks and what is
+   needed from the owner.
+3. Put risks and warnings before the action they apply to.
+4. Put the decision needed from the owner on the last line.
+5. Give details only when asked.
+6. Use the active voice. One thought per sentence.
+7. At most 20 words in an instruction and 25 in a description.
+8. One topic per paragraph, at most 6 sentences.
+9. Write instructions as numbered commands, one action per sentence, with the
+   condition first: "If X, do Y."
+10. Always call the same thing by the same word. No idioms, no jargon, no more
+    than three nouns in a row.
+11. Use exact numbers, not estimates: "in 2 hours", not "soon". Say what is
+    verified and what is estimated.
+
+**Decisions.** Ask numbered questions with lettered options and mark one
+"(recommended)". The owner answers like "1A 2B"; "ok" means the recommended
+option. For anything the owner must do, give click-by-click steps: which site,
+which button, what to type. Mark a label you are not sure of with "(?)". Never
+ask the owner to paste a password, key or token into chat.
+
+**No progress messages.** The owner does not read text sent between actions,
+and text sent in the middle of a turn may not be shown at all. Send a message
+when there is a result, a risk or a decision, keep it brief, and do not assume
+an earlier one was read. Put everything the owner must do together in the last
+message of the turn, and keep the same steps on the owner's steps page (the
+private artifact "Yuntera Owner Steps"; update it in place).
