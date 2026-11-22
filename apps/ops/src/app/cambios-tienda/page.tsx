@@ -20,6 +20,7 @@ const KIND: Record<ShopChangeKind, string> = {
   shop_name: "Nombre de la tienda",
   fiscal: "Datos fiscales",
   contact: "Correo y teléfono",
+  description: "Descripción de la tienda",
 };
 
 const NAME_PROBLEM = {
@@ -32,10 +33,10 @@ export default function ShopChangesPage({ searchParams }: PageProps<"/cambios-ti
   return (
     <div className="shell py-8">
       <PageHeader title="Cambios de tienda">
-        Lo que los vendedores piden cambiar de su tienda: el nombre que ven los compradores (lo
-        decide operaciones), los datos fiscales (operaciones) y el correo y teléfono de contacto
-        (finanzas, porque es el teléfono con que confirma los cambios de cuenta). Nada cambia hasta
-        que alguien lo aprueba aquí.
+        Lo que los vendedores piden cambiar de su tienda: el nombre y la descripción que ven los
+        compradores (lo decide operaciones), los datos fiscales (operaciones) y el correo y teléfono
+        de contacto (finanzas, porque es el teléfono con que confirma los cambios de cuenta). Nada
+        cambia hasta que alguien lo aprueba aquí.
       </PageHeader>
       <div className="mt-6">
         <Suspense fallback={<Skeleton className="h-96" />}>
@@ -110,6 +111,14 @@ async function Queue({ searchParams }: Pick<PageProps<"/cambios-tienda">, "searc
 function Details({ kind, details }: { kind: ShopChangeKind; details: ShopDetails | null }) {
   if (!details) return <dd>—</dd>;
   if (kind === "shop_name") return <dd className="font-bold break-words">{details.trade_name}</dd>;
+  if (kind === "description") {
+    // The seller's text, shown as text with its line breaks: markup in it is never rendered.
+    return (
+      <dd className="whitespace-pre-line break-words">
+        {details.description ?? <span className="text-ink-muted">Sin descripción</span>}
+      </dd>
+    );
+  }
   if (kind === "contact") {
     return (
       <>

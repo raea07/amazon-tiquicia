@@ -246,6 +246,7 @@ const KIND: Record<ShopChangeKind, string> = {
   shop_name: "nombre de la tienda",
   fiscal: "datos fiscales",
   contact: "correo y teléfono",
+  description: "descripción",
 };
 
 /** The latest request of one kind: waiting, or why it was not approved. */

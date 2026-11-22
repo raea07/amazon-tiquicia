@@ -32,6 +32,8 @@ const CHANGE_KIND: Record<string, string> = {
   shop_name: "el nombre de su tienda",
   fiscal: "los datos fiscales de su tienda",
   contact: "el correo y el teléfono de contacto de su tienda",
+  description: "la descripción de su tienda",
+  logo: "el logotipo de su tienda",
 };
 
 const ROLE: Record<string, string> = {

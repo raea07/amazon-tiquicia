@@ -132,6 +132,9 @@ export default function ListingsScreen() {
                       {listing.offer_status === "paused" ? (
                         <Badge tone="neutral">En pausa</Badge>
                       ) : null}
+                      {edit && !edit.editable && listing.product_status !== "archived" ? (
+                        <Badge tone="info">De otra tienda</Badge>
+                      ) : null}
                     </View>
                     <View style={styles.figures}>
                       <Text variant="bodyStrong" style={styles.tabular} testID="listing-price">
@@ -156,9 +159,9 @@ export default function ListingsScreen() {
         </View>
       )}
       <Text variant="small" tint="muted">
-        Cuando varios vendedores ofrecen el mismo producto, destacamos la oferta con la mejor
-        combinación de precio, rapidez de entrega y desempeño del vendedor. Las demás siguen
-        visibles en la página del producto.
+        Cuando varias tiendas venden el mismo producto, la oferta destacada es la nueva que tiene
+        existencias y el precio más bajo; si cuestan lo mismo, la que se publicó antes. Las demás
+        siguen visibles en la página del producto y se pueden comprar.
       </Text>
     </Screen>
   );

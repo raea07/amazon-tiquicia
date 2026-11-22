@@ -1,12 +1,7 @@
-import {
-  daysBetween,
-  isPhotoTemplate,
-  type OfferCandidate,
-  selectFeaturedOffer,
-  toCostaRicaTime,
-} from "@yuntera/core";
-import type { ProductOffer, ProductPage } from "@yuntera/db";
+import { isPhotoTemplate, type OfferCandidate, selectFeaturedOffer } from "@yuntera/core";
+import type { ShopOffer as ProductOffer, ShopProductPage as ProductPage } from "@yuntera/db";
 import { pictureAddress } from "@yuntera/next-kit/product-image";
+import { ShopLogo } from "@yuntera/next-kit/shop-logo";
 import { Alert, Badge, formatDate, formatPrice, Price, Skeleton, Stars } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
@@ -56,8 +51,8 @@ export default function ProductRoute(props: PageProps<"/p/[slug]">) {
   );
 }
 
-/** Turns an offer from the API into the shape the featured-offer rule scores. */
-function toCandidate(offer: ProductOffer, today: string): OfferCandidate {
+/** Turns an offer from the API into the shape the offer rule orders (packages/core/src/offers.ts). */
+function toCandidate(offer: ProductOffer): OfferCandidate {
   return {
     offerId: offer.offer_id,
     sellerId: offer.seller.slug,
@@ -65,19 +60,6 @@ function toCandidate(offer: ProductOffer, today: string): OfferCandidate {
     // Shipping is charged per order, not per offer, so it does not separate offers here.
     shippingMinor: 0,
     availableQuantity: offer.available,
-    promiseDays: offer.promise
-      ? Math.max(0, daysBetween(today, offer.promise.latest))
-      : offer.fulfillment === "platform"
-        ? 1
-        : 1 + offer.handling_days,
-    fulfilledByPlatform: offer.fulfillment === "platform",
-    sellerScore: offer.seller.score,
-    sellerStatus:
-      offer.seller.health === "critico"
-        ? "suspended"
-        : offer.seller.health === "en_riesgo"
-          ? "at_risk"
-          : "active",
     condition: offer.condition,
     listedAt: offer.listed_at,
   };
@@ -94,15 +76,14 @@ async function Product({ params, searchParams }: PageProps<"/p/[slug]">) {
     product.skus.find((k) => k.offers.some((o) => o.available > 0)) ??
     product.skus[0];
 
-  // "Today" is a request-time fact: say so explicitly, so it is never baked into a prerender.
+  // The promise dates depend on today: a request-time fact, never baked into a prerender.
   await connection();
-  const today = toCostaRicaTime(new Date()).date;
   const offers = sku?.offers ?? [];
-  const selection = selectFeaturedOffer(offers.map((offer) => toCandidate(offer, today)));
+  const selection = selectFeaturedOffer(offers.map(toCandidate));
   const byId = new Map(offers.map((offer) => [offer.offer_id, offer]));
-  const featured = selection.featured ? byId.get(selection.featured.offer.offerId) : undefined;
+  const featured = selection.featured ? byId.get(selection.featured.offerId) : undefined;
   const others = selection.ranked
-    .map((scored) => byId.get(scored.offer.offerId))
+    .map((candidate) => byId.get(candidate.offerId))
     .filter((offer): offer is ProductOffer => offer !== undefined && offer !== featured);
 
   return (
@@ -181,13 +162,13 @@ async function Product({ params, searchParams }: PageProps<"/p/[slug]">) {
       {others.length > 0 ? (
         <section aria-labelledby="otras-ofertas" className="mt-10">
           <h2 id="otras-ofertas" className="text-xl font-bold">
-            Otras ofertas de este producto
+            Otras ofertas de este producto ({others.length})
           </h2>
           <p className="mt-1 text-sm text-ink-muted">
-            Destacamos la oferta con la mejor combinación de precio, rapidez de entrega y desempeño
-            del vendedor.{" "}
+            Mostramos primero la oferta nueva con existencias y el precio más bajo; si cuestan lo
+            mismo, la que se publicó antes. Puede comprar cualquiera de estas.{" "}
             <Link href="/ayuda#como-ordenamos" className="text-link underline">
-              Cómo la elegimos
+              Cómo las ordenamos
             </Link>
             .
           </p>
@@ -261,9 +242,17 @@ function Breadcrumbs({ product }: { product: ProductPage }) {
 function OfferFacts({ offer }: { offer: ProductOffer }) {
   return (
     <dl className="mt-2 space-y-1 text-sm">
-      <div className="flex gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <dt className="text-ink-muted">Vendido por</dt>
-        <dd className="font-semibold">{offer.seller.trade_name}</dd>
+        <dd>
+          <Link
+            href={`/tienda/${offer.seller.slug}` as Route}
+            className="inline-flex min-h-11 items-center gap-2 font-semibold text-link underline"
+          >
+            <ShopLogo logo={offer.seller.logo} name={offer.seller.trade_name} size={28} />
+            {offer.seller.trade_name}
+          </Link>
+        </dd>
       </div>
       <div className="flex gap-1.5">
         <dt className="text-ink-muted">Entrega</dt>

@@ -135,3 +135,53 @@ export async function publishApprovedPhotos(
   await deleteUnneededPhotoFiles(null);
   return { waiting: confirmed.waiting, refused: refused + confirmed.refused };
 }
+
+/** Words for the seller when the console refuses a logo it cannot publish. */
+const LOGO_REFUSED: Record<DecodedPhotoProblem, string> = {
+  not_an_image:
+    "El archivo del logotipo no es una imagen que podamos abrir, así que no lo publicamos. Súbalo de nuevo desde su teléfono o computadora.",
+  wrong_format:
+    "El archivo del logotipo no es del tipo con que se subió, así que no lo publicamos. Súbalo de nuevo desde su teléfono o computadora.",
+  wrong_size:
+    "El logotipo no tiene el tamaño con que se subió, así que no lo publicamos. Súbalo de nuevo desde su teléfono o computadora.",
+};
+
+/**
+ * Publishes an approved shop logo the same way: its largest waiting copy is
+ * decoded here and the three public sizes are written from it; then the
+ * database confirms it (and refuses it if its waiting files changed after it
+ * was sent). A copy that cannot be decoded is refused with the seller's reason.
+ */
+export async function publishApprovedLogo(
+  api: Api,
+  logoId: string,
+): Promise<"published" | "waiting" | "refused"> {
+  const storage = (await sessionClient()).storage;
+  for (const logo of await api.opsLogoFilesToPublish(logoId)) {
+    const { data } = await storage.from(PHOTO_BUCKETS.pending).download(logo.source);
+    if (!data) {
+      console.warn("logo publish: the waiting copy could not be read");
+      continue;
+    }
+    const made = await renditionsOf(logo, new Uint8Array(await data.arrayBuffer()));
+    if ("problem" in made) {
+      await api.opsReviewLogo(logoId, false, LOGO_REFUSED[made.problem]);
+      await deleteUnneededPhotoFiles(null);
+      return "refused";
+    }
+    for (const file of made.files) {
+      const { error } = await storage.from(PHOTO_BUCKETS.public).upload(file.path, file.bytes, {
+        contentType: PHOTO_CONTENT_TYPE[logo.format],
+        cacheControl: PUBLIC_CACHE_SECONDS,
+        upsert: false,
+      });
+      const code = (error as { code?: string } | null)?.code;
+      if (error && code !== "KeyAlreadyExists" && code !== "ResourceAlreadyExists") {
+        console.warn(`logo publish: ${code ?? error.message}`);
+      }
+    }
+  }
+  const confirmed = await api.opsConfirmLogoPublished(logoId);
+  await deleteUnneededPhotoFiles(null);
+  return confirmed.outcome;
+}

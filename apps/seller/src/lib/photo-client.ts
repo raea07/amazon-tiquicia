@@ -154,7 +154,7 @@ function refusal(status: number, body: string): string {
 }
 
 /** Sends one file to its upload address, reporting progress from 0 to 1. */
-function put(
+export function put(
   url: string,
   blob: Blob,
   contentType: string,

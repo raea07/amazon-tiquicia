@@ -1,17 +1,12 @@
-import {
-  daysBetween,
-  type OfferCandidate,
-  selectFeaturedOffer,
-  toCostaRicaTime,
-} from "@yuntera/core";
+import { type OfferCandidate, selectFeaturedOffer } from "@yuntera/core";
 import type { ProductOffer, ProductPage } from "@yuntera/db";
 
 /**
- * Which offer a product page features and in what order the others follow:
- * the same rule as the website (apps/web/src/app/p/[slug]/page.tsx), using
- * the featured-offer scoring in packages/core.
+ * Which offer a product page shows first and in what order the others follow:
+ * the same rule as the website (apps/web/src/app/p/[slug]/page.tsx) and the
+ * database, from packages/core/src/offers.ts.
  */
-export function toCandidate(offer: ProductOffer, today: string): OfferCandidate {
+export function toCandidate(offer: ProductOffer): OfferCandidate {
   return {
     offerId: offer.offer_id,
     sellerId: offer.seller.slug,
@@ -19,19 +14,6 @@ export function toCandidate(offer: ProductOffer, today: string): OfferCandidate 
     // Shipping is charged per order, not per offer, so it does not separate offers here.
     shippingMinor: 0,
     availableQuantity: offer.available,
-    promiseDays: offer.promise
-      ? Math.max(0, daysBetween(today, offer.promise.latest))
-      : offer.fulfillment === "platform"
-        ? 1
-        : 1 + offer.handling_days,
-    fulfilledByPlatform: offer.fulfillment === "platform",
-    sellerScore: offer.seller.score,
-    sellerStatus:
-      offer.seller.health === "critico"
-        ? "suspended"
-        : offer.seller.health === "en_riesgo"
-          ? "at_risk"
-          : "active",
     condition: offer.condition,
     listedAt: offer.listed_at,
   };
@@ -48,13 +30,12 @@ export function chooseSku(product: ProductPage, requested: string | undefined): 
   );
 }
 
-export function rankOffers(offers: ProductOffer[], now = new Date()) {
-  const today = toCostaRicaTime(now).date;
-  const selection = selectFeaturedOffer(offers.map((offer) => toCandidate(offer, today)));
+export function rankOffers(offers: ProductOffer[]) {
+  const selection = selectFeaturedOffer(offers.map(toCandidate));
   const byId = new Map(offers.map((offer) => [offer.offer_id, offer]));
-  const featured = selection.featured ? byId.get(selection.featured.offer.offerId) : undefined;
+  const featured = selection.featured ? byId.get(selection.featured.offerId) : undefined;
   const others = selection.ranked
-    .map((scored) => byId.get(scored.offer.offerId))
+    .map((candidate) => byId.get(candidate.offerId))
     .filter((offer): offer is ProductOffer => offer !== undefined && offer !== featured);
   return { featured, others };
 }

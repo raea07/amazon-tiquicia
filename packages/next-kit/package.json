@@ -20,6 +20,7 @@
     "./cache-tags": "./src/cache-tags.ts",
     "./guard": "./src/guard.ts",
     "./product-image": "./src/product-image.tsx",
+    "./shop-logo": "./src/shop-logo.tsx",
     "./fiscal-document": "./src/fiscal-document.tsx"
   },
   "scripts": {

@@ -1,5 +1,5 @@
 import { brand } from "@yuntera/brand";
-import { DEFAULT_OFFER_CONFIG, DEFAULT_RANKING } from "@yuntera/core";
+import { DEFAULT_RANKING } from "@yuntera/core";
 import { colors, radius, space } from "@yuntera/expo-kit/theme";
 import { Button, Screen, Stack, Text } from "@yuntera/expo-kit/ui";
 import * as Linking from "expo-linking";
@@ -47,10 +47,10 @@ function Draft() {
 /**
  * Help and the legal basics, with the website's words (apps/web/src/app/ayuda).
  * The ranking explanation reads its numbers from the constants the search
- * and the featured-offer rule use, so it cannot drift from what happens.
+ * uses, so it cannot drift from what happens; the offer order is described
+ * in words (packages/core/src/offers.ts).
  */
 export default function HelpScreen() {
-  const offer = DEFAULT_OFFER_CONFIG.weights;
   const ranking = DEFAULT_RANKING.weights;
   const mail = () => void Linking.openURL(`mailto:${brand.support.email}`);
   return (
@@ -145,11 +145,12 @@ export default function HelpScreen() {
         </Item>
         <Item>Los productos agotados o con muchas devoluciones bajan.</Item>
         <Text>
-          Cuando varios vendedores ofrecen el mismo producto, destacamos una oferta según el precio
-          ({percent(offer.price)}), la rapidez de entrega ({percent(offer.speed)}), el desempeño del
-          vendedor ({percent(offer.seller)}) y si sale de nuestra bodega (
-          {percent(offer.platformFulfillment)}). Las demás ofertas siempre se muestran. Los
-          resultados pagados, cuando existan, llevarán la etiqueta “Patrocinado”.
+          Cuando varias tiendas venden el mismo producto, mostramos primero la oferta nueva que
+          tiene existencias y el precio más bajo para usted. Si dos cuestan lo mismo, va primero la
+          que se publicó antes. No pesa nada más: ni el tamaño de la tienda ni lo que le paga a{" "}
+          {brand.name}. Las demás ofertas siempre se muestran debajo, cada una con la tienda que la
+          vende, y usted puede comprar la que prefiera. Los resultados pagados, cuando existan,
+          llevarán la etiqueta “Patrocinado”.
         </Text>
       </Section>
 

@@ -30,6 +30,13 @@ export default function CatalogPage() {
         >
           Retirar una foto que ya está en la tienda
         </Link>
+        {" · "}
+        <Link
+          href="/catalogo/logotipos"
+          className="inline-flex min-h-11 items-center text-link underline"
+        >
+          Logotipos de tiendas por revisar
+        </Link>
       </p>
       <div className="mt-6">
         <Suspense fallback={<Skeleton className="h-96" />}>

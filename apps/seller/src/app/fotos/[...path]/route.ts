@@ -3,7 +3,8 @@ import { sessionClient } from "@yuntera/next-kit/server";
 
 /**
  * A photo of the seller's own listing that is not public yet, for the photo
- * manager: `/fotos/<seller>/<product>/<photo>/<size>.<ext>`.
+ * manager: `/fotos/<seller>/<product>/<photo>/<size>.<ext>`; or the shop's
+ * logo waiting for review: `/fotos/<seller>/logo/<logo>/<size>.<ext>`.
  *
  * The file is downloaded here under the seller's own session, and the storage
  * rules decide: only a member of the shop, and only a file that is part of a
@@ -14,7 +15,7 @@ import { sessionClient } from "@yuntera/next-kit/server";
  */
 
 const PATH =
-  /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\/(400|800|1600)\.(jpg|png|webp)$/;
+  /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\/([0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}|logo)\/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\/(400|800|1600)\.(jpg|png|webp)$/;
 
 const notFound = () =>
   new Response(null, { status: 404, headers: { "cache-control": "no-store" } });

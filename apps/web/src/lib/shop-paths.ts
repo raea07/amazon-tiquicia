@@ -2,8 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import { type Api, createApi } from "@yuntera/db";
 
 /**
- * Which shop addresses stand for one thing in the catalogue, and whether that
- * thing exists.
+ * Which shop addresses stand for one thing in the catalogue (a product, a
+ * category, a shop's page), and whether that thing exists.
  *
  * Product and category pages send their prepared shell at once and fill in
  * the catalogue data afterwards. By then the response has already started
@@ -13,7 +13,7 @@ import { type Api, createApi } from "@yuntera/db";
  * depend on anything that only exists while a page renders.)
  */
 
-export type ShopPath = { kind: "product" | "category"; slug: string };
+export type ShopPath = { kind: "product" | "category" | "shop"; slug: string };
 
 /** The only shape a product or category address can have (see the slug rules in the database). */
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -25,11 +25,11 @@ const MAX_SLUG_LENGTH = 120;
  * not found without asking anyone.
  */
 export function shopPathOf(pathname: string): ShopPath | "malformed" | null {
-  const match = /^\/(p|c)\/([^/]*)\/?$/.exec(pathname);
+  const match = /^\/(p|c|tienda)\/([^/]*)\/?$/.exec(pathname);
   if (!match) return null;
   const slug = match[2] ?? "";
   if (slug.length > MAX_SLUG_LENGTH || !SLUG.test(slug)) return "malformed";
-  return { kind: match[1] === "p" ? "product" : "category", slug };
+  return { kind: match[1] === "p" ? "product" : match[1] === "c" ? "category" : "shop", slug };
 }
 
 let api: Api | undefined;
