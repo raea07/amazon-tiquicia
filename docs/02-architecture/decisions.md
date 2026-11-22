@@ -41,8 +41,8 @@ its own entry, not something that happens by drift.
 | 32  | [Delivered and returned parcels end an order as delivered](#32-delivered-and-returned-parcels-end-an-order-as-delivered)                            | Built; not on the preview yet            |
 | 33  | [A fee change pauses offers below the price floor](#33-a-fee-change-pauses-offers-below-the-price-floor)                                            | Built; not on the preview yet            |
 | 34  | ["Refund completed" waits for a recorded confirmation](#34-refund-completed-waits-for-a-recorded-confirmation)                                      | Built; gateway not built                 |
-| 35  | [The web apps' own sign-in limit, per visitor and per account](#35-the-web-apps-own-sign-in-limit-per-visitor-and-per-account) | Built; not on the preview yet |
-| 36  | [Session lifetimes per app](#36-session-lifetimes-per-app) | Built; not on the preview yet |
+| 35  | [The web apps' own sign-in limit, per visitor and per account](#35-the-web-apps-own-sign-in-limit-per-visitor-and-per-account)                      | Built; not on the preview yet            |
+| 36  | [Session lifetimes per app](#36-session-lifetimes-per-app)                                                                                          | Built; not on the preview yet            |
 
 ---
 
