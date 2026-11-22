@@ -9,13 +9,14 @@ production, with the Supabase and Vercel dashboards open.
 - **Steps 1–8 were done for the preview on 21 November 2026** (project
   `yuntera`, reference `lfulotisyeyooxecwnox`, US East, Postgres 17, free
   plan), first up to migration `082400`, then again for `082500` to
-  `082700` (account security, notifications, product photos), and then for
-  `082800` to `083100` (the security hardening). Migrations `083200` and
-  `083300` (the follow-ups) are **not** applied there yet and the apps there
-  are not redeployed with them: their steps are under
-  [Migrations 083200 and 083300](#migrations-083200-and-083300). Each step says
-  what was actually run and what differed from the local build. Places that
-  differed, or still may, are marked ⚠.
+  `082700` (account security, notifications, product photos), then for
+  `082800` to `083100` (the security hardening), and **on 22 November 2026
+  for `083200` to `083500`** (the follow-ups, payments, invoicing), with the
+  four apps redeployed each time: the preview has 33 migrations. What was run
+  for the last four is under
+  [What was done on the preview, 22 November 2026](#what-was-done-on-the-preview-22-november-2026).
+  Each step says what was actually run and what differed from the local
+  build. Places that differed, or still may, are marked ⚠.
 - **It costs money or it does not, depending on step 1.** Decide before
   starting.
 - **Do not touch the existing production project** of the other product in the
@@ -524,8 +525,10 @@ The database follow-ups (`083200`: the scan check at picking, checked driver
 positions and action times, the district of each stop, withdrawing a return,
 the final state of an order with a parcel delivered and one returned, the
 fee-floor re-check, new messages, the network extension's revoke) and the web
-follow-ups (`083300`: the apps' own sign-in limit). **Not applied to the hosted
-preview yet, and the web apps there are not redeployed with these changes.**
+follow-ups (`083300`: the apps' own sign-in limit). **Applied to the hosted
+preview on 22 November 2026, with `083400` and `083500`, and the four apps
+redeployed**; what happened is under
+[What was done on the preview, 22 November 2026](#what-was-done-on-the-preview-22-november-2026).
 Both were applied locally, in order, on top of a database built to `083100`
 with that era's demo data and committed activity (returns, refunds, an order
 with one parcel delivered and one returned, messages): both went in without
@@ -699,8 +702,8 @@ Payments through a gateway (`083400`: attempts at ONVO, its signed
 notifications, money kept for finance, gateway refunds completed only on the
 gateway's confirmation, fees, the modes `sandbox`, `test` and `live`) and
 electronic invoices (`083500`: the platform's own documents for Hacienda,
-numbered without gaps, signed and sent by a worker). **Not applied to the
-hosted preview yet.** They go on top of `083200` and `083300`, never before:
+numbered without gaps, signed and sent by a worker). **Applied to the hosted
+preview on 22 November 2026** (below). They go on top of `083200` and `083300`, never before:
 `083400` builds on the refund confirmations of `083200`, and `083500` on both.
 Applying them does not connect anything: the preview stays in `sandbox`, the
 two workers are not deployed, and nothing reaches ONVO or Hacienda until the
@@ -820,6 +823,219 @@ the migrations (step 4 of the section above); that the trigger on
 `auth.users` exists and an account deletion through the apps still succeeds
 there; that the suites pass on the platform; and the duration of each
 migration (both took under a second locally on the demo data).
+
+### What was done on the preview, 22 November 2026
+
+All four migrations, `083200` to `083500`, in one sitting (06:00 to 06:40
+UTC), in the order of both sections above. Vercel CLI 65.12.1, Playwright
+in headless Chromium, the Management API through the network proxy.
+
+1. **Recorded first.** Row counts of all 120 tables in `public`, `private`,
+   `auth`, `storage`, `vault` and `net` (2 498 rows); 30 timed calls of
+   `shop_path_exists` as a visitor (median 67 ms, fastest 47 ms) and of
+   `my_roles` as `comprador` after one sign-in (median 56 ms, fastest 53 ms);
+   the old apps' signed-in pages (shop, seller centre, console, route,
+   warehouse: 20 pages) loaded without an error.
+2. **`AUTH_GUARD_KEY`.** Generated with the command of point 1 into
+   `/root/yuntera-auth-guard-key.txt` (mode 600) and set on the four projects
+   with the command of point 2 (the CLI says "Removed trailing newline from
+   stdin input"); each lists it as a sensitive Production variable. The other
+   settings the merged code reads were all there (`NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SITE_URL`,
+   `ENABLE_EXPERIMENTAL_COREPACK` on all four, `NEXT_PUBLIC_SHOP_URL` on the
+   seller centre and the console, `SHOP_REFRESH_KEY` on those and the shop);
+   nothing was added, `YUNTERA_LOCAL_RUN` and the Turnstile key were not set.
+   After the redeploy the shop answered `401` (not `404`) to a refresh with a
+   wrong key, so its `SHOP_REFRESH_KEY` is usable.
+3. **Read-only checks, then `push`.** No order in `shipped` or
+   `partially_shipped` had a parcel delivered and the rest returned; 2
+   refunds; `payments_mode` `sandbox`; `has_table_privilege(current_user,
+   'auth.users', 'TRIGGER')` true. `push` applied all four at the first try
+   in 2.6 s (06:05:59 to 06:06:02); `status` lists 33 files. No platform
+   difference this time.
+4. **What they left.**
+   - Both refunds got a row in `private.refund_confirmations`, reference
+     `before_confirmations`, at their booking time; no `refund.completed`
+     event was written; no refund lacks a confirmation or a way back, and
+     `private.gateway_refunds` was empty. The cantons "Vázquez De Coronado",
+     "Montes De Oca" and "Montes De Oro" and 13 districts lost their capital
+     joining word. No order was in the delivered-and-returned state.
+   - ⚠ **The network extension's grants are still there.** All four checks
+     of point 4 are true. The schema's ACL is
+     `{supabase_admin=UC/supabase_admin,=U/supabase_admin,…,anon=U/supabase_admin,authenticated=U/supabase_admin,…}`;
+     its two tables give everyone (PUBLIC) every privilege and its functions
+     give PUBLIC execute, all granted by `supabase_admin`, and
+     `issue_pg_net_access` exists. `postgres` holds only `U` without grant
+     option, so its revoke changes nothing (no error); running section 8 of
+     `083200` again changed nothing. The Data API still refuses the schema
+     (`406 PGRST106` for `Accept-Profile: net`). Recorded as a platform limit
+     for the owner to take to Supabase support or accept; `125_followups.sql`
+     fails on it (point 6).
+   - The scheduled jobs: `payments-sweep`, `invoice-sweep` and
+     `auth-attempts-cleanup` were added; from the push to 06:34 every run of
+     every job succeeded (`invoice-sweep` and `notify-sweep` 56 each,
+     `payments-sweep` 28, `expire-unpaid-orders` 5, 5 to 27 ms on average);
+     `select private.notify_kick();` ran without error; `net.http_request_queue`
+     and `net._http_response` stayed empty.
+   - `payments_mode` still `"sandbox"`; `invoicing_issuer.ready` and
+     `invoicing_policy.simulated_payments` false; no electronic invoice; the
+     two worker functions not executable by `anon` or `authenticated`.
+   - The guard: 94 tables (62 public, 32 private, 14 new), row-level security
+     on all, 0 table, sequence or column privileges for `anon`,
+     `authenticated` or PUBLIC (by `has_table_privilege` and by `aclexplode`),
+     0 write policies (57 read policies), no definer function without a fixed
+     `search_path`; the default privileges of `postgres` as before.
+     `anon` may execute 13 functions in `public` (11 before: the two limit
+     functions) and `authenticated` 181 (155).
+   - What is owed to shoppers (`refunds_payable`): −1 990 000 céntimos, that
+     is ₡19,900 owed, all from the return refund on YT-100114 booked at 00:09
+     before these migrations. The other refund booked before (₡6,450) did not
+     go through that account. Not adjusted.
+5. **The digest.** Computed and stored with the commands of point 7 (the
+   file under `/root`, mode 600, removed straight after); `vault.secrets`
+   holds `auth_limit_caller_digest` only. `auth_limit_reserve` as a visitor
+   without a proof, with a random proof and with an empty one answers
+   `auth_limit_caller`; after the redeploy every app signed its demo user in.
+6. **Suites.** ⚠ The first run failed nine files. One for the platform
+   (`125_followups`, its last check, `net_grants`: point 4); the other eight
+   for reasons in the tests, all about a preview seeded before invoicing and
+   used by earlier smoke tests, each fixed without loosening what it proves:
+   - `050` looked for the seed's cash stop only while `pending`; a wrong code
+     at the door had left it `arrived`, which is still open.
+   - `095` counted the deleted person's invitations, orders and reviews as a
+     fresh seed has them (a revoked invitation and a seventh order exist);
+     it now compares with what the person had before.
+   - `095`, `130` and `135_merge_followups` called the sign-in limit without
+     the apps' proof, which the digest now refuses. `_helpers.sql` has
+     `pg_temp.set_caller_digest`, which sets the digest for the suite's own
+     rolled-back transaction; `130` now tests the caller check against the
+     real Vault there instead of skipping it.
+   - `095`, `140` and `145` relied on the seed's settings for the demo issuer
+     (ready, simulated money documented), and `140` on invoice jobs for the
+     seed's payments; a database seeded before `083500` never got them, by
+     design. They get them for their own transaction only
+     (`pg_temp.seed_invoicing_settings`, and in `140` the jobs the route
+     makes).
+   - `135_payments` and `145` (`check_money`) required what is owed to
+     shoppers to equal the refunds not completed; the ₡19,900 above stays
+     there with nothing recording it leaving, so refunds confirmed
+     `before_confirmations` without a way back are now counted apart.
+
+   Then 23 of 24 files pass on the platform, part 2 of `100_notifications`
+   skipped as before; `125_followups` fails at its last block only (sections
+   1 to 7 run before it and pass). Locally all 24 pass with the changes
+   (lane 19, fresh reset). Row counts were identical before and after the
+   runs (134 tables, 2 555 rows), and the digest was unchanged afterwards.
+7. **Redeploy.** One at a time from the repository root with `vercel deploy
+   --prod --yes --token dummy`, 30 to 40 s each: web
+   `dpl_12nCw68ahpdAfkvuEMhwrTrVxc8h` (ready 06:19:20), vende
+   `dpl_6paYVhBG7mqzCDo86Ky5hLtgcMbx`, central
+   `dpl_5usvPFn9DaDvSn7vo7L8xCs9eACo`, campo
+   `dpl_BYDzN2bmfP32cZeCcpZBW9kn1F3W` (ready 06:21:14). Without a bypass all
+   12 addresses (each deployment's own, `<project>.vercel.app` and
+   `<project>-sports-calendar.vercel.app`) answer `302` to
+   `vercel.com/sso-api`, at `/` and at `/ingresar`. **The window**: from the
+   push to the field app's redeploy, about 15 minutes; the old apps' 20
+   signed-in pages loaded right after the push as before; picking in the old
+   field app would have been refused (`scan_required`, the call it makes was
+   tried on the API afterwards); no other action was tried in the window, and
+   no warehouse work was going on.
+8. **Smoke test** through a bypass made and revoked as in step 8 (the API
+   now wants exactly 32 letters and digits), sent to the four `vercel.app`
+   hosts only, failing on console errors, page errors, failed requests and
+   5xx. Every script passed with no error:
+   - Regression at 1280 and 390 px: home (CSP, HSTS), `licuadra` finds the
+     blender, a product, choosing another zone (the "Actualizando la fecha de
+     entrega…" notice was seen while the new date came), cart with IVA,
+     sign-in as `comprador` (cookie `HttpOnly`, `Secure`), no payment method
+     chosen in advance, SINPE Móvil, the simulated payment, a four-digit
+     delivery code, "Mis pedidos", "Cerrar sesión" (YT-100783, YT-100784;
+     YT-100782 from a run that stopped at a check, later cancelled); the
+     seller centre, the console, the route and the warehouse as their demo
+     users, signed in and out, nothing scrolled sideways. Session cookies:
+     shop 90 days, seller centre 30 days, console and field app 12 hours.
+   - Sign-in limit, with two throwaway accounts under `yuntera.example`
+     signed up through the shop (consent box unticked at first; with
+     confirmation off each was signed in at once): wrong passwords for the
+     first from another browser until "Hubo demasiados intentos de ingreso.
+     Por seguridad, espere 14 minutos y vuelva a intentarlo. Si no recuerda
+     la contraseña, puede restablecerla con «Olvidé mi contraseña».", the
+     address kept in the form; meanwhile the second signed in at 390 px. ⚠
+     This network leaves through several addresses (5 attempts arrived from
+     4), so the per-address bucket filled only after 21 wrong passwords; the
+     6th, with the right password, still signed in. Sign-up with the first
+     account's address showed "Revise su correo… Le enviamos un correo…" and
+     nothing about an existing account; a new address is signed in at once
+     instead, as expected with confirmation off. Auth sent nothing (it
+     answers `user_already_exists` without e-mail when confirmation is off).
+     Both accounts deleted themselves with "Eliminar mi cuenta" (the first
+     from its own browser while the limit held it elsewhere); afterwards they
+     do not sign in, and they have no session, identity or name left. ⚠ The
+     first run lost the throwaways' random passwords when it stopped early;
+     they were given new ones by a guarded `update` on exactly those two
+     addresses, passed as a query parameter, and the second run kept them in
+     a mode-600 file, removed at the end.
+   - The console as `central`: all 18 sections by its menu at 1280 px and
+     by the folded menu at 390 px; a search for "Andrés" found 6 orders with
+     the name in neither the address bar nor any request; `/cobros` says
+     "Modo de pagos: Simulación" and shows "Reembolsos por pagar ₡19 900";
+     `/cobros/ajustes` "Modo actual: Simulación" and that the payment service
+     has not reported; `/cobros/revision` and `/cobros/reembolsos` load;
+     `/comprobantes` "La facturación electrónica no está configurada… no se
+     emite ningún comprobante"; `/tarifas` loads.
+   - The field app at 390 px, on YT-100783's parcel: another product's real
+     code (YT-100784's) refused by the API (`scanned_wrong_item`) and on the
+     screen ("Ese código no es el de este producto…"); no code at all is
+     `scan_required`; the right code in lower case with spaces confirmed the
+     line. `repartidor`'s eight stops all carry a district and cantón; the
+     route and the open stop show "San Pedro, Montes de Oca".
+   - `comprador` at 390 px withdrew the claim an earlier test left open on
+     YT-100010; a second tab then asking for the same unit while this round's
+     own claim was open got "Esas unidades ya están en otra solicitud de
+     devolución…"; that claim was withdrawn too. Both rows now read "Usted
+     retiró esta solicitud."
+   - `central` closed the nine test reports on `cafe-molido-tarrazu-340g`
+     with "Descartar el reporte" and the note "Reportes de una prueba
+     automática del sitio de prueba; no había nada que corregir."; the
+     product stays active.
+   - Point 7 of the 083400 section: YT-100782 (paid by the simulation)
+     cancelled by the shopper; the order page shows "Reembolsos ₡5 400
+     Completado … en modo de prueba, sin dinero real"; the gateway refund is
+     `simulated`, `succeeded`, confirmation `sandbox`; events `order.cancelled`
+     and `refund.completed`, no `refund.requested`. Its invoice jobs wait
+     (`pending`, 0 attempts) and `invoice_money_documented` is false for all
+     three orders, so they will never be documented on the preview.
+   - Afterwards a token after sign-out got `400 session_ended` from
+     `my_orders`, `my_roles` and `my_addresses`; 30 timed calls again:
+     medians 60 ms (visitor) and 53 ms (shopper), fastest 48 and 49 ms.
+9. **Afterwards.** Vercel listed no runtime error and no log line for the
+   four projects from 05:55 to 06:34. Every scheduled job succeeded (above).
+   Advisors, against the round before: security 233 findings (was 191) —
+   `authenticated` may execute 181 definer functions (155), `anon` 13 (11:
+   the sign-in limit's two), RLS with no policy on 37 tables (23: the 14 new
+   private tables, reached only through definer functions), leaked-password
+   protection off and `pg_net` in `public` as before. Performance: 76
+   unindexed foreign keys (68) and 16 unused indexes (14), on demo data.
+
+The bypass secrets were revoked; each project lists none and all 12 addresses
+redirect to the login again.
+
+⚠ **Found, not fixed here** (STATUS, "Things to know"): cash on delivery
+taken in sandbox counts as real money for invoicing
+(`invoice_money_documented` checks only the sandbox provider and the test
+environment), so it would be documented once an issuer is set up; the
+console's invoices page and the shopper's order page say slightly wrong
+things in simulation.
+
+**For production**, on the throwaway project built for it: do points 1 to 3
+of the 083200 section and point 1 of the 083400 section first, all four
+migrations in one `push` (they went in unchanged here); store the digest
+before the first sign-in; expect the `net` grants to be the platform's as
+here, and decide with Supabase support before launch; the suites should pass
+as they did here on a fresh project except `125`'s last check; keep
+`payments_mode` and the invoicing settings as they are until the owner's
+set-up; and with e-mail confirmation on, check that sign-up with an existing
+address and with a new one look the same, which the preview cannot show.
 
 ## 4. Confirm the database is what the migrations say
 

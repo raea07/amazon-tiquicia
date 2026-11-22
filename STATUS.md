@@ -7,13 +7,14 @@ payer, refunds sent through it and completed only on its confirmation, and a
 finance section in the console (migration `083400`); and the platform's own
 electronic documents for Hacienda, signed and sent by a worker, shown on the
 shopper's order and in the seller's statements (migration `083500`). Both
-work only against local fakes. **Migrations `083200`, `083300`, `083400` and
-`083500` are NOT on the hosted preview yet, and the web apps there are NOT
-redeployed with these changes**: the preview still runs the 29 migrations and
-the apps of the earlier round, and **it still simulates payments** (the steps
-are in the runbook, sections
+work only against local fakes. **On 22 November 2026 all four migrations
+(`083200` to `083500`) were applied to the hosted preview, which now has 33,
+and its four web apps were redeployed with this code.** The preview **still
+simulates payments** (`payments_mode` is `sandbox`), no worker is deployed
+(notifications, payments, invoicing), and nothing is invoiced: the issuer is
+not set up. What was done and what differed is in the runbook, sections
 [083200 and 083300](docs/07-deployment/runbook-first-deploy.md#migrations-083200-and-083300)
-and [083400 and 083500](docs/07-deployment/runbook-first-deploy.md#migrations-083400-and-083500)).
+and [083400 and 083500](docs/07-deployment/runbook-first-deploy.md#migrations-083400-and-083500).
 This is the honest state of the project: what exists, how far it was checked,
 and what only the owner can do.
 
@@ -30,9 +31,10 @@ Everyone can reset a password, confirm their e-mail and delete their account;
 staff and sellers can add a second factor; messages for every step of an order
 are planned and sent, but only to local fake providers. **A hosted preview
 exists.** The database is a Supabase project in your separate free
-organisation, with all 29 migrations applied, the security review's fixes
-included, and the demo data loaded. The notification worker is not deployed, so
-nothing is sent. Since the review, apps and visitors can reach the database
+organisation, with all 33 migrations applied (the security review's fixes,
+both follow-ups, payments and invoicing included), and the demo data loaded.
+Payments there are simulated, and no worker is deployed, so nothing is sent,
+charged or invoiced. Since the review, apps and visitors can reach the database
 only through its functions: no table is readable or writable directly. The
 four web apps are deployed as a preview on Vercel at
 `yuntera-web`, `yuntera-vende`, `yuntera-central` and `yuntera-campo` (each
@@ -93,29 +95,30 @@ In the order that unblocks the most.
       `storage` instead of failing on the platform's setting.
    2. The `pg_net` extension lets visitors and signed-in users call its web
       request functions and read its responses. The API does not expose its
-      schema, so nobody can reach them over the internet. Migration `083200`
-      revokes this; whether the revoke holds on the hosted project, and after
-      an upgrade of the extension, must be checked there with the queries in
-      the runbook once it is applied.
+      schema, so nobody can reach them over the internet (checked again on
+      22 November: `406`, "Invalid schema: net"). **Migration `083200`'s
+      revoke does not hold on the hosted project:** the grants belong to the
+      platform's own role (`supabase_admin`), to `anon`, `authenticated` and
+      to everyone (PUBLIC), and `postgres` cannot take back a grant it did not
+      make. Running the revoke again changed nothing. Only Supabase support
+      can remove them, or you accept it as a limit; until then
+      `125_followups.sql` fails there at its last check, on purpose.
 
    Migrations `082800` to `083100` are applied to the preview (that item is
    done), and the four web apps are redeployed with them. The four demo
    shops' payout accounts were loaded before approvals existed; I stamped
    exactly those four as approved, as the seed does, so payout runs on the
    preview include them again.
-4. **Take migrations `083200` and `083300` to the preview and redeploy the
-   four web apps**, in the order the
-   [runbook](docs/07-deployment/runbook-first-deploy.md#migrations-083200-and-083300)
-   gives: generate `AUTH_GUARD_KEY` and set it on all four Vercel projects
-   **before** redeploying (the new apps sign nobody in without it), apply both
-   migrations, check the network extension's grants, run the suites,
-   redeploy, then store the key's digest in the project's Vault. Staff and
-   field users are signed out once by the new session limits.
-   Then **`083400` and `083500`**, by their own
-   [runbook section](docs/07-deployment/runbook-first-deploy.md#migrations-083400-and-083500):
-   the preview stays in sandbox mode, nothing is invoiced, and the payments
-   and invoice workers are not deployed until you have ONVO's keys and the tax
-   credentials (item 6).
+4. **Tell the accountant about ₡19,900 owed to shoppers.** The account
+   "Reembolsos por pagar a clientes" on the preview holds ₡19,900 (the
+   refunded damaged-item return on YT-100114, booked on 22 November before
+   `083400`). Nothing recorded that money leaving, because in sandbox nothing
+   moved it; it stays there until finance clears it with an adjustment the
+   accountant agrees to. I did not adjust it. (Migrations `083200` to
+   `083500` are on the preview and the apps redeployed: that item is done.
+   `AUTH_GUARD_KEY` is in a file only root can read on the machine that did
+   it, `/root/yuntera-auth-guard-key.txt`; keep it or replace it on all four
+   projects together with the digest in Vault, as the runbook says.)
 5. **Open a pull request for this branch** (`claude/vigilant-edison-lh64v2`)
    when you want it on `main`. I did not open one because you had not asked.
    The CI workflow will run for the first time then; its steps were run by hand
@@ -395,6 +398,34 @@ and no write policy is left. On that database the payout suites fail with
 `nothing_to_pay` until the demo payout accounts are approved; with them
 approved, they pass.
 
+On the hosted preview, on 22 November 2026 (06:00 to 06:40 UTC), after
+applying migrations `083200` to `083500` and redeploying the four apps. The
+commands and numbers are in the runbook, section
+[083200 and 083300](docs/07-deployment/runbook-first-deploy.md#migrations-083200-and-083300).
+
+| Check              | Result                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before applying    | No order was waiting to become delivered; two refunds were booked; payments in sandbox; the migration role may add a trigger on the sign-in table. `AUTH_GUARD_KEY` was set on all four projects first; nothing else was missing                                                                                                                                                                                              |
+| Applying           | All four went in at the first try, in 2.6 seconds; no platform difference this time                                                                                                                                                                                                                                                                                                                                           |
+| One-off changes    | Both refunds got a confirmation marked "before confirmations" and no "refund completed" was announced again; three cantons and 13 districts were corrected ("Montes de Oca", which the drivers' app now shows); no order was in the delivered-and-returned state, so none changed                                                                                                                                             |
+| Guard              | No app role holds any privilege on any of the 94 tables (14 of them new), view, sequence or column; no write policy; row-level security on everywhere; the workers' functions are closed to the app roles. The network extension's grants are **not** gone ("What needs you", item 3)                                                                                                                                         |
+| Payments, invoices | Still in sandbox; the simulated payment works; a cancellation of a simulated purchase showed the refund as completed ("en modo de prueba, sin dinero real"). The issuer is not ready, simulated money is not documented, and no document exists. The three new scheduled jobs succeed every run and wake nobody                                                                                                               |
+| Sign-in limit      | The key's digest is in Vault: a call without the apps' proof is refused; every app signs people in. With two throwaway accounts: wrong passwords until the limit, then "Hubo demasiados intentos de ingreso. Por seguridad, espere 14 minutos…", while the second account signed in. The guesses spread over several of this network's addresses, so the limit held after 21 wrong passwords, not 5                           |
+| Sessions           | The shop's cookie lasts 90 days, the seller centre's 30, the console's and the field app's 12 hours. A token after sign-out is refused at once; calls take as long as before                                                                                                                                                                                                                                                  |
+| Database tests     | 23 of 24 files pass on the platform; `125_followups` fails at its last check only, on the network extension's grants (above). Six suites first failed for reasons in the tests, all about a used preview seeded before invoicing (see the runbook); each was fixed without loosening what it proves and passes locally. The suites left every table as they found it                                                          |
+| Old apps, new data | For the 15 minutes before the redeploy the old apps' pages loaded against the new database; the old field app could not have confirmed a pick in that time (`scan_required`); no action was tried                                                                                                                                                                                                                             |
+| Browser checks     | At 1280 and 390 px, with no console error, failed request or server error: a purchase with SINPE Móvil to the delivery code, with the zone's "update coming" notice; one page of each other app; every console section at both widths; the order search keeping names out of addresses; the finance pages in simulation; a wrong product refused at picking and the right one accepted; a stop's district; a return withdrawn |
+| Afterwards         | No runtime error or log line on the four apps; the scheduled jobs all succeeded; nothing was sent                                                                                                                                                                                                                                                                                                                             |
+
+What this round left on the preview, on purpose: three orders of
+`comprador` (YT-100782 cancelled and refunded in the simulation, YT-100783
+with its one line picked, YT-100784 paid and waiting); on YT-100010 the
+earlier test's open claim and this round's own claim, both withdrawn by the
+shopper; the nine test reports on the Tarrazú coffee closed as tests; two
+deleted throwaway accounts (their sign-in records anonymised, as every
+deletion does); about 20 sessions of demo accounts left to expire; and 25
+sign-in-limit rows, which go within two hours.
+
 On the hosted preview, on 21 and 22 November 2026, after applying migrations
 `082800` to `083100` and redeploying the four apps. The commands and numbers
 are in the
@@ -459,6 +490,14 @@ What these checks do **not** cover, stated plainly:
   invitations in the browser, a suspended driver losing their routes, a
   locked delivery code released by staff, actions in the old apps during the
   15 minutes before the redeploy, and anything in the native apps.
+- **The follow-ups, payments and invoicing on the hosted preview were
+  smoke-tested, not exhaustively.** Not tried there: `test` or `live` payment
+  mode, any worker (none is deployed), the gateway's notifications, a real
+  invoice or Hacienda, the Turnstile check, a refresh-limit wait, an idle
+  console session timing out, a fee change, a driver's offline queue, and the
+  sign-up screens with e-mail confirmation on (it stays off on the preview,
+  so a new address is signed in at once while an existing one sees "Revise su
+  correo").
 - **The hosted preview was smoke-tested, not exhaustively tested.** Not tried
   there: a staff role other than administrator, creating a payout run, a
   seller with a second factor, the notification worker's secret key, and a
@@ -709,9 +748,10 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     (120 refused refreshes in 10 minutes), a person whose access token has
     expired is treated as signed out for those requests; nothing is deleted,
     and the token is renewed after the wait.
-  - Until the hosted project stores the key's digest in Vault, anyone with
-    the public key can add rows to the sign-in limit's table (they count
-    against nobody and go within two hours). Not tried against a real Vault.
+  - The hosted preview stores the key's digest in Vault since 22 November,
+    and a call without the apps' proof is refused there. A project without
+    the digest lets anyone with the public key add rows to the sign-in
+    limit's table (they count against nobody and go within two hours).
   - With e-mail confirmation off, as on the preview, a new address is signed
     in at once at sign-up, so a stranger can still tell it from an existing
     one there.
@@ -722,9 +762,22 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     shop's cache; the shop catches up within its cache lifetime (about a
     minute). Offers paused by a fee change catch up the same way.
   - Auth's own refusal by its human check is shown with the generic message.
-  - The `pg_net` revoke is not verified on the hosted project, nor whether the
-    platform grants it again on an upgrade (runbook, "Migrations 083200 and
-    083300", point 4).
+  - The `pg_net` revoke does not take on the hosted project ("What needs
+    you", item 3); the API does not expose the schema.
+  - Cash on delivery taken in sandbox mode counts as real money for
+    invoicing: `invoice_money_documented` treats only the sandbox provider and
+    the gateway's test environment as simulated. Nothing is issued while the
+    issuer is not set up, but once it is, a new sandbox cash order on the
+    preview would get documents. Needs a new migration before the issuer is
+    set up anywhere with demo cash orders.
+  - The console's invoices page says the payments waiting "will be issued in
+    order" once the issuer is set up; simulated ones never will. The shopper's
+    order page without a delivery fee says both that Yuntera issues no
+    document and that it issues one for the delivery.
+  - Sign-in limits were tried from a network that leaves through several
+    addresses, so the strict per-address limit was met only after about 20
+    wrong passwords; the per-address behaviour as such is covered by the
+    local journey.
   - The phone-clock correction of queued driver actions is tested in the
     database and the web export only, not on a phone; if the phone's clock
     jumps while an action waits, the time can still be off.
@@ -739,8 +792,9 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     declined or withdrawn within that minute is still announced.
   - The seller centre has no screen for offers paused by a fee change beyond
     their paused status and the message; staff see them on `/tarifas`.
-  - Between applying `083200` on the preview and redeploying the field app,
-    the old field app cannot confirm a pick (`scan_required`).
+  - Between applying `083200` and redeploying the field app, the old field app
+    cannot confirm a pick (`scan_required`): 15 minutes on the preview on
+    22 November.
 
 ## Running it
 
