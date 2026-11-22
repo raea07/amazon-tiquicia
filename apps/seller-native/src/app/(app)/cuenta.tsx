@@ -209,8 +209,9 @@ export default function AccountScreen() {
           </Alert>
         ) : null}
         <Text variant="small" tint="muted">
-          Los datos fiscales no se cambian desde aquí. Si alguno cambió, escríbanos desde su correo
-          de contacto y lo verificamos con usted.
+          El nombre de la tienda, los datos fiscales, el correo y el teléfono de contacto no se
+          cambian desde la aplicación: pida el cambio en el sitio de vendedores, en Cuenta. Lo
+          revisamos con usted antes de aplicarlo.
         </Text>
       </Card>
 
@@ -226,6 +227,19 @@ export default function AccountScreen() {
             : "—"}
         </Item>
 
+        {current.iban_masked !== null &&
+        current.approved === false &&
+        request?.status !== "pending" ? (
+          <Alert
+            tone="warning"
+            title="Su cuenta todavía no está aprobada"
+            testID="payout-unapproved"
+          >
+            Esta cuenta se registró antes de que revisáramos cada cuenta, así que no le podemos
+            transferir a ella hasta aprobarla. Envíela abajo, tal como está, para que la confirmemos
+            con usted por teléfono.
+          </Alert>
+        ) : null}
         {request?.status === "pending" ? (
           <Alert tone="info" title="Cambio de cuenta en revisión" testID="payout-request-pending">
             {`El ${longDay(request.requested_at)} se pidió cambiar a la cuenta ${request.iban_masked} (titular: ${request.holder_name}). Le vamos a llamar al teléfono registrado de la tienda para confirmarlo. Mientras tanto le seguimos pagando a la cuenta actual.`}

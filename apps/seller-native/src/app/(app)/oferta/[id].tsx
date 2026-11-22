@@ -25,6 +25,7 @@ import { View } from "react-native";
 import { ProductThumb } from "@/components/parts";
 import { StockForm } from "@/components/stock-form";
 import { FULFILLMENT_LABEL, PRODUCT_STATUS } from "@/lib/labels";
+import { withPriceFloor } from "@/lib/refusal";
 import { checkOffer, type OfferInput, plainColones } from "@/lib/rules";
 import { shopKey, useShop } from "@/lib/shops";
 
@@ -105,7 +106,7 @@ function PriceForm({ listing }: { listing: SellerListing }) {
             await save.mutateAsync(checked.input);
             setResult({ ok: "Cambios guardados." });
           } catch (error) {
-            setResult({ error: messageOf(error) });
+            setResult({ error: withPriceFloor(error, messageOf(error)) });
           }
         }}
       >

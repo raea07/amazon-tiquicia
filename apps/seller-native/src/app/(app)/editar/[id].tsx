@@ -27,6 +27,7 @@ import { View } from "react-native";
 import { CategoryField, PackageFields, useCategoryOptions } from "@/components/listing-fields";
 import { ListingChanges } from "@/components/parts";
 import { PRODUCT_STATUS } from "@/lib/labels";
+import { withPriceFloor } from "@/lib/refusal";
 import {
   checkListingEdit,
   type ListingEditForm,
@@ -96,7 +97,7 @@ function ListingState({
               await withdraw.mutateAsync(listing.product_id);
               onWithdrawn("Retiramos su cambio. La publicación queda como está.");
             } catch (cause) {
-              setError(messageOf(cause));
+              setError(withPriceFloor(cause, messageOf(cause)));
             }
           }}
         >
@@ -186,7 +187,7 @@ function EditForm({
       const result = await update.mutateAsync(checked.input);
       onSaved(listingEditOutcome(result.outcome));
     } catch (cause) {
-      setError(messageOf(cause));
+      setError(withPriceFloor(cause, messageOf(cause)));
     } finally {
       setSending(null);
     }
@@ -315,7 +316,7 @@ function ArchiveForm({
             await archive.mutateAsync(productId);
             onArchived("Producto archivado. Ya no aparece en la tienda.");
           } catch (cause) {
-            setError(messageOf(cause));
+            setError(withPriceFloor(cause, messageOf(cause)));
           }
         }}
       >

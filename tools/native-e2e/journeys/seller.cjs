@@ -4,7 +4,8 @@
 // Higuerón; sees what needs doing today; changes a price and a stock count;
 // creates a listing and checks the fee preview against the documented example
 // (₡20 000, hogar, card, shipped by the seller: ₡16 203,20); edits the title of
-// a published listing and sees it waiting for review; checks that the three
+// a published listing and sees it waiting for review; a price below the fees
+// is refused with the lowest price the database accepts; checks that the three
 // balances on the payouts screen add up; sees the payout account masked and a
 // wrong IBAN refused before anything is sent; and packs an order. In the
 // other shop, the first shop's messages are gone and each balance matches
@@ -43,6 +44,8 @@ function check(condition, message) {
 
 /** True while the second-step checks run: Auth's 422 for a wrong code is expected then. */
 let authRefusals = false;
+// While a refusal from the database is expected (a 400 the browser logs).
+let dbRefusals = false;
 
 /** A call to Auth's HTTP API (setting up the authenticator app, as the website does). */
 async function auth(method, path, data, token) {
@@ -132,6 +135,7 @@ function colones(text) {
       if (m.type() !== "error") return;
       // A wrong second-step code: Auth answers 422 and the browser logs it.
       if (authRefusals && /status of 422/.test(m.text())) return;
+      if (dbRefusals && /status of 400/.test(m.text())) return;
       errors.push(`${name} console: ${m.text().slice(0, 300)}`);
     });
     page.on("pageerror", (e) => errors.push(`${name} pageerror: ${String(e).slice(0, 300)}`));
@@ -262,6 +266,23 @@ function colones(text) {
   await visible("offer-save").click();
   await page.getByText("Cambios guardados.").first().waitFor();
   check(true, `price changed from ₡${before} to ₡${after}`);
+  // A price below what the sale would pay in fees: the database refuses it and
+  // says the lowest price it would take.
+  dbRefusals = true;
+  await visible("offer-price").fill("1");
+  await visible("offer-save").click();
+  const floor = page
+    .getByText(/El precio mínimo para este producto es ₡/)
+    .filter({ visible: true });
+  await floor.first().waitFor();
+  const floorText = (await floor.first().innerText()).replace(/\s+/g, " ");
+  log("   ", floorText);
+  check(
+    /Suba el precio/.test(floorText) && !/[a-z]+_[a-z_]+/.test(floorText),
+    "a price below the fees is refused in Spanish, with the lowest price accepted",
+  );
+  dbRefusals = false;
+  await visible("offer-price").fill(after);
   const stockField = page.locator('[data-testid^="stock-quantity-"]').filter({ visible: true });
   await stockField.first().fill("23");
   await page.locator('[data-testid^="stock-save-"]').filter({ visible: true }).first().click();

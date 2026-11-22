@@ -118,15 +118,18 @@ export function checkShop(form: ShopForm): Checked<ShopInput> {
 
 // ── Listings ────────────────────────────────────────────────────────────────
 
+const OVER_200_CM = "Yuntera no transporta paquetes de más de 200 cm por lado. Revise las medidas.";
+
 const packageSchema = {
   weightGrams: z.coerce
     .number("Escriba el peso en gramos.")
     .int("Escriba el peso en gramos, sin decimales.")
     .min(1, "Escriba el peso en gramos.")
     .max(30_000, "Por ahora no manejamos productos de más de 30 kg."),
-  lengthCm: z.coerce.number().min(0.1, "Escriba el largo en centímetros.").max(200),
-  widthCm: z.coerce.number().min(0.1, "Escriba el ancho en centímetros.").max(200),
-  heightCm: z.coerce.number().min(0.1, "Escriba el alto en centímetros.").max(200),
+  // The same limit the database keeps (package_over_limit), in its words.
+  lengthCm: z.coerce.number().min(0.1, "Escriba el largo en centímetros.").max(200, OVER_200_CM),
+  widthCm: z.coerce.number().min(0.1, "Escriba el ancho en centímetros.").max(200, OVER_200_CM),
+  heightCm: z.coerce.number().min(0.1, "Escriba el alto en centímetros.").max(200, OVER_200_CM),
 };
 
 const titleSchema = z

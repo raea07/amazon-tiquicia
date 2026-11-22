@@ -68,15 +68,15 @@ export default function HomeScreen() {
 
         {justRegistered === shop.id ? (
           <Alert tone="success" title="Recibimos su solicitud">
-            Mientras verificamos sus datos puede ir creando sus productos. Se publican cuando su
-            tienda quede aprobada.
+            Mientras verificamos sus datos puede ir preparando sus productos como borradores. Los
+            envía a revisión cuando su tienda quede aprobada.
           </Alert>
         ) : null}
         {seller.status === "pending" ? (
           <Alert tone="info" title="Su tienda está en revisión" testID="shop-pending">
             Estamos verificando su identidad con los datos que nos dio. Normalmente toma uno o dos
-            días hábiles y le avisamos por correo. Sus productos todavía no son visibles para los
-            compradores.
+            días hábiles y le avisamos por correo. Mientras tanto puede preparar productos como
+            borradores; se envían a revisión cuando la tienda quede aprobada.
           </Alert>
         ) : null}
         {seller.status === "suspended" ? (

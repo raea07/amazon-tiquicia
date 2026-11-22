@@ -20,6 +20,7 @@ import {
   PackageFields,
   useCategoryOptions,
 } from "@/components/listing-fields";
+import { withPriceFloor } from "@/lib/refusal";
 import { checkNewListing, type ListingForm, type NewListingInput } from "@/lib/rules";
 import { shopKey, useShop } from "@/lib/shops";
 
@@ -72,7 +73,7 @@ export default function NewListingScreen() {
         params: { creado: draft ? "borrador" : "revision", tienda: shop.id },
       });
     } catch (cause) {
-      setError(messageOf(cause));
+      setError(withPriceFloor(cause, messageOf(cause)));
     } finally {
       setSending(null);
     }

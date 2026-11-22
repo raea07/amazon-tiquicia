@@ -115,6 +115,10 @@ describe("checkNewListing (createListing)", () => {
       "Por ahora no manejamos productos de más de 30 kg.",
     );
     assert.equal(
+      errorOf(checkNewListing({ ...good, lengthCm: "250" }, false)),
+      "Yuntera no transporta paquetes de más de 200 cm por lado. Revise las medidas.",
+    );
+    assert.equal(
       errorOf(checkNewListing({ ...good, price: "doce" }, false)),
       "Escriba el precio en colones, por ejemplo 12 500.",
     );
