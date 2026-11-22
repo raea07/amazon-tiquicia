@@ -219,7 +219,12 @@ function BrandFilter({
   brands: ShopBrand[];
   resultCount: number;
 }) {
-  const current = brands.find((brand) => brand.slug === query.brand);
+  // An old address (a brand renamed, or merged into another) means the brand
+  // that has it now: select that one and name it.
+  const current = query.brand
+    ? (brands.find((brand) => brand.slug === query.brand) ??
+      brands.find((brand) => brand.former_slugs.includes(query.brand ?? "")))
+    : undefined;
   if (brands.length < 2 && !query.brand) return null;
   return (
     <div className="flex flex-wrap items-end gap-3 text-sm">
@@ -236,7 +241,7 @@ function BrandFilter({
           <select
             id="marca"
             name="marca"
-            defaultValue={query.brand ?? ""}
+            defaultValue={current?.slug ?? query.brand ?? ""}
             className="min-h-11 max-w-full rounded-md border border-border-strong bg-surface px-3"
           >
             <option value="">Todas las marcas</option>

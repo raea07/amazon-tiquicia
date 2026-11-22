@@ -1,5 +1,4 @@
 import { ApiError, type OpsCatalogProduct } from "@yuntera/db";
-import { ActionForm } from "@yuntera/next-kit/client";
 import { messageOf, sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import {
@@ -16,6 +15,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { correctProduct, restoreProduct, takeDownProduct } from "@/app/catalogue-actions";
 import { CatalogueNav } from "@/components/catalogue-nav";
+import { CatalogueForm, CatalogueOutcome } from "@/components/catalogue-outcome";
 import { percent } from "@/lib/catalogue-labels";
 import { requireStaff } from "@/lib/staff";
 
@@ -31,9 +31,11 @@ export default function CorrectProductPage({ searchParams }: PageProps<"/catalog
         con lo que cambió y el motivo que usted escriba.
       </PageHeader>
       <div className="mt-6">
-        <Suspense fallback={<Skeleton className="h-96" />}>
-          <Correction searchParams={searchParams} />
-        </Suspense>
+        <CatalogueOutcome>
+          <Suspense fallback={<Skeleton className="h-96" />}>
+            <Correction searchParams={searchParams} />
+          </Suspense>
+        </CatalogueOutcome>
       </div>
     </div>
   );
@@ -181,7 +183,7 @@ async function Correction({
                 Corregir categoría y marca
               </h2>
               <div className="mt-3 rounded-lg border border-border bg-surface p-5">
-                <ActionForm
+                <CatalogueForm
                   action={correctProduct}
                   submit="Guardar la corrección"
                   pendingLabel="Guardando…"
@@ -227,7 +229,7 @@ async function Correction({
                     maxLength={400}
                     hint="Lo lee tal cual. Si la comisión o el IVA cambian con la categoría, el aviso se lo dice."
                   />
-                </ActionForm>
+                </CatalogueForm>
               </div>
             </section>
           )}
@@ -238,7 +240,7 @@ async function Correction({
                 Retirar el producto de la tienda
               </summary>
               <div className="mt-2 rounded-lg border border-border bg-surface p-5">
-                <ActionForm
+                <CatalogueForm
                   action={takeDownProduct}
                   submit="Retirar de la tienda"
                   variant="danger"
@@ -252,7 +254,7 @@ async function Correction({
                     maxLength={400}
                     hint="Deja de verse y de poder comprarse en el acto. Los pedidos ya hechos siguen su curso. El vendedor puede corregirlo y enviarlo de nuevo a revisión."
                   />
-                </ActionForm>
+                </CatalogueForm>
               </div>
             </details>
           ) : null}
@@ -262,22 +264,32 @@ async function Correction({
               <h2 id="volver" className="text-lg font-bold">
                 Volver a publicar
               </h2>
-              <div className="mt-3 rounded-lg border border-border bg-surface p-5">
-                <ActionForm
-                  action={restoreProduct}
-                  submit="Volver a publicar"
-                  pendingLabel="Publicando…"
-                >
-                  <input type="hidden" name="productId" value={product.id} />
-                  <TextAreaField
-                    label="Nota para el vendedor"
-                    name="note"
-                    rows={2}
-                    maxLength={400}
-                    hint="Por ejemplo, qué se resolvió."
-                  />
-                </ActionForm>
-              </div>
+              {product.changed_since_take_down ? (
+                <div className="mt-3">
+                  <Alert tone="warning">
+                    El vendedor cambió el producto después de que lo retiramos, y esos cambios no se
+                    han revisado. No se puede volver a publicar así: cuando el vendedor lo envíe a
+                    revisión, se decide en Productos por revisar.
+                  </Alert>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-lg border border-border bg-surface p-5">
+                  <CatalogueForm
+                    action={restoreProduct}
+                    submit="Volver a publicar"
+                    pendingLabel="Publicando…"
+                  >
+                    <input type="hidden" name="productId" value={product.id} />
+                    <TextAreaField
+                      label="Nota para el vendedor"
+                      name="note"
+                      rows={2}
+                      maxLength={400}
+                      hint="Por ejemplo, qué se resolvió."
+                    />
+                  </CatalogueForm>
+                </div>
+              )}
             </section>
           ) : null}
         </section>

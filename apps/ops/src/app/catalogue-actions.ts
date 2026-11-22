@@ -8,7 +8,7 @@
  * catalogue, so shoppers see the change at once.
  */
 
-import { REVIEW_HIDE_REASONS } from "@yuntera/db";
+import { ApiError, REVIEW_HIDE_REASONS } from "@yuntera/db";
 import {
   type ActionState,
   attempt,
@@ -25,15 +25,27 @@ import { currentStaff } from "@/lib/staff";
 
 type Api = Awaited<ReturnType<typeof sessionApi>>;
 
-/** Runs a catalogue change; on success, redraws the page and refreshes the shop. */
+/**
+ * Runs a catalogue change; on success, redraws the page and refreshes the shop.
+ * `explain` may give a refusal a message that fits this form better than the
+ * general one for its code.
+ */
 async function catalogueAction(
   returnTo: string,
   run: (api: Api) => Promise<string>,
   values?: Record<string, string>,
+  explain?: (error: unknown) => string | null,
 ): Promise<ActionState> {
   if (!(await currentStaff())) redirectTo(signInPath(returnTo));
+  let explained: string | null = null;
   const state = await attempt(async () => {
-    const message = await run(await sessionApi());
+    let message: string;
+    try {
+      message = await run(await sessionApi());
+    } catch (error) {
+      explained = explain?.(error) ?? null;
+      throw error;
+    }
     // What shoppers see changed: category pages, search, ratings, and (for a
     // category, or a product moving between categories) the menu.
     await refreshShopCatalog({
@@ -41,6 +53,7 @@ async function catalogueAction(
     });
     return message;
   }, values);
+  if (explained) return { error: explained, values };
   if (state.ok) refresh();
   return state;
 }
@@ -64,17 +77,35 @@ export async function createCategory(
   if (text(formData, "name").length < 2) {
     return { error: "Escriba el nombre de la categoría.", values };
   }
+  const name = text(formData, "name");
+  const slugTyped = text(formData, "slug") !== "";
   return catalogueAction(
     "/catalogo/categorias",
     async (api) => {
       const created = await api.opsCreateCategory({
-        nameEs: text(formData, "name"),
-        slug: text(formData, "slug") || null,
+        nameEs: name,
+        slug: slugTyped ? text(formData, "slug") : null,
         parentId,
       });
       return `Categoría creada en /c/${created.slug}. Ya se ve en la tienda; el menú la muestra cuando tenga productos.`;
     },
     values,
+    // With the address left empty it is made from the name: say so, or the
+    // refusal speaks of an address the person never wrote.
+    (error) => {
+      if (slugTyped || !(error instanceof ApiError)) return null;
+      const from = `La dirección que hacemos a partir del nombre «${name.slice(0, 60)}»`;
+      if (error.code === "category_slug_taken") {
+        return `${from} ya es de otra categoría, o lo fue. Escriba otra en «Dirección en la tienda», o cambie el nombre.`;
+      }
+      if (error.code === "category_slug_reserved") {
+        return `${from} la usa la tienda para otra página. Escriba otra en «Dirección en la tienda», o cambie el nombre.`;
+      }
+      if (error.code === "category_slug_invalid") {
+        return "Del nombre no sale una dirección válida. Escriba una en «Dirección en la tienda», con letras sin tildes, números y guiones.";
+      }
+      return null;
+    },
   );
 }
 

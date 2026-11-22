@@ -1,5 +1,4 @@
 import { ApiError, type SearchPreview } from "@yuntera/db";
-import { ActionForm } from "@yuntera/next-kit/client";
 import { messageOf, sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Alert, buttonClass, EmptyState, Skeleton, TextAreaField, TextField } from "@yuntera/ui";
@@ -7,6 +6,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { addSynonym, removeSynonym } from "@/app/catalogue-actions";
 import { CatalogueNav } from "@/components/catalogue-nav";
+import { CatalogueForm, CatalogueOutcome } from "@/components/catalogue-outcome";
 import { requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Búsqueda" };
@@ -21,9 +21,11 @@ export default function SearchToolsPage({ searchParams }: PageProps<"/catalogo/b
         tildes y con un solo espacio.
       </PageHeader>
       <div className="mt-6">
-        <Suspense fallback={<Skeleton className="h-96" />}>
-          <SearchTools searchParams={searchParams} />
-        </Suspense>
+        <CatalogueOutcome>
+          <Suspense fallback={<Skeleton className="h-96" />}>
+            <SearchTools searchParams={searchParams} />
+          </Suspense>
+        </CatalogueOutcome>
       </div>
     </div>
   );
@@ -122,7 +124,7 @@ async function SearchTools({
           Nuevo sinónimo
         </h2>
         <div className="mt-3 rounded-lg border border-border bg-surface p-5">
-          <ActionForm action={addSynonym} submit="Agregar sinónimo" pendingLabel="Guardando…">
+          <CatalogueForm action={addSynonym} submit="Agregar sinónimo" pendingLabel="Guardando…">
             <TextField
               label="Palabra que la gente busca"
               name="term"
@@ -139,7 +141,7 @@ async function SearchTools({
               placeholder="refrigeradora"
               hint="Una o varias, separadas por comas, hasta ocho. Palabras como «de» o «la», o que salen en casi todos los productos, no sirven."
             />
-          </ActionForm>
+          </CatalogueForm>
         </div>
       </section>
 
@@ -170,7 +172,7 @@ async function SearchTools({
                     Quitar
                   </summary>
                   <div className="mt-2">
-                    <ActionForm
+                    <CatalogueForm
                       action={removeSynonym}
                       submit={`Quitar «${synonym.term}»`}
                       variant="danger"
@@ -181,7 +183,7 @@ async function SearchTools({
                         Quien busque «{synonym.term}» deja de encontrar lo que solo trae el
                         sinónimo.
                       </p>
-                    </ActionForm>
+                    </CatalogueForm>
                   </div>
                 </details>
               </li>

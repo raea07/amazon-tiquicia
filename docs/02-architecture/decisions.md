@@ -1294,14 +1294,27 @@ Catálogo). Chosen where the work offered a choice:
   is approved).
 - **A merged brand stays as a row** that points at the survivor: its name
   becomes a search alias and its filter address shows the survivor, so nothing
-  that pointed at it breaks. A renamed brand keeps its old name as an alias too.
+  that pointed at it breaks. A renamed brand keeps its old name as an alias
+  and its old filter address too (`brands.former_slugs`). Merging into a brand
+  that is out of the filter is refused, so the moved products never drop out
+  of it.
 - **A hidden review keeps its row and is excluded from the rating** by the
   existing trigger (it counts published reviews only); the reasons are a short
   fixed list, never a low rating; the author reads why on their order page,
   never who did it. Hiding only the seller's reply leaves the rating alone.
+  The trigger locks the product row before it counts, so two reviews of one
+  product changing at once cannot leave a stale rating.
 - **Content reports use the same doors**: acting on a product report is a
   take-down that can be put back, and on a review report a hiding with the
   closest reason, closing the review's other open reports.
+- **Putting back never publishes what no one reviewed.** A take-down records
+  a digest of the listing (`taken_down_fingerprint`: text, category, brand,
+  variants and packages). A seller may change a listing that is not on sale in
+  place, so a restore is refused once it differs
+  (`listing_changed_since_take_down`); a staff correction while it is down
+  keeps it restorable. A take-down ends when the listing leaves `rejected` any
+  other way (the seller sends it to review, review decides), so a listing
+  review turned down cannot be "put back" either.
 
 **Consequences.**
 

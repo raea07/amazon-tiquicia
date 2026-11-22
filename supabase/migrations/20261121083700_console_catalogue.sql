@@ -67,6 +67,8 @@ create policy "staff read" on public.category_slug_aliases for select
 alter table public.brands
   add column active boolean not null default true,
   add column aliases text[] not null default '{}' check (cardinality(aliases) <= 20),
+  -- Earlier filter addresses (?marca=), which keep showing the brand after a rename.
+  add column former_slugs text[] not null default '{}' check (cardinality(former_slugs) <= 20),
   add column merged_into_id uuid references public.brands (id),
   add column merged_at timestamptz,
   add constraint brands_not_merged_into_itself check (merged_into_id is distinct from id);
@@ -91,9 +93,19 @@ alter table public.reviews
 -- A take-down by staff (as opposed to a rejection at first review), so that
 -- staff can put it back. The reason is the product's rejection_reason, which
 -- the seller already reads.
+--
+-- `taken_down_fingerprint` is a digest of what the listing said when it was
+-- taken down. Putting it back is refused once the seller has changed it since
+-- (a seller may edit a listing that is not on sale in place, without review),
+-- so a restore never publishes text, a category or a package no one reviewed.
+-- A take-down ends by itself when the listing leaves 'rejected' any other way
+-- (the seller sends it to review, review decides): see the trigger below.
 alter table public.products
   add column taken_down_at timestamptz,
-  add column taken_down_by uuid references auth.users (id) on delete set null;
+  add column taken_down_by uuid references auth.users (id) on delete set null,
+  add column taken_down_fingerprint text,
+  add constraint products_take_down_whole
+    check ((taken_down_at is null) = (taken_down_fingerprint is null));
 
 -- Brands and synonyms are reference data whose changes must not be silent;
 -- categories already have the audit trigger (20261121083000_limits.sql).
@@ -360,6 +372,79 @@ begin
 end;
 $$;
 
+-- A digest of everything about a listing that a seller can change and that
+-- review is meant to see: its text, where it is filed, its brand, and each
+-- variant with its package. Compared when staff put a taken-down listing back.
+create or replace function private.listing_fingerprint(p_product_id uuid) returns text
+language sql stable security definer
+set search_path = ''
+as $$
+  select md5(jsonb_build_object(
+    'title', p.title,
+    'description', p.description,
+    'bullet_points', to_jsonb(p.bullet_points),
+    'attributes', p.attributes,
+    'brand_id', p.brand_id,
+    'category_id', p.category_id,
+    'tax_rate_bps', p.tax_rate_bps,
+    'warranty_months', p.warranty_months,
+    'made_in_cr', p.made_in_cr,
+    'skus', coalesce((select jsonb_agg(to_jsonb(k) - 'created_at' order by k.id)
+                      from public.skus k where k.product_id = p.id), '[]'::jsonb))::text)
+  from public.products p
+  where p.id = p_product_id;
+$$;
+
+-- A take-down ends when the listing leaves 'rejected' by any door other than a
+-- staff restore (which clears it itself): the seller sends it to review, or
+-- review decides. What comes back then has been through review, and staff
+-- cannot later "put back" a listing that review turned down.
+create or replace function private.products_end_take_down() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  if new.taken_down_at is not distinct from old.taken_down_at then
+    new.taken_down_at := null;
+    new.taken_down_by := null;
+    new.taken_down_fingerprint := null;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger products_end_take_down
+  before update on public.products
+  for each row
+  when (old.taken_down_at is not null and new.status <> 'rejected')
+  execute function private.products_end_take_down();
+
+-- Replaces the version in 20261121080900_trust.sql. The product's rating and
+-- count were recomputed from what this transaction could see when the trigger
+-- started; two reviews of one product changing at once (two staff hiding, a
+-- hide and a new review) then each wrote a count that missed the other, and
+-- the product kept a wrong rating until its next review. Now the product row
+-- is locked first, and the count is read in a statement that starts after the
+-- lock is granted, so it sees every review committed before it (READ
+-- COMMITTED takes a new snapshot per statement).
+create or replace function private.reviews_rating_trigger() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_product uuid := coalesce(new.product_id, old.product_id);
+begin
+  perform 1 from public.products p where p.id = v_product for update;
+  update public.products p
+  set rating_sum = coalesce((select sum(r.rating)::integer from public.reviews r
+                             where r.product_id = v_product and r.status = 'published'), 0),
+      rating_count = (select count(*)::integer from public.reviews r
+                      where r.product_id = v_product and r.status = 'published')
+  where p.id = v_product;
+  return null;
+end;
+$$;
+
 -- Takes a published product off the shop for a reason the seller reads, and
 -- marks it as a staff take-down so it can be put back.
 create or replace function private.take_down_product(p_product_id uuid, p_reason text) returns void
@@ -375,7 +460,8 @@ begin
   end if;
   update public.products
   set status = 'rejected', rejection_reason = trim(p_reason),
-      taken_down_at = now(), taken_down_by = (select auth.uid())
+      taken_down_at = now(), taken_down_by = (select auth.uid()),
+      taken_down_fingerprint = private.listing_fingerprint(p_product_id)
   where id = p_product_id;
   perform private.catalog_audit('TAKE_DOWN', 'products', p_product_id::text,
     jsonb_build_object('status', p.status), jsonb_build_object('status', 'rejected', 'reason', trim(p_reason)));
@@ -445,23 +531,43 @@ as $$
   where a.slug = left(p_slug, 60) and private.category_visible(c.id);
 $$;
 
+-- The brand a filter address (?marca=) means: the brand at that address, or
+-- the one that had it before a rename, or, for a brand merged away, the brand
+-- it went into. Addresses and earlier addresses share one namespace, so at
+-- most one brand answers.
+create or replace function private.brand_for_slug(p_slug text) returns uuid
+language sql stable security definer
+set search_path = ''
+as $$
+  select coalesce(b.merged_into_id, b.id)
+  from public.brands b
+  where b.slug = p_slug or p_slug = any (b.former_slugs)
+  order by (b.slug = p_slug) desc, b.id
+  limit 1;
+$$;
+
 -- The brands a shopper can filter by: shown, not merged away, with products on
--- sale (in a category and everything under it, when one is given).
+-- sale (in a category and everything under it, when one is given). With each,
+-- the addresses that used to mean it (its own before a rename, and those of
+-- brands merged into it), so an old link still selects it in the filter.
 create or replace function public.list_brands(p_category_slug text default null)
-returns table (slug text, name text, product_count bigint)
+returns table (slug text, name text, product_count bigint, former_slugs text[])
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select b.slug, b.name, count(p.id)
+  select b.slug, b.name, count(p.id),
+         b.former_slugs || coalesce((select array_agg(x order by x)
+                                     from public.brands m, unnest(m.former_slugs || m.slug) x
+                                     where m.merged_into_id = b.id), '{}')
   from public.brands b
   join public.products p on p.brand_id = b.id
   where b.active and b.merged_into_id is null
     and p.status = 'active' and p.min_price_minor is not null
     and (p_category_slug is null
          or p.category_id in (select private.category_descendants(left(p_category_slug, 100))))
-  group by b.slug, b.name
+  group by b.id, b.slug, b.name, b.former_slugs
   order by b.name, b.slug;
 $$;
 
@@ -519,11 +625,7 @@ begin
   end if;
 
   if p_brand_slug is not null then
-    v_brands := array(
-      select b.id from public.brands b
-      where b.merged_into_id is null
-        and (b.slug = p_brand_slug
-             or b.id = (select m.merged_into_id from public.brands m where m.slug = p_brand_slug)));
+    v_brands := array(select x from private.brand_for_slug(p_brand_slug) x where x is not null);
   end if;
 
   if v_folded is not null then
@@ -902,6 +1004,10 @@ begin
      or char_length(v_name_en) > 60 then
     perform private.fail('category_name_invalid');
   end if;
+  -- The depth and the sibling names are checked against the tree as it is:
+  -- a move under way (ops_move_category) must finish first, or a child could
+  -- land below the depth limit once its ancestor has moved.
+  perform pg_advisory_xact_lock(hashtext('yuntera.category_tree'));
   if p_parent_id is not null then
     select * into v_parent from public.categories where id = p_parent_id for update;
     if not found then
@@ -950,6 +1056,8 @@ begin
   if not private.has_staff_role('catalog') then
     perform private.fail('forbidden');
   end if;
+  -- Sibling names are checked against the tree as it is (see ops_create_category).
+  perform pg_advisory_xact_lock(hashtext('yuntera.category_tree'));
   select * into c from public.categories where id = p_category_id for update;
   if not found then
     perform private.fail('category_not_found');
@@ -1158,6 +1266,7 @@ begin
       'name', b.name,
       'active', b.active,
       'aliases', to_jsonb(b.aliases),
+      'former_slugs', to_jsonb(b.former_slugs),
       'merged_into', case when m.id is not null
                           then jsonb_build_object('id', m.id, 'name', m.name, 'slug', m.slug) end,
       'merged_at', b.merged_at,
@@ -1207,7 +1316,7 @@ begin
   if private.brand_name_taken(v_name, null) then
     perform private.fail('brand_name_taken');
   end if;
-  if exists (select 1 from public.brands b where b.slug = v_slug) then
+  if exists (select 1 from public.brands b where b.slug = v_slug or v_slug = any (b.former_slugs)) then
     perform private.fail('brand_slug_taken');
   end if;
   insert into public.brands (slug, name) values (v_slug, v_name) returning id into v_id;
@@ -1216,7 +1325,8 @@ end;
 $$;
 
 -- Renames a brand. The old name stays as a search alias, so a shopper who
--- types it still finds the products.
+-- types it still finds the products, and an old filter address (?marca=)
+-- keeps showing the brand.
 create or replace function public.ops_update_brand(
   p_brand_id uuid, p_name text, p_slug text default null
 ) returns jsonb
@@ -1227,6 +1337,7 @@ declare
   b public.brands%rowtype;
   v_name text;
   v_slug text;
+  v_former text[];
   r record;
 begin
   if not private.has_staff_role('catalog') then
@@ -1258,12 +1369,22 @@ begin
               or private.fold(v_name) = any (select private.fold(a) from unnest(o.aliases) a))) then
     perform private.fail('brand_name_taken');
   end if;
-  if v_slug <> b.slug and exists (select 1 from public.brands o where o.slug = v_slug) then
+  if v_slug <> b.slug and exists (
+       select 1 from public.brands o
+       where o.id <> b.id and (o.slug = v_slug or v_slug = any (o.former_slugs))) then
     perform private.fail('brand_slug_taken');
+  end if;
+  if v_slug <> b.slug then
+    -- The old address keeps showing this brand (going back to an earlier one
+    -- makes it live again); the newest twenty are kept.
+    v_former := array_remove(b.former_slugs, v_slug) || b.slug;
+    v_former := v_former[greatest(1, cardinality(v_former) - 19):];
+  else
+    v_former := b.former_slugs;
   end if;
 
   update public.brands
-  set name = v_name, slug = v_slug,
+  set name = v_name, slug = v_slug, former_slugs = v_former,
       aliases = case
         when private.fold(v_name) = private.fold(b.name) then
           array(select a from unnest(b.aliases) a where private.fold(a) <> private.fold(v_name))
@@ -1335,6 +1456,11 @@ begin
   end if;
   if v_from.merged_into_id is not null or v_into.merged_into_id is not null then
     perform private.fail('brand_merged');
+  end if;
+  -- Into a brand out of the filter, the moved products would leave the filter
+  -- too. Show it again first, if it is the one that stays.
+  if not v_into.active then
+    perform private.fail('brand_merge_into_hidden');
   end if;
 
   -- The names first: the products' search documents are rebuilt from them.
@@ -1783,6 +1909,8 @@ begin
     'rejection_reason', p.rejection_reason,
     'taken_down', p.status = 'rejected' and p.taken_down_at is not null,
     'taken_down_at', case when p.status = 'rejected' then p.taken_down_at end,
+    'changed_since_take_down', p.status = 'rejected' and p.taken_down_at is not null
+                               and p.taken_down_fingerprint is distinct from private.listing_fingerprint(p.id),
     'edit_pending', exists (select 1 from public.product_change_requests r
                             where r.product_id = p.id and r.status = 'pending'),
     'offer_count', p.offer_count,
@@ -1818,6 +1946,7 @@ declare
   v_default integer := (select s.default_referral_bps from public.fee_schedules s where s.active);
   v_old_bps integer;
   v_new_bps integer;
+  v_take_down_intact boolean;
 begin
   if not private.has_staff_role('catalog') then
     perform private.fail('forbidden');
@@ -1880,9 +2009,18 @@ begin
                 else p.tax_rate_bps end;
   select b.name into v_old_brand from public.brands b where b.id = p.brand_id;
 
+  v_take_down_intact := p.taken_down_at is not null
+                        and p.taken_down_fingerprint = private.listing_fingerprint(p.id);
   update public.products
   set category_id = v_category.id, brand_id = v_new_brand_id, tax_rate_bps = v_tax
   where id = p.id;
+  -- A taken-down listing that staff correct is what they would put back: the
+  -- correction is not a seller's change. Only when the seller had changed
+  -- nothing before it, so a correction never makes a seller's edit look reviewed.
+  if v_take_down_intact then
+    update public.products set taken_down_fingerprint = private.listing_fingerprint(p.id)
+    where id = p.id;
+  end if;
 
   perform private.catalog_audit('CORRECT', 'products', p.id::text,
     jsonb_build_object('category', v_old_category.slug, 'brand', v_old_brand, 'tax_rate_bps', p.tax_rate_bps),
@@ -1894,6 +2032,8 @@ begin
     perform private.emit('product.staff_changed', jsonb_strip_nulls(jsonb_build_object(
       'product_id', p.id, 'seller_id', p.created_by_seller_id, 'kind', 'corrected',
       'note', left(v_note, 400),
+      -- The message says it is still on sale only when it is.
+      'on_sale', p.status = 'active',
       'from_category', case when v_category.id <> p.category_id then v_old_category.name_es end,
       'to_category', case when v_category.id <> p.category_id then v_category.name_es end,
       'brand_changed', v_new_brand_id is distinct from p.brand_id,
@@ -1925,9 +2065,10 @@ begin
 end;
 $$;
 
--- Puts back a product staff took down (by this screen or from a report). Not
--- one the seller has since changed and sent to review: that goes through the
--- review queue. The shop must be allowed to trade (the trigger on products
+-- Puts back a product staff took down (by this screen or from a report),
+-- exactly as it was when it was taken down. Not one the seller has changed
+-- since (listing_changed_since_take_down), nor one the seller sent to review
+-- (that ended the take-down: review decides). The shop must be allowed to trade (the trigger on products
 -- says so with listing_shop_not_active).
 create or replace function public.ops_restore_product(p_product_id uuid, p_note text) returns void
 language plpgsql security definer
@@ -1947,8 +2088,14 @@ begin
   if not found or p.status <> 'rejected' or p.taken_down_at is null then
     perform private.fail('product_not_taken_down');
   end if;
+  -- The seller changed it since: what would go on sale has not been reviewed.
+  -- The seller sends it to review instead (which ends the take-down).
+  if p.taken_down_fingerprint is distinct from private.listing_fingerprint(p.id) then
+    perform private.fail('listing_changed_since_take_down');
+  end if;
   update public.products
-  set status = 'active', rejection_reason = null, taken_down_at = null, taken_down_by = null
+  set status = 'active', rejection_reason = null, taken_down_at = null, taken_down_by = null,
+      taken_down_fingerprint = null
   where id = p.id;
   perform private.catalog_audit('RESTORE', 'products', p.id::text,
     jsonb_build_object('status', p.status, 'reason', p.rejection_reason),
@@ -2214,6 +2361,9 @@ revoke all on function
   private.review_hide_reason_text(text),
   private.hide_review(uuid, text, text, uuid),
   private.take_down_product(uuid, text),
+  private.listing_fingerprint(uuid),
+  private.products_end_take_down(),
+  private.brand_for_slug(text),
   private.brand_name_taken(text, uuid),
   private.check_synonym(text),
   private.search_products_unbounded(text, text, bigint, bigint, boolean, boolean, text, integer, integer, text)

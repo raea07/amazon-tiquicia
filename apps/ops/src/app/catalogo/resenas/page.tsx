@@ -4,7 +4,6 @@ import {
   REVIEW_HIDE_REASONS,
   type ReviewFilter,
 } from "@yuntera/db";
-import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import {
@@ -21,6 +20,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { hideReview, showReview } from "@/app/catalogue-actions";
 import { CatalogueNav } from "@/components/catalogue-nav";
+import { CatalogueForm, CatalogueOutcome } from "@/components/catalogue-outcome";
 import { REVIEW_FILTER, REVIEW_HIDE_REASON } from "@/lib/catalogue-labels";
 import { REPORT_REASON } from "@/lib/labels";
 import { requireStaff } from "@/lib/staff";
@@ -38,9 +38,11 @@ export default function ReviewsPage({ searchParams }: PageProps<"/catalogo/resen
         y por qué.
       </PageHeader>
       <div className="mt-6">
-        <Suspense fallback={<Skeleton className="h-96" />}>
-          <Reviews searchParams={searchParams} />
-        </Suspense>
+        <CatalogueOutcome>
+          <Suspense fallback={<Skeleton className="h-96" />}>
+            <Reviews searchParams={searchParams} />
+          </Suspense>
+        </CatalogueOutcome>
       </div>
     </div>
   );
@@ -234,17 +236,17 @@ function ReviewCard({ review }: { review: OpsReview }) {
 
       <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4">
         {review.hidden ? (
-          <ActionForm action={showReview} submit="Mostrar la reseña de nuevo" size="sm">
+          <CatalogueForm action={showReview} submit="Mostrar la reseña de nuevo" size="sm">
             <input type="hidden" name="reviewId" value={review.id} />
             <p className="text-ink-muted">Vuelve a la página del producto y a su calificación.</p>
-          </ActionForm>
+          </CatalogueForm>
         ) : (
           <details>
             <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
               Ocultar la reseña
             </summary>
             <div className="mt-2">
-              <ActionForm
+              <CatalogueForm
                 action={hideReview}
                 submit="Ocultar la reseña"
                 variant="danger"
@@ -267,14 +269,14 @@ function ReviewCard({ review }: { review: OpsReview }) {
                     Los reportes abiertos de esta reseña se cierran como atendidos.
                   </p>
                 ) : null}
-              </ActionForm>
+              </CatalogueForm>
             </div>
           </details>
         )}
 
         {review.seller_reply ? (
           review.reply_hidden ? (
-            <ActionForm
+            <CatalogueForm
               action={showReview}
               submit="Mostrar la respuesta del vendedor"
               size="sm"
@@ -282,14 +284,14 @@ function ReviewCard({ review }: { review: OpsReview }) {
             >
               <input type="hidden" name="reviewId" value={review.id} />
               <input type="hidden" name="part" value="reply" />
-            </ActionForm>
+            </CatalogueForm>
           ) : (
             <details>
               <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
                 Ocultar solo la respuesta del vendedor
               </summary>
               <div className="mt-2">
-                <ActionForm
+                <CatalogueForm
                   action={hideReview}
                   submit="Ocultar la respuesta"
                   variant="danger"
@@ -307,7 +309,7 @@ function ReviewCard({ review }: { review: OpsReview }) {
                     autoComplete="off"
                   />
                   <p className="text-ink-muted">La reseña y la calificación no cambian.</p>
-                </ActionForm>
+                </CatalogueForm>
               </div>
             </details>
           )

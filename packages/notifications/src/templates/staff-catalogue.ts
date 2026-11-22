@@ -4,7 +4,8 @@
  * `product.staff_changed`). Three kinds, one template:
  *
  *   - corrected: the category or the brand was corrected; says what it was,
- *     what it is now, why, and what it means for the commission and the IVA;
+ *     what it is now, why, what it means for the commission and the IVA, and
+ *     whether the listing is on sale (`on_sale`);
  *   - taken_down: the listing was taken off the shop, with the reason;
  *   - restored: it is back on sale.
  *
@@ -91,7 +92,12 @@ export const STAFF_CATALOGUE_TEMPLATES: Record<string, Template> = {
       preheader: "Para que los compradores lo encuentren donde lo buscan.",
       greeting: `Hola, ${shop}:`,
       paragraphs: [
-        `Nuestro equipo de catálogo corrigió «${title}» para que los compradores lo encuentren donde lo buscan. El producto sigue a la venta.`,
+        `Nuestro equipo de catálogo corrigió «${title}» para que los compradores lo encuentren donde lo buscan.`,
+        // Staff may also correct a listing that is not on sale (in review,
+        // rejected, taken down): only then would "still on sale" be untrue.
+        v.on_sale === true
+          ? "El producto sigue a la venta."
+          : "El producto no está a la venta en este momento; la corrección se verá cuando vuelva a publicarse.",
         note ? `Motivo: ${note}` : "",
         fromBps !== null && toBps !== null
           ? `Con la nueva categoría, la comisión por cada venta pasa de ${percent(fromBps)} a ${percent(toBps)}. Se aplica a las ventas desde ahora; las anteriores no cambian.`

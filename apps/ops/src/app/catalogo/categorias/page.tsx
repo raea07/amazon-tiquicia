@@ -1,5 +1,4 @@
 import type { OpsCategory } from "@yuntera/db";
-import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Badge, EmptyState, SelectField, Skeleton, TextField } from "@yuntera/ui";
@@ -14,6 +13,7 @@ import {
   shiftCategory,
 } from "@/app/catalogue-actions";
 import { CatalogueNav } from "@/components/catalogue-nav";
+import { CatalogueForm, CatalogueOutcome } from "@/components/catalogue-outcome";
 import { percent } from "@/lib/catalogue-labels";
 import { requireStaff } from "@/lib/staff";
 
@@ -30,9 +30,11 @@ export default function CategoriesPage() {
         cambia solo con una actualización de tarifas.
       </PageHeader>
       <div className="mt-6">
-        <Suspense fallback={<Skeleton className="h-96" />}>
-          <Categories />
-        </Suspense>
+        <CatalogueOutcome>
+          <Suspense fallback={<Skeleton className="h-96" />}>
+            <Categories />
+          </Suspense>
+        </CatalogueOutcome>
       </div>
     </div>
   );
@@ -63,7 +65,7 @@ async function Categories() {
           Nueva categoría
         </h2>
         <div className="mt-3 rounded-lg border border-border bg-surface p-5">
-          <ActionForm action={createCategory} submit="Crear categoría" pendingLabel="Creando…">
+          <CatalogueForm action={createCategory} submit="Crear categoría" pendingLabel="Creando…">
             <TextField label="Nombre" name="name" maxLength={60} autoComplete="off" />
             <TextField
               label="Dirección en la tienda"
@@ -82,7 +84,7 @@ async function Categories() {
                 </option>
               ))}
             </SelectField>
-          </ActionForm>
+          </CatalogueForm>
         </div>
       </section>
 
@@ -130,7 +132,15 @@ function CategoryRow({
   places: OpsCategory[];
   siblings: OpsCategory[];
 }) {
-  const parent = category.parent_id ? byId.get(category.parent_id) : undefined;
+  // Active but not shown: the nearest category above it that is hidden is why.
+  let hiddenBy: OpsCategory | undefined;
+  for (
+    let above = category.parent_id ? byId.get(category.parent_id) : undefined;
+    above && !hiddenBy;
+    above = above.parent_id ? byId.get(above.parent_id) : undefined
+  ) {
+    if (!above.active) hiddenBy = above;
+  }
   const first = siblings[0]?.id === category.id;
   const last = siblings.at(-1)?.id === category.id;
   return (
@@ -144,7 +154,7 @@ function CategoryRow({
         {category.visible ? (
           <Badge tone="success">Se ve en la tienda</Badge>
         ) : category.active ? (
-          <Badge tone="warning">Oculta: {parent?.name_es ?? "la de arriba"} está oculta</Badge>
+          <Badge tone="warning">Oculta: {hiddenBy?.name_es ?? "la de arriba"} está oculta</Badge>
         ) : (
           <Badge tone="warning">Oculta</Badge>
         )}
@@ -167,7 +177,7 @@ function CategoryRow({
           Cambiar «{category.name_es}»
         </summary>
         <div className="mt-3 grid gap-5 lg:grid-cols-2">
-          <ActionForm action={renameCategory} submit="Guardar nombre y dirección" size="sm">
+          <CatalogueForm action={renameCategory} submit="Guardar nombre y dirección" size="sm">
             <input type="hidden" name="categoryId" value={category.id} />
             <TextField
               label="Nombre"
@@ -184,10 +194,10 @@ function CategoryRow({
               autoComplete="off"
               hint="Si la cambia, la anterior sigue funcionando: lleva a la nueva."
             />
-          </ActionForm>
+          </CatalogueForm>
 
           <div className="flex flex-col gap-4">
-            <ActionForm action={moveCategory} submit="Mover" size="sm" variant="secondary">
+            <CatalogueForm action={moveCategory} submit="Mover" size="sm" variant="secondary">
               <input type="hidden" name="categoryId" value={category.id} />
               <SelectField
                 label="Mover dentro de"
@@ -203,11 +213,11 @@ function CategoryRow({
                   </option>
                 ))}
               </SelectField>
-            </ActionForm>
+            </CatalogueForm>
 
             <div className="flex flex-wrap gap-2">
               {first ? null : (
-                <ActionForm
+                <CatalogueForm
                   action={shiftCategory}
                   submit="Subir un lugar"
                   size="sm"
@@ -216,10 +226,10 @@ function CategoryRow({
                 >
                   <input type="hidden" name="categoryId" value={category.id} />
                   <input type="hidden" name="direction" value="-1" />
-                </ActionForm>
+                </CatalogueForm>
               )}
               {last ? null : (
-                <ActionForm
+                <CatalogueForm
                   action={shiftCategory}
                   submit="Bajar un lugar"
                   size="sm"
@@ -228,7 +238,7 @@ function CategoryRow({
                 >
                   <input type="hidden" name="categoryId" value={category.id} />
                   <input type="hidden" name="direction" value="1" />
-                </ActionForm>
+                </CatalogueForm>
               )}
             </div>
 
@@ -238,7 +248,7 @@ function CategoryRow({
                   Ocultar de la tienda
                 </summary>
                 <div className="mt-2">
-                  <ActionForm
+                  <CatalogueForm
                     action={setCategoryVisible}
                     submit="Ocultar la categoría"
                     variant="danger"
@@ -253,11 +263,11 @@ function CategoryRow({
                       {category.active_product_count} productos publicados siguen a la venta y se
                       encuentran con la búsqueda. Puede volver a mostrarla cuando quiera.
                     </p>
-                  </ActionForm>
+                  </CatalogueForm>
                 </div>
               </details>
             ) : (
-              <ActionForm
+              <CatalogueForm
                 action={setCategoryVisible}
                 submit="Mostrar en la tienda"
                 size="sm"
@@ -265,7 +275,7 @@ function CategoryRow({
               >
                 <input type="hidden" name="categoryId" value={category.id} />
                 <input type="hidden" name="visible" value="yes" />
-              </ActionForm>
+              </CatalogueForm>
             )}
 
             {!category.in_use && category.child_count === 0 ? (
@@ -274,7 +284,7 @@ function CategoryRow({
                   Eliminar la categoría
                 </summary>
                 <div className="mt-2">
-                  <ActionForm
+                  <CatalogueForm
                     action={deleteCategory}
                     submit="Eliminar para siempre"
                     variant="danger"
@@ -286,7 +296,7 @@ function CategoryRow({
                       No tiene productos ni pedidos que la nombren. Se borra con sus direcciones
                       anteriores; no se puede deshacer.
                     </p>
-                  </ActionForm>
+                  </CatalogueForm>
                 </div>
               </details>
             ) : (

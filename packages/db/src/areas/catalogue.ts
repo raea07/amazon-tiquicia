@@ -21,6 +21,8 @@ export const shopBrand = z.object({
   slug: z.string(),
   name: z.string(),
   product_count: z.number().int(),
+  /** Addresses that used to mean this brand (before a rename, or of a brand merged into it). */
+  former_slugs: z.array(z.string()),
 });
 export type ShopBrand = z.infer<typeof shopBrand>;
 
@@ -109,6 +111,8 @@ export const opsBrand = z.object({
   active: z.boolean(),
   /** Old names (merged or renamed brands) that search still finds. */
   aliases: z.array(z.string()),
+  /** Earlier filter addresses, which still show this brand. */
+  former_slugs: z.array(z.string()),
   merged_into: z.object({ id, name: z.string(), slug: z.string() }).nullable(),
   merged_at: timestamp.nullable(),
   product_count: z.number().int(),
@@ -199,6 +203,8 @@ export const opsCatalogProduct = z.object({
   /** Taken down by staff (by this screen or from a report): it can be put back. */
   taken_down: z.boolean(),
   taken_down_at: timestamp.nullable(),
+  /** The seller changed it after the take-down: it cannot be put back, only sent to review. */
+  changed_since_take_down: z.boolean(),
   /** A seller's change waits for review: decide it before correcting. */
   edit_pending: z.boolean(),
   offer_count: z.number().int(),
@@ -304,6 +310,11 @@ export const catalogueErrors = {
     "es-CR": "Elija dos marcas distintas: la duplicada y la que queda.",
     en: "Choose two different brands: the duplicate and the one that remains.",
   },
+  brand_merge_into_hidden: {
+    "es-CR":
+      "La marca que queda está fuera del filtro de la tienda, y los productos unidos saldrían del filtro con ella. Vuelva a ofrecerla en el filtro antes de unir.",
+    en: "The brand that remains is out of the shop's filter, and the merged products would leave the filter with it. Offer it in the filter again before merging.",
+  },
   synonym_invalid: {
     "es-CR":
       "Escriba palabras de entre 2 y 60 letras o números (hasta cuatro palabras), y al menos una búsqueda equivalente.",
@@ -381,6 +392,11 @@ export const catalogueErrors = {
     "es-CR":
       "En esa categoría la comisión es mayor y alguna oferta de este producto quedaría por debajo de lo que cuesta venderla. Pida al vendedor que ajuste el precio antes.",
     en: "That category's commission is higher and an offer of this product would sell below what the fees cost. Ask the seller to adjust the price first.",
+  },
+  listing_changed_since_take_down: {
+    "es-CR":
+      "El vendedor cambió este producto después de que lo retiramos, y esos cambios no se han revisado. No se puede volver a publicar así: el vendedor debe enviarlo a revisión.",
+    en: "The seller changed this product after it was taken down, and those changes have not been reviewed. It cannot be put back like this: the seller must send it for review.",
   },
   product_not_taken_down: {
     "es-CR":

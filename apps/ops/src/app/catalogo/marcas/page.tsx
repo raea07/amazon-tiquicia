@@ -1,5 +1,4 @@
 import type { OpsBrand } from "@yuntera/db";
-import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Badge, EmptyState, formatDate, SelectField, Skeleton, TextField } from "@yuntera/ui";
@@ -7,6 +6,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { createBrand, mergeBrands, renameBrand, setBrandVisible } from "@/app/catalogue-actions";
 import { CatalogueNav } from "@/components/catalogue-nav";
+import { CatalogueForm, CatalogueOutcome } from "@/components/catalogue-outcome";
 import { requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Marcas" };
@@ -21,9 +21,11 @@ export default function BrandsPage() {
         sigue encontrando.
       </PageHeader>
       <div className="mt-6">
-        <Suspense fallback={<Skeleton className="h-96" />}>
-          <Brands />
-        </Suspense>
+        <CatalogueOutcome>
+          <Suspense fallback={<Skeleton className="h-96" />}>
+            <Brands />
+          </Suspense>
+        </CatalogueOutcome>
       </div>
     </div>
   );
@@ -42,7 +44,7 @@ async function Brands() {
           Nueva marca
         </h2>
         <div className="mt-3 rounded-lg border border-border bg-surface p-5">
-          <ActionForm action={createBrand} submit="Crear marca" pendingLabel="Creando…">
+          <CatalogueForm action={createBrand} submit="Crear marca" pendingLabel="Creando…">
             <TextField label="Nombre" name="name" maxLength={60} autoComplete="off" />
             <TextField
               label="Dirección del filtro"
@@ -52,7 +54,7 @@ async function Brands() {
               autoComplete="off"
               hint="Lo que va en ?marca= en la tienda. Si la deja vacía, la hacemos a partir del nombre."
             />
-          </ActionForm>
+          </CatalogueForm>
         </div>
       </section>
 
@@ -72,7 +74,9 @@ async function Brands() {
               <BrandRow
                 key={brand.id}
                 brand={brand}
-                others={current.filter((other) => other.id !== brand.id)}
+                // Only into a brand in the filter: into a hidden one, the moved
+                // products would leave the filter with it.
+                others={current.filter((other) => other.id !== brand.id && other.active)}
               />
             ))}
           </ul>
@@ -121,6 +125,12 @@ function BrandRow({ brand, others }: { brand: OpsBrand; others: OpsBrand[] }) {
           ? ` (${brand.product_count} en total)`
           : ""}
       </p>
+      {brand.former_slugs.length > 0 ? (
+        <p className="mt-1 break-words text-ink-muted">
+          Direcciones anteriores, que siguen mostrando la marca:{" "}
+          {brand.former_slugs.map((slug) => `?marca=${slug}`).join(", ")}
+        </p>
+      ) : null}
       {brand.aliases.length > 0 ? (
         <p className="mt-1 break-words text-ink-muted">
           La búsqueda también la encuentra como: {brand.aliases.join(", ")}
@@ -132,7 +142,7 @@ function BrandRow({ brand, others }: { brand: OpsBrand; others: OpsBrand[] }) {
           Cambiar «{brand.name}»
         </summary>
         <div className="mt-3 flex flex-col gap-5">
-          <ActionForm action={renameBrand} submit="Guardar nombre" size="sm">
+          <CatalogueForm action={renameBrand} submit="Guardar nombre" size="sm">
             <input type="hidden" name="brandId" value={brand.id} />
             <TextField
               label="Nombre"
@@ -148,7 +158,7 @@ function BrandRow({ brand, others }: { brand: OpsBrand; others: OpsBrand[] }) {
               maxLength={60}
               autoComplete="off"
             />
-          </ActionForm>
+          </CatalogueForm>
 
           {brand.active ? (
             <details>
@@ -156,7 +166,7 @@ function BrandRow({ brand, others }: { brand: OpsBrand; others: OpsBrand[] }) {
                 Sacar del filtro de la tienda
               </summary>
               <div className="mt-2">
-                <ActionForm
+                <CatalogueForm
                   action={setBrandVisible}
                   submit="Sacar del filtro"
                   variant="danger"
@@ -168,14 +178,18 @@ function BrandRow({ brand, others }: { brand: OpsBrand; others: OpsBrand[] }) {
                     Deja de ofrecerse para filtrar. Sus productos siguen a la venta y siguen
                     mostrando la marca.
                   </p>
-                </ActionForm>
+                </CatalogueForm>
               </div>
             </details>
           ) : (
-            <ActionForm action={setBrandVisible} submit="Volver a ofrecer en el filtro" size="sm">
+            <CatalogueForm
+              action={setBrandVisible}
+              submit="Volver a ofrecer en el filtro"
+              size="sm"
+            >
               <input type="hidden" name="brandId" value={brand.id} />
               <input type="hidden" name="visible" value="yes" />
-            </ActionForm>
+            </CatalogueForm>
           )}
 
           {others.length > 0 ? (
@@ -184,7 +198,7 @@ function BrandRow({ brand, others }: { brand: OpsBrand; others: OpsBrand[] }) {
                 Es la misma que otra marca: unirlas
               </summary>
               <div className="mt-2">
-                <ActionForm
+                <CatalogueForm
                   action={mergeBrands}
                   submit={`Unir «${brand.name}» a la elegida`}
                   variant="danger"
@@ -206,7 +220,7 @@ function BrandRow({ brand, others }: { brand: OpsBrand; others: OpsBrand[] }) {
                     Los {brand.product_count} productos de «{brand.name}» pasan a la elegida, y «
                     {brand.name}» deja de existir como marca aparte. No se puede deshacer.
                   </p>
-                </ActionForm>
+                </CatalogueForm>
               </div>
             </details>
           ) : null}

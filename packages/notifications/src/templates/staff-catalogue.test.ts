@@ -52,6 +52,7 @@ describe("seller_listing_staff_change", () => {
     const mail = email({
       ...base,
       kind: "corrected",
+      on_sale: true,
       note: "Es un utensilio de cocina.",
       from_category: "Cocina eléctrica",
       to_category: "Cocina y mesa",
@@ -84,6 +85,21 @@ describe("seller_listing_staff_change", () => {
     expect(mail.text).not.toMatch(/comisión|IVA/);
     expect(mail.text).toContain("sin marca → Nimbo");
     expect(mail.text).not.toContain("Categoría");
+  });
+
+  it("says it is still on sale only when it is", () => {
+    const corrected = {
+      ...base,
+      kind: "corrected",
+      note: "Marca según la caja.",
+      brand_changed: true,
+    };
+    expect(email({ ...corrected, on_sale: true }).text).toContain("El producto sigue a la venta.");
+    for (const vars of [{ ...corrected, on_sale: false }, corrected]) {
+      const text = email(vars).text;
+      expect(text).not.toContain("sigue a la venta");
+      expect(text).toContain("no está a la venta en este momento");
+    }
   });
 
   it("says a take-down plainly, with the reason and what to do", () => {

@@ -105,8 +105,9 @@ When each event happens:
 - `product.staff_changed` (migration 083700) when catalogue staff correct a
   listing's category or brand, take it down (also from a content report) or
   put it back. One template says which, with the reason, and for a
-  correction the old and new category and brand, and the commission and IVA
-  when they change.
+  correction the old and new category and brand, the commission and IVA
+  when they change, and whether the listing is on sale (`on_sale`; staff may
+  correct one that is in review, rejected or taken down).
 - The rest come from the care, catalogue and seller-verification screens.
 - `invoice.requested` is for electronic invoicing and sends nothing here.
 

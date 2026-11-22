@@ -103,6 +103,17 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     return (await outcomes().allInnerTexts()).at(-1)?.replace(/\s+/g, " ").trim() ?? "";
   };
 
+  // What the page says at its top once the form that did something is gone
+  // (CatalogueOutcome in the console), waiting a moment for `expected`.
+  const outcome = async (expected) => {
+    const region = staff.locator("[data-catalogue-outcome]");
+    await region
+      .locator('[role="status"]', { hasText: expected })
+      .waitFor({ timeout: 5000 })
+      .catch(() => undefined);
+    return text(region);
+  };
+
   // ── 1. A new department, empty ────────────────────────────────────────────
   await staff.goto(OPS + "/catalogo/categorias", { waitUntil: "networkidle" });
   const nav = await staff.locator('nav[aria-label="Catálogo"] a').allInnerTexts();
@@ -116,6 +127,16 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   const created = await submit(create, "Crear categoría");
   log("created:", created);
   check(created.includes("/c/regalos-ticos"), `category not created: ${created}`);
+  // The same name again, address left empty: the refusal says the address is
+  // the one made from the name, which the person never typed.
+  await create.locator('input[name="name"]').fill("Regalos ticos");
+  const again = await submit(create, "Crear categoría");
+  log("same name, no address:", again);
+  check(
+    again.includes("a partir del nombre «Regalos ticos»"),
+    `the refusal does not say where the address came from: ${again}`,
+  );
+  await create.locator('input[name="name"]').fill("");
   await staff.screenshot({ path: SHOTS + "/cc1-categories.png", fullPage: true });
 
   const empty = await shop("/c/regalos-ticos");
@@ -289,6 +310,10 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   const merged = await text(mergedRow);
   log("merged:", merged);
   check(merged.includes("Volcán"), `merge did not take: ${merged}`);
+  // The form that was merged is gone; the page still says what happened.
+  const mergeSaid = await outcome("Marcas unidas");
+  log("merge outcome:", mergeSaid);
+  check(mergeSaid.includes("Marcas unidas"), `the merge's outcome is not shown: ${mergeSaid}`);
   await staff.screenshot({ path: SHOTS + "/cc5-brands-merged.png", fullPage: true });
 
   const brandsAfter = await shop("/buscar");
@@ -315,6 +340,15 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   check(
     byOldName.some((t) => t.includes("Bombillo")),
     "searching the merged brand's name finds nothing",
+  );
+  // The old brand's filter address selects and names the brand it went into.
+  const oldAddress = await shop("/buscar?marca=luma");
+  const selected = await oldAddress.locator('select[name="marca"]').inputValue();
+  const summary = await text(oldAddress.locator("main p", { hasText: "Mostrando" }).first());
+  log("?marca=luma selects:", selected, "|", summary);
+  check(
+    selected === "volcan" && summary.includes("de Volcán"),
+    `the merged brand's old address: ${selected} ${summary}`,
   );
 
   // ── 7. A synonym that makes a search find something ──────────────────────────
@@ -368,6 +402,9 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   const hiddenReview = await text(card);
   log("hidden:", hiddenReview.slice(0, 160));
   check(hiddenReview.includes("Oculta: Datos personales"), `review not hidden: ${hiddenReview}`);
+  const hideSaid = await outcome("Reseña oculta");
+  log("hide outcome:", hideSaid);
+  check(hideSaid.includes("Reseña oculta"), `the hide's outcome is not shown: ${hideSaid}`);
 
   const productHidden = await shop("/p/hamaca-algodon-doble");
   const ratingHidden = await text(productHidden.locator("#resenas"));

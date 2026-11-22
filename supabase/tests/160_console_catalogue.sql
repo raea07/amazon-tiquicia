@@ -425,6 +425,12 @@ reset role;
 select pg_temp.login('central@yuntera.example', 'aal2');
 select public.ops_set_category_active((select id from public.categories where slug = 'hogar'), false);
 reset role;
+-- The brands with products on sale anywhere under Hogar, worked out here from
+-- the tables, for the filter on that department's listing.
+select pg_temp.remember('hogar_brands', (
+  select count(distinct p.brand_id)::text from public.products p join public.brands b on b.id = p.brand_id
+  where b.active and b.merged_into_id is null and p.status = 'active' and p.min_price_minor is not null
+    and p.category_id in (select private.category_descendants('hogar'))));
 select pg_temp.login_anon();
 do $$ begin
   assert not exists (select 1 from public.list_categories() where slug in ('hogar', 'cocina')),
@@ -432,7 +438,10 @@ do $$ begin
   assert not public.shop_path_exists('category', 'cocina'), 'hidden: and their pages';
   assert exists (select 1 from public.search_products('tabla de picar') where slug = 'tabla-picar-teca'),
     'hidden: their products are still found';
-  assert (select count(*) from public.list_brands('hogar')) >= 0, 'hidden: the brand list still answers';
+  assert (select count(*) from public.list_brands('hogar')) = current_setting('t.hogar_brands')::bigint
+     and current_setting('t.hogar_brands')::bigint > 0,
+    format('hidden: the brand filter of a hidden department still lists its brands (%s)',
+           current_setting('t.hogar_brands'));
 end $$;
 reset role;
 select pg_temp.login('central@yuntera.example', 'aal2');
@@ -511,6 +520,47 @@ begin
   perform public.ops_set_brand_active((select id from public.brands where slug = 'tinamu'), false);
   perform pg_temp.refused(format('select public.ops_set_brand_active(%L, false)',
                                  (select id from public.brands where slug = 'tinamu')), 'brand_unchanged');
+
+  -- Not into a hidden brand: what moves would leave the filter with it.
+  v := public.ops_create_brand('Tinamu Duplicada', 'tinamu-duplicada');
+  perform pg_temp.refused(format('select public.ops_merge_brands(%L, %L)', v ->> 'id',
+                                 (select id from public.brands where slug = 'tinamu')), 'brand_merge_into_hidden');
+  assert (select merged_into_id is null from public.brands where slug = 'tinamu-duplicada'),
+    'brands: a refused merge changes nothing';
+
+  -- A new filter address: the old one keeps showing the brand, and no other
+  -- brand may take it.
+  v := public.ops_update_brand((select id from public.brands where slug = 'sendero'), null, 'sendero-cr');
+  assert v ->> 'slug' = 'sendero-cr'
+     and (select former_slugs = '{sendero}' from public.brands where slug = 'sendero-cr'),
+    format('brands: the old address is kept %s', v);
+  perform pg_temp.refused($q$select public.ops_create_brand('Sendero Nuevo', 'sendero')$q$, 'brand_slug_taken');
+  perform pg_temp.refused(format($q$select public.ops_update_brand(%L, null, 'sendero')$q$,
+                                 (select id from public.brands where slug = 'tinamu')), 'brand_slug_taken');
+end
+$$;
+reset role;
+select pg_temp.remember('sendero_listed', (
+  select count(*)::text from public.products p join public.brands b on b.id = p.brand_id
+  where b.slug = 'sendero-cr' and p.status = 'active' and p.min_price_minor is not null));
+select pg_temp.login_anon();
+do $$ begin
+  assert (select count(*) from public.search_products(p_brand_slug => 'sendero'))
+       = current_setting('t.sendero_listed')::bigint and current_setting('t.sendero_listed')::bigint > 0,
+    'brands: the old filter address still finds the renamed brand';
+  assert (select former_slugs = '{sendero}' from public.list_brands() where slug = 'sendero-cr'),
+    'brands: and the filter knows it';
+end $$;
+reset role;
+select pg_temp.login('central@yuntera.example', 'aal2');
+do $$
+declare
+  v jsonb;
+begin
+  -- Back to the address it had: live again, no longer an old one.
+  v := public.ops_update_brand((select id from public.brands where slug = 'sendero-cr'), null, 'sendero');
+  assert (select former_slugs = '{sendero-cr}' from public.brands where slug = 'sendero'),
+    format('brands: back to its address %s', v);
 end
 $$;
 reset role;
@@ -518,6 +568,9 @@ reset role;
 select pg_temp.remember('volcan_active', (
   select count(*)::text from public.products p join public.brands b on b.id = p.brand_id
   where b.slug = 'volcan' and p.status = 'active'));
+select pg_temp.remember('volcan_listed', (
+  select count(*)::text from public.products p join public.brands b on b.id = p.brand_id
+  where b.slug = 'volcan' and p.status = 'active' and p.min_price_minor is not null));
 select pg_temp.login_anon();
 do $$ begin
   assert exists (select 1 from public.search_products('luma') where slug = 'bombillo-led-9w-4u'),
@@ -531,8 +584,12 @@ do $$ begin
        = current_setting('t.volcan_active')::bigint, 'brands: the filter finds exactly the brand';
   assert not exists (select 1 from public.list_brands() where slug in ('luma', 'tinamu')),
     'brands: merged and hidden brands are not offered as a filter';
-  assert exists (select 1 from public.list_brands() where slug = 'volcan' and product_count = 5),
+  assert exists (select 1 from public.list_brands()
+                 where slug = 'volcan' and product_count = current_setting('t.volcan_listed')::bigint
+                   and product_count > 0),
     'brands: the filter counts the products';
+  assert (select former_slugs @> '{luma}' from public.list_brands() where slug = 'volcan'),
+    'brands: the filter knows the merged brand''s address means the one that stayed';
   assert (select array_agg(slug order by slug) from public.list_brands('cafe')) = '{cafetal-los-santos}',
     'brands: in a category, only its brands';
   assert public.get_product('alimento-perro-adulto-tinamu-8kg') ->> 'brand' = 'Tinamú',
@@ -622,6 +679,21 @@ end $$;
 
 -- ═══ 5. Reviews ════════════════════════════════════════════════════════════
 
+-- On a database people use, other reviews may be reported, replied to or
+-- hidden already: the filters are checked on this review and on the change
+-- from what they counted before.
+select pg_temp.remember('review_had_reply', (
+  select (seller_reply is not null)::text from public.reviews where id = current_setting('t.review')::uuid));
+select pg_temp.remember('review_open_reports', (
+  select count(*)::text from public.content_reports
+  where target_type = 'review' and target_id = current_setting('t.review')::uuid
+    and status in ('open', 'in_review')));
+select pg_temp.login('central@yuntera.example', 'aal2');
+select pg_temp.remember('reported_before', public.ops_reviews('reported') ->> 'total');
+select pg_temp.remember('replied_before', public.ops_reviews('replied') ->> 'total');
+select pg_temp.remember('hidden_before', public.ops_reviews('hidden') ->> 'total');
+reset role;
+
 -- The seller answers, and someone reports the review.
 select pg_temp.login('cafetal@yuntera.example');
 select public.seller_reply_review(current_setting('t.review')::uuid, 'Gracias, revisaremos el empaque.');
@@ -641,19 +713,30 @@ begin
   assert (v ->> 'total')::int = (select count(*) from public.reviews) and (v ->> 'page_size')::int = 50,
     format('reviews: all %s', v ->> 'total');
   v := public.ops_reviews('reported');
-  assert (v ->> 'total')::int = 1, format('reviews: reported %s', v);
+  assert (v ->> 'total')::int = current_setting('t.reported_before')::int
+         + case when current_setting('t.review_open_reports')::int = 0 then 1 else 0 end,
+    format('reviews: reported %s', v ->> 'total');
+  v := public.ops_reviews('reported', current_setting('t.review')::uuid);
+  assert (v ->> 'total')::int = 1, format('reviews: the reported one is listed %s', v);
   v_row := v -> 'reviews' -> 0;
-  assert v_row ->> 'id' = current_setting('t.review') and (v_row ->> 'open_reports')::int = 1
-     and v_row -> 'report_reasons' = '["abuse"]' and v_row ->> 'seller_name' = 'Cafetal Los Santos'
+  assert v_row ->> 'id' = current_setting('t.review')
+     and (v_row ->> 'open_reports')::int = current_setting('t.review_open_reports')::int + 1
+     and v_row -> 'report_reasons' @> '["abuse"]' and v_row ->> 'seller_name' = 'Cafetal Los Santos'
      and v_row ->> 'seller_reply' like 'Gracias%', format('reviews: the reported one %s', v_row);
   -- Of the reviewer, only what the shop shows.
   assert v_row ->> 'author' = 'María R.' or v_row ->> 'author' like '% _.', format('reviews: author %s', v_row ->> 'author');
   assert not (v_row ? 'user_id') and not (v_row ? 'email') and not (v_row ? 'order_number')
      and v_row::text not like '%comprador%', 'reviews: nothing else about the reviewer';
-  assert ((public.ops_reviews('replied')) ->> 'total')::int = 1, 'reviews: replied';
+  assert ((public.ops_reviews('replied')) ->> 'total')::int = current_setting('t.replied_before')::int
+         + case when current_setting('t.review_had_reply')::boolean then 0 else 1 end, 'reviews: replied';
+  assert ((public.ops_reviews('replied', current_setting('t.review')::uuid)) ->> 'total')::int = 1,
+    'reviews: the replied one is listed';
   assert ((public.ops_reviews('low')) ->> 'total')::int
        = (select count(*) from public.reviews where rating <= 2), 'reviews: low ratings';
-  assert ((public.ops_reviews('hidden')) ->> 'total')::int = 0, 'reviews: none hidden yet';
+  assert ((public.ops_reviews('hidden')) ->> 'total')::int = current_setting('t.hidden_before')::int,
+    'reviews: none hidden yet';
+  assert ((public.ops_reviews('hidden', current_setting('t.review')::uuid)) ->> 'total')::int = 0,
+    'reviews: this one is not hidden';
   assert ((public.ops_reviews('all', current_setting('t.review')::uuid)) ->> 'total')::int = 1, 'reviews: by id';
   perform pg_temp.refused($q$select public.ops_reviews('todas')$q$, 'review_filter_invalid');
 
@@ -665,7 +748,10 @@ begin
   perform public.ops_hide_review(current_setting('t.review')::uuid, 'offensive', 'Insulta al repartidor.');
   perform pg_temp.refused(format($q$select public.ops_hide_review(%L, 'spam')$q$, current_setting('t.review')),
                           'review_already_hidden');
-  assert ((public.ops_reviews('hidden')) -> 'reviews' -> 0 ->> 'hidden_reason') = 'offensive', 'reviews: hidden, with why';
+  assert ((public.ops_reviews('hidden', current_setting('t.review')::uuid)) -> 'reviews' -> 0 ->> 'hidden_reason')
+         = 'offensive', 'reviews: hidden, with why';
+  assert ((public.ops_reviews('hidden')) ->> 'total')::int = current_setting('t.hidden_before')::int + 1,
+    'reviews: one more hidden';
 end
 $$;
 reset role;
@@ -954,6 +1040,118 @@ do $$ begin
 end $$;
 select public.ops_restore_product(current_setting('t.molido')::uuid, 'El vendedor corrigió el peso anunciado.');
 reset role;
+
+-- Putting back never publishes what no one reviewed. A seller may change a
+-- listing that is not on sale in place, without sending it; staff then cannot
+-- put that change on sale. Staff's own correction while it is down does not
+-- count as a change, and does not make the seller's look reviewed either.
+select pg_temp.remember('lic_sku', (select id::text from public.skus
+                                    where product_id = current_setting('t.licuadora')::uuid
+                                    order by created_at, id limit 1));
+select pg_temp.remember('lic_events_from', (select coalesce(max(id), 0)::text from private.outbox_events));
+create function pg_temp.seller_edits_licuadora(p_title text, p_submit boolean) returns jsonb
+language sql as $$
+  select public.seller_update_listing(
+    current_setting('t.licuadora')::uuid, p_title, 'cocina-electrica',
+    'Una descripción nueva que el equipo todavía no ha leído.', array['Sin revisar todavía'],
+    k.weight_grams, k.length_cm, k.width_cm, k.height_cm, k.id, p_submit)
+  from (select current_setting('t.lic_sku')::uuid as id,
+               current_setting('t.lic_w')::integer as weight_grams,
+               current_setting('t.lic_l')::numeric as length_cm,
+               current_setting('t.lic_wi')::numeric as width_cm,
+               current_setting('t.lic_h')::numeric as height_cm) k;
+$$;
+grant execute on function pg_temp.seller_edits_licuadora(text, boolean) to authenticated;
+select pg_temp.remember('lic_w', weight_grams::text), pg_temp.remember('lic_l', length_cm::text),
+       pg_temp.remember('lic_wi', width_cm::text), pg_temp.remember('lic_h', height_cm::text)
+from public.skus where id = current_setting('t.lic_sku')::uuid;
+
+select pg_temp.login('central@yuntera.example', 'aal2');
+do $$
+declare
+  v_lic uuid := current_setting('t.licuadora')::uuid;
+begin
+  perform public.ops_take_down_product(v_lic, 'La descripción promete cosas que no hace.');
+  perform public.ops_correct_product(v_lic, (select id from public.categories where slug = 'cocina-electrica'),
+                                     null, false, 'Vuelve a la categoría donde estaba.');
+  assert (public.ops_catalog_product(v_lic::text) ->> 'taken_down')::boolean
+     and not (public.ops_catalog_product(v_lic::text) ->> 'changed_since_take_down')::boolean,
+    'take-down: a staff correction keeps it ready to put back';
+end
+$$;
+reset role;
+select pg_temp.login('vendedor@yuntera.example');
+do $$ begin
+  assert pg_temp.seller_edits_licuadora('Licuadora Volcán 600 W, texto sin revisar', false) ->> 'status' = 'rejected',
+    'take-down: the seller saves a change without sending it';
+end $$;
+reset role;
+select pg_temp.login('central@yuntera.example', 'aal2');
+do $$
+declare
+  v_lic uuid := current_setting('t.licuadora')::uuid;
+  v jsonb := public.ops_catalog_product(v_lic::text);
+begin
+  assert (v ->> 'taken_down')::boolean and (v ->> 'changed_since_take_down')::boolean,
+    format('take-down: staff see the seller changed it %s', v);
+  perform pg_temp.refused(format('select public.ops_restore_product(%L, %L)', v_lic, 'Revisado, vuelve a la tienda.'),
+                          'listing_changed_since_take_down');
+  perform public.ops_correct_product(v_lic, null, (select id from public.brands where slug = 'nimbo'), false,
+                                     'La marca correcta es Nimbo, según la caja.');
+  perform pg_temp.refused(format('select public.ops_restore_product(%L, %L)', v_lic, 'Revisado, vuelve a la tienda.'),
+                          'listing_changed_since_take_down');
+end
+$$;
+reset role;
+do $$ begin
+  assert (select status = 'rejected' and title like '%sin revisar' from public.products
+          where id = current_setting('t.licuadora')::uuid), 'take-down: the unreviewed text stays off the shop';
+end $$;
+
+-- The seller sends it to review: that ends the take-down, and when review
+-- turns it down there is nothing for staff to put back.
+select pg_temp.login('vendedor@yuntera.example');
+select pg_temp.seller_edits_licuadora('Licuadora Volcán 600 W, enviada a revisión', true);
+reset role;
+do $$ begin
+  assert (select status = 'pending_review' and taken_down_at is null and taken_down_by is null
+                 and taken_down_fingerprint is null
+          from public.products where id = current_setting('t.licuadora')::uuid),
+    'take-down: sending it to review ends the take-down';
+end $$;
+select pg_temp.login('central@yuntera.example', 'aal2');
+select public.ops_review_product(current_setting('t.licuadora')::uuid, false, 'Sigue prometiendo cosas que no hace.');
+do $$ begin
+  assert not (public.ops_catalog_product(current_setting('t.licuadora')) ->> 'taken_down')::boolean,
+    'take-down: rejected in review, it is not a take-down any more';
+  perform pg_temp.refused(format('select public.ops_restore_product(%L, %L)', current_setting('t.licuadora'),
+                                 'Ya se resolvió el asunto.'), 'product_not_taken_down');
+end $$;
+reset role;
+do $$
+declare
+  v jsonb := pg_temp.planned_for('product.staff_changed', current_setting('t.lic_events_from')::bigint);
+begin
+  assert (select status = 'rejected' from public.products where id = current_setting('t.licuadora')::uuid),
+    'take-down: still off the shop';
+  -- What the seller is told about a correction says whether it is on sale.
+  assert exists (select 1 from jsonb_array_elements(v) x
+                 where x -> 'context' ->> 'kind' = 'corrected' and x -> 'context' ->> 'on_sale' = 'false'),
+    format('take-down: a correction while it is down says it is not on sale %s', v);
+  assert not exists (select 1 from jsonb_array_elements(v) x
+                     where x -> 'context' ->> 'kind' = 'corrected' and x -> 'context' ->> 'on_sale' = 'true'),
+    'take-down: and never that it is';
+end
+$$;
+do $$
+declare
+  v jsonb := pg_temp.planned_for('product.staff_changed', current_setting('t.events_from')::bigint);
+begin
+  assert exists (select 1 from jsonb_array_elements(v) x
+                 where x -> 'context' ->> 'kind' = 'corrected' and x -> 'context' ->> 'on_sale' = 'true'),
+    'products: a correction of a listing on sale says so';
+end
+$$;
 
 -- A shop that may not trade cannot have its product put back.
 select pg_temp.login('central@yuntera.example', 'aal2');
