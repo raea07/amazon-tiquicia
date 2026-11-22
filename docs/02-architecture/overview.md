@@ -171,7 +171,8 @@ filled as data arrives.
 
 | Kind of content                                                               | Where it is read                                              | Lifetime                                                                                      | Invalidated by                                                                                                                                                           |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Categories                                                                    | `getCategories` in `apps/web/src/lib/data.ts`                 | `hours` profile                                                                               | Tag `categories`                                                                                                                                                         |
+| Categories                                                                    | `getCategories` in `apps/web/src/lib/data.ts`                 | `hours` profile                                                                               | Tags `categories` and `catalog` (the console's catalogue tools drop `catalog`)                                                                                           |
+| Brands of the listing filter                                                  | `getBrands`                                                   | `minutes` profile                                                                             | Tag `catalog`                                                                                                                                                            |
 | Districts and zones                                                           | `getDistricts`                                                | `days` profile                                                                                | Tag `districts`                                                                                                                                                          |
 | Search results, category pages, home shelves                                  | `searchCatalog`                                               | `minutes` profile: served stale for up to 5 minutes, refreshed in the background every minute | Tag `catalog`, dropped only by the protected refresh endpoint                                                                                                            |
 | Product page                                                                  | `getProductPage`                                              | `minutes` profile                                                                             | Tags `catalog`, `product:<slug>` and `offer:<id>` per offer: an order drops its offers' pages, a cancellation or a review its products' pages, never the whole catalogue |
@@ -180,8 +181,10 @@ filled as data arrives.
 
 The whole `catalog` tag is dropped only through the shop's refresh endpoint,
 which asks for `SHOP_REFRESH_KEY`: by the console when content is taken down,
-a shop is suspended or closed, or a listing is rejected or an edit approved,
-and by the seller centre when a listing is archived. An action any shopper
+a shop is suspended or closed, a listing is rejected or an edit approved, or
+catalogue staff change a category, a brand, a synonym, a review or a
+product's category or brand, and by the seller centre when a listing is
+archived. An action any shopper
 can repeat drops only the pages it changed (`packages/next-kit/src/cache-tags.ts`).
 
 Two rules keep this safe.

@@ -1266,3 +1266,51 @@ says so: locally, never on a real project.
   account is deleted, with access closed (privacy.md).
 - Only proven against a local fake of Hacienda; signature acceptance needs
   the sandbox credentials.
+
+## 39. Catalogue staff change the catalogue through functions; hiding is not taking down
+
+**Context.** The lockdown left categories, brands, search synonyms and review
+moderation without a door. Staff need them, and the shop must follow at once
+without breaking links, the rating or the fees.
+
+**Decision.** One function per change, for catalogue staff and
+administrators only, each audited (migration 083700, console section
+Catálogo). Chosen where the work offered a choice:
+
+- **Hiding a category** takes it and everything under it out of the menus and
+  category pages and out of sellers' choices; its products stay on sale, in
+  search and at their own address (breadcrumbs show only what shows). Taking
+  goods off sale is a separate, explicit act: a product take-down.
+- **A renamed category keeps its old address** as an alias the shop answers
+  with a permanent redirect (308) in its proxy, so links and search engines
+  follow. Addresses and old addresses share one namespace, and a few words the
+  shop keeps for itself are refused.
+- **Commission never changes as a side effect.** A category move that would
+  change what a listed product pays is refused; commissions change in a
+  migration with the TypeScript mirror. A staff correction of one product's
+  category may change its commission, because the product was misfiled; it is
+  refused if an offer would then sell at a loss, and the seller is told the old
+  and new rate (and the IVA, which follows the category as when a seller's edit
+  is approved).
+- **A merged brand stays as a row** that points at the survivor: its name
+  becomes a search alias and its filter address shows the survivor, so nothing
+  that pointed at it breaks. A renamed brand keeps its old name as an alias too.
+- **A hidden review keeps its row and is excluded from the rating** by the
+  existing trigger (it counts published reviews only); the reasons are a short
+  fixed list, never a low rating; the author reads why on their order page,
+  never who did it. Hiding only the seller's reply leaves the rating alone.
+- **Content reports use the same doors**: acting on a product report is a
+  take-down that can be put back, and on a review report a hiding with the
+  closest reason, closing the review's other open reports.
+
+**Consequences.**
+
+- The seller is told of a correction, take-down or restoration by a new
+  message (`seller_listing_staff_change`); the reviewer of a hidden review is
+  not messaged, only shown on the order page.
+- Only the listing's own shop is told; other shops offering on a shared
+  listing are not.
+- A seller who edits a reply staff hid keeps it hidden until staff show it.
+- The commission spec in `packages/core/src/fees.ts` is keyed by the launch
+  slugs of the departments; the live rate stays on the category row, so a
+  renamed department keeps its rate while the spec keeps the old slug.

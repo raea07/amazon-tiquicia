@@ -1411,7 +1411,11 @@ begin
       -- what a shopper typed at checkout for a factura (083500): erased by
       -- delete_my_account (and by a trigger on deleted_at as a second guard),
       -- and used up when the document is made
-      'private.invoice_checkout_receivers.user_id');
+      'private.invoice_checkout_receivers.user_id',
+      -- kept as a bare id: who added a search synonym, hid a review or a
+      -- seller's reply, or took a product down (083700)
+      'search_synonyms.created_by', 'reviews.hidden_by', 'reviews.reply_hidden_by',
+      'products.taken_down_by');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end
 $$;

@@ -1633,10 +1633,10 @@ select pg_temp.logout();
 do $$
 begin
   assert (select bool_and(prosecdef) from pg_proc
-          where oid in ('public.search_products(text, text, bigint, bigint, boolean, boolean, text, integer, integer)'::regprocedure,
+          where oid in ('public.search_products(text, text, bigint, bigint, boolean, boolean, text, integer, integer, text)'::regprocedure,
                         'public.suggest_products(text, integer)'::regprocedure)), 'both wrappers are definer';
   assert not has_function_privilege('anon',
-           'private.search_products_unbounded(text, text, bigint, bigint, boolean, boolean, text, integer, integer)', 'execute')
+           'private.search_products_unbounded(text, text, bigint, bigint, boolean, boolean, text, integer, integer, text)', 'execute')
      and not has_function_privilege('authenticated', 'private.suggest_products_unbounded(text, integer)', 'execute'),
     'and the unbounded bodies cannot be called by the API roles';
 end
