@@ -2,7 +2,7 @@ import { ApiError, type InvoiceDetail } from "@yuntera/db";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { FiscalDocumentView } from "@yuntera/next-kit/fiscal-document";
 import { sessionApi } from "@yuntera/next-kit/server";
-import { Skeleton } from "@yuntera/ui";
+import { Alert, Skeleton } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -22,8 +22,9 @@ export default function InvoicePage(props: PageProps<"/comprobantes/[id]">) {
   );
 }
 
-async function Invoice({ params }: PageProps<"/comprobantes/[id]">) {
+async function Invoice({ params, searchParams }: PageProps<"/comprobantes/[id]">) {
   const { id } = await params;
+  const issued = (await searchParams).emitido === "1";
   await requireStaff(`/comprobantes/${id}`, ["finance"]);
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   let doc: InvoiceDetail;
@@ -51,12 +52,17 @@ async function Invoice({ params }: PageProps<"/comprobantes/[id]">) {
           </Link>
         ) : null}
       </div>
+      {issued && doc.replaces ? (
+        <Alert tone="success" title="Reemplazo emitido">
+          Emitimos el comprobante {doc.consecutivo}, que reemplaza al rechazado{" "}
+          {doc.replaces.consecutivo}. Sale hacia Hacienda en unos segundos.
+        </Alert>
+      ) : null}
       {doc.status === "rejected" && !doc.replaced_by ? (
         <ActionForm
           action={replaceInvoice}
           submit="Emitir reemplazo"
           pendingLabel="Emitiendo…"
-          hideOnSuccess
           className="flex flex-wrap items-center gap-3"
         >
           <input type="hidden" name="invoiceId" value={doc.id} />

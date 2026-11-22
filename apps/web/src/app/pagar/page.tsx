@@ -106,6 +106,7 @@ async function Checkout() {
           totalMinor={quote.total_minor}
           codAvailable={quote.cod_available ?? false}
           idempotencyKey={idempotencyKey}
+          shippingMinor={quote.shipping_minor ?? 0}
         />
         <p className="mt-6 text-sm">
           <Link href="/cuenta#direcciones" className="text-link underline">

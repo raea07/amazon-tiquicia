@@ -36,6 +36,17 @@ const transportOf = (code: string | null) =>
         ? "Hacienda no está disponible en este momento."
         : "No se pudo enviar."));
 
+/** Why a paid order's documents could not all be made, in words. */
+const PLANNING: Record<string, string> = {
+  invoice_receiver_incomplete:
+    "A la tienda le faltan datos fiscales válidos (razón social de al menos 3 letras o identificación). Corríjalos con una solicitud de cambio de la tienda; la factura se emite sola en menos de un minuto.",
+  invoice_tax_rate_unmapped:
+    "La tarifa de IVA de las comisiones no tiene código de Hacienda. Avise al equipo técnico.",
+};
+const planningOf = (reason: string) =>
+  PLANNING[reason] ??
+  "No se pudo emitir. Se vuelve a intentar sola cada minuto; si sigue, avise al equipo técnico.";
+
 const hoursSince = (iso: string | null) =>
   iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 3_600_000)) : 0;
 
@@ -118,13 +129,24 @@ async function Invoices({ searchParams }: Pick<PageProps<"/comprobantes">, "sear
             portal de Hacienda y cámbiela antes de esa fecha; sin ella no se puede emitir.
           </Alert>
         ) : null}
-        {data.failed_events > 0 ? (
-          <Alert tone="warning" title="Pagos sin comprobante">
-            {data.failed_events === 1
-              ? "Un pago no pudo producir su comprobante"
-              : `${data.failed_events} pagos no pudieron producir su comprobante`}
-            , casi siempre porque a la tienda le faltan datos fiscales (razón social o
-            identificación). Revise los datos de la tienda.
+        {data.failed_jobs.length > 0 ? (
+          <Alert tone="warning" title="Pagos sin todos sus comprobantes">
+            {data.failed_jobs.length === 1
+              ? "A un pago le falta un comprobante."
+              : `A ${data.failed_jobs.length} pagos les falta algún comprobante.`}{" "}
+            Se vuelve a intentar solo; corrija la causa y se emite.
+            <ul className="mt-2 flex flex-col gap-1">
+              {data.failed_jobs.map((job) => (
+                <li key={job.event_id}>
+                  <span className="font-semibold">
+                    {job.topic === "fiscal.refund_booked" ? "Reembolso del pedido" : "Pedido"}{" "}
+                    {job.order_number ?? "sin número"}
+                    {job.seller_name ? `, tienda ${job.seller_name}` : ""}:
+                  </span>{" "}
+                  {planningOf(job.reason)}
+                </li>
+              ))}
+            </ul>
           </Alert>
         ) : null}
       </div>
@@ -167,7 +189,9 @@ async function Invoices({ searchParams }: Pick<PageProps<"/comprobantes">, "sear
                   <span className="font-semibold">
                     {row.rejection_source === "reception"
                       ? "Hacienda no lo recibió:"
-                      : "Motivo de Hacienda:"}
+                      : row.rejection_source === "local"
+                        ? "No se envió:"
+                        : "Motivo de Hacienda:"}
                   </span>{" "}
                   {row.hacienda_message ?? "Hacienda no indicó el motivo."}
                 </p>
@@ -176,7 +200,6 @@ async function Invoices({ searchParams }: Pick<PageProps<"/comprobantes">, "sear
                     action={replaceInvoice}
                     submit="Emitir reemplazo"
                     pendingLabel="Emitiendo…"
-                    hideOnSuccess
                     className="flex flex-wrap items-center gap-3"
                   >
                     <input type="hidden" name="invoiceId" value={row.id} />
@@ -187,7 +210,6 @@ async function Invoices({ searchParams }: Pick<PageProps<"/comprobantes">, "sear
                       submit="Reemplazar por un tiquete sin receptor"
                       variant="secondary"
                       pendingLabel="Emitiendo…"
-                      hideOnSuccess
                       className="flex flex-wrap items-center gap-3"
                     >
                       <input type="hidden" name="invoiceId" value={row.id} />
@@ -233,7 +255,8 @@ async function Invoices({ searchParams }: Pick<PageProps<"/comprobantes">, "sear
         <p className="mt-1 max-w-3xl text-sm text-ink-muted">
           Si Hacienda no está disponible, los comprobantes se guardan y se envían solos cuando
           vuelve (contingencia). Un comprobante detenido por las revisiones previas se reenvía
-          después de corregir la causa.
+          después de corregir la causa; si la causa está en el propio comprobante (por ejemplo, un
+          dato del receptor), emita un reemplazo con otro número.
         </p>
         {data.unsent.length === 0 ? (
           <p className="mt-3 text-sm">Todo lo emitido ya salió hacia Hacienda.</p>
@@ -247,16 +270,41 @@ async function Invoices({ searchParams }: Pick<PageProps<"/comprobantes">, "sear
                     : transportOf(row.last_error_code)}
                   {row.attempts > 0 ? ` ${row.attempts} intentos.` : ""}
                 </p>
-                <ActionForm
-                  action={retryInvoice}
-                  submit="Enviar ahora"
-                  variant="secondary"
-                  pendingLabel="Enviando…"
-                  hideOnSuccess
-                  className="flex flex-wrap items-center gap-3"
-                >
-                  <input type="hidden" name="invoiceId" value={row.id} />
-                </ActionForm>
+                <div className="flex flex-wrap gap-3">
+                  <ActionForm
+                    action={retryInvoice}
+                    submit="Enviar ahora"
+                    variant="secondary"
+                    pendingLabel="Enviando…"
+                    hideOnSuccess
+                    className="flex flex-wrap items-center gap-3"
+                  >
+                    <input type="hidden" name="invoiceId" value={row.id} />
+                  </ActionForm>
+                  {row.replaceable ? (
+                    // Never signed, so never sent: a new document with a new number takes its place.
+                    <ActionForm
+                      action={replaceInvoice}
+                      submit="Emitir reemplazo"
+                      pendingLabel="Emitiendo…"
+                      className="flex flex-wrap items-center gap-3"
+                    >
+                      <input type="hidden" name="invoiceId" value={row.id} />
+                    </ActionForm>
+                  ) : null}
+                  {row.replaceable && row.kind === "delivery" && row.document_type === "01" ? (
+                    <ActionForm
+                      action={replaceInvoice}
+                      submit="Reemplazar por un tiquete sin receptor"
+                      variant="secondary"
+                      pendingLabel="Emitiendo…"
+                      className="flex flex-wrap items-center gap-3"
+                    >
+                      <input type="hidden" name="invoiceId" value={row.id} />
+                      <input type="hidden" name="asTicket" value="1" />
+                    </ActionForm>
+                  ) : null}
+                </div>
               </Row>
             ))}
           </ul>

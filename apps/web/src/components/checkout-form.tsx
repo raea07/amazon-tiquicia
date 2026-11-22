@@ -38,15 +38,25 @@ export function CheckoutForm({
   totalMinor,
   codAvailable,
   idempotencyKey,
+  shippingMinor,
 }: {
   addresses: Address[];
   totalMinor: number;
   codAvailable: boolean;
   idempotencyKey: string;
+  /** The delivery fee: Yuntera's only charge to the shopper, so the only thing it invoices them. */
+  shippingMinor: number;
 }) {
   const [state, action] = useActionState(placeOrderWithInvoice, initial);
   const deliverable = addresses.filter((address) => address.zone_active);
-  const preferred = deliverable.find((address) => address.is_default) ?? deliverable[0];
+  // After a refused try, what was chosen comes back; the first time, only the default address.
+  const preferred =
+    deliverable.find((address) => address.id === state.values?.addressId) ??
+    deliverable.find((address) => address.is_default) ??
+    deliverable[0];
+  // A new set of inputs whenever the form comes back, so they show what was chosen
+  // (the browser resets the form once its action finishes).
+  const stamp = JSON.stringify(state.values ?? {});
 
   return (
     <form action={action} className="flex flex-col gap-8">
@@ -66,6 +76,7 @@ export function CheckoutForm({
               }`}
             >
               <input
+                key={stamp}
                 type="radio"
                 name="addressId"
                 value={address.id}
@@ -106,9 +117,11 @@ export function CheckoutForm({
                 }`}
               >
                 <input
+                  key={stamp}
                   type="radio"
                   name="paymentMethod"
                   value={method.value}
+                  defaultChecked={!disabled && state.values?.paymentMethod === method.value}
                   disabled={disabled}
                   required
                   className="mt-1 size-5 accent-(--color-brand)"
@@ -125,7 +138,18 @@ export function CheckoutForm({
         </div>
       </fieldset>
 
-      <InvoiceRequestFields values={state.values} />
+      {shippingMinor > 0 ? (
+        <InvoiceRequestFields values={state.values} />
+      ) : (
+        <fieldset>
+          <legend className="font-display text-xl font-bold">3. Facturas electrónicas</legend>
+          <p className="mt-1 text-sm text-ink-muted">
+            Este pedido tiene entrega gratis, así que Yuntera no le cobra nada que deba facturarle.
+            Los productos los factura cada vendedor con su propio sistema de facturación
+            electrónica.
+          </p>
+        </fieldset>
+      )}
 
       <FormMessage state={state} />
 

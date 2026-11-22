@@ -128,8 +128,11 @@ async function until(what, fn, seconds = 60) {
     "the name is kept",
   );
   check(await shopper.locator("#factura").isChecked(), "and the choice");
+  check(
+    await shopper.locator('input[name="paymentMethod"][value="sinpe_movil"]').isChecked(),
+    "and the payment method",
+  );
   await shopper.fill('input[name="facturaNumero"]', "1-0987-0654");
-  await shopper.check('input[name="paymentMethod"][value="sinpe_movil"]');
   await shopper.click('button:has-text("Confirmar pedido")');
   await shopper.waitForURL((u) => /^\/pedidos\/YT-/.test(new URL(u).pathname), { timeout: 30000 });
   const orderPath = new URL(shopper.url()).pathname;
@@ -320,6 +323,8 @@ async function until(what, fn, seconds = 60) {
   check(reason.includes(rejectedNote.clave.slice(21, 41)), "for that credit note");
   await finance.screenshot({ path: `${SHOTS}/i07-ops-rejected.png`, fullPage: true });
   await rejectedRow.locator('button:has-text("Emitir reemplazo")').click();
+  // The new document's own page, which says what it replaces.
+  await finance.waitForURL(/\/comprobantes\/[0-9a-f-]{36}\?emitido=1$/, { timeout: 20000 });
   await finance.waitForSelector("text=que reemplaza al rechazado");
   const done = await text(finance.locator("text=que reemplaza al rechazado").first());
   const newNumber = /comprobante (\d{20})/.exec(done)?.[1];
@@ -366,6 +371,25 @@ async function until(what, fn, seconds = 60) {
   check(final.includes(newNumber), "the replacement credit note, not the rejected one");
   check(!final.includes(rejectedNote.clave.slice(21, 41)), "the rejected one is not listed");
   await shopper.screenshot({ path: `${SHOTS}/i10-order-credit-note.png`, fullPage: true });
+
+  // ── 6. Free delivery (over the zone's threshold): nothing of Yuntera's to invoice ──
+  await shopper.goto(`${WEB}/p/laptop-14-nimbo-libro`, { waitUntil: "networkidle" });
+  await shopper
+    .locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")')
+    .click();
+  await shopper.waitForSelector("text=Agregado al carrito");
+  await shopper.goto(`${WEB}/pagar`, { waitUntil: "networkidle" });
+  await shopper.waitForSelector("text=Resumen del pedido");
+  check(
+    (await text(shopper.locator('aside[aria-label="Resumen del pedido"]'))).includes("Gratis"),
+    "this order has free delivery",
+  );
+  check((await shopper.locator("#factura").count()) === 0, "so no factura is offered");
+  check(
+    (await text(shopper.locator("main:visible"))).includes("Este pedido tiene entrega gratis"),
+    "and the checkout says why",
+  );
+  await shopper.screenshot({ path: `${SHOTS}/i11-checkout-free-delivery.png`, fullPage: true });
 
   check(
     (await documents()).filter((d) => d.state === "aceptado" || d.state === "rechazado").length >=

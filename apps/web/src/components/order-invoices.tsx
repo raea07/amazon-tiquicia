@@ -13,14 +13,18 @@ import { sessionApi } from "@/lib/supabase";
 export async function OrderInvoices({
   orderNumber,
   paid,
+  payOnDelivery,
   shippingMinor,
 }: {
   orderNumber: string;
+  /** The payment has been received: documents are issued within minutes of it. */
   paid: boolean;
+  /** Cash on delivery not yet paid: nothing is issued until the cash is collected. */
+  payOnDelivery: boolean;
   shippingMinor: number;
 }) {
   const invoices: InvoiceRow[] = await (await sessionApi()).myOrderInvoices(orderNumber);
-  if (invoices.length === 0 && !paid) return null;
+  if (invoices.length === 0 && !paid && !(payOnDelivery && shippingMinor > 0)) return null;
 
   return (
     <section aria-labelledby="comprobantes">
@@ -29,9 +33,11 @@ export async function OrderInvoices({
       </h2>
       {invoices.length === 0 ? (
         <p className="mt-2 text-sm text-ink-muted">
-          {shippingMinor > 0
-            ? "Su comprobante por la entrega a domicilio estará aquí en unos minutos."
-            : "Este pedido no tuvo costo de entrega, así que Yuntera no le emite comprobante."}
+          {shippingMinor === 0
+            ? "Este pedido no tuvo costo de entrega, así que Yuntera no le emite comprobante."
+            : paid
+              ? "Su comprobante por la entrega a domicilio estará aquí en unos minutos."
+              : "Le emitiremos el comprobante por la entrega a domicilio cuando pague al recibir el pedido. Aparecerá aquí."}
         </p>
       ) : (
         <ul className="mt-3 flex flex-col gap-3">

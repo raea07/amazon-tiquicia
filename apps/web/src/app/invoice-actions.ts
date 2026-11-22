@@ -10,6 +10,7 @@
  */
 
 import { HACIENDA_ID_CODE, type IdentificationType, parseIdentification } from "@yuntera/core";
+import { cleanText, HACIENDA_EMAIL } from "@yuntera/next-kit/fiscal-document";
 import {
   type ActionState,
   GENERIC_ERROR,
@@ -24,6 +25,9 @@ import { getViewer, signInUrl } from "@/lib/session";
 import { sessionApi } from "@/lib/supabase";
 
 const FIELDS = [
+  // Kept so a refused try comes back with the address and payment method chosen.
+  "addressId",
+  "paymentMethod",
   "factura",
   "facturaTipo",
   "facturaNumero",
@@ -37,13 +41,29 @@ const receiverSchema = z
   .object({
     facturaTipo: z.enum(ID_KINDS, "Elija el tipo de identificación para la factura."),
     facturaNumero: z.string().trim().min(1, "Escriba el número de identificación para la factura."),
+    // Cleaned as the XML will carry it, so what passes here is what Hacienda receives.
     facturaNombre: z
       .string()
-      .trim()
-      .min(3, "Escriba el nombre o la razón social para la factura.")
-      .max(100, "El nombre para la factura puede tener hasta 100 caracteres."),
+      .max(1000, "El nombre para la factura puede tener hasta 100 caracteres.")
+      .transform((name) => cleanText(name, 1000))
+      .pipe(
+        z
+          .string()
+          .min(3, "Escriba el nombre o la razón social para la factura.")
+          .max(100, "El nombre para la factura puede tener hasta 100 caracteres."),
+      ),
     facturaCorreo: z
-      .union([z.literal(""), z.email("Revise el correo para la factura.").max(160)])
+      .union([
+        z.literal(""),
+        z
+          .string()
+          .trim()
+          .max(160, "Revise el correo para la factura; debe ser como nombre@dominio.com.")
+          .regex(
+            HACIENDA_EMAIL,
+            "Revise el correo para la factura; debe ser como nombre@dominio.com.",
+          ),
+      ])
       .optional(),
   })
   .refine((v) => parseIdentification(v.facturaNumero, v.facturaTipo) !== null, {

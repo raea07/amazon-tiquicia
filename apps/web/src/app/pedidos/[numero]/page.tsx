@@ -242,7 +242,13 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
           <Suspense fallback={<Skeleton className="h-24" />}>
             <OrderInvoices
               orderNumber={order.order_number}
-              paid={!awaitingPayment && order.status !== "payment_review"}
+              paid={["captured", "partially_refunded", "refunded"].includes(
+                order.payment?.status ?? "",
+              )}
+              payOnDelivery={
+                order.payment_method === "cash_on_delivery" &&
+                !["cancelled", "refunded"].includes(order.status)
+              }
               shippingMinor={order.shipping_minor}
             />
           </Suspense>
