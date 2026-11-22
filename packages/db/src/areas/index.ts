@@ -22,10 +22,11 @@ import * as notifications from "./notifications";
 import { paymentsApi, paymentsErrors } from "./payments";
 import * as peoplePayouts from "./people-payouts";
 import { photosApi, photosErrors } from "./photos";
+import { sellerListingsApi, sellerListingsErrors } from "./seller-listings";
 import type { Caller, Messages } from "./types";
 import { webFollowupsApi, webFollowupsErrors } from "./web-followups";
 
-// The listings, integrity, limits, followups, payments and invoicing areas name their exports uniquely, so
+// The listings, integrity, limits, followups, payments, invoicing and seller-listings areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
 // would clash with each other, so their schemas and types are re-exported by
 // name.
@@ -85,6 +86,7 @@ export type {
   WarehouseRole,
 } from "./people-payouts";
 export * from "./photos";
+export * from "./seller-listings";
 export type { Caller, Messages } from "./types";
 export * from "./web-followups";
 
@@ -100,6 +102,7 @@ export const areaErrors = {
   ...webFollowupsErrors,
   ...paymentsErrors,
   ...invoicingErrors,
+  ...sellerListingsErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -113,6 +116,8 @@ export const areaApi = (caller: Caller) => ({
   ...webFollowupsApi(caller),
   ...paymentsApi(caller),
   ...invoicingApi(caller),
+  // After listings and limits: some of its methods replace theirs (see seller-listings.ts).
+  ...sellerListingsApi(caller),
   // Last: some of its methods replace core ones (see followups.ts).
   ...followupsApi(caller),
 });

@@ -98,7 +98,8 @@ export type MyInvitation = z.infer<typeof myInvitation>;
 
 // ── Changes to the shop's details ───────────────────────────────────────────
 
-export const shopChangeKind = z.enum(["shop_name", "fiscal", "contact"]);
+/** "description": the shop's public description (20261121083600_seller_listings.sql). */
+export const shopChangeKind = z.enum(["shop_name", "fiscal", "contact", "description"]);
 export type ShopChangeKind = z.infer<typeof shopChangeKind>;
 
 /** What a request proposes, or what the shop has; the fields depend on the kind. */
@@ -110,6 +111,8 @@ export const shopDetails = z.object({
   economic_activity_code: z.string().nullable().optional(),
   contact_email: z.string().optional(),
   contact_phone: z.string().optional(),
+  /** Plain text, shown as text; null asks to remove it. */
+  description: z.string().nullable().optional(),
 });
 export type ShopDetails = z.infer<typeof shopDetails>;
 
@@ -133,7 +136,10 @@ export const sellerShopChanges = z.object({
   /** A change of payout account is waiting, which holds back a change of contact. */
   payout_request_open: z.boolean(),
   /** What is on file, for the forms to start from; null for members who may not ask. */
-  current: z.object({ fiscal: shopDetails, contact: shopDetails }).nullable().optional(),
+  current: z
+    .object({ fiscal: shopDetails, contact: shopDetails, description: shopDetails.optional() })
+    .nullable()
+    .optional(),
   /** The latest request of each kind. */
   requests: z.array(shopChange),
 });
