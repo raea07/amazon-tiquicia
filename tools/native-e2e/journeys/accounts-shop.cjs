@@ -216,6 +216,13 @@ async function webIsUp() {
   );
   await b.noSideways("second step");
   await b.shot("accounts-shop-05-second-step");
+  // Halfway through, the account tab asks for nothing the database would
+  // refuse (any refused call would fail this journey) and leads back here.
+  await b.page.goto(`${BASE}/cuenta`, { waitUntil: "networkidle" });
+  await b.page.getByText("Falta un paso").first().waitFor();
+  await b.on("account-sign-in").click();
+  await b.on("second-step").waitFor();
+  check(true, "the account tab says a step is missing and leads back to the code");
   b.expect(/status of 422/);
   await b.on("second-step-code").fill(codeAt(secret, Math.floor(Date.now() / 30000) - 20));
   await b.on("second-step-submit").click();
