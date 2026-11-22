@@ -35,6 +35,7 @@ begin
     'seller_paused_offers', 'seller_request_shop_description', 'seller_shop_front', 'seller_reserve_logo',
     'seller_finish_logo', 'seller_withdraw_logo', 'seller_remove_logo', 'ops_logos_for_review',
     'ops_review_logo', 'ops_logo_files_to_publish', 'ops_confirm_logo_published', 'get_shop',
+    'cart_alternatives',
     -- the workers' own, if a signed-in token ever reached them
     'worker_payments_claim', 'worker_payments_event', 'worker_payments_hello', 'worker_payments_report',
     'worker_invoice_claim', 'worker_invoice_health', 'worker_invoice_hint', 'worker_invoice_plan',

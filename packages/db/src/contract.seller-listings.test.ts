@@ -96,11 +96,42 @@ describe.skipIf(!db.enabled)("seller listings contract (against a seeded databas
     ).rejects.toMatchObject({ code: "forbidden" });
   });
 
+  it("offers a visitor's cart another shop's offer when the one in it cannot be bought", async () => {
+    // The offer added above has no stock yet; the creating shop's has.
+    const added = offersAdded[0] ?? "";
+    const alternatives = await db.as().cartAlternatives([added]);
+    expect(alternatives).toHaveLength(1);
+    expect(alternatives[0]).toMatchObject({
+      offer_id: added,
+      product_slug: "botella-termica-sendero-750ml",
+      seller_name: "Tienda Sendero",
+    });
+    expect(alternatives[0]?.alternative_offer_id).not.toBe(added);
+    expect(alternatives[0]?.available).toBeGreaterThan(0);
+    // A line that can be bought, or an offer that does not exist: nothing.
+    await expect(
+      db.as().cartAlternatives([alternatives[0]?.alternative_offer_id ?? ""]),
+    ).resolves.toEqual([]);
+    await expect(
+      db.as().cartAlternatives(["00000000-0000-4000-8000-000000000000"]),
+    ).resolves.toEqual([]);
+  });
+
+  it("shows staff which other shops' offers a listing edit would pause", async () => {
+    const queue = await staff().opsListingEditsForReview();
+    for (const edit of queue) expect(Array.isArray(edit.pauses_offers)).toBe(true);
+    await expect(
+      staff().opsReviewListingEdit("00000000-0000-4000-8000-000000000000", true, null, true),
+    ).rejects.toMatchObject({ code: "edit_not_found" });
+    await expect(shopper().opsListingEditsForReview()).rejects.toMatchObject({ code: "forbidden" });
+  });
+
   it("switches a variant off and on, and says what happened", async () => {
     const listing = await sendero().sellerListing(ids.camiseta ?? "");
     expect(listing.variants).toHaveLength(3);
     expect(listing.variants.every((variant) => variant.active)).toBe(true);
     expect(listing.other_shops).toBe(0);
+    expect(listing.paused_other_shops).toBe(0);
 
     await expect(sendero().sellerSetVariantActive(ids.small ?? "", false)).resolves.toMatchObject({
       outcome: "variant_off",

@@ -1,4 +1,4 @@
-import { STAFF_QUEUE_PAGE } from "@yuntera/db";
+import { type OfferPausedByEdit, STAFF_QUEUE_PAGE } from "@yuntera/db";
 import { DecisionForm } from "@yuntera/next-kit/client";
 import { ListingChanges } from "@yuntera/next-kit/listing-changes";
 import { photoPreviews, sessionApi } from "@yuntera/next-kit/server";
@@ -210,6 +210,9 @@ async function Review() {
                       changed={edit.changed}
                     />
                   </div>
+                  {edit.pauses_offers.length > 0 ? (
+                    <OffersThisEditPauses offers={edit.pauses_offers} />
+                  ) : null}
                   <div className="mt-4 border-t border-border pt-4">
                     <DecisionForm
                       action={reviewListingEdit}
@@ -219,6 +222,19 @@ async function Review() {
                       no="Rechazar cambio"
                     >
                       <input type="hidden" name="requestId" value={edit.request_id} />
+                      {edit.pauses_offers.length > 0 ? (
+                        <label className="flex min-h-11 items-start gap-3 text-sm">
+                          <input
+                            type="checkbox"
+                            name="pausaOfertas"
+                            className="mt-0.5 size-5 accent-(--color-brand)"
+                          />
+                          <span>
+                            Si apruebo, confirmo que revisé el paquete y que esas ofertas se ponen
+                            en pausa; a cada tienda le avisamos con el precio mínimo.
+                          </span>
+                        </label>
+                      ) : null}
                     </DecisionForm>
                   </div>
                 </article>
@@ -227,6 +243,40 @@ async function Review() {
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+/**
+ * Other shops' offers on sale that approving this edit would pause: the new
+ * package or category makes each sale cost them more in fees than it pays.
+ * Their shops did not ask for the change, so staff see them before deciding.
+ */
+function OffersThisEditPauses({ offers }: { offers: OfferPausedByEdit[] }) {
+  return (
+    <div className="mt-4 rounded-md border-2 border-warning p-4" data-testid="edit-pauses-offers">
+      <p className="font-semibold">
+        {offers.length === 1
+          ? "Si lo aprueba, se pausa la oferta de otra tienda"
+          : `Si lo aprueba, se pausan ${offers.length} ofertas de otras tiendas`}
+      </p>
+      <p className="mt-1 text-ink-muted">
+        Con el paquete o la categoría nuevos, su precio ya no cubre las tarifas. Lo declara la
+        tienda que creó la publicación: si el cambio no parece real, rechácelo.
+      </p>
+      <ul className="mt-3 flex flex-col gap-2">
+        {offers.map((offer) => (
+          <li key={offer.offer_id}>
+            <span className="font-semibold">{offer.seller_name}</span> · {offer.sku_code}
+            {offer.variant_name ? ` · ${offer.variant_name}` : ""} · precio{" "}
+            {formatPrice(offer.price_minor)}
+            {offer.min_price_minor !== null
+              ? // In whole colones, rounded up, as the shop is told.
+                `; necesitaría al menos ${formatPrice(Math.ceil(offer.min_price_minor / 100) * 100)}`
+              : "; ningún precio cubriría las tarifas"}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -14,7 +14,7 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { OfferForm } from "@/components/forms";
-import { ResumeOfferForm } from "@/components/seller-listing-forms";
+import { ResumeOfferForm, WithdrawOfferForm } from "@/components/seller-listing-forms";
 import { FULFILLMENT_LABEL, PRODUCT_STATUS } from "@/lib/labels";
 import { requireShop } from "@/lib/shop";
 
@@ -109,13 +109,13 @@ async function Listings({ searchParams }: Pick<PageProps<"/productos">, "searchP
                   {FULFILLMENT_LABEL[listing.fulfillment]}
                 </p>
                 {edit && !edit.editable && listing.product_status !== "archived" ? (
-                  <p className="mt-1">
+                  <div className="mt-1">
                     <Badge tone="info">De otra tienda</Badge>
-                    <span className="sr-only">
-                      : usted cambia su precio y sus existencias; el contenido lo cambia la tienda
-                      que lo publicó.
-                    </span>
-                  </p>
+                    <p className="mt-1 max-w-64 text-xs text-ink-muted">
+                      Usted cambia su precio y sus existencias; el texto, las fotos y el paquete los
+                      cambia la tienda que lo publicó.
+                    </p>
+                  </div>
                 ) : null}
                 {edit?.editable ? (
                   <p className="mt-1">
@@ -180,6 +180,15 @@ async function Listings({ searchParams }: Pick<PageProps<"/productos">, "searchP
                   <div className="mt-3">
                     <OfferForm listing={listing} />
                   </div>
+                  {edit && !edit.editable ? (
+                    <div className="mt-4 border-t border-border pt-3">
+                      <WithdrawOfferForm
+                        offerId={listing.offer_id}
+                        priceMinor={listing.price_minor}
+                        label={`${listing.title}${listing.variant_name ? `, ${listing.variant_name}` : ""}`}
+                      />
+                    </div>
+                  ) : null}
                 </details>
               </td>
             </tr>

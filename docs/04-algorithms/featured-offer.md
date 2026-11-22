@@ -46,8 +46,27 @@ its own buy button, so the shopper sees every offer and can choose any.
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Product page                   | Per variant: the first new offer in the buy box, "Vendido por" with the shop's logo and page; every other offer below, in order                                                                  |
 | Search results, category pages | One row per product (a product is never listed twice, however many shops sell it): the price of the first new offer across the product's variants that are switched on, from the listing summary |
-| Cart and checkout              | Exactly the offer the shopper added, with its shop ("Vendido por …"); checkout prices that offer again from the database                                                                         |
+| Cart and checkout              | Exactly the offer the shopper added, with its shop ("Vendido por …"); checkout prices that offer again from the database. When that offer can no longer be bought, see below                     |
 | Seller centre                  | "Destacada" when the shop's offer is the one the listing summary shows first, and how many other shops sell the product                                                                          |
+
+### When the offer in a cart can no longer be bought
+
+The cart keeps the offer the shopper chose; it never swaps it silently. When
+that offer sells out, is paused, or its shop stops trading, the cart asks
+`cart_alternatives` (a visitor function) for the offer of the same variant
+that the product page now shows first among those that can be bought (the
+same order, between the same `offer_order` markers), and says so:
+
+> Botella térmica Sendero 750 ml. La oferta de Ferretería El Higuerón se
+> agotó. Tienda Sendero lo vende a ₡9 900. [Cambiar a la oferta de Tienda
+> Sendero] [Ver todas las ofertas]
+
+"Cambiar" replaces the offer id in the cart and keeps the quantity; prices
+are read again as always. Only when no other shop sells the variant does the
+cart say the product is not available and ask to remove it. When an order is
+refused because a product ran out (`insufficient_stock`, `offer_unavailable`),
+checkout names the product and its shop, and says whether to change it on the
+cart page or lower the quantity, instead of "one of the products".
 
 ### Why this rule, and not the weighted score
 
@@ -123,27 +142,49 @@ the unit, and they count towards the product's rating.
 
 An approved edit of the package or category changes the fees of every offer
 on that variant or product. The creating shop's own offers are checked as
-before (its edit is refused while its own price would be below the floor),
-but another shop's offer is **paused** instead of the edit being refused for a
-price that shop set. That shop sees it in its list of paused offers with the
-reason ("se aprobó un cambio del paquete o de la categoría") and the lowest
-price that covers the new fees, and puts it back on sale in one step.
+before (its edit is refused while its own price would be below the floor).
+Another shop's offer the edit would leave below the floor is not a reason to
+refuse the creating shop's edit for a price it does not set, but the package
+data the creating shop declares sets the other shops' fees, and staff cannot
+weigh the parcel. So:
+
+- The console's review of the edit lists, before staff decide, each other
+  shop's offer the approval would pause, with its price and the lowest price
+  that would cover the fees afterwards (`ops_listing_edits_for_review`,
+  `pauses_offers`).
+- Approving such an edit is refused (`edit_pauses_offers`) unless staff tick
+  that they checked the package and confirm the pauses
+  (`ops_review_listing_edit(…, p_pause_offers => true)`). An edit that does
+  not look real is rejected instead.
+- Once confirmed, those offers are paused, each shop sees them in its list of
+  paused offers with the reason ("se aprobó un cambio del paquete o de la
+  categoría") and the lowest price that covers the new fees, puts them back
+  on sale in one step, and is told by e-mail and push
+  (`seller_offers_paused_edit`).
 
 ## When the creating shop stops
 
-"A live offer" means an offer on sale or paused (its shop can resume it at any
-moment) from a shop that may trade (active). A suspended or closed shop's
-offers are on sale nowhere and hold nothing back.
+"A live offer" means an offer **on sale** (status `active`, with or without
+stock right now) from a shop that may trade (active): what a shopper can find
+on the page. A paused offer sells nothing, so it holds nothing back; if it
+did, a shop that paused its offer and forgot it would stop the creating shop
+from ever reworking or retiring its own listing. A suspended or closed shop's
+offers are on sale nowhere and hold nothing back either. A shop that no
+longer wants to sell a product another shop created withdraws its offer for
+good from its list of products ("Dejar de vender este producto"); adding it
+again later puts the same offer back.
 
-| The creating shop…                                      | What happens to the product and to the other shops                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Wants to archive it, or take it to draft                | Refused while another active shop has a live offer: its page is not the creating shop's alone. It can pause or archive its own offer                                                                                                                                                                                                                                               |
-| Retires a variant                                       | Only its own offer on that variant is paused when another shop sells it; otherwise the variant leaves the page                                                                                                                                                                                                                                                                     |
-| Is suspended                                            | The product stays on sale through the other shops (its own offers leave the page); it stays the suspended shop's, because a suspension may be lifted, but that shop can send no edit while suspended. A product nobody else sells leaves the shop until it is reinstated                                                                                                           |
-| Closes (staff, or its last owner deleted their account) | Each of its published listings that another active shop sells **passes to the shop with the oldest live offer on it**, which from then on edits it through the same reviews. What the closed shop left waiting on it (a listing edit, photos not yet approved) is withdrawn; its approved photos stay. A listing nobody else sells stays with the closed shop and is shown nowhere |
+| The creating shop…                                      | What happens to the product and to the other shops                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wants to archive it, or take it to draft                | Refused while another active shop has a live offer: its page is not the creating shop's alone. It can pause or archive its own offer. Other shops' paused offers do not stop it; they stay paused, and the page says how many there are                                                                                                                                                                                                                                                                                                               |
+| Retires a variant                                       | Only its own offer on that variant is paused when another shop has a live offer on it; otherwise the variant leaves the page (other shops' paused offers on it stay paused)                                                                                                                                                                                                                                                                                                                                                                           |
+| Is suspended                                            | The product stays on sale through the other shops (its own offers leave the page); it stays the suspended shop's, because a suspension may be lifted, but that shop can send no edit while suspended. A product nobody else sells leaves the shop until it is reinstated                                                                                                                                                                                                                                                                              |
+| Closes (staff, or its last owner deleted their account) | Each of its published listings that another active shop offers **passes to the shop with the oldest offer on sale on it**, or, when every other offer is paused, to the shop with the oldest paused one (it can resume; without an heir the page would be gone for it too). The new owner edits it through the same reviews. What the closed shop left waiting on it (a listing edit, photos not yet approved) is withdrawn; its published photos stay with the listing. A listing nobody else offers stays with the closed shop and is shown nowhere |
 
 The closed shop's logo and description leave the shop too (they may describe
-the person behind it), and its public page stops existing.
+the person behind it), every change to its details still waiting for review
+is withdrawn (and a description is never approved onto a closed shop), and
+its public page stops existing.
 
 ## Variants on and off, and back to draft
 
@@ -187,9 +228,12 @@ product; an offer on another shop's listing is marked "De otra tienda".
 - **A shop that takes over a listing** can add and remove its own photos but
   not remove the photos the closed shop uploaded (their files are in that
   shop's folder); catalogue staff can take them down.
-- **No message** tells a shop that a listing edit paused one of its offers;
-  it sees the reason in the seller centre. A fee change still sends its
-  message as before.
+- **The paused-by-edit message** is planned by the approval itself, not by
+  the notification planner: only the approval knows which offers it paused.
+  It is recorded as an event `listing_edit.offers_paused` that no consumer
+  reads, so its deliveries have an event to belong to.
+- **Native shopper app.** Its cart still says only that a product is not
+  available; the swap to another shop's offer is on the website.
 
 ## What to measure before changing the order
 

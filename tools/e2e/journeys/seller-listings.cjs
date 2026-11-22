@@ -4,7 +4,12 @@
 // Sendero retires a size of its T-shirt and brings it back, takes a listing
 // back to draft and sends it to review again (staff publish it); Sendero
 // changes its description and logo, staff approve both, and the shop's page
-// and the product page show them. Screens are looked at at 390 px too.
+// and the product page show them. Also: when the offer in a cart sells out,
+// the cart names the other shop's offer and swaps to it; a package edit that
+// would pause another shop's offer needs staff to confirm it, and that shop
+// sees why; a paused offer does not stop the creating shop from going back to
+// draft, and the offering shop can stop selling for good; the description can
+// be removed. Screens are looked at at 390 px too.
 //
 // A journey drives the real apps in a real browser against a freshly seeded
 // database. It fails when a step does not arrive where it should, when the
@@ -168,6 +173,11 @@ const DESCRIPTION =
     (await offerRow.locator('a:has-text("Editar")').count()) === 0,
     "it can edit another shop's listing",
   );
+  // What it may change is said on screen, not only to screen readers.
+  check(
+    await offerRow.locator("text=Usted cambia su precio y sus existencias").isVisible(),
+    "the row does not say, visibly, what the shop may change",
+  );
 
   // ── 2. A shopper sees both offers and buys from the second shop ─────────────
   const shopperContext = await desktop();
@@ -217,6 +227,45 @@ const DESCRIPTION =
   const toPack = await text(ferreteria.locator("main:visible"));
   check(toPack.includes("Botella térmica"), "the offering shop does not see its sale");
 
+  // ── 2b. The offer in a cart sells out: the cart names the other shop's ─────
+  const visitorContext = await desktop();
+  const visitor = await visitorContext.newPage();
+  watch(visitor);
+  await visitor.goto(WEB + BOTTLE, { waitUntil: "networkidle" });
+  await visitor
+    .locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")')
+    .click();
+  await visitor.waitForSelector("text=Agregado al carrito");
+  const setFerreteriaStock = async (units) => {
+    await ferreteria.goto(SELLER + "/inventario", { waitUntil: "networkidle" });
+    const row = ferreteria.locator("main:visible tbody tr", { hasText: "Botella térmica" }).first();
+    await row.locator('input[name="quantity"]').fill(String(units));
+    await row.locator('button[type="submit"]').click();
+    await row.locator('[role="status"], [role="alert"]').first().waitFor();
+  };
+  // One unit is held for the order just paid: on hand 1 leaves none to sell.
+  await setFerreteriaStock(1);
+  await visitor.goto(WEB + "/carrito", { waitUntil: "networkidle" });
+  const soldOut = await text(visitor.locator("main ul > li").first());
+  log("sold-out line:", soldOut.slice(0, 220));
+  check(
+    soldOut.includes("La oferta de Ferretería El Higuerón se agotó") &&
+      soldOut.includes("Tienda Sendero lo vende a"),
+    "the cart does not say whose offer ran out and who else sells it",
+  );
+  check(!soldOut.includes("Ya no está disponible"), "the cart says the product is gone");
+  await visitor.screenshot({ path: SHOTS + "/sl2c-cart-sold-out.png", fullPage: true });
+  await onPhone(visitorContext, WEB + "/carrito", "sl2d-cart-sold-out-390.png");
+  await visitor.click('main button:has-text("Cambiar a la oferta de Tienda Sendero")');
+  await visitor.waitForSelector("main >> text=Vendido por Tienda Sendero");
+  check(
+    (await visitor.locator("main >> text=Continuar con la compra").count()) === 1,
+    "the cart cannot go on after the swap",
+  );
+  log("swapped:", (await text(visitor.locator("main ul > li").first())).slice(0, 160));
+  await visitorContext.close();
+  await setFerreteriaStock(6);
+
   // ── 3. Sendero retires a size and brings it back ───────────────────────────
   const senderoContext = await desktop();
   const sendero = await senderoContext.newPage();
@@ -250,6 +299,26 @@ const DESCRIPTION =
   check(/Talla S/.test(await look.page.locator("main").innerText()), "the size did not come back");
   await look.context.close();
   await onPhone(senderoContext, shirtEdit, "sl3b-variants-390.png");
+  // Its own offer on a size paused (nobody else sells it): the page says so
+  // and offers to put it back, instead of "A la venta".
+  await sendero.goto(SELLER + "/productos", { waitUntil: "networkidle" });
+  const mediumRow = sendero.locator("main:visible tbody tr", { hasText: "Talla M" }).first();
+  await mediumRow.locator("summary").click();
+  await mediumRow.locator('select[name="status"]').selectOption("paused");
+  await mediumRow.locator('form:has(select[name="status"]) button:has-text("Guardar")').click();
+  await mediumRow.locator('[role="status"]').first().waitFor();
+  await sendero.goto(shirtEdit, { waitUntil: "networkidle" });
+  const medium = sendero.locator('main:visible section[aria-labelledby="variantes"] li', {
+    hasText: "Talla M",
+  });
+  const mediumText = await text(medium);
+  log("own offer paused:", mediumText);
+  check(
+    mediumText.includes("Su oferta en pausa") && !mediumText.includes("A la venta"),
+    "a size whose own offer is paused is shown as on sale",
+  );
+  await medium.locator('button:has-text("Volver a ofrecer")').click();
+  await medium.locator("text=a la venta otra vez").waitFor();
 
   // ── 4. A listing back to draft, and through review again ───────────────────
   await sendero.goto(SELLER + "/productos", { waitUntil: "networkidle" });
@@ -369,6 +438,133 @@ const DESCRIPTION =
   const missing = await visit("/tienda/no-existe-esta-tienda", { notFound: true });
   check(missing.status === 404, `an unknown shop answered ${missing.status}`);
   await missing.context.close();
+
+  // ── 6. A package edit that would pause another shop's offer ────────────────
+  // Sendero sells TecnoCasa's blender from the warehouse at a price that
+  // covers today's fees; TecnoCasa then declares a much heavier package.
+  await sendero.goto(SELLER + "/productos/ofrecer?q=licuadora", { waitUntil: "networkidle" });
+  const blender = sendero.locator("main:visible li", { hasText: "Licuadora" }).first();
+  await blender.locator('input[name="price"]').fill("4 000");
+  await blender.locator('select[name="fulfillment"]').selectOption("platform");
+  await blender.locator('button:has-text("Agregar mi oferta")').click();
+  await sendero.waitForSelector("main:visible >> text=Agregamos su oferta");
+
+  const tecnoContext = await desktop();
+  const tecno = await tecnoContext.newPage();
+  watch(tecno);
+  await signIn(tecno, SELLER, "vendedor@yuntera.example");
+  if (!(await tecno.locator("main h1:visible").innerText()).includes("TecnoCasa")) {
+    await tecno.selectOption("#shop", { label: "TecnoCasa" });
+    await tecno.click('header button:has-text("Cambiar")');
+    await tecno.waitForSelector('main h1:visible:has-text("TecnoCasa")');
+  }
+  await tecno.goto(SELLER + "/productos", { waitUntil: "networkidle" });
+  await tecno
+    .locator("main:visible tbody tr", { hasText: "Licuadora" })
+    .first()
+    .locator('a:has-text("Editar")')
+    .click();
+  await tecno.waitForSelector('main:visible input[name="weightGrams"]');
+  await tecno.fill('main:visible input[name="weightGrams"]', "29000");
+  await tecno.click('main:visible button:has-text("Enviar cambios a revisión")');
+  await tecno.waitForSelector("main:visible >> text=Publicado; sus cambios están en revisión");
+  await tecnoContext.close();
+
+  await staff.goto(OPS + "/catalogo", { waitUntil: "networkidle" });
+  const heavy = staff
+    .locator('main:visible section[aria-labelledby="cambios"] article', { hasText: "Licuadora" })
+    .first();
+  const warning = await text(heavy.locator('[data-testid="edit-pauses-offers"]'));
+  log("edit warning:", warning.slice(0, 220));
+  check(
+    warning.includes("se pausa la oferta de otra tienda") && warning.includes("Tienda Sendero"),
+    "staff are not told the edit pauses another shop's offer",
+  );
+  await staff.screenshot({ path: SHOTS + "/sl7-edit-pauses-offers.png", fullPage: true });
+  await onPhone(staffContext, OPS + "/catalogo", "sl7b-edit-pauses-offers-390.png");
+  // Without the tick, the approval is refused with what to do.
+  await heavy.locator('button:has-text("Aprobar cambio")').click();
+  await heavy.locator("text=marque la casilla para confirmarlo").waitFor();
+  await heavy.locator('input[name="pausaOfertas"]').check();
+  await heavy.locator('button:has-text("Aprobar cambio")').click();
+  await heavy.waitFor({ state: "detached", timeout: 30000 });
+
+  // Sendero sees its offer paused, why, and the lowest price that covers the fees.
+  await sendero.goto(SELLER + "/productos", { waitUntil: "networkidle" });
+  const pausedList = await text(sendero.locator('main:visible [data-testid="paused-offers"]'));
+  log("paused list:", pausedList.slice(0, 240));
+  check(
+    pausedList.includes("Licuadora") && pausedList.includes("se aprobó un cambio del paquete"),
+    "the shop does not see why its offer was paused",
+  );
+
+  // ── 7. A paused offer holds nothing back; the shop stops selling for good ───
+  const bottleEdit =
+    SELLER +
+    (await sendero
+      .locator("main:visible tbody tr", { hasText: "Botella térmica" })
+      .first()
+      .locator('a:has-text("Editar")')
+      .getAttribute("href"));
+  await ferreteria.goto(SELLER + "/productos", { waitUntil: "networkidle" });
+  const ferreteriaBottle = ferreteria
+    .locator("main:visible tbody tr", { hasText: "Botella térmica" })
+    .first();
+  await ferreteriaBottle.locator("summary").click();
+  await ferreteriaBottle.locator('select[name="status"]').selectOption("paused");
+  await ferreteriaBottle
+    .locator('form:has(select[name="status"]) button:has-text("Guardar")')
+    .click();
+  await ferreteriaBottle.locator('[role="status"]').first().waitFor();
+  await sendero.goto(bottleEdit, { waitUntil: "networkidle" });
+  const draftNow = await text(sendero.locator('main:visible section[aria-labelledby="borrador"]'));
+  log("draft box with a paused offer elsewhere:", draftNow.slice(0, 240));
+  check(
+    draftNow.includes("oferta en pausa") &&
+      (await sendero
+        .locator(
+          'main:visible section[aria-labelledby="borrador"] button:has-text("Volver a borrador")',
+        )
+        .count()) === 1,
+    "another shop's paused offer still blocks going back to draft",
+  );
+  // The offering shop opening the listing's page is told whose it is.
+  await ferreteria.goto(bottleEdit, { waitUntil: "networkidle" });
+  check(
+    (await text(ferreteria.locator("main:visible h1"))).includes(
+      "Esta publicación es de otra tienda",
+    ),
+    "the offering shop gets no explanation on the listing's page",
+  );
+  await ferreteria.goto(SELLER + "/productos", { waitUntil: "networkidle" });
+  await ferreteriaBottle.locator("summary").click();
+  await ferreteriaBottle.locator('input[name="confirma"]').check();
+  await ferreteriaBottle.locator('button:has-text("Dejar de vender este producto")').click();
+  await ferreteriaBottle.locator("text=Dejó de venderlo").waitFor();
+  await ferreteria.goto(SELLER + "/productos", { waitUntil: "networkidle" });
+  check(
+    (await ferreteria.locator("main:visible tbody tr", { hasText: "Botella térmica" }).count()) ===
+      0,
+    "the withdrawn offer is still in the shop's list",
+  );
+  look = await visit(BOTTLE);
+  check(
+    !(await text(look.page.locator("main"))).includes("Ferretería El Higuerón"),
+    "the withdrawn offer is still on the product page",
+  );
+  await look.context.close();
+
+  // ── 8. The description removed ─────────────────────────────────────────────
+  await sendero.goto(SELLER + "/tienda", { waitUntil: "networkidle" });
+  await sendero.click('main:visible button:has-text("Quitar la descripción")');
+  // The page now says what waits for review (the form starts afresh for it).
+  await sendero.waitForSelector("main:visible >> text=Pidió quitar la descripción");
+  check(
+    (await sendero
+      .locator('main:visible textarea[name="description"]')
+      .getAttribute("required")) === null,
+    "the description field cannot be left empty",
+  );
 
   await browser.close();
   if (errors.length > 0) {

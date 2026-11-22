@@ -35,9 +35,12 @@
 -- ═══ 0. Helpers ═════════════════════════════════════════════════════════════
 
 -- Does a shop other than the one that created the listing have a live offer
--- on it: an offer not archived (on sale or paused, which its shop can resume
--- at any moment) from a shop that may trade? A suspended or closed shop's
--- offers are on sale nowhere and hold nothing back.
+-- on it: an offer on sale (status 'active') from a shop that may trade? That
+-- is what a shopper can find and buy, with or without stock right now. A
+-- paused offer sells nothing, so it holds nothing back: otherwise a shop that
+-- paused its offer and forgot it would stop the creating shop from ever
+-- taking its own listing back to draft or archiving it. Nor do the offers of
+-- a suspended or closed shop, which are on sale nowhere.
 create or replace function private.listing_shared(p_product_id uuid) returns boolean
 language sql stable security definer
 set search_path = ''
@@ -50,7 +53,7 @@ as $$
     join public.sellers s on s.id = o.seller_id
     where p.id = p_product_id
       and o.seller_id is distinct from p.created_by_seller_id
-      and o.status <> 'archived' and s.status = 'active');
+      and o.status = 'active' and s.status = 'active');
 $$;
 
 -- The same for one variant.
@@ -66,7 +69,7 @@ as $$
     join public.sellers s on s.id = o.seller_id
     where k.id = p_sku_id
       and o.seller_id is distinct from p.created_by_seller_id
-      and o.status <> 'archived' and s.status = 'active');
+      and o.status = 'active' and s.status = 'active');
 $$;
 
 -- ═══ 1. The offer order ═════════════════════════════════════════════════════
@@ -443,8 +446,11 @@ begin
     perform private.fail('variant_not_found');
   end if;
   -- The listing's row: a variant switched off, a listing taken back to draft
-  -- or archived at this moment waits for this, or this waits for it.
+  -- or archived at this moment waits for this, or this waits for it. The
+  -- variant is read again once the lock is held: the first read may predate a
+  -- variant switched off by a transaction that held the lock and committed.
   select * into v_product from public.products where id = v_sku.product_id for update;
+  select * into v_sku from public.skus where id = p_sku_id for update;
   if v_product.status <> 'active' or not v_sku.active
      or not exists (select 1 from public.categories c where c.id = v_product.category_id and c.active)
      or not private.product_page_open(v_product.id) then
@@ -578,7 +584,18 @@ begin
       join public.skus k on k.id = o.sku_id
       join public.sellers s on s.id = o.seller_id
       where k.product_id = p.id and o.seller_id <> p.created_by_seller_id
-        and o.status <> 'archived' and s.status = 'active')
+        and o.status = 'active' and s.status = 'active'),
+    -- How many other shops have only a paused offer on it: they hold nothing
+    -- back, but the page says so, and that their offer stays paused.
+    'paused_other_shops', (
+      select count(distinct o.seller_id) from public.offers o
+      join public.skus k on k.id = o.sku_id
+      join public.sellers s on s.id = o.seller_id
+      where k.product_id = p.id and o.seller_id <> p.created_by_seller_id
+        and o.status = 'paused' and s.status = 'active'
+        and not exists (select 1 from public.offers o2 join public.skus k2 on k2.id = o2.sku_id
+                        where k2.product_id = p.id and o2.seller_id = o.seller_id
+                          and o2.status = 'active'))
   );
 end;
 $$;
@@ -617,13 +634,17 @@ end;
 $$;
 
 -- A shop that closes cannot edit anything any more. Each of its published
--- listings that another shop still sells passes to the shop with the oldest
--- live offer on it, which from then on edits it through the same reviews;
--- what the closing shop had waiting for review on it is withdrawn. A listing
--- nobody else sells stays with the closed shop and is shown nowhere. Also,
--- whatever path closes the shop: its logo and description leave the shop
--- (they may describe the person behind it), and a logo waiting for review
--- goes out of the queue.
+-- listings that another active shop still offers passes to one of them, which
+-- from then on edits it through the same reviews: the shop with the oldest
+-- offer on sale, or, when every other offer is paused, the shop with the
+-- oldest paused one (it can put its offer back on sale; without an heir the
+-- page would be gone for it too). What the closing shop had waiting for
+-- review on it is withdrawn. A listing nobody else offers stays with the
+-- closed shop and is shown nowhere. Also, whatever path closes the shop: its
+-- logo and description leave the shop (they may describe the person behind
+-- it), a logo waiting for review goes out of the queue, and every change to
+-- the shop's details still waiting is withdrawn, so nothing is approved onto
+-- a closed shop afterwards.
 create or replace function private.sellers_hand_over_on_close() returns trigger
 language plpgsql security definer
 set search_path = ''
@@ -637,8 +658,8 @@ begin
             join public.skus k on k.id = o.sku_id
             join public.sellers s on s.id = o.seller_id
             where k.product_id = p.id and o.seller_id <> new.id
-              and o.status <> 'archived' and s.status = 'active'
-            order by o.created_at, o.id limit 1) as heir
+              and o.status in ('active', 'paused') and s.status = 'active'
+            order by (o.status = 'active') desc, o.created_at, o.id limit 1) as heir
     from public.products p
     where p.created_by_seller_id = new.id and p.status = 'active'
     order by p.id
@@ -665,9 +686,69 @@ begin
   where seller_id = new.id and state in ('uploading', 'pending', 'approved');
   update public.sellers set logo_path = null, description = null
   where id = new.id and (logo_path is not null or description is not null);
+  update public.seller_change_requests
+  set status = 'withdrawn', decided_at = now()
+  where seller_id = new.id and status = 'pending';
   return null;
 end;
 $$;
+
+-- Replaces the version in 20261121083100_merge.sql (which replaced the one
+-- in 082700), with one change: the closed shop's published photos of a
+-- listing that passed to another shop stay, whatever state that shop's offer
+-- is in. The hand-over above runs first (closing the shop is this function's
+-- first statement), so "passed to another shop" is the one test, the same
+-- rule as the hand-over's; before, only an offer on sale kept the photos, and
+-- a shop that inherited a listing with its offer paused got it without
+-- pictures and could not put them back without a review. The rest is as it
+-- was: keep the two in step if either changes again.
+create or replace function private.close_abandoned_shop(p_seller_id uuid) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_product uuid;
+begin
+  update public.sellers s set status = 'closed' where s.id = p_seller_id and s.status <> 'closed';
+  delete from public.payout_detail_requests r where r.seller_id = p_seller_id;
+  delete from public.seller_invitations i where i.seller_id = p_seller_id;
+  delete from public.seller_change_requests r where r.seller_id = p_seller_id;
+  for v_product in
+    update public.product_photos ph
+    set state = 'removed', live_position = null, remove_requested_at = null,
+        alt = null, live_alt = null
+    where ph.seller_id = p_seller_id
+      and ph.state in ('uploading', 'pending', 'approved')
+      and not (ph.state = 'approved' and ph.published_at is not null
+               and (exists (select 1 from public.products p
+                            where p.id = ph.product_id and p.created_by_seller_id <> p_seller_id)
+                    or exists (select 1 from public.offers o
+                               join public.skus k on k.id = o.sku_id
+                               where k.product_id = ph.product_id and o.seller_id <> p_seller_id
+                                 and o.status = 'active')))
+    returning ph.product_id
+  loop
+    perform private.sync_product_images(v_product);
+  end loop;
+  if not exists (select 1 from public.order_items i where i.seller_id = p_seller_id)
+     and not exists (select 1 from public.payouts po where po.seller_id = p_seller_id)
+     and not exists (select 1 from public.ledger_entries e
+                     join public.ledger_accounts a on a.id = e.account_id
+                     where a.seller_id = p_seller_id) then
+    delete from public.seller_private sp where sp.seller_id = p_seller_id;
+  else
+    update public.seller_private sp
+    set contact_email = p_seller_id::text || '@tienda-cerrada.invalid',
+        contact_phone = '+50620000000',
+        fiscal_address = 'Eliminada junto con la cuenta.',
+        postal_code = null, payout_iban = null, payout_holder_name = null,
+        sinpe_movil_number = null, kyc_notes = null
+    where sp.seller_id = p_seller_id;
+  end if;
+end;
+$$;
+
+revoke all on function private.close_abandoned_shop(uuid) from public, anon, authenticated;
 
 -- ═══ 4. Variants on and off; a listing back to draft ════════════════════════
 
@@ -817,17 +898,111 @@ alter table private.fee_floor_breaches
   add column reason text not null default 'fee_change'
     check (reason in ('fee_change', 'listing_edit'));
 
+-- Other shops' offers on sale that a waiting listing edit would leave below
+-- the price floor if it were approved now: its new package or category makes
+-- a sale cost them more in fees than it pays. The creating shop's own offers
+-- are not here: its edit is refused while its own price would be too low.
+-- Each with the shop, the variant, its price now and the lowest price that
+-- would cover the fees after the edit.
+create or replace function private.listing_edit_pauses(p_request_id uuid) returns jsonb
+language sql stable security definer
+set search_path = ''
+as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'offer_id', x.id, 'seller_id', x.seller_id, 'seller_name', x.trade_name,
+           'sku_code', x.code, 'variant_name', x.variant_name, 'title', x.title,
+           'price_minor', x.price_minor,
+           'min_price_minor', private.min_price_covering_fees(x.fulfillment, x.category_id, x.weight, x.longest))
+         order by x.trade_name, x.code, x.id), '[]'::jsonb)
+  from (
+    select o.id, o.seller_id, s.trade_name, k.code, k.variant_name, p.title, o.price_minor, o.fulfillment,
+           c.id as category_id,
+           case when k.id = (r.proposed ->> 'sku_id')::uuid
+                then (r.proposed ->> 'weight_grams')::integer else k.weight_grams end as weight,
+           case when k.id = (r.proposed ->> 'sku_id')::uuid
+                then greatest((r.proposed ->> 'length_cm')::numeric, (r.proposed ->> 'width_cm')::numeric,
+                              (r.proposed ->> 'height_cm')::numeric)
+                else greatest(k.length_cm, k.width_cm, k.height_cm) end as longest
+    from public.product_change_requests r
+    join public.products p on p.id = r.product_id
+    join public.categories c on c.slug = r.proposed ->> 'category_slug' and c.active
+    join public.skus k on k.product_id = p.id
+    join public.offers o on o.sku_id = k.id
+    join public.sellers s on s.id = o.seller_id
+    where r.id = p_request_id and r.status = 'pending'
+      and o.status = 'active' and o.seller_id <> p.created_by_seller_id
+      and exists (select 1 from public.fee_schedules f where f.active)
+  ) x
+  where private.worst_unit_payout(x.price_minor, x.fulfillment, x.category_id, x.weight, x.longest) < 0;
+$$;
+
+revoke all on function private.listing_edit_pauses(uuid) from public, anon, authenticated;
+
+-- Replaces the version in the fixes migration: each waiting edit also lists
+-- the other shops' offers its approval would pause (see above), so staff see
+-- that before they decide. Unchanged otherwise.
+create or replace function public.ops_listing_edits_for_review() returns jsonb
+language plpgsql stable security definer
+set search_path = ''
+as $$
+begin
+  if not private.has_staff_role('catalog') then
+    perform private.fail('forbidden');
+  end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'request_id', x.id,
+      'product_id', x.product_id,
+      'slug', x.slug,
+      'seller_name', x.trade_name,
+      'submitted_at', x.submitted_at,
+      'sku_code', x.sku_code,
+      'variant_name', x.variant_name,
+      'before', x.live,
+      'after', x.proposed,
+      'changed', (
+        select coalesce(jsonb_agg(f.name order by f.position), '[]'::jsonb)
+        from unnest(array['title', 'category_slug', 'bullet_points', 'description',
+                          'weight_grams', 'length_cm', 'width_cm', 'height_cm'])
+             with ordinality as f (name, position)
+        where x.live -> f.name is distinct from x.proposed -> f.name),
+      'pauses_offers', (
+        select coalesce(jsonb_agg(e - 'seller_id' - 'title'), '[]'::jsonb)
+        from jsonb_array_elements(private.listing_edit_pauses(x.id)) e)
+    ) order by x.submitted_at, x.id)
+    from (
+      select r.id, r.product_id, r.submitted_at, r.proposed, p.slug, s.trade_name,
+             k.code as sku_code, k.variant_name,
+             private.listing_content(r.product_id, k.id) as live
+      from public.product_change_requests r
+      join public.products p on p.id = r.product_id
+      join public.sellers s on s.id = r.seller_id
+      join public.skus k on k.id = (r.proposed ->> 'sku_id')::uuid
+      where r.status = 'pending'
+    ) x
+  ), '[]'::jsonb);
+end;
+$$;
+
 -- Replaces the version in the fixes migration. What changed: an approved edit
 -- of a shared listing's package or category can make a sale of another
 -- shop's offer cost more in fees than it pays. That shop did not ask for the
--- edit, so its offer is paused (as a fee change pauses it) and listed for it
--- with the reason, instead of the creating shop's edit being refused for a
--- price it does not control. The creating shop's own offers are checked as
--- before: its edit is refused while its own price would fall below the floor.
-create or replace function public.ops_review_listing_edit(
+-- edit, and the package data the creating shop declares sets its fees, so:
+--   * the approval is refused (edit_pauses_offers) unless staff confirm it
+--     with p_pause_offers, having seen those offers in the queue (above);
+--   * once confirmed, those offers are paused (as a fee change pauses them),
+--     listed for their shop with the reason, and each shop is told by
+--     e-mail and push which offers and the lowest price that covers the fees.
+-- The creating shop's own offers are checked as before: its edit is refused
+-- while its own price would fall below the floor. The signature gains
+-- p_pause_offers, so the old one is dropped first.
+drop function public.ops_review_listing_edit(uuid, boolean, text);
+
+create function public.ops_review_listing_edit(
   p_request_id uuid,
   p_approve boolean,
-  p_reason text default null
+  p_reason text default null,
+  p_pause_offers boolean default false
 ) returns void
 language plpgsql security definer
 set search_path = ''
@@ -838,7 +1013,10 @@ declare
   v_category public.categories%rowtype;
   v_sku uuid;
   v_version text;
+  v_pauses jsonb;
+  v_event bigint;
   o record;
+  x record;
 begin
   if not private.has_staff_role('catalog') then
     perform private.fail('forbidden');
@@ -872,33 +1050,53 @@ begin
     end if;
     v_sku := (r.proposed ->> 'sku_id')::uuid;
 
-    -- Other shops' offers the new package or category would leave below the floor.
+    -- Other shops' offers the new package or category would leave below the
+    -- floor, read with their rows locked (a price changed at this moment
+    -- waits, and is then checked by the floor itself).
+    perform 1 from public.offers x2 join public.skus k2 on k2.id = x2.sku_id
+    where k2.product_id = p.id and x2.seller_id <> p.created_by_seller_id and x2.status = 'active'
+    order by x2.id
+    for update of x2;
+    v_pauses := private.listing_edit_pauses(r.id);
+    if jsonb_array_length(v_pauses) > 0 and not coalesce(p_pause_offers, false) then
+      perform private.fail('edit_pauses_offers');
+    end if;
+
     select version into v_version from public.fee_schedules where active;
     for o in
-      select x.id, x.seller_id, x.price_minor, x.fulfillment,
-             case when k.id = v_sku then (r.proposed ->> 'weight_grams')::integer else k.weight_grams end as weight,
-             case when k.id = v_sku
-                  then greatest((r.proposed ->> 'length_cm')::numeric, (r.proposed ->> 'width_cm')::numeric,
-                                (r.proposed ->> 'height_cm')::numeric)
-                  else greatest(k.length_cm, k.width_cm, k.height_cm) end as longest
-      from public.offers x
-      join public.skus k on k.id = x.sku_id
-      where k.product_id = p.id and x.status = 'active' and x.seller_id <> p.created_by_seller_id
-      order by x.id
-      for update of x
+      select (e ->> 'offer_id')::uuid as id, (e ->> 'seller_id')::uuid as seller_id,
+             (e ->> 'price_minor')::bigint as price_minor, (e ->> 'min_price_minor')::bigint as min_price_minor
+      from jsonb_array_elements(v_pauses) e
     loop
-      if v_version is not null
-         and private.worst_unit_payout(o.price_minor, o.fulfillment, v_category.id, o.weight, o.longest) < 0 then
-        update public.offers set status = 'paused' where id = o.id;
-        insert into private.fee_floor_breaches
-          (schedule_version, offer_id, seller_id, price_minor, min_price_minor, reason)
-        values (v_version, o.id, o.seller_id, o.price_minor,
-                private.min_price_covering_fees(o.fulfillment, v_category.id, o.weight, o.longest),
-                'listing_edit')
-        on conflict (schedule_version, offer_id) do update
-          set price_minor = excluded.price_minor, min_price_minor = excluded.min_price_minor,
-              reason = excluded.reason, paused_at = now();
-      end if;
+      update public.offers set status = 'paused' where id = o.id;
+      insert into private.fee_floor_breaches
+        (schedule_version, offer_id, seller_id, price_minor, min_price_minor, reason)
+      values (v_version, o.id, o.seller_id, o.price_minor, o.min_price_minor, 'listing_edit')
+      on conflict (schedule_version, offer_id) do update
+        set price_minor = excluded.price_minor, min_price_minor = excluded.min_price_minor,
+            reason = excluded.reason, paused_at = now();
+    end loop;
+
+    -- Each shop whose offer was paused is told (e-mail, and push to its
+    -- owners and admins): which offers, and the lowest price for each. The
+    -- messages are planned here, from the event recorded for them, because
+    -- only this function knows which offers this approval paused.
+    for x in
+      select (e ->> 'seller_id')::uuid as seller_id, count(*) as n,
+             jsonb_agg(jsonb_build_object('title', e ->> 'title', 'variant', e ->> 'variant_name',
+                                          'min_price_minor', (e ->> 'min_price_minor')::bigint)
+                       order by e ->> 'sku_code') as offers
+      from jsonb_array_elements(v_pauses) e
+      group by e ->> 'seller_id'
+      order by e ->> 'seller_id'
+    loop
+      insert into private.outbox_events (topic, payload)
+      values ('listing_edit.offers_paused', jsonb_build_object(
+        'seller_id', x.seller_id, 'product_id', p.id, 'request_id', r.id, 'offer_count', x.n))
+      returning id into v_event;
+      perform private.notify_shop(v_event, 'seller_offers_paused_edit', x.seller_id,
+        array['email', 'push'], 'seller:' || x.seller_id,
+        jsonb_build_object('seller_id', x.seller_id, 'paused_count', x.n, 'paused_offers', x.offers));
     end loop;
 
     update public.product_change_requests
@@ -924,9 +1122,13 @@ begin
   end if;
 
   perform private.emit('product.edit_reviewed',
-    jsonb_build_object('product_id', r.product_id, 'request_id', r.id, 'approved', p_approve));
+    jsonb_build_object('product_id', r.product_id, 'request_id', r.id, 'approved', p_approve,
+                       'offers_paused', coalesce(jsonb_array_length(v_pauses), 0)));
 end;
 $$;
+
+revoke all on function public.ops_review_listing_edit(uuid, boolean, text, boolean) from public;
+grant execute on function public.ops_review_listing_edit(uuid, boolean, text, boolean) to authenticated;
 
 -- ═══ 6. Offers paused below the price floor, for their seller ═════════════
 
@@ -1154,6 +1356,12 @@ begin
   -- The shop's row first: a payout-account request sent at the same moment
   -- waits for this decision, and this one sees it if it came first.
   perform 1 from public.seller_private where seller_id = r.seller_id for update;
+  -- Nothing is approved onto a closed shop (closing withdraws what waits, so
+  -- this is the second guard): its face was cleared because it may describe
+  -- the person behind it.
+  if p_approve and exists (select 1 from public.sellers s where s.id = r.seller_id and s.status = 'closed') then
+    perform private.fail('shop_change_shop_closed');
+  end if;
   -- Finance confirms a payout-account change by calling the phone on file. A
   -- contact change approved while such a request waits would let whoever sent
   -- both answer that call: the payout request is decided first.
@@ -1909,6 +2117,49 @@ as $$
   end;
 $$;
 
+-- ═══ 9b. Another shop's offer for a cart line that can no longer be bought ═══
+
+-- For each offer in a cart that cannot be bought now (sold out, paused, its
+-- shop suspended or closed), the offer of the same variant that the product
+-- page would show first among those that can: in stock, cheapest, oldest
+-- (the offer order above). The cart then says that the chosen shop's offer
+-- ran out and who else sells it, at what price, and offers to swap the line,
+-- instead of telling the shopper the product is gone. Only for a product a
+-- shopper can open; nothing about the offer the cart had beyond its variant.
+create or replace function public.cart_alternatives(p_offer_ids uuid[])
+returns table (offer_id uuid, product_slug text, title text, variant_name text,
+               alternative_offer_id uuid, seller_name text, price_minor bigint,
+               list_price_minor bigint, available integer)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select req.offer_id, p.slug, p.title, k.variant_name,
+         alt.id, alt.trade_name, alt.price_minor, alt.list_price_minor,
+         least(alt.available_quantity, 10)
+  from unnest(p_offer_ids[1:60]) with ordinality as req (offer_id, position)
+  join public.offers mine on mine.id = req.offer_id
+  join public.skus k on k.id = mine.sku_id and k.active
+  join public.products p on p.id = k.product_id and p.status = 'active'
+  join public.categories c on c.id = p.category_id and c.active
+  cross join lateral (
+    select o.id, s.trade_name, o.price_minor, o.list_price_minor, o.available_quantity
+    from public.offers o
+    join public.sellers s on s.id = o.seller_id
+    where o.sku_id = k.id and o.id <> mine.id and o.status = 'active' and s.status = 'active'
+      and o.available_quantity > 0 and o.condition = 'new'
+    -- BEGIN offer_order
+    order by (o.available_quantity > 0) desc, o.price_minor asc, o.created_at asc, o.id asc
+    -- END offer_order
+    limit 1
+  ) alt
+  where private.product_page_open(p.id)
+    and not (mine.status = 'active' and mine.available_quantity > 0
+             and exists (select 1 from public.sellers ms where ms.id = mine.seller_id and ms.status = 'active'))
+  order by req.position;
+$$;
+
 -- ═══ 10. Grants ═════════════════════════════════════════════════════════════
 
 revoke all on function
@@ -1945,7 +2196,8 @@ revoke all on function
   public.ops_review_logo(uuid, boolean, text),
   public.ops_logo_files_to_publish(uuid),
   public.ops_confirm_logo_published(uuid),
-  public.get_shop(text)
+  public.get_shop(text),
+  public.cart_alternatives(uuid[])
 from public;
 
 grant execute on function
@@ -1966,4 +2218,4 @@ grant execute on function
   public.ops_confirm_logo_published(uuid)
 to authenticated;
 
-grant execute on function public.get_shop(text) to anon, authenticated;
+grant execute on function public.get_shop(text), public.cart_alternatives(uuid[]) to anon, authenticated;

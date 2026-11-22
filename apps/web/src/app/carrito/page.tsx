@@ -1,9 +1,11 @@
+import type { CartAlternative, CartLine } from "@yuntera/db";
 import { ProductImage } from "@yuntera/next-kit/product-image";
 import { Alert, buttonClass, EmptyState, formatDate, formatPrice, Skeleton } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { updateCartLine } from "@/app/actions";
+import { swapCartOffer } from "@/app/cart-actions";
 import { readCart, readLocation } from "@/lib/cart";
 import { publicApi } from "@/lib/supabase";
 
@@ -47,7 +49,15 @@ async function Cart() {
     api.checkoutQuote(items, location.postalCode),
   ]);
   const quantityOf = new Map(items.map((item) => [item.offerId, item.quantity]));
-  const hasUnavailable = lines.some((line) => !line.buyable);
+  const unavailable = lines.filter((line) => !line.buyable).map((line) => line.offer_id);
+  const hasUnavailable = unavailable.length > 0;
+  // Another shop may still sell what the shopper chose: say so, instead of "gone".
+  const alternativeOf = new Map(
+    (hasUnavailable ? await api.cartAlternatives(unavailable) : []).map((alt) => [
+      alt.offer_id,
+      alt,
+    ]),
+  );
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
@@ -84,9 +94,11 @@ async function Cart() {
                     </p>
                   </>
                 ) : (
-                  <Alert tone="warning" title={line.title ?? "Producto no disponible"}>
-                    Ya no está disponible. Quítelo para continuar con su compra.
-                  </Alert>
+                  <UnavailableLine
+                    line={line}
+                    alternative={alternativeOf.get(line.offer_id)}
+                    quantity={quantity}
+                  />
                 )}
 
                 <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
@@ -197,7 +209,11 @@ async function Cart() {
 
         <div className="mt-5">
           {hasUnavailable ? (
-            <Alert tone="warning">Quite los productos no disponibles para continuar.</Alert>
+            <Alert tone="warning">
+              {alternativeOf.size > 0
+                ? "Cambie o quite los productos que ya no están disponibles para continuar. El total cambia cuando lo haga."
+                : "Quite los productos no disponibles para continuar. El total cambia cuando lo haga."}
+            </Alert>
           ) : (
             <Link href="/pagar" className={buttonClass({ size: "lg", block: true })}>
               Continuar con la compra
@@ -206,5 +222,62 @@ async function Cart() {
         </div>
       </aside>
     </div>
+  );
+}
+
+/**
+ * A line the shopper cannot buy as it is. When another shop sells the same
+ * variant, say whose offer ran out, who else sells it and at what price, and
+ * offer the swap; the product page lists every offer. Otherwise, say it is
+ * not available and what to do.
+ */
+function UnavailableLine({
+  line,
+  alternative,
+  quantity,
+}: {
+  line: CartLine;
+  alternative: CartAlternative | undefined;
+  quantity: number;
+}) {
+  if (!alternative) {
+    return (
+      <Alert tone="warning" title={line.title ?? "Producto no disponible"}>
+        {line.seller_name
+          ? `La oferta de ${line.seller_name} ya no está disponible`
+          : "Ya no está disponible"}{" "}
+        y ninguna otra tienda lo vende ahora. Quítelo para continuar con su compra.
+      </Alert>
+    );
+  }
+  const what = `${alternative.title}${alternative.variant_name ? `, ${alternative.variant_name}` : ""}`;
+  const soldOut = line.seller_name && line.available === 0;
+  return (
+    <Alert tone="warning" title={what}>
+      <p>
+        {line.seller_name
+          ? soldOut
+            ? `La oferta de ${line.seller_name} se agotó.`
+            : `La oferta de ${line.seller_name} ya no está a la venta.`
+          : "La oferta que eligió ya no está a la venta."}{" "}
+        {alternative.seller_name} lo vende a {formatPrice(alternative.price_minor)}
+        {quantity > alternative.available ? ` (le quedan ${alternative.available})` : ""}.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <form action={swapCartOffer}>
+          <input type="hidden" name="from" value={line.offer_id} />
+          <input type="hidden" name="to" value={alternative.alternative_offer_id} />
+          <button type="submit" className={buttonClass({ size: "sm" })}>
+            Cambiar a la oferta de {alternative.seller_name}
+          </button>
+        </form>
+        <Link
+          href={`/p/${alternative.product_slug}` as Route}
+          className="inline-flex min-h-11 items-center text-link underline"
+        >
+          Ver todas las ofertas
+        </Link>
+      </div>
+    </Alert>
   );
 }

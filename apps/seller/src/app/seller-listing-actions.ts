@@ -4,7 +4,8 @@
  * Actions that came back after the lockdown closed the tables: an offer on a
  * product another shop created, a variant switched off and on, a listing back
  * to draft, an offer a fee change paused put back on sale at a price that
- * covers the fees, and the shop's description.
+ * covers the fees, an offer on another shop's product withdrawn for good,
+ * and the shop's description.
  *
  * Like every action here: re-read the session, validate the input, call the
  * API, answer with text that is safe to show. The database decides whether
@@ -202,6 +203,37 @@ export async function resumePausedOffer(
   return { ok: "Precio guardado. Su oferta está a la venta otra vez." };
 }
 
+/**
+ * The shop stops selling a product another shop created: its offer is
+ * archived (seller_update_offer, which the database lets only this shop's
+ * members do). It leaves the product page and the shop's list; adding it
+ * again from "Vender uno que ya existe" puts the same offer back.
+ */
+export async function withdrawOffer(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await shopForAction("/productos");
+  const offerId = z.uuid().safeParse(formData.get("offerId"));
+  const priceMinor = z.coerce.number().int().positive().safeParse(formData.get("priceMinor"));
+  if (!offerId.success || !priceMinor.success) return { error: GENERIC_ERROR };
+  if (formData.get("confirma") !== "on") {
+    return { error: "Marque la casilla para confirmar que deja de venderlo." };
+  }
+  const state = await attempt(async () => {
+    await (await sessionApi()).sellerUpdateOffer({
+      offerId: offerId.data,
+      priceMinor: priceMinor.data,
+      status: "archived",
+    });
+    await refreshShopCatalog();
+    return "Dejó de venderlo: su oferta ya no aparece en la página del producto. Si quiere volver a venderlo, búsquelo en «Vender uno que ya existe».";
+  });
+  // No refresh() here: the row would leave the list and take this
+  // confirmation with it. The list no longer shows it on the next visit.
+  return state;
+}
+
 // ── The shop's description ──────────────────────────────────────────────────
 
 export async function requestShopDescription(
@@ -210,7 +242,9 @@ export async function requestShopDescription(
 ): Promise<ActionState> {
   const shop = await shopForAction("/tienda");
   const values = typed(formData, "description");
-  const text = normaliseShopDescription(values.description ?? "") ?? "";
+  // "Quitar la descripción" asks to remove it, whatever the field holds.
+  const removing = formData.get("quitar") === "1";
+  const text = removing ? "" : (normaliseShopDescription(values.description ?? "") ?? "");
   if (text.length > SHOP_DESCRIPTION_MAX) {
     return {
       error: `La descripción puede tener hasta ${SHOP_DESCRIPTION_MAX} caracteres; esta tiene ${text.length}.`,

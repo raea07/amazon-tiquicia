@@ -2,7 +2,8 @@
  * Messages for events that had no consumer until migration 083200: a
  * return's goods back at the warehouse, a delivery code locked and released,
  * an invitation to join a shop, a decided change of a shop's details or
- * payout account, a payout paid, and offers paused by a fee change.
+ * payout account, a payout paid, and offers paused by a fee change or (083600)
+ * by an approved change to the listing they are sold on.
  *
  * Same rules as catalog.ts: Spanish, usted, plain and specific; never the
  * delivery code, an address, an identification number or payment details
@@ -264,6 +265,55 @@ export const FOLLOWUP_TEMPLATES: Record<string, Template> = {
         body: one
           ? "Una oferta: suba el precio para venderla."
           : `${count} ofertas: suba el precio para venderlas.`,
+        url: "/productos",
+      },
+    };
+  },
+
+  // Migration 083600: catalogue staff approved a change to the package or the
+  // category of a listing another shop created, and with it this shop's offer
+  // on that listing no longer covers the fees. Planned by the approval itself.
+  seller_offers_paused_edit: ({ vars: v, name, links }) => {
+    const count = Math.max(1, n(v.paused_count));
+    const one = count === 1;
+    const offers = (Array.isArray(v.paused_offers) ? v.paused_offers : [])
+      .slice(0, 20)
+      .map((raw): [string, string] => {
+        const offer = (raw ?? {}) as Vars;
+        const variant = clean(s(offer.variant), 40);
+        const title = clean(s(offer.title), 90) + (variant ? ` (${variant})` : "");
+        const minimum = n(offer.min_price_minor);
+        return [
+          title,
+          minimum > 0
+            ? `precio mínimo ${colones(Math.ceil(minimum / 100) * 100)}`
+            : "revise el precio",
+        ];
+      });
+    const what = one ? "una de sus ofertas" : `${count} de sus ofertas`;
+    return {
+      from: "sellers",
+      subject: `Pausamos ${what} por un cambio en la publicación`,
+      preheader: one
+        ? "Suba el precio para volver a venderla."
+        : "Suba el precio para volver a venderlas.",
+      greeting: shopHello(v, name),
+      paragraphs: [
+        one
+          ? "La tienda que creó la publicación cambió el tamaño o el peso del paquete, o la categoría, y lo aprobamos. Con eso, venderla cuesta más en tarifas, y con su precio actual cada venta le dejaría una deuda en lugar de un pago. Por eso pausamos su oferta; nadie la puede comprar mientras tanto."
+          : "La tienda que creó la publicación cambió el tamaño o el peso del paquete, o la categoría, y lo aprobamos. Con eso, venderlas cuesta más en tarifas, y con sus precios actuales cada venta le dejaría una deuda en lugar de un pago. Por eso pausamos sus ofertas; nadie las puede comprar mientras tanto.",
+        one
+          ? "Para volver a venderla, ponga en Yuntera Vende un precio igual o mayor al mínimo que indicamos: vuelve a la venta en el mismo paso. Si cree que el cambio del paquete no es correcto, responda a este correo."
+          : "Para volver a venderlas, ponga en Yuntera Vende un precio igual o mayor al mínimo que indicamos: vuelven a la venta en el mismo paso. Si cree que el cambio del paquete no es correcto, responda a este correo.",
+      ],
+      facts: offers,
+      action: { label: "Ver sus productos", url: `${links.seller}/productos` },
+      note: SELLER_FOOTER,
+      push: {
+        title: one ? "Oferta en pausa" : "Ofertas en pausa",
+        body: one
+          ? "Cambió la publicación: suba el precio para venderla."
+          : `${count} ofertas: cambió la publicación; suba el precio para venderlas.`,
         url: "/productos",
       },
     };

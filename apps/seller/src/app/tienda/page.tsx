@@ -139,12 +139,22 @@ function DescriptionStatus({ front }: { front: SellerShopFront }) {
   const request = front.description_request;
   if (!request) return null;
   if (request.status === "pending") {
+    // An empty proposal asks to remove the description.
+    const removal = !request.proposed.description;
     return (
       <div className="mt-3">
-        <Alert tone="info" title="Descripción nueva en revisión">
+        <Alert
+          tone="info"
+          title={
+            removal
+              ? "Pidió quitar la descripción; está en revisión"
+              : "Descripción nueva en revisión"
+          }
+        >
           <span className="block">
-            La envió el {day(request.requested_at)}. Mientras la revisamos, la tienda muestra la que
-            ya tenía.
+            {removal
+              ? `Lo pidió el ${day(request.requested_at)}. Mientras lo revisamos, la tienda sigue mostrando la descripción que tiene.`
+              : `La envió el ${day(request.requested_at)}. Mientras la revisamos, la tienda muestra la que ya tenía.`}
           </span>
           {front.can_edit ? (
             <div className="mt-2">

@@ -31,11 +31,22 @@ export async function reviewListingEdit(
   if (!requestId.success) return { error: GENERIC_ERROR };
   const approve = formData.get("decision") === "yes";
   const note = String(formData.get("note") ?? "").trim();
+  // Ticked when the edit would pause other shops' offers and staff confirm it.
+  const pauseOffers = formData.get("pausaOfertas") === "on";
 
   const state = await attempt(
     async () => {
-      await (await sessionApi()).opsReviewListingEdit(requestId.data, approve, note || null);
+      await (await sessionApi()).opsReviewListingEdit(
+        requestId.data,
+        approve,
+        note || null,
+        pauseOffers,
+      );
       if (!approve) return "Cambio rechazado; el vendedor ve el motivo.";
+      if (pauseOffers) {
+        await refreshShopCatalog();
+        return "Cambio aprobado. Las ofertas que ya no cubrían las tarifas quedaron en pausa y avisamos a sus tiendas.";
+      }
       // The shop keeps catalogue pages for about a minute; tell it they changed.
       await refreshShopCatalog();
       return "Cambio aprobado: la publicación ya muestra el texto nuevo.";

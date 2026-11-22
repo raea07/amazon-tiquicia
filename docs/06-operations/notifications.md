@@ -69,6 +69,13 @@ mailbox, not to each person.
 
 <!-- END notification-table -->
 
+One message is planned outside the table's planner: when catalogue staff
+confirm a listing edit that pauses other shops' offers (migration 083600),
+`ops_review_listing_edit` itself plans `seller_offers_paused_edit` (`email`,
+`push`) for each of those shops, from an event `listing_edit.offers_paused`
+it records for them. Only the approval knows which offers it paused, so the
+planner, which reads events after commit, could not tell.
+
 When each event happens:
 
 - `order.placed`, `payment.captured`, `order.released`, `order.cancelled`,

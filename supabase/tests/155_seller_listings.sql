@@ -12,6 +12,8 @@
 --   I  a shop suspended and closed: shared listings stay and pass on
 --   J  the per-request check: none of the new functions passes at aal1 for
 --      an account with a second factor
+--   K  (before J) what counts as a live offer, the identity check on adding
+--      one, the hand-over's choice of heir, photos and details on closing
 --
 -- Each function is called by the right caller, by wrong ones, and what it
 -- leaves behind is checked. The money checks of _money_helpers.sql
@@ -260,6 +262,49 @@ begin
   select * into v_cart from public.cart_lines(array[v_offer]);
   assert v_cart.buyable and v_cart.seller_name = 'Ferretería El Higuerón' and v_cart.price_minor = 950000,
     format('cart line: %s', row_to_json(v_cart));
+end
+$$;
+
+-- A cart line whose offer cannot be bought any more names another shop's
+-- offer of the same variant, the one the product page shows first.
+do $$
+declare
+  v_offer uuid := current_setting('t.botella_offer')::uuid;
+  v_sendero uuid := pg_temp.offer_of('botella-termica-sendero-750ml', 'sendero');
+  v_price bigint;
+  v_alt record;
+begin
+  perform pg_temp.login_anon();
+  assert not exists (select 1 from public.cart_alternatives(array[v_offer, v_sendero])),
+    'nothing for lines that can be bought';
+  reset role;
+  -- Sold out at the offering shop.
+  perform pg_temp.act('vendedor@yuntera.example');
+  perform public.seller_set_stock(current_setting('t.higueron_wh')::uuid, pg_temp.sku('botella-termica-sendero-750ml'), 0);
+  v_price := (select price_minor from public.offers where id = v_sendero);
+  perform pg_temp.login_anon();
+  select * into v_alt from public.cart_alternatives(array[gen_random_uuid(), v_offer]);
+  assert v_alt.offer_id = v_offer and v_alt.alternative_offer_id = v_sendero
+     and v_alt.seller_name = 'Tienda Sendero' and v_alt.product_slug = 'botella-termica-sendero-750ml'
+     and v_alt.available > 0 and v_alt.price_minor = v_price,
+    format('the other shop''s offer: %s', row_to_json(v_alt));
+  assert (select count(*) from public.cart_alternatives(array[gen_random_uuid()])) = 0, 'an unknown offer: nothing';
+  reset role;
+  -- Paused at the offering shop: the same.
+  perform pg_temp.act('vendedor@yuntera.example');
+  perform public.seller_set_stock(current_setting('t.higueron_wh')::uuid, pg_temp.sku('botella-termica-sendero-750ml'), 5);
+  perform public.seller_update_offer(v_offer, 950000, 'paused', 1::smallint);
+  assert (select alternative_offer_id from public.cart_alternatives(array[v_offer])) = v_sendero, 'paused: the same';
+  -- No other offer to buy: nothing.
+  perform pg_temp.act('sendero@yuntera.example');
+  perform public.seller_update_offer(v_sendero, (select price_minor from public.offers where id = v_sendero),
+                                     'paused', (select handling_days from public.offers where id = v_sendero));
+  assert not exists (select 1 from public.cart_alternatives(array[v_offer])), 'no other offer: nothing';
+  perform public.seller_update_offer(v_sendero, (select price_minor from public.offers where id = v_sendero),
+                                     'active', (select handling_days from public.offers where id = v_sendero));
+  perform pg_temp.act('vendedor@yuntera.example');
+  perform public.seller_update_offer(v_offer, 950000, 'active', 1::smallint);
+  perform pg_temp.logout();
 end
 $$;
 
@@ -851,8 +896,13 @@ select pg_temp.logout();
 
 -- ═══ H. Offers paused below the price floor ═════════════════════════════════
 
--- An approved edit of a shared listing's package leaves another shop's offer
--- below the floor: that offer is paused and listed, the edit goes through.
+-- The fee schedule as it is now, to put back exactly after the fee change below.
+select pg_temp.remember('min_referral_fee',
+  (select min_referral_fee_per_unit_minor::text from public.fee_schedules where active));
+
+-- An edit of a shared listing's package would leave another shop's offer
+-- below the floor: staff see that in the queue and must confirm it; then that
+-- offer is paused, listed, and its shop is told; the edit goes through.
 do $$
 declare
   v_sku uuid := pg_temp.sku('balon-futbol-sendero-5');
@@ -861,6 +911,7 @@ declare
   v_old bigint := private.min_price_covering_fees('platform', v_category, 430, 22);
   v_new bigint := private.min_price_covering_fees('platform', v_category, 20000, 100);
   v_theirs uuid;
+  v_request uuid;
   v_list jsonb;
   c jsonb := private.listing_content(v_product, pg_temp.sku('balon-futbol-sendero-5'));
 begin
@@ -874,12 +925,36 @@ begin
   perform public.seller_update_listing(v_product, c ->> 'title', c ->> 'category_slug', c ->> 'description',
     array(select jsonb_array_elements_text(c -> 'bullet_points')), 20000, 100, 22, 22);
   perform pg_temp.act('central@yuntera.example');
-  perform public.ops_review_listing_edit(
-    (select id from public.product_change_requests where product_id = v_product and status = 'pending'), true);
+  v_request := (select id from public.product_change_requests where product_id = v_product and status = 'pending');
+  -- The queue names the offer the approval would pause, its shop, its price
+  -- and the lowest price that would cover the fees afterwards.
+  assert exists (select 1 from jsonb_array_elements(public.ops_listing_edits_for_review()) q,
+                   jsonb_array_elements(q -> 'pauses_offers') x
+                 where (q ->> 'request_id')::uuid = v_request and (x ->> 'offer_id')::uuid = v_theirs
+                   and x ->> 'seller_name' = 'Ferretería El Higuerón'
+                   and (x ->> 'min_price_minor')::bigint = v_new
+                   and (x ->> 'price_minor')::bigint = ((v_old + 199) / 100) * 100 + 100),
+    format('the queue warns: %s', public.ops_listing_edits_for_review());
+  -- Approving without confirming that is refused, and changes nothing.
+  perform pg_temp.refused(format('select public.ops_review_listing_edit(%L, true)', v_request), 'edit_pauses_offers');
+  assert (select weight_grams from public.skus where id = v_sku) = 430
+     and (select status from public.offers where id = v_theirs) = 'active', 'nothing changed';
+  perform public.ops_review_listing_edit(v_request, true, null, true);
   assert (select weight_grams from public.skus where id = v_sku) = 20000, 'the edit went through';
   assert (select status from public.offers where id = v_theirs) = 'paused', 'the other shop''s offer is paused';
   assert (select status from public.offers where id = pg_temp.offer_of('balon-futbol-sendero-5', 'sendero')) = 'active',
     'the creator''s, which covers the fees, is not';
+  -- The paused shop is told, by e-mail, which offer and the lowest price.
+  assert exists (select 1 from private.notification_deliveries d
+                 where d.template = 'seller_offers_paused_edit' and d.channel = 'email'
+                   and d.recipient_seller_id = current_setting('t.ferreteria')::uuid
+                   and (d.context ->> 'paused_count')::integer = 1
+                   and (d.context #>> '{paused_offers,0,min_price_minor}')::bigint = v_new),
+    'the shop whose offer was paused is told';
+  assert not exists (select 1 from private.notification_deliveries d
+                     where d.template = 'seller_offers_paused_edit'
+                       and d.recipient_seller_id = current_setting('t.sendero')::uuid),
+    'the shop that sent the edit is not';
 
   perform pg_temp.act('vendedor@yuntera.example');
   v_list := public.seller_paused_offers(current_setting('t.ferreteria')::uuid);
@@ -922,8 +997,9 @@ $$;
 
 -- ═══ I. A shop suspended, then closed ═══════════════════════════════════════
 
--- Put the fees back first: block H paused most of the catalogue.
-update public.fee_schedules set min_referral_fee_per_unit_minor = 0 where active;
+-- Put the fees back first, exactly as they were: block H paused most of the catalogue.
+update public.fee_schedules set min_referral_fee_per_unit_minor = current_setting('t.min_referral_fee')::bigint
+where active;
 select pg_temp.act('vendedor@yuntera.example');
 select public.seller_update_offer(current_setting('t.botella_offer')::uuid, 960000, 'active', 1::smallint);
 select pg_temp.logout();
@@ -999,6 +1075,255 @@ begin
 end
 $$;
 
+-- ═══ K. What counts as a live offer, the checks on who may add one, and the
+--        hand-over, each on fixtures of its own ═══════════════════════════════
+
+-- A shop of its own, active, with its owner, verified or not.
+create function pg_temp.k_shop(p_slug text, p_kyc public.kyc_status default 'verified') returns uuid
+language plpgsql as $$
+declare
+  v_user uuid;
+  v_shop uuid;
+begin
+  insert into auth.users (id, email, raw_user_meta_data)
+  values (gen_random_uuid(), p_slug || '@yuntera.example', jsonb_build_object('full_name', 'Dueña ' || p_slug))
+  returning id into v_user;
+  insert into public.sellers (slug, trade_name, status, approved_at)
+  values (p_slug, 'Tienda ' || p_slug, 'active', now() - interval '30 days') returning id into v_shop;
+  insert into public.seller_private (seller_id, legal_name, id_type, id_number, contact_email, contact_phone,
+                                     fiscal_address, kyc_status)
+  values (v_shop, 'Tienda ' || p_slug || ' S.A.', 'juridica', '3101' || lpad((random() * 999999)::int::text, 6, '0'),
+          p_slug || '@yuntera.example', '+50622223333', 'San José', p_kyc);
+  insert into public.seller_members (seller_id, user_id, role) values (v_shop, v_user, 'owner');
+  perform pg_temp.remember(replace(p_slug, '-', '_'), v_shop::text);
+  return v_shop;
+end;
+$$;
+
+-- A published product of a shop, with one variant per name, the shop's own
+-- offer on each with stock at the warehouse.
+create function pg_temp.k_product(p_slug text, p_shop uuid, p_variants text[]) returns uuid
+language plpgsql as $$
+declare
+  v_product uuid;
+  v_sku uuid;
+  v text;
+begin
+  insert into public.products (slug, title, category_id, status, created_by_seller_id, published_at)
+  values (p_slug, 'Producto ' || p_slug, (select id from public.categories where slug = 'hogar'), 'active',
+          p_shop, now() - interval '20 days')
+  returning id into v_product;
+  foreach v in array p_variants loop
+    insert into public.skus (product_id, code, variant_name, weight_grams, length_cm, width_cm, height_cm)
+    values (v_product, upper(p_slug) || '-' || upper(v), v, 500, 20, 10, 10) returning id into v_sku;
+    insert into public.offers (sku_id, seller_id, price_minor, fulfillment, handling_days, created_at)
+    values (v_sku, p_shop, 2000000, 'platform', 0, now() - interval '20 days');
+    perform private.apply_stock_change(current_setting('t.depot')::uuid, v_sku, p_shop, 5, 'receive', null,
+                                       'test', null, 'k');
+  end loop;
+  return v_product;
+end;
+$$;
+
+create function pg_temp.k_sku(p_slug text, p_variant text) returns uuid
+language sql as $$
+  select k.id from public.skus k join public.products p on p.id = k.product_id
+  where p.slug = p_slug and k.variant_name = p_variant
+$$;
+
+select pg_temp.k_shop('k-creadora');
+select pg_temp.k_shop('k-uno');
+select pg_temp.k_shop('k-dos');
+select pg_temp.k_shop('k-tres');
+select pg_temp.k_shop('k-sin-verificar', 'pending');
+select pg_temp.k_shop('k-heredera');
+select pg_temp.remember('k_producto', pg_temp.k_product('k-producto', current_setting('t.k_creadora')::uuid,
+                                                         array['Rojo', 'Azul'])::text);
+
+-- K1. A paused offer of another shop holds nothing back; one on sale does; a
+-- shop can withdraw its offer for good; a suspended shop's offer holds nothing.
+do $$
+declare
+  v_product uuid := current_setting('t.k_producto')::uuid;
+  v_rojo uuid := pg_temp.k_sku('k-producto', 'Rojo');
+  v_azul uuid := pg_temp.k_sku('k-producto', 'Azul');
+  v_uno uuid;
+  v_dos uuid;
+  v_listing jsonb;
+begin
+  perform pg_temp.act('k-uno@yuntera.example');
+  v_uno := (public.seller_add_offer(current_setting('t.k_uno')::uuid, v_rojo, 2100000, 'seller', 1::smallint)
+            ->> 'offer_id')::uuid;
+  assert private.listing_shared(v_product) and private.variant_shared(v_rojo), 'an offer on sale shares it';
+
+  -- Paused by its shop: on sale nowhere, so it holds nothing back.
+  perform public.seller_update_offer(v_uno, 2100000, 'paused', 1::smallint);
+  assert not private.listing_shared(v_product) and not private.variant_shared(v_rojo),
+    'a paused offer does not share the listing';
+  perform pg_temp.act('k-creadora@yuntera.example');
+  v_listing := public.seller_listing(v_product);
+  assert not (v_listing ->> 'shared')::boolean and (v_listing ->> 'other_shops')::integer = 0
+     and (v_listing ->> 'paused_other_shops')::integer = 1, format('the page says it as it is: %s', v_listing);
+  -- The creating shop retires that variant itself (not only its own offer).
+  assert public.seller_set_variant_active(v_rojo, false) ->> 'outcome' = 'variant_off', 'the variant goes off';
+  assert public.seller_set_variant_active(v_rojo, true) ->> 'outcome' = 'variant_on', 'and comes back';
+
+  -- On sale again: shared.
+  perform pg_temp.act('k-uno@yuntera.example');
+  perform public.seller_update_offer(v_uno, 2100000, 'active', 1::smallint);
+  perform pg_temp.act('k-creadora@yuntera.example');
+  perform pg_temp.refused(format('select public.seller_unpublish_listing(%L)', v_product), 'listing_shared');
+  perform pg_temp.refused(format('select public.seller_archive_listing(%L)', v_product), 'listing_shared');
+  assert public.seller_set_variant_active(v_rojo, false) ->> 'outcome' = 'offer_paused',
+    'a variant another shop sells: only the creator''s own offer pauses';
+  assert (select status from public.offers where id = v_uno) = 'active', 'the other shop keeps selling';
+  assert public.seller_set_variant_active(v_rojo, true) ->> 'outcome' = 'offer_resumed', 'and its own comes back';
+
+  -- The offering shop withdraws its offer for good.
+  perform pg_temp.act('k-uno@yuntera.example');
+  perform public.seller_update_offer(v_uno, 2100000, 'archived', 1::smallint);
+  assert not private.listing_shared(v_product), 'a withdrawn offer holds nothing back';
+  assert not exists (select 1 from public.seller_listings(current_setting('t.k_uno')::uuid) where offer_id = v_uno),
+    'and leaves the shop''s list';
+
+  -- Another shop's offer on sale, then that shop suspended: nothing held back.
+  perform pg_temp.act('k-dos@yuntera.example');
+  v_dos := (public.seller_add_offer(current_setting('t.k_dos')::uuid, v_azul, 2050000, 'seller', 1::smallint)
+            ->> 'offer_id')::uuid;
+  assert private.listing_shared(v_product), 'shared again';
+  perform pg_temp.act('central@yuntera.example');
+  perform public.ops_set_seller_status(current_setting('t.k_dos')::uuid, 'suspended', 'Revisión de documentos.');
+  assert (select status from public.offers where id = v_dos) = 'active', 'its offer is still marked on sale';
+  assert not private.listing_shared(v_product) and not private.variant_shared(v_azul),
+    'but a suspended shop''s offer holds nothing back';
+  perform pg_temp.act('k-creadora@yuntera.example');
+  assert public.seller_unpublish_listing(v_product) ->> 'status' = 'draft', 'so the creator can take it back to draft';
+  perform pg_temp.act('central@yuntera.example');
+  perform public.ops_set_seller_status(current_setting('t.k_dos')::uuid, 'active');
+  perform pg_temp.logout();
+end
+$$;
+
+-- K2. Only a verified shop adds offers: an active shop whose identity is not
+-- verified is refused (the shop's status alone would let it through).
+do $$
+begin
+  assert (select status from public.sellers where id = current_setting('t.k_sin_verificar')::uuid) = 'active',
+    'the shop is active';
+  perform pg_temp.act('k-sin-verificar@yuntera.example');
+  perform pg_temp.refused(format('select public.seller_catalog_search(%L, ''libreta'')',
+                                 current_setting('t.k_sin_verificar')), 'shop_not_approved');
+  perform pg_temp.refused(format('select public.seller_add_offer(%L, %L, 500000, ''seller'', 1::smallint)',
+                                 current_setting('t.k_sin_verificar'), pg_temp.sku('libreta-tapa-dura-a5')),
+                          'shop_not_approved');
+  assert not exists (select 1 from public.offers where seller_id = current_setting('t.k_sin_verificar')::uuid),
+    'nothing was added';
+  perform pg_temp.logout();
+end
+$$;
+
+-- K3. The hand-over when the creating shop closes: the oldest offer ON SALE
+-- wins, ahead of an older paused one and of a newer one on sale; a listing
+-- whose only other offer is paused still passes, with its photos; nothing of
+-- the closed shop's details is approved afterwards.
+select pg_temp.remember('k_cierre', pg_temp.k_product('k-cierre', current_setting('t.k_heredera')::uuid,
+                                                       array['Normal'])::text);
+select pg_temp.remember('k_pausa', pg_temp.k_product('k-pausa', current_setting('t.k_heredera')::uuid,
+                                                      array['Normal'])::text);
+do $$
+declare
+  v_cierre uuid := current_setting('t.k_cierre')::uuid;
+  v_pausa uuid := current_setting('t.k_pausa')::uuid;
+  v_sku uuid := pg_temp.k_sku('k-cierre', 'Normal');
+  v_tres uuid;
+  v_dos uuid;
+  v_uno uuid;
+  v_photo uuid;
+begin
+  perform pg_temp.act('k-tres@yuntera.example');
+  v_tres := (public.seller_add_offer(current_setting('t.k_tres')::uuid, v_sku, 2100000, 'seller', 1::smallint)
+             ->> 'offer_id')::uuid;
+  perform public.seller_update_offer(v_tres, 2100000, 'paused', 1::smallint);
+  perform pg_temp.act('k-dos@yuntera.example');
+  v_dos := (public.seller_add_offer(current_setting('t.k_dos')::uuid, v_sku, 2100000, 'seller', 1::smallint)
+            ->> 'offer_id')::uuid;
+  perform pg_temp.act('k-uno@yuntera.example');
+  v_uno := (public.seller_add_offer(current_setting('t.k_uno')::uuid, v_sku, 2000000, 'seller', 1::smallint)
+            ->> 'offer_id')::uuid;
+  -- Added in one transaction they share a clock: date them as they would be.
+  update public.offers set created_at = now() - interval '3 days' where id = v_tres;
+  update public.offers set created_at = now() - interval '2 days' where id = v_dos;
+  update public.offers set created_at = now() - interval '1 day' where id = v_uno;
+  -- On the other listing, only a paused offer of another shop.
+  perform pg_temp.act('k-tres@yuntera.example');
+  perform public.seller_update_offer(
+    (public.seller_add_offer(current_setting('t.k_tres')::uuid, pg_temp.k_sku('k-pausa', 'Normal'), 2100000,
+                             'seller', 1::smallint) ->> 'offer_id')::uuid, 2100000, 'paused', 1::smallint);
+  perform pg_temp.logout();
+
+  -- A published photo of the closing shop on that listing.
+  insert into public.product_photos (product_id, seller_id, state, position, live_position, live_alt,
+                                     width, height, published_at)
+  values (v_pausa, current_setting('t.k_heredera')::uuid, 'approved', 0, 0, 'Foto', 1200, 1200, now())
+  returning id into v_photo;
+  perform private.sync_product_images(v_pausa);
+  assert (select count(*) from public.product_images where product_id = v_pausa) = 1, 'the listing has its photo';
+
+  -- A description waiting for review when the shop closes.
+  perform pg_temp.act('k-heredera@yuntera.example');
+  perform pg_temp.remember('k_description',
+    public.seller_request_shop_description(current_setting('t.k_heredera')::uuid, 'Tienda de Ana, Calle 5.')::text);
+  perform pg_temp.logout();
+end
+$$;
+
+-- Closed the way an account deletion closes it (the photos are decided there).
+select private.close_abandoned_shop(current_setting('t.k_heredera')::uuid);
+
+do $$
+declare
+  v_cierre uuid := current_setting('t.k_cierre')::uuid;
+  v_pausa uuid := current_setting('t.k_pausa')::uuid;
+begin
+  assert (select created_by_seller_id from public.products where id = v_cierre) = current_setting('t.k_dos')::uuid,
+    format('the oldest offer on sale wins, not the older paused one nor the newer one: %s',
+           (select slug from public.sellers where id = (select created_by_seller_id from public.products
+                                                       where id = v_cierre)));
+  assert (select created_by_seller_id from public.products where id = v_pausa) = current_setting('t.k_tres')::uuid,
+    'a listing whose other offer is paused passes to that shop';
+  assert (select count(*) from public.product_images where product_id = v_pausa) = 1
+     and (select state from public.product_photos where product_id = v_pausa) = 'approved',
+    'with its published photo';
+  assert (select status from public.products where id = v_pausa) = 'active', 'and stays published';
+end
+$$;
+
+-- Closed by staff: what waited for review is withdrawn, and approving it
+-- afterwards changes nothing.
+do $$
+declare
+  v_request uuid;
+begin
+  perform pg_temp.act('k-uno@yuntera.example');
+  v_request := public.seller_request_shop_description(current_setting('t.k_uno')::uuid, 'Tienda de Ana Pérez, Calle 5.');
+  perform pg_temp.act('central@yuntera.example');
+  perform public.ops_set_seller_status(current_setting('t.k_uno')::uuid, 'closed', 'Cierre pedido por la tienda.');
+  assert (select status from public.seller_change_requests where id = v_request) = 'withdrawn',
+    'closing withdraws the waiting request';
+  perform pg_temp.refused(format('select public.ops_decide_shop_change(%L, true)', v_request),
+                          'shop_change_not_pending');
+  -- Even a request somehow still waiting is not approved onto a closed shop.
+  update public.seller_change_requests set status = 'pending', decided_at = null, decided_by = null
+  where id = v_request;
+  perform pg_temp.refused(format('select public.ops_decide_shop_change(%L, true)', v_request),
+                          'shop_change_shop_closed');
+  assert (select description is null from public.sellers where id = current_setting('t.k_uno')::uuid),
+    'the closed shop has no description';
+  perform pg_temp.logout();
+  perform pg_temp.check_money('K');
+end
+$$;
+
 -- ═══ J. The per-request check ═══════════════════════════════════════════════
 
 insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret)
@@ -1014,7 +1339,8 @@ begin
     'seller_catalog_search', 'seller_add_offer', 'seller_set_variant_active', 'seller_unpublish_listing',
     'seller_paused_offers', 'seller_request_shop_description', 'seller_shop_front', 'seller_reserve_logo',
     'seller_finish_logo', 'seller_withdraw_logo', 'seller_remove_logo', 'ops_logos_for_review',
-    'ops_review_logo', 'ops_logo_files_to_publish', 'ops_confirm_logo_published', 'get_shop'] loop
+    'ops_review_logo', 'ops_logo_files_to_publish', 'ops_confirm_logo_published', 'get_shop',
+    'cart_alternatives'] loop
     perform set_config('request.path', '/rpc/' || v_fn, true);
     begin
       perform public.check_request();

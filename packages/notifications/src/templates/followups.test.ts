@@ -64,6 +64,7 @@ describe("messages added with migration 083200", () => {
     "seller_payout_account_decided",
     "seller_payout_paid",
     "seller_offers_paused_fees",
+    "seller_offers_paused_edit",
   ]) {
     it(`${template} never carries a code, an address, an id number or payment details`, () => {
       const text = everything(template, { ...order, ...PLANTED, shop_name: "TecnoCasa" });
@@ -194,6 +195,23 @@ describe("messages added with migration 083200", () => {
     });
     expect(mail.subject).toBe("Pausamos 3 de sus ofertas por el cambio de comisiones");
     expect(mail.text).toContain("Por eso las pausamos; nadie las puede comprar");
+  });
+
+  it("says an approved change to the listing paused the offer, with the lowest price, escaped", () => {
+    const mail = email("seller_offers_paused_edit", {
+      shop_name: "Ferretería El Higuerón",
+      paused_count: 1,
+      paused_offers: [{ title: HOSTILE, variant: "Talla S", min_price_minor: 681_006 }],
+    });
+    expect(mail.subject).toBe("Pausamos una de sus ofertas por un cambio en la publicación");
+    expect(mail.text).toMatch(/cambió el tamaño o el peso del paquete, o la categoría/);
+    expect(mail.text).toContain(`precio mínimo ${colones(681_100)}`);
+    expect(mail.text).toContain("https://vende.yuntera.cr/productos");
+    expect(mail.text).not.toMatch(/comisiones de Yuntera cambiaron|las pausamos|venderlas/);
+    expect(mail.html).not.toContain("<script");
+    const two = email("seller_offers_paused_edit", { shop_name: "TecnoCasa", paused_count: 2 });
+    expect(two.subject).toBe("Pausamos 2 de sus ofertas por un cambio en la publicación");
+    expect(two.text).toContain("Por eso pausamos sus ofertas; nadie las puede comprar");
   });
 });
 

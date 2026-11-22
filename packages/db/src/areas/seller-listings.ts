@@ -13,7 +13,9 @@
  * Some methods replace one of the same name (this area is spread after the
  * listings area): `getProduct` reads each shop's logo with its offer,
  * `sellerListing` reads which variants are on and which another shop sells,
- * and `shopPathExists` also answers for a shop's page. The kind
+ * `shopPathExists` also answers for a shop's page, and the listing-edit
+ * review (`opsListingEditsForReview`, `opsReviewListingEdit`) shows and
+ * confirms the other shops' offers an approval would pause. The kind
  * "description" of a shop change is in limits.ts with the other kinds.
  *
  * SQL: supabase/migrations/20261121083600_seller_listings.sql.
@@ -28,7 +30,7 @@ import {
   productStatus,
   sellerStatus,
 } from "../schemas";
-import { sellerListingDetail } from "./listings";
+import { opsListingEdit, sellerListingDetail } from "./listings";
 import { photoFilesToPublish, photoFormat, photoRules } from "./photos";
 import type { Caller, Messages } from "./types";
 
@@ -123,8 +125,10 @@ export type SellerListingVariant = z.infer<typeof sellerListingVariant>;
 
 export const sharedListingDetail = sellerListingDetail.extend({
   variants: z.array(sellerListingVariant),
-  /** How many other shops sell from this listing now. */
+  /** How many other shops have an offer on sale on this listing now (they hold it in the shop). */
   other_shops: z.number().int(),
+  /** How many other shops have only a paused offer on it (they hold nothing back). */
+  paused_other_shops: z.number().int(),
 });
 export type SharedListingDetail = z.infer<typeof sharedListingDetail>;
 
@@ -272,6 +276,43 @@ export const publicShop = z.object({
 });
 export type PublicShop = z.infer<typeof publicShop>;
 
+// ── A cart line whose offer can no longer be bought ─────────────────────────
+
+/** Another shop's offer of the same variant, the one the product page shows first. */
+export const cartAlternative = z.object({
+  /** The offer the cart holds. */
+  offer_id: id,
+  product_slug: z.string(),
+  title: z.string(),
+  variant_name: z.string(),
+  alternative_offer_id: id,
+  seller_name: z.string(),
+  price_minor: money,
+  list_price_minor: money.nullable(),
+  /** At most 10. */
+  available: z.number().int(),
+});
+export type CartAlternative = z.infer<typeof cartAlternative>;
+
+// ── A listing edit that would pause other shops' offers ─────────────────────
+
+export const offerPausedByEdit = z.object({
+  offer_id: id,
+  seller_name: z.string(),
+  sku_code: z.string(),
+  variant_name: z.string(),
+  price_minor: money,
+  /** The lowest price that would cover the fees after the edit; null when none does. */
+  min_price_minor: money.nullable(),
+});
+export type OfferPausedByEdit = z.infer<typeof offerPausedByEdit>;
+
+export const opsListingEditWithPauses = opsListingEdit.extend({
+  /** Other shops' offers on sale that approving this edit would pause. */
+  pauses_offers: z.array(offerPausedByEdit),
+});
+export type OpsListingEditWithPauses = z.infer<typeof opsListingEditWithPauses>;
+
 // ── Errors ──────────────────────────────────────────────────────────────────
 
 export const sellerListingsErrors = {
@@ -316,6 +357,16 @@ export const sellerListingsErrors = {
     "es-CR":
       "Ese logotipo ya no está pendiente: fue decidido, reemplazado o retirado. Actualice la página.",
     en: "That logo is no longer waiting: it was decided, replaced or withdrawn. Refresh the page.",
+  },
+  edit_pauses_offers: {
+    "es-CR":
+      "Si aprueba este cambio, se pausan ofertas de otras tiendas porque su precio ya no cubriría las tarifas. Revise la lista y marque la casilla para confirmarlo, o rechace el cambio.",
+    en: "Approving this change pauses other shops' offers, because their price would no longer cover the fees. Check the list and tick the box to confirm, or reject the change.",
+  },
+  shop_change_shop_closed: {
+    "es-CR":
+      "Esa tienda está cerrada, así que no se aplican cambios a sus datos. Rechace la solicitud.",
+    en: "That shop is closed, so no change is applied to its details. Reject the request.",
   },
   logo_daily_limit_reached: {
     "es-CR": "Hoy ya subió el máximo de logotipos (10). Podrá subir otro mañana.",
@@ -391,6 +442,31 @@ export const sellerListingsApi = ({ call, run }: Caller) => ({
   /** True when there was a logo to remove. */
   sellerRemoveLogo: (sellerId: string) =>
     call("seller_remove_logo", { p_seller_id: sellerId }, z.boolean()),
+
+  /** For each cart line that cannot be bought, another shop's offer of the same variant. Needs no account. */
+  cartAlternatives: (offerIds: string[]) =>
+    call("cart_alternatives", { p_offer_ids: offerIds }, z.array(cartAlternative)),
+
+  /** The listing edits waiting, each with the other shops' offers its approval would pause. Replaces the listings method. */
+  opsListingEditsForReview: () =>
+    call("ops_listing_edits_for_review", {}, z.array(opsListingEditWithPauses)),
+  /**
+   * Approves or rejects a listing edit. An approval that would pause other
+   * shops' offers is refused (edit_pauses_offers) unless `pauseOffers` says
+   * staff saw them and confirm. Replaces the listings method.
+   */
+  opsReviewListingEdit: (
+    requestId: string,
+    approve: boolean,
+    reason?: string | null,
+    pauseOffers = false,
+  ) =>
+    run("ops_review_listing_edit", {
+      p_request_id: requestId,
+      p_approve: approve,
+      p_reason: reason ?? undefined,
+      p_pause_offers: pauseOffers,
+    }),
 
   opsLogosForReview: () => call("ops_logos_for_review", {}, z.array(opsLogoReview)),
   opsReviewLogo: (logoId: string, approve: boolean, reason?: string | null) =>

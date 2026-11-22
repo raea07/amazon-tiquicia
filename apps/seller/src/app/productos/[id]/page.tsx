@@ -48,8 +48,15 @@ async function EditListing({ params, searchParams }: PageProps<"/productos/[id]"
   try {
     listing = await (await sessionApi()).sellerListing(id, variant.success ? variant.data : null);
   } catch (error) {
-    // Someone else's product and one that does not exist look the same: not found.
-    if (error instanceof ApiError && error.code === "listing_not_found") notFound();
+    if (error instanceof ApiError && error.code === "listing_not_found") {
+      // A product this shop sells but another shop created: say so, and what
+      // this shop may change. Any other: not found, as one that does not exist.
+      const edits = await (await sessionApi()).sellerListingEdits(shop.id);
+      if (edits.some((edit) => edit.product_id === id && !edit.editable)) {
+        return <AnotherShopsListing />;
+      }
+      notFound();
+    }
     throw error;
   }
   // It belongs to another of this person's shops: they are working in this one.
@@ -164,11 +171,9 @@ async function EditListing({ params, searchParams }: PageProps<"/productos/[id]"
               </h2>
               {listing.shared ? (
                 <p className="mt-1 text-sm text-ink-muted">
-                  {listing.other_shops === 1
-                    ? "Otra tienda también vende desde esta publicación"
-                    : `${listing.other_shops} tiendas más venden desde esta publicación`}
-                  , así que no puede salir de la tienda. Cambie lo que necesite con «Enviar cambios
-                  a revisión»: mientras tanto sigue a la venta como está.
+                  <SharedBy count={listing.other_shops} />, así que no puede salir de la tienda.
+                  Cambie lo que necesite con «Enviar cambios a revisión»: mientras tanto sigue a la
+                  venta como está.
                 </p>
               ) : (
                 <>
@@ -176,6 +181,7 @@ async function EditListing({ params, searchParams }: PageProps<"/productos/[id]"
                     Para rehacerlo con calma: deja de aparecer en la tienda y en las búsquedas, y
                     nadie lo puede comprar. Los pedidos que ya tiene siguen su curso. Cuando lo
                     envíe a revisión y lo aprobemos, vuelve a la venta.
+                    <PausedElsewhere count={listing.paused_other_shops} />
                   </p>
                   <UnpublishListingForm productId={listing.product_id} />
                 </>
@@ -192,14 +198,16 @@ async function EditListing({ params, searchParams }: PageProps<"/productos/[id]"
             </h2>
             {listing.shared ? (
               <p className="mt-1 text-sm text-ink-muted">
-                Otra tienda también vende desde esta publicación, así que no se puede archivar. Si
-                usted ya no lo vende, ponga su oferta en pausa desde la lista de productos.
+                <SharedBy count={listing.other_shops} />, así que no se puede archivar. Si usted ya
+                no lo vende, ponga su oferta en pausa desde la lista de productos: la publicación
+                sigue para la otra tienda.
               </p>
             ) : (
               <>
                 <p className="mt-1 mb-4 text-sm text-ink-muted">
                   El producto desaparece de la tienda y deja de venderse. Sus existencias, sus
                   pedidos anteriores y sus pagos no cambian.
+                  <PausedElsewhere count={listing.paused_other_shops} />
                 </p>
                 <ArchiveListingForm productId={listing.product_id} />
               </>
@@ -322,7 +330,8 @@ function Variants({ listing }: { listing: SellerListingDetail }) {
                 <p className="mt-1 flex flex-wrap gap-2">
                   {!variant.active ? (
                     <Badge tone="neutral">Retirada</Badge>
-                  ) : variant.shared && ownPaused ? (
+                  ) : ownPaused ? (
+                    // Whether or not another shop sells it: this shop does not, now.
                     <Badge tone="warning">Su oferta en pausa</Badge>
                   ) : (
                     <Badge tone="success">A la venta</Badge>
@@ -337,7 +346,6 @@ function Variants({ listing }: { listing: SellerListingDetail }) {
                   name={name}
                   active={variant.active}
                   ownOfferPaused={ownPaused}
-                  shared={variant.shared}
                 />
               )}
             </li>
@@ -345,5 +353,47 @@ function Variants({ listing }: { listing: SellerListingDetail }) {
         })}
       </ul>
     </section>
+  );
+}
+
+/** "Another shop sells from this listing", with how many. */
+function SharedBy({ count }: { count: number }) {
+  return (
+    <>
+      {count <= 1
+        ? "Otra tienda tiene una oferta a la venta en esta publicación"
+        : `${count} tiendas más tienen una oferta a la venta en esta publicación`}
+    </>
+  );
+}
+
+/** Shops whose offer here is paused: they hold nothing back, and the seller is told. */
+function PausedElsewhere({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <span className="mt-1 block">
+      {count === 1
+        ? "Otra tienda tiene aquí una oferta en pausa; no lo impide, y su oferta sigue en pausa."
+        : `${count} tiendas más tienen aquí una oferta en pausa; no lo impiden, y sus ofertas siguen en pausa.`}
+    </span>
+  );
+}
+
+/** A product this shop sells but another shop created and edits. */
+function AnotherShopsListing() {
+  return (
+    <div className="flex max-w-3xl flex-col gap-4">
+      <h1 className="text-3xl font-bold">Esta publicación es de otra tienda</h1>
+      <Alert tone="info" title="Usted vende aquí con su propia oferta">
+        El texto, las fotos, el paquete y las variantes los cambia la tienda que la publicó, con
+        nuestra revisión. Usted cambia su precio, si está a la venta o en pausa, y sus existencias,
+        desde la lista de productos; ahí también puede dejar de venderlo.
+      </Alert>
+      <p>
+        <Link href="/productos" className="inline-flex min-h-11 items-center text-link underline">
+          Ir a la lista de productos
+        </Link>
+      </p>
+    </div>
   );
 }

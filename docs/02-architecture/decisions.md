@@ -1285,10 +1285,19 @@ such an offer needs review, and who owns a listing several shops sell.
 - An offer on another shop's product needs no review (its content was
   reviewed); only verified, active shops may add one, at most 30 a day.
 - The creating shop keeps the content and edits it through review; nobody
-  else does. It cannot archive or draft a listing another active shop sells.
-  When it closes, each such listing passes to the shop with the oldest live
-  offer. An approved package or category edit pauses other shops' offers it
-  left below the price floor rather than being refused.
+  else does. It cannot archive or draft a listing on which another active
+  shop has an offer on sale; a paused offer holds nothing back (a forgotten
+  pause would otherwise block the creating shop for good), and the offering
+  shop can withdraw its offer for good. When the creating shop closes, each
+  listing another active shop offers passes to the shop with the oldest offer
+  on sale (the oldest paused one when none is), with its published photos.
+- A package or category edit that would leave other shops' offers below the
+  price floor is not refused for prices the creating shop does not set, but
+  staff see those offers in the review and must confirm; the offers are then
+  paused and their shops are told.
+- When the offer in a cart can no longer be bought, the cart names another
+  shop's offer of the same variant (the first in the same order) and offers
+  to swap the line; it never swaps silently.
 - The shop's description is a reviewed shop change; its logo goes through the
   photo pipeline; both are shown as text or images only, never markup.
 
@@ -1298,5 +1307,5 @@ such an offer needs review, and who owns a listing several shops sell.
   delivery date is shown next to its price. Bringing speed back is a change to
   both sides and the help page.
 - A shop that takes over a listing cannot remove the photos the closed shop
-  uploaded; staff can. No message tells a shop a listing edit paused its offer.
+  uploaded; staff can.
 - Details: [offers and the product page](../04-algorithms/featured-offer.md).

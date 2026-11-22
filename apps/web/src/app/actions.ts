@@ -10,6 +10,7 @@
  */
 
 import { parsePhone } from "@yuntera/core";
+import { ApiError } from "@yuntera/db";
 import { tagsForOffers, tagsForProducts } from "@yuntera/next-kit/cache-tags";
 import {
   type ActionState,
@@ -33,6 +34,7 @@ import {
   writeCart,
   writeLocation,
 } from "@/lib/cart";
+import { describeCartProblem } from "@/lib/cart-problems";
 import { getViewer, safeReturnPath, signInUrl } from "@/lib/session";
 import { sessionApi } from "@/lib/supabase";
 
@@ -209,6 +211,14 @@ export async function placeOrder(_previous: ActionState, formData: FormData): Pr
     const order = await api.placeOrder({ items: cart, ...parsed.data });
     orderNumber = order.order_number;
   } catch (error) {
+    // Which product ran out, and what to do, rather than "one of the products".
+    if (
+      error instanceof ApiError &&
+      (error.code === "insufficient_stock" || error.code === "offer_unavailable")
+    ) {
+      const named = await describeCartProblem(cart);
+      if (named) return { error: named };
+    }
     return { error: messageOf(error) };
   }
 
