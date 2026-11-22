@@ -55,6 +55,7 @@ API_KEY="sb_publishable_local_development_only"
 # Lets the seller centre, the console and the journeys ask the shop to drop its cached
 # catalogue (apps/web/src/app/api/catalogo/refrescar). A local value, not a secret.
 REFRESH_KEY="local-refresh-key-lane-${LANE}"
+GUARD_KEY="local-guard-key-lane-${LANE}"
 STATE="$ROOT/.lane/$LANE"
 APPS=(web seller ops field)
 NATIVE_APPS=(shop seller driver warehouse)
@@ -90,6 +91,9 @@ export DEV_API_PORT=$API_PORT
 export API_URL=$API_URL
 export API_KEY=$API_KEY
 export SHOP_REFRESH_KEY=$REFRESH_KEY
+export AUTH_GUARD_KEY=$GUARD_KEY
+export E2E_SHOTS=$STATE/screenshots
+export NATIVE_SHOTS=$STATE/native-screenshots
 export NEXT_PUBLIC_SUPABASE_URL=$API_URL
 export NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$API_KEY
 export EXPO_PUBLIC_SUPABASE_URL=$API_URL
@@ -182,10 +186,19 @@ case "$COMMAND" in
         echo "NEXT_PUBLIC_SITE_URL=http://localhost:$(app_port "$app")"
         echo "NEXT_PUBLIC_SHOP_URL=http://localhost:$(app_port web)"
         echo "SHOP_REFRESH_KEY=$REFRESH_KEY"
+        # Signs the sign-in limit's hashes and the console's activity cookie. A local value.
+        echo "AUTH_GUARD_KEY=$GUARD_KEY"
+        # Nothing stands in front of the apps here, so the journeys may say who the
+        # visitor is in X-Forwarded-For; a deployment trusts only its own proxy.
+        echo "AUTH_CLIENT_IP_HEADER=x-forwarded-for"
       } > "$ROOT/apps/$app/.env.local"
     done
     echo "lane $LANE: building the apps (log: $STATE/build.log)"
-    ( cd "$ROOT" && pnpm build > "$STATE/build.log" 2>&1 ) || { tail -40 "$STATE/build.log" >&2; exit 1; }
+    # Always a fresh build: a build restored from the cache carries pages
+    # prerendered against an older database, older than the shop's cache
+    # lifetime, and a journey would then meet offers that no longer exist.
+    ( cd "$ROOT" && pnpm exec turbo run build --force > "$STATE/build.log" 2>&1 ) || {
+      tail -40 "$STATE/build.log" >&2; exit 1; }
     for app in "${APPS[@]}"; do
       [ -d "$ROOT/apps/$app" ] || continue
       start "$app" "$ROOT/apps/$app" pnpm exec next start --port "$(app_port "$app")"
@@ -241,7 +254,6 @@ case "$COMMAND" in
     shift; [ $# -gt 0 ] && shift
     eval "$(print_env)"
     eval "$(print_native_env)"
-    export NATIVE_SHOTS="${NATIVE_SHOTS:-$ROOT/tools/native-e2e/screenshots}"
     ( cd "$ROOT" && pnpm --filter @yuntera/native-e2e journeys "$@" )
     ;;
 
