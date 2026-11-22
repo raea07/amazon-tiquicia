@@ -101,10 +101,17 @@ async function Checkout() {
             Los pagos son simulados: no se cobra dinero real ni se entrega ningún producto.
           </Alert>
         ) : null}
+        {quote.payments_mode === "test" ? (
+          <Alert tone="info" className="mb-6" title="Pagos de prueba">
+            El cobro pasa por el entorno de pruebas del procesador de pagos: no se cobra dinero
+            real.
+          </Alert>
+        ) : null}
         <CheckoutForm
           addresses={addresses}
           totalMinor={quote.total_minor}
           codAvailable={quote.cod_available ?? false}
+          throughGateway={quote.payments_mode !== "sandbox"}
           idempotencyKey={idempotencyKey}
         />
         <p className="mt-6 text-sm">

@@ -27,6 +27,16 @@ const METHODS = [
   },
 ] as const;
 
+/** With the payment gateway, SINPE Móvil is matched to the order by who pays, not by a code. */
+const GATEWAY_TEXT: Partial<Record<(typeof METHODS)[number]["value"], string>> = {
+  sinpe_movil:
+    "En el paso siguiente nos indica la identificación y el celular de quien paga, y le damos el número. El pedido se confirma solo al llegar la transferencia.",
+  card: "En el paso siguiente pasa a la página segura de ONVO, nuestro procesador de pagos; nosotros nunca vemos los datos de la tarjeta.",
+};
+
+/** Many banks let a person send at most ₡100 000 a day by SINPE Móvil. */
+const SINPE_DAILY_LIMIT_MINOR = 10_000_000;
+
 /**
  * The last step of a purchase: choose where and how, see the total, confirm.
  * Nothing is pre-selected except the shopper's own default address — in
@@ -37,11 +47,14 @@ export function CheckoutForm({
   totalMinor,
   codAvailable,
   idempotencyKey,
+  throughGateway = false,
 }: {
   addresses: Address[];
   totalMinor: number;
   codAvailable: boolean;
   idempotencyKey: string;
+  /** Test and live modes: payments go through the gateway. */
+  throughGateway?: boolean;
 }) {
   const [state, action] = useActionState(placeOrder, initial);
   const deliverable = addresses.filter((address) => address.zone_active);
@@ -115,8 +128,16 @@ export function CheckoutForm({
                 <span className="text-sm">
                   <span className="block font-semibold">{method.title}</span>
                   <span className="block text-ink-muted">
-                    {disabled ? "No disponible para pedidos de este monto." : method.text}
+                    {disabled
+                      ? "No disponible para pedidos de este monto."
+                      : ((throughGateway ? GATEWAY_TEXT[method.value] : undefined) ?? method.text)}
                   </span>
+                  {method.value === "sinpe_movil" && totalMinor > SINPE_DAILY_LIMIT_MINOR ? (
+                    <span className="mt-1 block font-medium text-warning">
+                      Muchos bancos permiten enviar hasta {formatPrice(SINPE_DAILY_LIMIT_MINOR)} al
+                      día por SINPE Móvil. Si su límite es menor, pague con tarjeta.
+                    </span>
+                  ) : null}
                 </span>
               </label>
             );

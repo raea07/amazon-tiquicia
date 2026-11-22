@@ -22,6 +22,7 @@ import { staffCancelOrder } from "@/app/integrity-actions";
 import { DeliveryCodePanel, ReturnedParcelForm } from "@/components/integrity-forms";
 import { NotificationLine } from "@/components/notification-list";
 import { PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
+import { REFUND_CHANNEL, REFUND_STATUS } from "@/lib/payment-labels";
 import { canSee, requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Pedido" };
@@ -56,9 +57,13 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
   const payment = order.payment ? PAYMENT_STATUS[order.payment.status] : null;
   const canHandleParcels = canSee(staff.staff_role, ["ops", "support"]);
   const deliveryCode = canHandleParcels ? await api.opsDeliveryCode(order.id) : null;
+  // The gateway's view of the payment: its references, and its refunds on their way.
+  const gateway = await api.orderPayment(order.order_number);
+  // A transfer is confirmed by hand only where the gateway does not confirm it.
   const awaitingTransfer =
     (order.status === "pending_payment" || order.status === "payment_review") &&
-    (order.payment_method === "sinpe_movil" || order.payment_method === "bank_transfer");
+    (order.payment_method === "sinpe_movil" || order.payment_method === "bank_transfer") &&
+    gateway.manual_confirmation;
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
@@ -198,6 +203,34 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
               Código que el cliente debe poner en el detalle:{" "}
               <span className="font-semibold text-ink">{order.payment.sinpe_reference}</span>
             </p>
+          ) : null}
+          {gateway.attempt ? (
+            <p className="mt-2 break-all text-ink-muted">
+              Procesador: intento {gateway.attempt.status}
+              {gateway.attempt.intent_reference ? ` · ${gateway.attempt.intent_reference}` : ""}
+              {gateway.attempt.session_reference
+                ? ` · sesión ${gateway.attempt.session_reference}`
+                : ""}
+              {gateway.attempt.failure_code ? ` · rechazo: ${gateway.attempt.failure_code}` : ""}
+            </p>
+          ) : null}
+          {gateway.refunds.length > 0 ? (
+            <ul className="mt-3 space-y-1 border-t border-border pt-3">
+              {gateway.refunds.map((refund) => (
+                <li key={refund.id}>
+                  Reembolso {formatPrice(refund.amount_minor)}{" "}
+                  <Badge tone={REFUND_STATUS[refund.status].tone}>
+                    {REFUND_STATUS[refund.status].label}
+                  </Badge>
+                  <span className="block text-ink-muted">{REFUND_CHANNEL[refund.channel]}</span>
+                </li>
+              ))}
+              <li>
+                <Link href="/cobros/reembolsos" className="text-link underline">
+                  Ver en Cobros
+                </Link>
+              </li>
+            </ul>
           ) : null}
         </section>
 
