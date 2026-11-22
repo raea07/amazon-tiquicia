@@ -1,4 +1,5 @@
-import { type Address, COMMERCIAL_CONSENT_VERSION } from "@yuntera/db";
+import type { Address } from "@yuntera/db";
+import { AccountDeletedNotice } from "@yuntera/expo-kit/account";
 import { messageOf } from "@yuntera/expo-kit/api";
 import { useSession } from "@yuntera/expo-kit/auth";
 import { useApiMutation, useApiQuery } from "@yuntera/expo-kit/data";
@@ -6,7 +7,6 @@ import { space } from "@yuntera/expo-kit/theme";
 import {
   Button,
   Card,
-  Checkbox,
   Divider,
   ErrorState,
   FormMessage,
@@ -24,31 +24,24 @@ import { useState } from "react";
 import { View } from "react-native";
 import { validateProfile } from "@/lib/address";
 
+/**
+ * Name and phone. The commercial consent is with the channels for messages,
+ * on Notificaciones, as on the website: both are saved there in one call.
+ */
 function ProfileForm({
   fullName: initialName,
   phone: initialPhone,
-  marketingOptIn,
 }: {
   fullName: string;
   phone: string;
-  marketingOptIn: boolean;
 }) {
   const [fullName, setFullName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
-  // The stored choice, whatever it is; for a new account that is "no".
-  const [marketing, setMarketing] = useState(marketingOptIn);
   const [result, setResult] = useState<{ ok?: string; error?: string }>({});
-  // The profile no longer carries the commercial consent (update_profile
-  // ignores it): a change is recorded on its own, with the wording's version
-  // and where it was given, the way the website's Notificaciones page does.
   const save = useApiMutation(
-    async (api, input: { fullName: string; phone: string | null; marketing: boolean | null }) => {
-      await api.updateProfile({ fullName: input.fullName, phone: input.phone });
-      if (input.marketing !== null) {
-        await api.setMyCommercialConsent(input.marketing, COMMERCIAL_CONSENT_VERSION, "shop_app");
-      }
-    },
-    { invalidates: [["profile"]] },
+    (api, input: { fullName: string; phone: string | null }) =>
+      api.updateProfile({ fullName: input.fullName, phone: input.phone }),
+    { invalidates: [["profile"], ["notification-settings"]] },
   );
 
   return (
@@ -68,12 +61,6 @@ function ProfileForm({
         inputMode="tel"
         placeholder="8888-1234"
       />
-      <Checkbox checked={marketing} onChange={setMarketing}>
-        <Text variant="small">
-          Acepto recibir ofertas y novedades de Yuntera por correo. Es opcional, y puede retirarlo
-          cuando quiera.
-        </Text>
-      </Checkbox>
       <FormMessage {...result} />
       <Button
         loading={save.isPending}
@@ -86,11 +73,7 @@ function ProfileForm({
           }
           if (!("fullName" in checked)) return;
           try {
-            await save.mutateAsync({
-              fullName: checked.fullName,
-              phone: checked.phone,
-              marketing: marketing === marketingOptIn ? null : marketing,
-            });
+            await save.mutateAsync({ fullName: checked.fullName, phone: checked.phone });
             setResult({ ok: "Datos guardados." });
           } catch (error) {
             setResult({ error: messageOf(error) });
@@ -149,20 +132,30 @@ function AddressRow({ address }: { address: Address }) {
 }
 
 function SignedOut() {
+  const { status } = useSession();
   return (
     <Screen>
+      <AccountDeletedNotice />
       <Text variant="title">Su cuenta</Text>
-      <Text tint="muted">
-        Ingrese para comprar, seguir sus pedidos y guardar sus direcciones. Puede ver los productos
-        sin una cuenta.
-      </Text>
+      {status === "secondStep" ? (
+        <Text tint="muted">
+          Falta un paso para entrar a su cuenta: el código de su aplicación de autenticación.
+        </Text>
+      ) : (
+        <Text tint="muted">
+          Ingrese para comprar, seguir sus pedidos y guardar sus direcciones. Puede ver los
+          productos sin una cuenta.
+        </Text>
+      )}
       <Stack gap={3}>
-        <LinkButton href="/ingresar?siguiente=/cuenta" block size="lg">
-          Ingresar
+        <LinkButton href="/ingresar?siguiente=/cuenta" block size="lg" testID="account-sign-in">
+          {status === "secondStep" ? "Escribir el código" : "Ingresar"}
         </LinkButton>
-        <LinkButton href="/ingresar?modo=crear&siguiente=/cuenta" block variant="secondary">
-          Crear una cuenta
-        </LinkButton>
+        {status === "secondStep" ? null : (
+          <LinkButton href="/ingresar?modo=crear&siguiente=/cuenta" block variant="secondary">
+            Crear una cuenta
+          </LinkButton>
+        )}
       </Stack>
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <ListRow
@@ -176,7 +169,10 @@ function SignedOut() {
   );
 }
 
-/** "Su cuenta": personal data, delivery addresses, orders, help and signing out. */
+/**
+ * "Su cuenta": personal data, delivery addresses, orders, messages, the
+ * password, help, signing out and deleting the account.
+ */
 export default function AccountScreen() {
   const { status, viewer, signOut } = useSession();
   const profile = useApiQuery(["profile"], (api) => api.myProfile(), { personal: true });
@@ -209,6 +205,13 @@ export default function AccountScreen() {
         />
         <Divider />
         <ListRow
+          href="/cuenta/notificaciones"
+          title="Notificaciones"
+          subtitle="Correo, WhatsApp, SMS y publicidad"
+          testID="account-notifications"
+        />
+        <Divider />
+        <ListRow
           href="/ayuda"
           title="Ayuda"
           subtitle="Entregas, pagos, devoluciones y reclamos"
@@ -225,7 +228,6 @@ export default function AccountScreen() {
           key={data?.id ?? "profile"}
           fullName={data?.full_name ?? ""}
           phone={data?.phone?.replace("+506", "") ?? ""}
-          marketingOptIn={data?.marketing_opt_in ?? false}
         />
       </Card>
 
@@ -239,6 +241,25 @@ export default function AccountScreen() {
         <LinkButton href="/direcciones/nueva?siguiente=/cuenta" variant="secondary" block>
           Agregar una dirección
         </LinkButton>
+      </Stack>
+
+      <Stack gap={3}>
+        <Text variant="heading">Su acceso</Text>
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <ListRow
+            href="/cuenta/contrasena"
+            title="Contraseña"
+            subtitle="Al cambiarla, cerramos las demás sesiones abiertas de su cuenta."
+            testID="account-password"
+          />
+          <Divider />
+          <ListRow
+            href="/cuenta/eliminar"
+            title="Eliminar su cuenta"
+            subtitle="Antes le explicamos qué se borra y qué debemos conservar por ley."
+            testID="account-delete"
+          />
+        </Card>
       </Stack>
 
       <View style={{ marginTop: space[2] }}>
