@@ -1,12 +1,12 @@
 # Status
 
-Updated 21 November 2026, after the fixes from the internal security review
+Updated 22 November 2026, after the fixes from the internal security review
 (the lockdown of direct table access, the integrity of money and returns, and
 limits against abuse) were merged with account security, notifications,
-product photos and the native apps. The fixes are tested on a development
-machine only: **migrations `082800` to `083100` are not applied to the hosted
-preview yet.** This is the honest state of the project: what exists, how far
-it was checked, and what only the owner can do.
+product photos and the native apps, applied to the hosted preview (all 29
+migrations are there now) and checked there, and the four web apps were
+redeployed. This is the honest state of the project: what exists, how far it
+was checked, and what only the owner can do.
 
 ## In one paragraph
 
@@ -21,9 +21,8 @@ Everyone can reset a password, confirm their e-mail and delete their account;
 staff and sellers can add a second factor; messages for every step of an order
 are planned and sent, but only to local fake providers. **A hosted preview
 exists.** The database is a Supabase project in your separate free
-organisation, with the first 25 migrations applied and the demo data loaded;
-the four that close the security review are not applied there yet (see
-"What needs you", item 3). The notification worker is not deployed, so
+organisation, with all 29 migrations applied, the security review's fixes
+included, and the demo data loaded. The notification worker is not deployed, so
 nothing is sent. Since the review, apps and visitors can reach the database
 only through its functions: no table is readable or writable directly. The
 four web apps are deployed as a preview on Vercel at
@@ -69,18 +68,24 @@ In the order that unblocks the most.
    5. Store accounts in the company's name need a legal
       entity, a D-U-N-S number, a public website and a work e-mail on the
       company's own domain.
-3. **Apply migrations `082800` to `083100` to the hosted preview**, in order,
-   and check what the runbook lists for them
-   ([runbook](docs/07-deployment/runbook-first-deploy.md)): that the
-   platform's default privileges for new tables give the API roles nothing,
-   that the photo storage rules still allow and refuse what they did, and that
-   the data repairs did what they say (every order has a delivery code; open
-   returns that repeated units or had no delivered goods are closed). Then
-   decide about the four demo shops' payout accounts: after `083000` an
-   account finance never approved is not paid, and the preview's were loaded
-   before approvals existed, so payout runs there pay nobody until finance
-   approves them again (the seller sends the same account) or you stamp them
-   deliberately. Redeploy the four web apps afterwards; all four changed.
+3. **Decide two small privilege questions the hosted run left open**
+   ([runbook](docs/07-deployment/runbook-first-deploy.md#migrations-20261121082800-to-20261121083100),
+   point 4). Neither is reachable today; both are a one-line revoke if you
+   want them closed before production:
+   1. Supabase gives visitors and signed-in users everything on any table,
+      sequence or function that `postgres` creates in the `storage` schema.
+      Nothing of ours is there, and the lockdown leaves the platform's schemas
+      alone, so the guard test now proves that `postgres` owns nothing in
+      `storage` instead of failing on the platform's setting.
+   2. The `pg_net` extension lets visitors and signed-in users call its web
+      request functions and read its responses. The API does not expose its
+      schema, so nobody can reach them over the internet.
+
+   Migrations `082800` to `083100` are applied to the preview (that item is
+   done), and the four web apps are redeployed with them. The four demo
+   shops' payout accounts were loaded before approvals existed; I stamped
+   exactly those four as approved, as the seed does, so payout runs on the
+   preview include them again.
 4. **Open a pull request for this branch** (`claude/vigilant-edison-lh64v2`)
    when you want it on `main`. I did not open one because you had not asked.
    The CI workflow will run for the first time then; its steps were run by hand
@@ -269,8 +274,34 @@ preview is: all four went in; every order got its delivery code, a wrong code
 on an order still on its way was carried over, a duplicate withdrawal was
 closed, every cash stop names its order, no table is readable by an app role
 and no write policy is left. On that database the payout suites fail with
-`nothing_to_pay` until the demo payout accounts are approved, as "What needs
-you", item 3, says; with them approved, they pass.
+`nothing_to_pay` until the demo payout accounts are approved; with them
+approved, they pass.
+
+On the hosted preview, on 21 and 22 November 2026, after applying migrations
+`082800` to `083100` and redeploying the four apps. The commands and numbers
+are in the
+[runbook](docs/07-deployment/runbook-first-deploy.md#migrations-20261121082800-to-20261121083100).
+
+| Check              | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before applying    | No order had two payments taken or two refunds booked, and none had two cash stops open, so the new unique rules could go in                                                                                                                                                                                                                                                                                                                                   |
+| Applying           | The first file stopped at once on a platform difference already known from the search migration (it may set a search setting only after loading the extension) and left nothing behind. Fixed in the file; then all four went in, in 2 seconds                                                                                                                                                                                                                 |
+| Lockdown           | Visitors and signed-in users hold no privilege on any table, view, sequence or column; every table path answers "permission denied" from outside; no write policy is left; row-level security is on all 80 tables. What the platform still grants by default is in "What needs you", item 3                                                                                                                                                                    |
+| Storage            | The photo suite passes there. Through the storage service, a visitor and a seller were refused the waiting photos, another shop's files and any overwrite. No photo was waiting for review on the preview, so that refusal was not tried on a real waiting file                                                                                                                                                                                                |
+| Data repairs       | Every order has its delivery code, and each shopper reads the right one on each open order. There were no returns to close. Every cash stop names its order                                                                                                                                                                                                                                                                                                    |
+| Database tests     | All 17 files pass, three times in a row, part 2 of notifications skipped as before. Four first failed for reasons in the tests (a count of seed rows, a sign-in row without an id, a timing that included compiling a function, and a check that did not allow for the platform's own storage setting); each was fixed without loosening what it proves, and passes locally too. The suites left every table as they found it                                  |
+| Per-request check  | A token used after sign-out is still refused at once. Calls take about as long as before (within the network's noise)                                                                                                                                                                                                                                                                                                                                          |
+| Old apps, new data | For the 15 minutes before the redeploy, the old apps' pages all loaded against the new database; nothing broke that was seen (no action was tried in that window)                                                                                                                                                                                                                                                                                              |
+| Browser checks     | At 1280 and 390 px, with no console error, failed request or server error: a purchase with SINPE Móvil to the delivery code; one page of each other app; the delivery code on no staff, warehouse or driver screen nor in any of the 446 responses they received; a driver's wrong code says how many tries are left; a damaged-item return approved, received and refunded once; a contact change rejected with a reason the seller reads; 16 console screens |
+| Afterwards         | No runtime error on the four apps; the scheduled jobs all succeeded; nothing was sent                                                                                                                                                                                                                                                                                                                                                                          |
+
+What this round left on the preview, on purpose: the four demo payout
+accounts marked approved; two paid SINPE Móvil orders of `comprador`
+(YT-100359 and YT-100360, waiting to be picked); a refunded damaged-item
+return on YT-100114; one wrong delivery code on YT-100011, whose stop on
+route R-1003 is now marked "arrived"; and a rejected contact-phone request of
+Tienda Sendero. Eleven sessions of `comprador`, `vendedor` and `central`
+from runs that stopped early were left to expire rather than deleted.
 
 On the hosted preview, on 21 November 2026, after applying migrations `082500`
 to `082700` (all three went in unchanged) and redeploying the four apps. The
@@ -302,12 +333,14 @@ would plan once it is deployed.
 
 What these checks do **not** cover, stated plainly:
 
-- **The security review's fixes are not on the hosted preview.** Migrations
-  `082800` to `083100` and the apps that go with them were tested on a
-  development machine only (local PostgreSQL with a stand-in for Supabase's
-  roles and API). The platform's default privileges, the storage rules after
-  the lockdown and the data repairs are to be checked there when they are
-  applied ([runbook](docs/07-deployment/runbook-first-deploy.md#migrations-20261121082800-to-20261121083100)).
+- **The security review's fixes on the hosted preview were smoke-tested, not
+  exhaustively.** The platform questions are answered there: its default
+  privileges (what is left is in "What needs you", item 3), the storage rules
+  after the lockdown, the data repairs and the suites. Not tried there:
+  refusing a real waiting photo (none was waiting), the limits and
+  invitations in the browser, a suspended driver losing their routes, a
+  locked delivery code released by staff, actions in the old apps during the
+  15 minutes before the redeploy, and anything in the native apps.
 - **The hosted preview was smoke-tested, not exhaustively tested.** Not tried
   there: a staff role other than administrator, creating a payout run, a
   seller with a second factor, the notification worker's secret key, and a
@@ -453,10 +486,14 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   again, staff included (an administrator can still do it in the database).
 - Unit economics, launch thresholds and data-retention periods in the strategy
   documents are estimates and say so.
-- A payout account finance never approved is not paid. Accounts on the
-  hosted preview were loaded before approvals existed, so once `083000` is
-  applied there, payout runs pay nobody until finance approves them again
-  ("What needs you", item 3).
+- A payout account finance never approved is not paid. The hosted preview's
+  demo accounts were loaded before approvals existed; on 21 November 2026 the
+  four the seed treats as approved were stamped approved there by one guarded
+  statement, so the preview matches a fresh seed again.
+- A shopper who asks again to return a unit already returned (only possible
+  from a page left open from before) is refused, but is shown the cart's
+  message about maximum quantities instead of one that says the unit is
+  already in a return.
 - Activating a new fee schedule does not re-check offers against the price
   floor (a sale must not pay less than its fees); the floor is enforced when a
   price, package, category or status changes.
