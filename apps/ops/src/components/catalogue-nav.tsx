@@ -15,23 +15,23 @@ const PAGES = [
 export function CatalogueNav({ current }: { current: (typeof PAGES)[number]["href"] }) {
   return (
     <nav aria-label="Catálogo" className="mb-6">
-      <ul className="flex flex-wrap gap-2">
+      {/* Links in a plain row, not a list: the pages below it are lists of cards. */}
+      <div className="flex flex-wrap gap-2">
         {PAGES.map((page) => (
-          <li key={page.href}>
-            <Link
-              href={page.href as Route}
-              aria-current={page.href === current ? "page" : undefined}
-              className={`inline-flex min-h-11 items-center rounded-full border px-4 text-sm ${
-                page.href === current
-                  ? "border-anil-900 bg-anil-900 font-semibold text-white"
-                  : "border-border-strong bg-surface text-ink hover:bg-surface-muted"
-              }`}
-            >
-              {page.label}
-            </Link>
-          </li>
+          <Link
+            key={page.href}
+            href={page.href as Route}
+            aria-current={page.href === current ? "page" : undefined}
+            className={`inline-flex min-h-11 items-center rounded-full border px-4 text-sm ${
+              page.href === current
+                ? "border-anil-900 bg-anil-900 font-semibold text-white"
+                : "border-border-strong bg-surface text-ink hover:bg-surface-muted"
+            }`}
+          >
+            {page.label}
+          </Link>
         ))}
-      </ul>
+      </div>
     </nav>
   );
 }
