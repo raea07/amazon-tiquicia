@@ -867,9 +867,13 @@ begin
   assert (select count(*) from public.suggest_products(v_long)) >= 0, 'nor a huge prefix';
   assert (select count(*) from public.search_products('licuadora')) >= 1, 'ordinary searches still work';
 
-  -- A cart is checked for size before anything is priced.
+  -- A cart is checked for size before anything is priced. The first call of a
+  -- function in a session compiles it, which on a hosted project's small
+  -- machine alone took 0.17–0.25 s; call it once on an empty cart first, so
+  -- the time below is the refusal's own.
   v_cart := (select jsonb_agg(jsonb_build_object('offer_id', gen_random_uuid(), 'quantity', 1))
              from generate_series(1, 200000));
+  assert public.checkout_quote('[]'::jsonb, '10101') ->> 'issue' = 'cart_empty', 'an empty cart is refused';
   v_start := clock_timestamp();
   assert public.checkout_quote(v_cart, '10101') ->> 'issue' = 'too_many_lines', 'too many lines';
   assert clock_timestamp() - v_start < interval '100 milliseconds',
@@ -1671,8 +1675,17 @@ do $$
 declare
   v_cart jsonb := (select jsonb_agg(jsonb_build_object('offer_id', gen_random_uuid(), 'quantity', 1))
                    from generate_series(1, 200000));
-  v_start timestamptz := clock_timestamp();
+  v_start timestamptz;
 begin
+  -- As for checkout_quote above: the first call compiles the function (0.28 s
+  -- on the hosted project's small machine), so make it on an empty cart first.
+  begin
+    perform public.place_order('[]'::jsonb, current_setting('t.fa8_address')::uuid, 'card', 'fa8-warm-up');
+    raise exception 'FA-8: an empty order was placed';
+  exception when others then
+    if sqlerrm <> 'cart_empty' then raise; end if;
+  end;
+  v_start := clock_timestamp();
   begin
     perform public.place_order(v_cart, current_setting('t.fa8_address')::uuid, 'card', 'fa8-many-lines');
     raise exception 'FA-8: an order of 200,000 lines was placed';

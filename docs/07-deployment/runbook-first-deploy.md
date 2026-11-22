@@ -8,8 +8,9 @@ production, with the Supabase and Vercel dashboards open.
 
 - **Steps 1–8 were done for the preview on 21 November 2026** (project
   `yuntera`, reference `lfulotisyeyooxecwnox`, US East, Postgres 17, free
-  plan), first up to migration `082400` and then again for `082500` to
-  `082700` (account security, notifications, product photos). Each step says
+  plan), first up to migration `082400`, then again for `082500` to
+  `082700` (account security, notifications, product photos), and then for
+  `082800` to `083100` (the security hardening). Each step says
   what was actually run and what differed from the local build. Places that
   differed, or still may, are marked ⚠.
 - **It costs money or it does not, depending on step 1.** Decide before
@@ -253,12 +254,14 @@ seconds; the weekly clean-up keeps a week of them.
 
 The fixes from the internal security review: the lockdown (`082800`), the
 integrity of money and returns (`082900`), limits (`083000`) and the merge
-with the features before them (`083100`). **Not applied to the preview yet.**
-They were applied locally, in order, on top of a database built to `082700`
-with the old demo data and some activity (an order placed, paid, delivered
-after one wrong code, a withdrawal opened on it, a duplicate withdrawal
-planted, a wrong code on an order still on its way): all four went in, and
-the checks below gave the expected answers. Do this in order.
+with the features before them (`083100`). **Applied to the preview on
+21 November 2026 at 23:42 UTC**, so it has 29 migrations; what happened
+there follows the list. Before that they were applied locally, in order, on
+top of a database built to `082700` with the old demo data and some activity
+(an order placed, paid, delivered after one wrong code, a withdrawal opened
+on it, a duplicate withdrawal planted, a wrong code on an order still on its
+way): all four went in, and the checks below gave the expected answers. Do
+this in order.
 
 1. **Before `082900`, read-only:** no order has two `order_capture` or two
    `order_refund` ledger transactions, and no order has two cash stops in
@@ -328,6 +331,189 @@ the checks below gave the expected answers. Do this in order.
    the owner.
 8. **The suites.** `remote-db.sh test` for all 17 files, after step 7.
 9. **Redeploy the four web apps**; all four changed.
+
+**What was done on the preview, 21–22 November 2026.**
+
+1. Both read-only checks returned no rows (17 capture or refund
+   transactions and 3 cash stops existed, none doubled).
+2. Recorded first: the row count of all 111 tables in `public`, `private`,
+   `auth` and `storage` (2 166 rows); the privileges of `anon`,
+   `authenticated` and PUBLIC on our relations in `public` (76 table grants:
+   56 to `authenticated`, 20 `SELECT` to `anon`, plus column grants on 13
+   tables); and 30 timed calls each, through the API from outside, of
+   `shop_path_exists` as a visitor and `my_roles` as the demo shopper
+   (medians 57 and 60 ms in the first round, 54 and 56 ms in the second;
+   fastest 50 and 52 ms).
+3. `push`: ⚠ `082800` failed at once with _permission denied to set
+   parameter "pg_trgm.word_similarity_threshold"_ and nothing was kept. It
+   recreates the two search functions, which pin that setting, and the
+   migration role may do so only once pg_trgm's library is loaded in the
+   session (the same difference as `081200`, first table above). The file now
+   calls `extensions.word_similarity('a', 'a')` first; the second `push`
+   applied all four in 2.2 s. `status` lists 29 files. A local reset and all
+   17 suites passed with the change (lane 19).
+4. **Default privileges.** `postgres` now has, globally, only
+   `{postgres=X}` for functions (PUBLIC cannot execute new functions), and in
+   `public` only `postgres` and `service_role` on new tables, sequences and
+   functions. What still names `anon` or `authenticated`, and why it is not
+   reached by our migrations:
+   - `postgres` in `storage`: everything on new tables, sequences and
+     functions to `anon` and `authenticated`. The platform sets this; the
+     lockdown leaves the platform's schemas alone. It applies only to objects
+     `postgres` creates in `storage`, and `postgres` owns none there (every
+     table and function in `storage` belongs to `supabase_storage_admin`, in
+     `auth` to `supabase_auth_admin`). Low risk while no migration or
+     dashboard query creates objects in `storage`; `postgres` could revoke
+     it with `alter default privileges for role postgres in schema storage
+     revoke all on tables from anon, authenticated` (and sequences,
+     functions), which is the owner's decision.
+   - `supabase_admin` in `public`, `graphql` and `graphql_public`: everything
+     to `anon` and `authenticated`. `postgres` cannot change these. They apply
+     to objects the platform itself creates there, for example an extension
+     enabled in `public` from the dashboard. Today `supabase_admin` owns no
+     table or function in `public`, and `pg_graphql` is not enabled. Enable
+     extensions in `extensions`, never in `public`; `110_lockdown.sql` fails
+     on any table privilege that appears in `public` or `private`.
+   - Not a default privilege, but found here: `pg_net` (enabled by `082600`)
+     lets `anon` and `authenticated` use schema `net`, execute
+     `net.http_get`/`http_post`/… and read `net._http_response`. The Data API
+     exposes only `public` and `graphql_public` (`Accept-Profile: net` gets
+     `406 PGRST106`), so nobody reaches it over HTTP. A revoke on `net` for
+     the API roles would close it for good; also the owner's decision.
+
+   The rest held: no privilege of `anon` or `authenticated` on any table,
+   view, sequence or column in `public` or `private` (0 by `aclexplode`, 0 by
+   `has_*_privilege`, and the statement of point 4 gave 0); no policy other
+   than for `select` (57 read policies remain); row-level security on all 80
+   tables (62 public, 18 private). From outside, every table path answered
+   `401` to a visitor and `403` to the shopper (`42501`), reads and writes.
+5. **Storage.** `105_product_photos.sql` passed on its own. Through the
+   storage API, as a visitor and as `vendedor` (TecnoCasa), only reads and
+   refused writes: the waiting bucket by its public address gives _Bucket not
+   found_; download and a signed link for a waiting path, of the shop's own
+   (a rejected photo's) or another shop's, give `not_found`; listing the
+   waiting bucket returns nothing; an upload into another shop's path, an
+   overwrite of a published photo with `x-upsert` (the same bytes) or `PUT`,
+   and an upload address with `x-upsert` give `Unauthorized`; the published
+   photo was byte for byte the same afterwards. ⚠ No photo is waiting for
+   review on the preview, and making one would need a write as a seller, so
+   "a waiting file cannot be fetched" rests on the suite (which makes waiting
+   rows in its rolled-back transaction) and on the refusals above, not on a
+   real waiting file.
+6. **Repairs.** 19 orders, 19 codes in `private.delivery_codes`,
+   `orders.delivery_pin` gone. Each demo shopper read, through the API, the
+   code of each of their open orders (7) and it equalled the stored one
+   (compared by hash, never printed); delivered and cancelled orders show no
+   code, as designed; another shopper's order is `order_not_found`. The
+   preview had no return requests, so nothing was closed. The one wrong
+   attempt on a stop (YT-100114) was on a delivered order and correctly not
+   carried. All 3 cash stops name their own order.
+7. **Payout accounts.** Stamped, as a deliberate change to the demo data,
+   with one guarded statement: `payout_approved_at = now()` only where it was
+   null and holder and last four digits match the seed (Cafetal Los Santos
+   4066, TecnoCasa 6789, Ferretería El Higuerón 8637, Sendero 6777), raising
+   unless exactly four rows matched. Four were; Bazar Nuevo (no account) was
+   left alone; `payout_approved_by` stays null as in the seed; the audit
+   trigger wrote one row each. The payout preview now pays three shops (the
+   fourth is below the minimum); no payout run was created.
+8. **Suites.** ⚠ The first full run failed four files, each for a reason in
+   the test: `070_api` counted TecnoCasa's nine seed offers (the preview has
+   a tenth from the photo test; it now compares with the tables and still
+   requires the nine); `115_integrity` inserted sign-in rows without an id
+   (the real `auth.users` has no default); `120_limits` timed the first call
+   of `checkout_quote` and of `place_order` in a fresh session, which
+   includes compiling the function (0.17–0.28 s here; the second call takes
+   0.1 ms), so each is now called once on an empty cart first, limits
+   unchanged; and `110_lockdown` demanded no default grant in any schema,
+   including the platform's `storage` (point 4). `110` now leaves `storage`
+   out and instead, where `supabase_storage_admin` exists, fails if
+   `postgres` owns anything in `storage`. Then all 17 passed, three runs in
+   a row, part 2 of `100_notifications.sql` skipped as before; locally all 17
+   passed in lane 19. Row counts were identical before and after every run.
+9. **Per-request check.** The shopper's token after sign-out got
+   `400 session_ended` from `my_orders`, `my_roles` and `my_addresses`; a new
+   sign-in worked. 30 timed calls again, in three sets: medians 55–65 ms for
+   the visitor and 57–74 ms for the shopper, fastest 49–53 ms, against 54–57
+   and 56–60 before: within the noise of the network.
+10. **The window and the redeploy.** Between the push (23:42:52) and the
+    first new deployment (23:57) the old apps ran against the new database.
+    Every function the old client calls still existed; signed-in pages of all
+    four apps (shop home, product, cart, orders, an order, account; seller
+    home, listings, orders, payouts, stock; console home, orders, support,
+    dispatch, sellers, payouts, cash; route and warehouse) loaded with no
+    error before and after the push. Nothing was seen to break; actions were
+    not tried in that window. The merged code reads no setting the projects
+    lack (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+    `NEXT_PUBLIC_SITE_URL` on all four, `NEXT_PUBLIC_SHOP_URL` and
+    `SHOP_REFRESH_KEY` where listed in step 7), so none was added. Deployed
+    one at a time with Vercel CLI 65.12.1 (`--token` with a dummy value; the
+    proxy adds the credential); each restored its cache and ran a full
+    `next build` in 20–26 s: web `dpl_9TWf5TKW8ThfXtt5Rr3wQ7EWztbo`, vende
+    `dpl_J7edsEr8W55zkFGz3VCgRHrk5zrd`, central
+    `dpl_9XKkdZNhZJ2W6Zu4jPYLkLuP3ZpC`, campo
+    `dpl_8ha5ta91P2EJPvK9CnfvXMmEfD3n`. Without a bypass, all 12 addresses of
+    the four deployments redirect to `vercel.com/sso-api`.
+11. **Smoke test** through a bypass (step 8), in Playwright, failing on any
+    console error, page error, failed request or 5xx. All passed:
+    - Regression at 1280 and 390 px: home (CSP, HSTS), a misspelt search, a
+      product, the cart, sign-in (cookie `HttpOnly`, `Secure`), no payment
+      method chosen in advance, SINPE Móvil, the simulated payment, the
+      delivery code on the order page, "Mis pedidos", sign-out (orders
+      YT-100359 and YT-100360); the seller centre as `vendedor`, the console
+      as `central`, the route as `repartidor` and the warehouse as `bodega`,
+      each signed in and out, nothing scrolled sideways.
+    - The code: staff's `get_order` and `ops_delivery_code` returned no code
+      for the 9 open orders; 446 responses (2.3 MB) received by staff on the
+      console's orders, dispatch and support pages and all 9 order pages, by
+      `bodega` on the board and 6 parcels and by `repartidor` on the route
+      and both stops contained none of the 9 codes. A wrong code on stop
+      YT500011 (YT-100011) at 390 px: _"Ese código no es. Quedan 4 intentos.
+      Pídale al cliente que lo lea de su pedido."_; the console shows
+      "Intentos fallidos del código: 1 de 5" and "El código de entrega solo lo
+      ve el cliente".
+    - A return on YT-100114: the shopper claimed one unit as damaged from the
+      shop; staff approved it in `/atencion`, which offered no refund until
+      the goods were recorded back, then refunded ₡19 900 once (one register
+      row, one `return_refund` transaction of four entries summing to zero,
+      payment `partially_refunded`). Posting it again: `invalid_return_state`.
+      ⚠ Asking again for the same unit is refused (`invalid_quantity`), but
+      the message the apps show for that code is about the cart ("Revise las
+      cantidades: hay un máximo por producto en cada pedido."), not about a
+      unit already returned. The shop no longer offers the form for that
+      unit, so only a stale tab would see it; the message should change.
+    - `sendero` asked for a new contact phone; staff saw it in
+      `/cambios-tienda`, a rejection without a reason was refused, then
+      rejected with one; the seller read it at 1280 and 390 px; the shop's
+      contact is exactly as before.
+    - The console as `central`, read only, at both widths: shop changes,
+      seller payouts, drivers, staff, sellers, support, dispatch, cash,
+      warehouses, catalogue, photos, messages, security, audit and two order
+      pages.
+12. **Afterwards.** Vercel listed no runtime error and no log line for any
+    of the four projects from 23:30 to 00:13. The scheduled jobs succeeded
+    every time since the push (`expire-unpaid-orders` 6 runs, about 32 ms;
+    `notify-sweep` 60 runs, about 17 ms; the daily and weekly ones were not
+    due); no HTTP request was queued and Vault holds no secret, so nothing
+    was sent. Advisors, against the table in step 4: security 191 findings —
+    `authenticated` may execute 155 definer functions (was 69) and `anon` 11
+    (was 4), because the lockdown made the read functions definer functions,
+    as designed; RLS with no policy on 23 tables (was 2: the dropped write
+    policies leave 18 private tables and 5 public ones that only definer
+    functions touch, and no API role holds a privilege on any); leaked-
+    password protection off (Pro plan); `pg_net` in `public` (since `082600`,
+    see point 4). The 16 "multiple permissive policies" are gone with the
+    write policies. Performance: 68 unindexed foreign keys (was 39; the new
+    tables' references to orders, users and items) and 14 unused indexes
+    (was 19), both on demo-sized data.
+
+The bypass secrets were made and revoked as in step 8; afterwards each
+project listed none.
+
+**For production**, the same steps on the throwaway project built for it:
+the migrations now apply unchanged, so step 3 should go through at the
+first `push`; repeat points 1, 4, 6 and 8 as written; point 7 does not apply
+(finance approves real accounts in the console); and decide first about the
+`storage` defaults and the `net` grants of point 4.
 
 ## 4. Confirm the database is what the migrations say
 

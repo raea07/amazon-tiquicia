@@ -292,12 +292,20 @@ $$;
 
 -- Nothing created later is granted by default. The migrations run as
 -- `postgres`; its default privileges must give the API roles and PUBLIC
--- nothing, in our schemas or anywhere.
+-- nothing, globally and in every schema but `storage`.
+--
+-- `storage` is the platform's: on a hosted project Supabase itself gives
+-- `anon` and `authenticated` everything on tables, sequences and functions
+-- that `postgres` creates there, and the lockdown leaves the platform's
+-- schemas alone (20261121082800_lockdown.sql, section 6). Those defaults
+-- apply only to objects `postgres` creates in `storage`, and no migration
+-- creates one; where the storage service's own role exists (a hosted
+-- project), the second check proves `postgres` owns nothing there.
 do $$
 declare
   found_ text;
 begin
-  select string_agg(format('%s %s: %s', coalesce(d.defaclnamespace::regnamespace::text, '(all)'),
+  select string_agg(format('%s %s: %s', coalesce(nullif(d.defaclnamespace, 0)::regnamespace::text, '(all)'),
                            d.defaclobjtype,
                            case when acl.grantee = 0 then 'PUBLIC' else pg_get_userbyid(acl.grantee) end),
                     '; ')
@@ -306,8 +314,21 @@ begin
   cross join lateral aclexplode(d.defaclacl) acl
   where d.defaclrole = 'postgres'::regrole
     and d.defaclobjtype in ('r', 'S', 'f')
+    and d.defaclnamespace is distinct from 'storage'::regnamespace
     and (acl.grantee = 0 or pg_get_userbyid(acl.grantee) in ('anon', 'authenticated'));
   assert found_ is null, format('default privileges still grant: %s', found_);
+
+  if exists (select 1 from pg_roles where rolname = 'supabase_storage_admin') then
+    select string_agg(o, ', ') into found_ from (
+      select c.relname::text as o from pg_class c
+      where c.relnamespace = 'storage'::regnamespace and c.relowner = 'postgres'::regrole
+      union all
+      select p.proname::text from pg_proc p
+      where p.pronamespace = 'storage'::regnamespace and p.proowner = 'postgres'::regrole
+    ) x;
+    assert found_ is null,
+      format('postgres owns objects in storage, which its default privileges give to anon and authenticated: %s', found_);
+  end if;
 
   -- Without an entry, PostgreSQL lets PUBLIC execute every new function.
   assert exists (select 1 from pg_default_acl d

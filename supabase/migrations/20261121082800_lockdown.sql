@@ -156,6 +156,12 @@ as $$
   left join public.brands b on b.id = p.brand_id;
 $$;
 
+-- The two search functions pin `pg_trgm.word_similarity_threshold`. On a hosted
+-- database the role that applies migrations is not a superuser, and may pin
+-- that setting only once pg_trgm's library is loaded in the session, so load it
+-- first, as `…081200_search.sql` does (that file ran in an earlier session).
+select extensions.word_similarity('a', 'a');
+
 create or replace function public.search_products(
   p_query text default null,
   p_category_slug text default null,

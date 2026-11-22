@@ -54,8 +54,9 @@ language plpgsql as $$
 declare
   v_id uuid;
 begin
-  insert into auth.users (email, raw_user_meta_data)
-  values (p_email, jsonb_build_object('full_name', p_name)) returning id into v_id;
+  -- auth.users.id has no default on a hosted project (only in the local shim).
+  insert into auth.users (id, email, raw_user_meta_data)
+  values (gen_random_uuid(), p_email, jsonb_build_object('full_name', p_name)) returning id into v_id;
   insert into public.addresses (user_id, label, recipient_name, phone, postal_code, senas, lat, lng, is_default)
   select v_id, 'Casa', p_name, a.phone, a.postal_code, a.senas, a.lat, a.lng, true
   from public.addresses a join auth.users u on u.id = a.user_id
