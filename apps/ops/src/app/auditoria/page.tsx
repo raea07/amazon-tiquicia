@@ -20,12 +20,25 @@ const TABLES: Record<string, string> = {
   fee_payment_methods: "Tarifas de cobro",
   "auth.mfa_factors": "Verificación en dos pasos",
   notification_deliveries: "Mensajes reenviados",
+  categories: "Categorías",
+  brands: "Marcas",
+  search_synonyms: "Sinónimos de búsqueda",
+  reviews: "Reseñas",
+  products: "Productos",
 };
 const ACTIONS: Record<string, string> = {
   INSERT: "Creó",
   UPDATE: "Cambió",
   DELETE: "Eliminó",
   RESET_MFA: "Reinició",
+  HIDE: "Ocultó",
+  SHOW: "Volvió a mostrar",
+  HIDE_REPLY: "Ocultó la respuesta de",
+  SHOW_REPLY: "Volvió a mostrar la respuesta de",
+  MERGE: "Unió",
+  CORRECT: "Corrigió",
+  TAKE_DOWN: "Retiró",
+  RESTORE: "Volvió a publicar",
 };
 
 // Shown as "changed" only; the values of these are never printed on screen.
