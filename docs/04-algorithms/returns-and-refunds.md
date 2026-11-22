@@ -187,12 +187,15 @@ the refund alone:
   (docs/06-operations/payments.md). It settles on the gateway's signed
   confirmation (`refund.succeeded`, which may arrive twice: the second is a
   duplicate) or on the worker's own question.
-- **`transfer`**: cash on delivery, a transfer confirmed by hand, real money
+- **`transfer`**: cash on delivery taken in `test` or `live` mode (a real
+  driver's cash: the payment records the mode it was taken in), a transfer
+  confirmed by hand, real money
   taken in live and refunded after the mode changed, or a gateway refund that
   failed. Finance pays it by bank transfer and records the bank's reference
   (`ops_record_refund_transfer`); that settles it.
-- **`simulated`**: money that was never real (taken in sandbox, or in the
-  gateway's test environment and refunded in another mode). It settles in the
+- **`simulated`**: money that was never real (taken in sandbox, cash on
+  delivery included while the mode is still sandbox, or in the gateway's test
+  environment and refunded in another mode). It settles in the
   same transaction as its booking; its confirmation waits for the commit, so
   "refund completed" always follows "refund requested".
 - **At the door** (cash on delivery, a parcel back before the cash was
@@ -220,15 +223,16 @@ was never real gets no documents on a real project
 (`invoicing_policy.simulated_payments` false), so its refunds have nothing to
 credit.
 
-| Kind                                  | Channel   | Confirmed when                  | "Refund completed" | Credit note           |
-| ------------------------------------- | --------- | ------------------------------- | ------------------ | --------------------- |
-| Card or SINPE Móvil, sandbox          | simulated | at commit (`sandbox`)           | yes                | if documented locally |
-| Card or SINPE Móvil, test or live     | gateway   | the gateway confirms            | yes                | yes                   |
-| Live money, refunded in another mode  | transfer  | finance records the transfer    | yes                | yes                   |
-| Cash on delivery, after it was paid   | transfer  | finance records the transfer    | yes                | yes                   |
-| Transfer confirmed by hand            | transfer  | finance records the transfer    | yes                | yes                   |
-| Cash on delivery, parcel back at door | none      | at commit (`at_door`), silently | no                 | commission, code 06   |
-| Full cancellation (any of the above)  | as above  | as above                        | yes                | every document, 01    |
+| Kind                                              | Channel   | Confirmed when                  | "Refund completed" | Credit note           |
+| ------------------------------------------------- | --------- | ------------------------------- | ------------------ | --------------------- |
+| Card or SINPE Móvil, sandbox                      | simulated | at commit (`sandbox`)           | yes                | if documented locally |
+| Card or SINPE Móvil, test or live                 | gateway   | the gateway confirms            | yes                | yes                   |
+| Live money, refunded in another mode              | transfer  | finance records the transfer    | yes                | yes                   |
+| Cash on delivery, sandbox                         | simulated | at commit (`sandbox`)           | yes                | if documented locally |
+| Cash on delivery, test or live, after it was paid | transfer  | finance records the transfer    | yes                | yes                   |
+| Transfer confirmed by hand                        | transfer  | finance records the transfer    | yes                | yes                   |
+| Cash on delivery, parcel back at door             | none      | at commit (`at_door`), silently | no                 | commission, code 06   |
+| Full cancellation (any of the above)              | as above  | as above                        | yes                | every document, 01    |
 
 `supabase/tests/145_refunds_end_to_end.sql` walks one refund of each kind
 through the four pieces and checks each effect happened once, in order, with

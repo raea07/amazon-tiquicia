@@ -269,6 +269,21 @@ select pg_temp.expect('sandbox return', current_setting('t.s_return_refund')::uu
   "requested": 1, "completed": 1, "in_order": true, "fiscal_events": 1}');
 select pg_temp.credit_notes_match('sandbox return', current_setting('t.s_return_refund')::uuid, 1);
 
+-- ═══ 2b. Sandbox: cash on delivery, the goods returned ═══════════════════
+-- The demo's cash: nothing to pay back, settled and confirmed like a card.
+
+select pg_temp.remember('s_cod', pg_temp.place('devol1@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'cash_on_delivery', 'e2e-s-cod-01')::text);
+select pg_temp.deliver(current_setting('t.s_cod')::uuid);
+select pg_temp.remember('s_cod_refund', pg_temp.return_units('devol1@yuntera.example',
+  current_setting('t.s_cod')::uuid, 'libreta-tapa-dura-a5', 1)::text);
+select pg_temp.plan_invoices();
+select pg_temp.expect('sandbox cash return', current_setting('t.s_cod_refund')::uuid, '{
+  "registered": 1, "ways_back": 1, "channel": "simulated", "status": "succeeded", "sent": 0,
+  "money_out": 1, "payment": "partially_refunded", "confirmed": 1, "requested": 1, "completed": 1,
+  "in_order": true, "fiscal_events": 1}');
+select pg_temp.credit_notes_match('sandbox cash return', current_setting('t.s_cod_refund')::uuid, 1);
+
 -- ═══ 3. The gateway's test environment: a card, cancelled ═════════════════
 -- Sent once, completed only on the gateway's confirmation (which arrives
 -- twice), then confirmed and announced once.

@@ -111,7 +111,8 @@ create trigger app_settings_payments_mode before insert or update on public.app_
 -- ═══ 2. The payment row learns its gateway ═════════════════════════════════
 
 alter table public.payments
-  -- test or live: which of the gateway's environments took this payment.
+  -- test or live: the mode the payment was taken in (for a payment through
+  -- the gateway, the environment that took it). Null: sandbox, or before 083400.
   add column environment text check (environment in ('test', 'live')),
   -- The gateway's id the payment can be refunded against (ONVO: the payment
   -- intent). Null for payments that did not come through the gateway.
@@ -131,6 +132,10 @@ begin
     -- still confirmed by finance by hand.
     new.provider := case when new.method in ('card', 'sinpe_movil') then private.payment_gateway()
                          else 'manual' end;
+  elsif new.provider = 'cash' and private.payments_mode() in ('test', 'live') then
+    -- Cash on delivery keeps its provider and records the mode it was taken
+    -- in. Null: taken in sandbox (the demo's cash), or before this migration.
+    new.environment := private.payments_mode();
   end if;
   return new;
 end;
@@ -658,6 +663,11 @@ begin
          and (private.payments_mode() = 'sandbox' or v_payment.method in ('card', 'sinpe_movil'))
       then 'simulated'
     when v_payment.environment = 'test' and v_payment.gateway_reference is not null
+      then 'simulated'
+    -- Cash taken in sandbox (or before 083400, which did not say) is the
+    -- demo's while the mode is sandbox. Cash taken in test or live mode is a
+    -- real driver's: it is paid back, in any mode.
+    when v_payment.provider = 'cash' and v_payment.environment is null and private.payments_mode() = 'sandbox'
       then 'simulated'
     else 'transfer' end;
 

@@ -943,7 +943,8 @@ declare r jsonb;
 begin
   perform public.record_consent('marketing', '2026-11');
   perform public.mfa_reserve_attempt();
-  assert jsonb_array_length(public.account_deletion_check() -> 'blockers') = 0, 'nothing pending';
+  assert jsonb_array_length(public.account_deletion_check() -> 'blockers') = 0,
+    format('nothing pending: %s', public.account_deletion_check() -> 'blockers');
   r := public.delete_my_account();
   assert (r ->> 'orders_kept')::int = 6 and (r ->> 'reviews_kept')::int = 6, format('result: %s', r);
   -- The token in hand still identifies the old id for up to an hour; a second

@@ -647,9 +647,10 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   once, credited once on the fiscal documents
   ([returns and refunds](docs/04-algorithms/returns-and-refunds.md#one-refund-four-pieces)).
   The payment shows "refunded" when the money has gone back, no longer when
-  the refund is booked. Cash on delivery, transfers confirmed by hand and
-  real money refunded after the mode changed are paid back by finance by
-  transfer and recorded with the bank's reference. A refund whose send got no
+  the refund is booked. Cash on delivery taken in test or live mode,
+  transfers confirmed by hand and real money refunded after the mode changed
+  are paid back by finance by transfer and recorded with the bank's
+  reference; the demo's cash in sandbox is settled as a simulation. A refund whose send got no
   answer is never sent again by itself: after an hour it goes to finance.
 - Money taken in sandbox or in the gateway's test environment is never
   documented on a real project (`invoicing_policy.simulated_payments` is
