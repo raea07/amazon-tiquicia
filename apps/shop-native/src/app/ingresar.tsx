@@ -1,10 +1,15 @@
-import { AccountDeletedNotice, ForgotPasswordForm } from "@yuntera/expo-kit/account";
+import {
+  AccountDeletedNotice,
+  DEFAULT_WEBSITE,
+  ForgotPasswordForm,
+} from "@yuntera/expo-kit/account";
 import { SignInForm, SignUpForm, useSession } from "@yuntera/expo-kit/auth";
 import { oneParam, safeReturnPath } from "@yuntera/expo-kit/paths";
 import { colors, space } from "@yuntera/expo-kit/theme";
 import { Card, Screen, Text, TextLink } from "@yuntera/expo-kit/ui";
 import { Link, Redirect, router, Stack, useLocalSearchParams } from "expo-router";
 import { View } from "react-native";
+import { shopUrl } from "@/lib/env";
 
 /**
  * Sign in, create an account, or ask for a password reset, at
@@ -30,6 +35,7 @@ export default function SignInScreen() {
         <Stack.Screen options={{ title: "Restablecer su contraseña" }} />
         <Card>
           <ForgotPasswordForm
+            website={shopUrl || DEFAULT_WEBSITE}
             onBack={() =>
               router.replace({ pathname: "/ingresar", params: { siguiente: returnTo } })
             }

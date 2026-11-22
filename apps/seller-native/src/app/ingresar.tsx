@@ -46,7 +46,7 @@ export default function SignInScreen() {
         <View style={{ flex: 1, justifyContent: "center", gap: 24 }}>
           <Logo app="seller" size={36} />
           <Card>
-            <ForgotPasswordForm onBack={() => setRecovering(false)} />
+            <ForgotPasswordForm website={legalBase} onBack={() => setRecovering(false)} />
           </Card>
         </View>
       </Screen>

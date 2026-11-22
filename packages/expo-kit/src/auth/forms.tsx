@@ -292,8 +292,11 @@ export function SignUpForm({ onSignedIn, legal }: { onSignedIn?: () => void; leg
   );
 }
 
-/** The whole sign-in screen of a staff-facing app (seller, driver, warehouse). */
-export function SignInScreen({ app }: { app: AppId }) {
+/**
+ * The whole sign-in screen of a staff-facing app (seller, driver, warehouse).
+ * `website` is the shop's website, where a reset link lands (ForgotPasswordForm).
+ */
+export function SignInScreen({ app, website }: { app: AppId; website?: string }) {
   const identity = apps[app];
   const { status } = useSession();
   const [recovering, setRecovering] = useState(false);
@@ -304,7 +307,7 @@ export function SignInScreen({ app }: { app: AppId }) {
         <AccountDeletedNotice />
         <Card>
           {recovering && status === "signedOut" ? (
-            <ForgotPasswordForm onBack={() => setRecovering(false)} />
+            <ForgotPasswordForm website={website} onBack={() => setRecovering(false)} />
           ) : (
             <>
               <Text variant="title">Ingresar</Text>

@@ -10,6 +10,7 @@
  * Pure: no React Native import, so the tests run in Node.
  */
 
+import { apps } from "@yuntera/brand";
 import { type DeletionBlocker, messageFor } from "@yuntera/db";
 
 /** Matches the project's Auth setting (`password_min_length`). */
@@ -59,6 +60,16 @@ export const RESET_SENT =
 /** What happens after the link, said on the screen that sent it. */
 export const RESET_NEXT =
   "El enlace del correo abre el sitio web de Yuntera en el navegador del teléfono: ahí elige la contraseña nueva. Después vuelva a esta aplicación e ingrese con su correo y la contraseña nueva.";
+
+/** The shop's planned public address, for a build that names none (EXPO_PUBLIC_SHOP_URL). */
+export const DEFAULT_WEBSITE = `https://${apps.shop.host}`;
+
+/**
+ * Where the reset e-mail's link points: the website's own /auth/confirm,
+ * which shows a button and checks the token only when it is pressed (mail
+ * scanners open links), then asks for the new password.
+ */
+export const resetLinkFor = (website: string) => `${website.replace(/\/+$/, "")}/auth/confirm`;
 
 export const PASSWORD_CHANGED =
   "Listo: su contraseña cambió. Cerramos las demás sesiones abiertas de su cuenta.";

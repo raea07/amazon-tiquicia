@@ -16,6 +16,7 @@ import { changePassword, deleteAccount, requestPasswordReset } from "./flows";
 import {
   ACCOUNT_DELETED,
   blockerMessages,
+  DEFAULT_WEBSITE,
   DELETION_CONFIRM_LABEL,
   DELETION_ON_THIS_PHONE,
   DELETION_TERMS,
@@ -23,6 +24,7 @@ import {
   PASSWORD_MIN_LENGTH,
   PASSWORD_RULES,
   RESET_NEXT,
+  resetLinkFor,
 } from "./rules";
 
 /**
@@ -91,10 +93,19 @@ export function PasswordRules({ password, repeat }: { password: string; repeat?:
 
 /**
  * "Olvidé mi contraseña": the address, then the same answer whatever it is.
- * The link in the e-mail opens the website, where the new password is set;
- * the person then comes back and signs in here.
+ * The link in the e-mail opens `website` (the shop's website, the project's
+ * site address, so Auth always accepts it), where the new password is set on
+ * its /auth/confirm and /recuperar/nueva pages; the person then comes back
+ * and signs in here. Any Yuntera account sets its password there, whichever
+ * app it uses.
  */
-export function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
+export function ForgotPasswordForm({
+  onBack,
+  website = DEFAULT_WEBSITE,
+}: {
+  onBack: () => void;
+  website?: string;
+}) {
   const { supabase } = useSession();
   const [email, setEmail] = useState("");
   const [result, setResult] = useState<{ ok?: string; error?: string }>({});
@@ -104,10 +115,11 @@ export function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
     if (busy) return;
     setBusy(true);
     setResult({});
-    // No redirect is named: the link opens the site's own /auth/confirm, the
-    // shop website, where any Yuntera account sets its new password.
     const outcome = await requestPasswordReset(
-      { resetPasswordForEmail: (address) => supabase.auth.resetPasswordForEmail(address) },
+      {
+        resetPasswordForEmail: (address) =>
+          supabase.auth.resetPasswordForEmail(address, { redirectTo: resetLinkFor(website) }),
+      },
       email,
     );
     setBusy(false);
