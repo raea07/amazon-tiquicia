@@ -45,6 +45,20 @@ export interface AppConfigOptions {
   /** Android permissions to remove even if a library asks for them. */
   blockedPermissions?: string[];
   /**
+   * Android permissions this app declares itself. Only one may also be taken
+   * off the kit's always-blocked list: POST_NOTIFICATIONS, which the drivers'
+   * app needs on Android 13 and later so the notice of its location
+   * foreground service is shown. Anything else on that list stays blocked.
+   */
+  androidPermissions?: string[];
+  /**
+   * False removes the app's data from Android's cloud backup
+   * (`android:allowBackup`). The drivers' app sets it: it keeps customers'
+   * details for the day in ordinary app storage. Default: Expo's (true); the
+   * secure store is excluded from backups in every app regardless.
+   */
+  androidBackup?: boolean;
+  /**
    * iOS background modes to remove although a plugin Expo applies on its own
    * adds them (expo-task-manager always adds "fetch").
    */
@@ -118,6 +132,11 @@ export function fontsPlugin(): PluginEntry {
  * without `requireAuthentication`), so both are removed and the stores do not
  * list a biometric permission. An app that adds a biometric feature deletes
  * them here.
+ *
+ * POST_NOTIFICATIONS is the one exception an app may lift, by declaring it in
+ * `androidPermissions`: the drivers' app, whose location foreground service
+ * must show its notice on Android 13 and later. It asks for it, after its
+ * own explanation, only when the driver starts sharing the position.
  */
 const ALWAYS_BLOCKED = [
   "android.permission.RECORD_AUDIO",
@@ -128,14 +147,44 @@ const ALWAYS_BLOCKED = [
   "android.permission.USE_FINGERPRINT",
 ];
 
+/** The only always-blocked permission an app may declare (see ALWAYS_BLOCKED). */
+const MAY_BE_DECLARED = new Set(["android.permission.POST_NOTIFICATIONS"]);
+
+/** The always-blocked list less what this app declares, and the app's own additions. */
+export function blockedFor(
+  options: Pick<AppConfigOptions, "blockedPermissions" | "androidPermissions">,
+): string[] {
+  const declared = new Set(options.androidPermissions ?? []);
+  for (const permission of declared) {
+    if (ALWAYS_BLOCKED.includes(permission) && !MAY_BE_DECLARED.has(permission)) {
+      throw new Error(`${permission} is blocked for every app and cannot be declared.`);
+    }
+  }
+  return [
+    ...ALWAYS_BLOCKED.filter((permission) => !declared.has(permission)),
+    ...(options.blockedPermissions ?? []),
+  ];
+}
+
 /**
  * Removes what plugins Expo applies automatically add for features that are
  * not built: the push entitlement (expo-notifications) and any background
  * mode the app does not use. Applied to the config before Expo applies the
  * listed and automatic plugins, so its mods run after theirs (mods registered
  * first run last). resolved-config.test.ts checks the outcome.
+ *
+ * Outside the development build it also removes what expo-dev-client adds
+ * for finding the dev server: its English local-network text and its
+ * "_expo._tcp" Bonjour service. Its own build phase deletes both from release
+ * builds, but only at build time, so `expo config --type introspect` (and
+ * anyone reading the preview or store configuration) saw an English purpose
+ * string; removing them here makes the resolved configuration say what the
+ * store build ships.
  */
-export function withoutUnbuiltCapabilities(removeBackgroundModes: string[]): ConfigPlugin {
+export function withoutUnbuiltCapabilities(
+  removeBackgroundModes: string[],
+  development = false,
+): ConfigPlugin {
   return (config) => {
     let next = withEntitlementsPlist(config, (mod) => {
       delete mod.modResults["aps-environment"];
@@ -147,6 +196,15 @@ export function withoutUnbuiltCapabilities(removeBackgroundModes: string[]): Con
         const kept = modes.filter((mode) => !removeBackgroundModes.includes(mode));
         if (kept.length > 0) mod.modResults.UIBackgroundModes = kept;
         else delete mod.modResults.UIBackgroundModes;
+      }
+      if (!development) {
+        delete mod.modResults.NSLocalNetworkUsageDescription;
+        const services = mod.modResults.NSBonjourServices;
+        if (Array.isArray(services)) {
+          const kept = services.filter((service) => service !== "_expo._tcp");
+          if (kept.length > 0) mod.modResults.NSBonjourServices = kept;
+          else delete mod.modResults.NSBonjourServices;
+        }
       }
       return mod;
     });
@@ -200,6 +258,11 @@ export function defineAppConfig(app: AppId, options: AppConfigOptions): ExpoConf
         // inside the app (permission prompt buttons, the copy and paste menu)
         // would follow English rather than Spanish. Not yet checked on a device.
         CFBundleDevelopmentRegion: "es",
+        // Ordinary app storage (AsyncStorage: a shopper's cart, the drivers'
+        // day kept for a dead zone) stays out of iCloud and computer backups.
+        // AsyncStorage already does this when the key is missing; it is
+        // written out so the choice is visible and checked.
+        RCTAsyncStorageExcludeFromBackup: true,
         // Expo's prebuild template allows plain HTTP to local-network hosts in
         // every build. Only the development build may: it reaches the local API
         // by the computer's LAN address. Whether this key covers a bare IP
@@ -210,8 +273,8 @@ export function defineAppConfig(app: AppId, options: AppConfigOptions): ExpoConf
           NSAllowsLocalNetworking: development,
         },
         // Shown by the development build when it looks for the dev server.
-        // Release builds strip expo-dev-client's own (English) text, so the
-        // Spanish one is set for the development variant only.
+        // The other variants carry no local-network text at all
+        // (withoutUnbuiltCapabilities removes expo-dev-client's English one).
         ...(development
           ? {
               NSLocalNetworkUsageDescription:
@@ -227,7 +290,9 @@ export function defineAppConfig(app: AppId, options: AppConfigOptions): ExpoConf
         monochromeImage: "./assets/android-icon-monochrome.png",
         backgroundColor: color.celeste[600],
       },
-      blockedPermissions: [...ALWAYS_BLOCKED, ...(options.blockedPermissions ?? [])],
+      blockedPermissions: blockedFor(options),
+      ...(options.androidPermissions ? { permissions: options.androidPermissions } : {}),
+      ...(options.androidBackup === false ? { allowBackup: false } : {}),
     },
     web: {
       // One HTML page and client-side routing: what the browser journeys drive.
@@ -278,5 +343,5 @@ export function defineAppConfig(app: AppId, options: AppConfigOptions): ExpoConf
       router: {},
     },
   };
-  return withoutUnbuiltCapabilities(options.removeBackgroundModes ?? [])(config);
+  return withoutUnbuiltCapabilities(options.removeBackgroundModes ?? [], development)(config);
 }

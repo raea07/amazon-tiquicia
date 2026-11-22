@@ -21,6 +21,14 @@ import {
   validateSignUp,
 } from "../errors";
 import { POLICY_VERSION } from "./policy";
+import {
+  CODE_REQUIRED,
+  lockedMessage,
+  needsSecondStep,
+  normaliseCode,
+  refusedMessage,
+  totpFactorId,
+} from "./second-step";
 import { signOutDevice } from "./sign-out";
 
 export interface Viewer {
@@ -29,7 +37,21 @@ export interface Viewer {
   name: string | null;
 }
 
-export type SessionStatus = "loading" | "signedOut" | "signedIn";
+/**
+ * "secondStep": the password was right, and the account has an authenticator
+ * app whose code has not been given yet. Nothing but the second step works
+ * then (the database refuses the rest), so roles are not read and the app
+ * shows the sign-in screen, which asks for the code (forms.tsx).
+ */
+export type SessionStatus = "loading" | "signedOut" | "secondStep" | "signedIn";
+
+/**
+ * Where an account with a second factor gives its code. "in-app": on the
+ * second-step screen of this app. "website": this app does not ask for it;
+ * such a sign-in is undone and the person is sent to the website (the
+ * shopper app, until it adds the screen).
+ */
+export type SecondStepMode = "in-app" | "website";
 
 export interface SessionValue {
   status: SessionStatus;
@@ -49,6 +71,11 @@ export interface SessionValue {
     password: string;
     accepted: boolean;
   }): Promise<{ error?: string; ok?: string; signedIn?: boolean }>;
+  /**
+   * The second step: checks the 6-digit code from the authenticator app.
+   * Returns the message to show, or null when the person is now signed in.
+   */
+  verifySecondStep(code: string): Promise<string | null>;
   /** Resolves to true when this phone is signed out (see signOutDevice). */
   signOut(): Promise<boolean>;
   reloadRoles(): Promise<void>;
@@ -71,9 +98,11 @@ function viewerOf(session: Session | null): Viewer | null {
  */
 export function SessionProvider({
   supabase,
+  secondStep = "website",
   children,
 }: {
   supabase: SupabaseClient;
+  secondStep?: SecondStepMode;
   children: ReactNode;
 }) {
   const queryClient = useQueryClient();
@@ -83,22 +112,30 @@ export function SessionProvider({
   const [roles, setRoles] = useState<Roles | null>(null);
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [rolesLoading, setRolesLoading] = useState(false);
-  const userId = session?.user.id ?? null;
+  // Roles belong to a session that is fully signed in, never to one halfway
+  // through the second step.
+  const userId = status === "signedIn" ? (session?.user.id ?? null) : null;
   const currentUser = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
+    const statusOf = (next: Session | null): SessionStatus =>
+      !next
+        ? "signedOut"
+        : secondStep === "in-app" && needsSecondStep(next)
+          ? "secondStep"
+          : "signedIn";
     supabase.auth
       .getSession()
       .then(({ data }) => {
         if (!active) return;
         setSession(data.session);
-        setStatus(data.session ? "signedIn" : "signedOut");
+        setStatus(statusOf(data.session));
       })
       .catch(() => active && setStatus("signedOut"));
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
-      setStatus(next ? "signedIn" : "signedOut");
+      setStatus(statusOf(next));
       // Another person's data must never be shown from the cache.
       if (event === "SIGNED_OUT") queryClient.clear();
     });
@@ -106,7 +143,7 @@ export function SessionProvider({
       active = false;
       data.subscription.unsubscribe();
     };
-  }, [supabase, queryClient]);
+  }, [supabase, queryClient, secondStep]);
 
   const reloadRoles = useCallback(async () => {
     if (!currentUser.current) return;
@@ -150,14 +187,16 @@ export function SessionProvider({
       const invalid = validateSignIn(email, password);
       if (invalid) return invalid;
       try {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
         });
         if (error) return signInMessage(error);
         // An account with a second factor counts only after its code, and the
-        // database refuses everything until then (check_request). The apps do
-        // not ask for the code yet, so such a session is not kept.
+        // database refuses everything until then (check_request). An app that
+        // asks for the code keeps the session halfway ("secondStep"); one that
+        // does not, undoes it and sends the person to the website.
+        if (secondStep === "in-app" && data.session) return null;
         const { data: level } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (level?.nextLevel === "aal2" && level.currentLevel !== "aal2") {
           await signOutDevice(supabase.auth);
@@ -168,7 +207,38 @@ export function SessionProvider({
         return signInMessage(error);
       }
     },
-    [supabase],
+    [supabase, secondStep],
+  );
+
+  const sessionNow = useRef<Session | null>(null);
+  sessionNow.current = session;
+  const verifySecondStep = useCallback(
+    async (raw: string) => {
+      const code = normaliseCode(raw);
+      if (!code) return CODE_REQUIRED;
+      const factorId = totpFactorId(sessionNow.current);
+      if (!factorId) return SECOND_FACTOR_NOT_IN_APP;
+      try {
+        // Counted before the code goes to Auth (see second-step.ts).
+        const attempt = await api.mfaReserveAttempt();
+        if (attempt.attempt_id === null) return lockedMessage(attempt);
+        const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
+        if (error) return refusedMessage(error, attempt);
+        // The client now holds the aal2 session; give the reservation back.
+        try {
+          await api.mfaAttemptSucceeded(attempt.attempt_id);
+        } catch (cause) {
+          console.error(
+            "Could not release a second-step reservation",
+            cause instanceof ApiError ? cause.code : "",
+          );
+        }
+        return null;
+      } catch (error) {
+        return messageOf(error);
+      }
+    },
+    [api, supabase],
   );
 
   const signUp = useCallback<SessionValue["signUp"]>(
@@ -223,6 +293,7 @@ export function SessionProvider({
       supabase,
       signIn,
       signUp,
+      verifySecondStep,
       signOut,
       reloadRoles,
     }),
@@ -236,6 +307,7 @@ export function SessionProvider({
       supabase,
       signIn,
       signUp,
+      verifySecondStep,
       signOut,
       reloadRoles,
     ],

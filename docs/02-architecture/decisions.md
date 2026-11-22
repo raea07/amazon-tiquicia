@@ -34,6 +34,8 @@ its own entry, not something that happens by drift.
 | 25  | [Photos in two buckets, published by re-encoding](#25-photos-in-two-buckets-published-by-re-encoding)                                               | Built; applied to the preview            |
 | 26  | [One register for every refund](#26-one-register-for-every-refund)                                                                                  | Built; not on the preview yet            |
 | 27  | [Limits are per account and per target, never per address](#27-limits-are-per-account-and-per-target-never-per-address)                             | Built; not on the preview yet            |
+| 28  | [A driver's offline day in ordinary app storage, kept small and short](#28-a-drivers-offline-day-in-ordinary-app-storage-kept-small-and-short)      | Built; unverified on a device            |
+| 29  | [The staff apps ask for the second factor themselves](#29-the-staff-apps-ask-for-the-second-factor-themselves)                                      | Built; hosted project untested           |
 
 ---
 
@@ -182,11 +184,16 @@ needs live positions, or when warehouse scanning speed becomes the constraint.
 The functions the native apps would call are the same ones the web app calls,
 so nothing below the screen has to change.
 
-**Since then.** Native apps for drivers (`apps/driver-native`) and the
-warehouse (`apps/warehouse-native`) exist as skeletons: sign-in, a home screen
-gated by role, the permissions they will need. Until their screens are built
-and a build has run on a phone, `apps/field` remains the tool drivers and the
-warehouse use.
+**Since then.** The native drivers' app (`apps/driver-native`, Yuntera Ruta)
+and warehouse app (`apps/warehouse-native`, Yuntera Bodega) have every flow
+of their `apps/field` areas. The drivers' app adds what this decision gave up:
+position sharing during a route with the screen off (a foreground service on
+Android, the location background mode on iOS, never the "always" permission)
+and work without signal (arrivals, failed deliveries and positions queued and
+sent later in order, the route readable from a copy kept on the phone,
+decision 28). The warehouse app scans with the camera or a hand scanner. Until
+a build of each has run on a phone, `apps/field` remains the tool drivers and
+the warehouse use.
 
 ## 5. The driver never sees the delivery PIN
 
@@ -589,9 +596,10 @@ model for a public website.
   call) is reported as failed rather than as done, so the person stays
   visibly signed in and can try again. Every way the apps sign out goes
   through `signOutDevice` (`packages/expo-kit/src/auth/sign-out.ts`): the
-  button, a session the database says has ended (decision 23), and a
-  password-only sign-in to an account with a second factor, which the apps
-  do not keep.
+  button, a session the database says has ended (decision 23), and, in the
+  shopper app, a password-only sign-in to an account with a second factor,
+  which that app does not keep (the other three ask for the code, decision
+  29).
 
 ## 19. A darker field outline in the native apps than on the web
 
@@ -802,3 +810,77 @@ contact phone) are requests staff approve, never direct writes.
   configured on the hosting platform before launch.
 - The numbers are first guesses above what an honest shopper or seller does;
   they are settings so that they can change without a migration.
+
+## 28. A driver's offline day in ordinary app storage, kept small and short
+
+**Context.** The drivers' app works in dead zones: it keeps the day's routes
+on the phone (customers' names, phones, _señas_ and map pins) and a queue of
+what the driver did without signal (arrivals, failed deliveries with the
+position at the door, position reports). Its first version kept both in the
+kit's encrypted storage, a cipher of our own that the apps no longer ship
+(decision 18). The secure store that replaced it suits the session, not
+this: a long route's day is tens of kilobytes (dozens of 1,024-byte pieces,
+against the store's 64-piece ceiling), rewritten whenever a stop changes, and
+the queue is written several times a minute by the location task while the
+screen is locked, each write several Keychain or Keystore calls.
+
+**Decision.** Both live in the app's ordinary storage (AsyncStorage through
+the kit's `appStorage`). The operating system encrypts it with the device's
+own keys (iOS data protection, Android file-based encryption) and keeps it to
+the app; there is no cipher of ours. In exchange the app keeps as little and
+as briefly as the feature needs (`apps/driver-native/src/lib/driver.tsx`,
+`route.ts` `keptOnPhone`, and `packages/expo-kit/src/offline/`):
+
+- Only the routes still to drive are saved; finished and cancelled ones are
+  shown while there is signal but never written, and a stop already closed
+  keeps no phone number. The queue holds stop ids, failure reasons and the
+  driver's positions, never a customer's name, phone or address.
+- The saved day is removed at sign-out (also when the server ends the
+  session), when access is lost or the driver is suspended, when another
+  account opens the app, and once it is a day old, whether or not anyone is
+  signed in and even with the app left open. The queue drops positions at
+  sign-out, everything of an account when it loses access or another account
+  signs in, positions after 5 minutes and other entries after 36 hours (they
+  are then shown as not sent).
+- The drivers' app is kept out of Android's cloud backup
+  (`android:allowBackup="false"`) and AsyncStorage is excluded from iOS
+  backups in every app (`RCTAsyncStorageExcludeFromBackup`, its default,
+  written out). Nothing of it is logged.
+
+**Consequences.**
+
+- Someone who unlocks the phone, or a forensic copy of an unlocked phone, can
+  read the day saved for the last 24 hours; the secure store would not have
+  stopped that either, since the app reads the day without asking for a
+  fingerprint.
+- Android's device-to-device transfer (moving to a new phone) is not
+  switched off by `allowBackup`; a transferred day is at most 24 hours old
+  and is removed on the next start. Not checked on a device.
+- Every removal path has a unit test with a fake store; the driver journey
+  checks what is left in storage after the routes end and after sign-out.
+
+## 29. The staff apps ask for the second factor themselves
+
+**Context.** Sellers can turn on an authenticator app on the website, and the
+database refuses a password-only session of such an account everything but
+the second step (decision 23). The native apps used to undo that sign-in and
+send the person to the website, which locked those sellers out of their app.
+
+**Decision.** The kit has a second-step screen. After the right password, an
+account with a verified authenticator is held at the session status
+`secondStep`: its roles are not read, and the sign-in form asks for the
+6-digit code. The code goes through the same steps as the website: an attempt
+is reserved with `mfa_reserve_attempt` before the code leaves, Auth's
+`challengeAndVerify` checks it, and `mfa_attempt_succeeded` gives the
+reservation back. The seller, driver and warehouse apps use it
+(`AppProviders secondStep="in-app"`); the shopper app still sends such
+accounts to the website until it gets the same screen.
+
+**Consequences.**
+
+- A wrong code says how many tries are left; after five in fifteen minutes the
+  pause holds even the right code and the message says how long to wait. The
+  code is never stored or logged.
+- Enrolling or removing an authenticator stays on the website.
+- Checked against the local stand-in for Auth (the seller journey); the hosted
+  project's Auth was not tried from the apps.

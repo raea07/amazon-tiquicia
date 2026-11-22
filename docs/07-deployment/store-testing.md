@@ -282,6 +282,34 @@ npx eas-cli submit --platform ios --profile production --id <build id> --non-int
 `--no-auto-testflight-setup` keeps the tool from creating TestFlight groups
 or inviting anyone; the owner manages testers.
 
+## The seller, driver and warehouse apps
+
+Yuntera Vende, Yuntera Ruta and Yuntera Bodega follow the same path as the
+shopper app, once each has been built for a phone (none has yet):
+
+- **One app per store and identifier.** Each needs its own app in Google Play
+  Console (Part 1, step 1) and in App Store Connect, under its own
+  identifier: `com.yuntera.vende`, `com.yuntera.ruta` and `com.yuntera.bodega`.
+  An identifier can never change after the first upload.
+- **One Expo project each**, in the company's Expo team account
+  (`raulea07s-team`, already named as `owner` in each app's `app.config.ts`).
+  The developer side runs `eas init` in each app's directory and copies the
+  project id into that app's `app.config.ts`, as for the shopper app; each
+  project then needs its own Google service-account key upload (Part 1, step
+  5) and its own iOS credentials.
+- **The drivers' app uses location while a route runs, with the screen off.**
+  Google Play asks, in **App content**, for the foreground service
+  permissions declaration: what the location service does (sharing the
+  position during the route in progress) and a short video of it in use. The
+  app does not ask for background location, so Play's separate
+  background-location declaration should not apply; Play Console says so when
+  the first build is uploaded. Apple's
+  review asks why the app uses the location background mode; the answer is
+  the same, and App Store Connect's privacy questions must say that precise
+  location is collected and linked to the driver. The app asks only for
+  location "while using the app", never "always", and for notifications on
+  Android 13 and later only to show the notice while the position is shared.
+
 ## Afterwards
 
 - **Owner:** for Android, start the rollout of each new draft release (Part
@@ -301,4 +329,5 @@ or inviting anyone; the owner manages testers.
   the store listing and the **Set up your app** tasks in Play Console: privacy
   policy, data safety, content rating, target audience.
 - **Demo data only.** The builds talk to the hosted preview backend.
-- **Only the shopper app** is ready for store testing.
+- **Only the shopper app** is ready for store testing. The other three need
+  their Expo projects, store apps and a first build (above).

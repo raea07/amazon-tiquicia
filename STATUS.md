@@ -31,7 +31,9 @@ four web apps are deployed as a preview on Vercel at
 `.vercel.app`); every address is behind a Vercel login, and the projects are
 not connected to the Git repository. A shopper app for iOS and Android exists
 with every shopping flow of the website, and the seller, driver and warehouse
-apps exist as skeletons. The shopper app's first store build for Android
+apps have every flow of their web counterparts (the drivers' app also shares
+the position during a route and works without signal); none of those three
+has been built for a phone yet. The shopper app's first store build for Android
 exists and waits for your Google key to go to Play's internal testing; no
 build has run on a phone or simulator yet. Payments and
 invoices are still simulated or missing, and no message is sent for real (see
@@ -165,7 +167,7 @@ In the order that unblocks the most.
 | Routes and warehouse | `apps/field`                                                       | Driver: the day's route, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with scan check, packing, receiving, stock lookup, checking in a returned parcel. A suspended driver sees a plain message and no route. Password reset and account deletion as in the other apps                                                                                                                                                                                                                                                                                                                                                   |
 | Database             | `supabase/`                                                        | 29 migrations, 80 tables (62 public, 18 private), 167 functions in `public` (155 for signed-in users, 11 open to visitors, 11 server-side only), no table, view or sequence reachable by an app role, two storage buckets with their rules, row-level security on every table as a second lock, double-entry ledger, one register for every refund, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                     |
 | Domain logic         | `packages/core`                                                    | Money and IVA, fees, featured-offer choice, search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. The shopper app (`apps/shop-native`) has every shopper flow of the website laid out for a phone: browse, search, product, cart, sign-in, checkout, payment (simulated), delivery code, orders, cancellation, returns, reviews, addresses, account, help. The seller, driver and warehouse apps are skeletons: sign-in, a screen for an account without access, and a home screen gated by role that reads real data. `packages/expo-kit` is what all four share: configuration, the session encrypted on the phone, the typed API, theme and components                                                                                                                                 |
+| Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. Shopper app: every shopper flow of the website. Seller app (Yuntera Vende): every seller-centre flow, packing to payouts and shop registration. Drivers' app (Yuntera Ruta): every driver flow, plus position sharing during a route and work without signal. Warehouse app (Yuntera Bodega): picking by camera or hand scanner, packing, receiving, stock lookup. The three ask for the second factor. `packages/expo-kit` is what all four share. None of the three has been built for a phone yet; until then, their users work in the web apps, too |
 | Notifications        | `packages/notifications`, `supabase/functions`, `tools/dev-notify` | A planner in the database turns each event into one message per person and channel, exactly once; a worker sends them by e-mail, WhatsApp, SMS and push with retries and dead letters; signed delivery reports; quiet hours; suppressions; account e-mails in the same words as Auth's templates. Runs locally against fake providers only                                                                                                                                                                                                                                                                                                                                                           |
 | Shared code          | `packages/{brand,ui,db,next-kit}`                                  | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session, security headers, forms)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Documentation        | `docs/`                                                            | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -374,31 +376,47 @@ These are missing, not hidden. The first group blocks a public launch.
 - Functions for the actions that existed only as direct writes (see "Things to
   know").
 
-**Native apps** (the shopper app is complete; the rest is missing)
+**Native apps** (all four have their screens; none of the seller, driver and
+warehouse apps has been built for a phone yet, so until then sellers, drivers
+and the warehouse use the web apps)
 
-- The screens of the seller, driver and warehouse apps beyond sign-in and a
-  home screen. Until then sellers, drivers and the warehouse use the web apps.
 - Push notifications. The database and the worker can send them, but no app
   registers its phone yet, and the package's permission and entitlement are
-  removed on purpose until that work starts.
-- Taking or uploading photos from the phone (the server side the seller app
-  would call exists).
-- Password reset, the second factor and account deletion in the apps. The
-  database function for deletion exists; both stores require it in the app
-  before the first submission. An account with a second factor is told to use
-  the website.
-- An offline queue for drivers, so a delivery confirmed without signal is sent
-  later.
+  removed on purpose until that work starts (the drivers' app may show only
+  the notice of its location service).
+- Taking or uploading photos from the phone: product photos in the seller app
+  (the server side exists) and delivery photos in the drivers' app. The seller
+  app's camera and photo texts come back with that work.
+- Password reset and account deletion inside the apps. The database function
+  for deletion exists; both stores require it in the app before the first
+  submission. The shopper app still sends an account with a second factor to
+  the website (the other three ask for the code).
 - Universal links (opening a yuntera.cr address in the app). No domain serves
   the files the phones check; the apps answer only addresses in their own
   schemes (`yuntera://`, `yuntera-ruta://` and so on), and those were not
   tested.
+- Seller app: inviting members, changing the shop's contact phone or e-mail
+  (not on the web either), and "use my current location" for a pickup place
+  (only a Plus Code; the app has no location permission). Its terms and
+  privacy links point at www.yuntera.cr unless `EXPO_PUBLIC_SHOP_URL` is set.
+- Drivers' app: a stop's district is not shown (`driver_today` does not return
+  it); actions sent after a dead zone are stamped with the time they arrive,
+  not the time they happened; starting a route needs signal; a driver
+  suspended while the phone has no signal keeps the saved route until a call
+  gets through (at most a day).
+- Warehouse app: scanning the bin as well as the product, and a cycle-count
+  adjustment screen (neither is in the web app).
+- Database checks the apps cannot make alone: `wms_confirm_pick` does not
+  compare the scanned code, `wms_receive` accepts more than was announced,
+  `driver_today` answers a suspended driver, and `driver_fail_stop`,
+  `driver_complete_stop` and `driver_report_position` do not range-check
+  coordinates.
 
 **Later**
 
 - English. The interface is Spanish only; error messages already exist in both.
-- Background location for drivers and camera barcode scanning (a hand scanner
-  works in the web app).
+- Background location for drivers and camera barcode scanning in the web app
+  (both exist in the native apps, unverified on a phone).
 - Sponsored listings, promotions and coupons, a map on the dispatch screen,
   bulk listing upload.
 
@@ -414,12 +432,14 @@ ones worth knowing about:
   the document says what would make this the wrong choice and when.
 - **A web app for drivers and the warehouse instead of native apps.** It works
   on any phone today and I could verify it; native builds I could not. The cost
-  is no background location and no offline mode. Native driver and warehouse
-  apps now exist as skeletons; the web app stays what they use until those
-  apps have screens and have run on a phone.
-- **Native apps share one kit and the web's API.** The shopper app and the
-  three skeletons use Expo, call the same database functions through the same
-  typed client, and keep the session encrypted on the phone.
+  is no background location and no offline mode. The native driver and
+  warehouse apps now have their screens, and the drivers' app shares the
+  position and works without signal; the web app stays what drivers and the
+  warehouse use until those apps have run on a phone.
+- **Native apps share one kit and the web's API.** All four use Expo, call the
+  same database functions through the same typed client, and keep the session
+  in the phone's secure store. The drivers' day kept for a dead zone is in the
+  app's ordinary storage, which the phone encrypts, and is removed within a day.
 - **Own drivers and a delivery code.** The customer's 4-digit code is checked
   on the server and is never shown to the driver or to staff.
 - **Fees are assumptions.** Commission by category, warehouse fee by size and
