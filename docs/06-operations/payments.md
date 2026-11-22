@@ -35,8 +35,29 @@ change and the reason are in the audit trail. The database refuses:
   or `onvo_live_secret_key_…`) and a webhook secret (`whsec_…`)
   (`payments_provider_not_ready`). The worker reports itself every time it
   runs (every minute on Supabase);
-- any change while an attempt is open at the gateway or a gateway refund is on
-  its way (`payments_work_open`): it would be stranded in the old mode.
+- any change while the environment being left still has work at the gateway:
+  an attempt being created, open, waiting, **declined** (ONVO's page can still
+  be paid after a decline until the worker stops it) or being stopped, or a
+  gateway refund not yet confirmed (`payments_work_open`): it would be
+  stranded, since the worker serves the current mode only.
+
+What happens across a change:
+
+- **An order placed in another mode and not paid yet** (in sandbox, or in the
+  other ONVO environment) is paid through the gateway of the current mode: the
+  shopper's **Pagar** moves its payment there. In sandbox, any unpaid order
+  shows the simulation. The simulation is shown only while the mode is
+  `sandbox`, whatever mode the order was placed in.
+- **Money paid in the environment the mode has left** (a page left open, an
+  event that comes late) is never applied by itself and never dropped: it is
+  kept for finance as **De otro entorno**, and the shopper's page says their
+  money arrived and is being reviewed.
+- **A refund of a payment taken in another environment** cannot go through
+  the worker. Test money (ONVO's test environment, or sandbox) is not real:
+  its refund completes at once as a simulation, with a note. Real money taken
+  in `live` and refunded after the mode left `live` is paid by finance by
+  bank transfer. A gateway refund left waiting for an environment the mode
+  has left can also be paid by transfer (**Ya lo transferí**).
 
 The seed refuses anything but `sandbox`, so a fresh database always starts
 there.
@@ -84,9 +105,10 @@ exact amount** (note §6.4), not by a code in the description.
 4. `payment_intent.succeeded` confirms the order. **Nobody at Yuntera
    confirms it by hand**: in `test` and `live` the console's manual
    confirmation is refused for these payments (`confirmed_by_gateway`). It
-   stays for bank transfers and for orders taken in sandbox.
+   stays for bank transfers (whose payment is not the gateway's: provider
+   `manual` in `test` and `live`) and, in sandbox, for SINPE Móvil.
 5. Above ₡100 000 the checkout warns that many banks limit SINPE Móvil to that
-   amount a day.
+   amount a day (a constant in the checkout form, not a setting).
 
 ### Cash on delivery
 
@@ -115,7 +137,17 @@ it goes to the review list as **Llegó tarde**.
   every money function does. A confirmation racing a cancellation or an
   expiry waits for it and then sees it.
 - Events come in any order. A success is never undone by an older failure; a
-  `processing` after a success is stale.
+  `processing` after a success is stale, and so is one older than the decline
+  already applied.
+- A card's `payment_intent.succeeded` can come before the
+  `checkout_session.succeeded` that tells us the intent's id. If it carries
+  our attempt id in its metadata (the intent is signed, and only our key
+  creates objects), it is applied to that attempt, which learns the intent's
+  id; the session event is then a duplicate. If the same money was meanwhile
+  kept as **Pago sin intento conocido**, that item closes itself when the
+  payment is applied, and money that is already an order's payment can never
+  be applied or refunded again from the review list
+  (`payment_review_applied`).
 - A success is applied only if its amount and currency are exactly the
   attempt's, the order still waits for its money, and it was not paid
   already. Anything else is kept for finance and changes nothing.
@@ -158,35 +190,42 @@ charged is the fee schedule (`fee_payment_methods`, mirrored in
 
 ### Por revisar (money that did not match)
 
-| What                      | Means                                                                       | Usual resolution                                                  |
-| ------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Monto distinto / moneda   | ONVO took another amount or currency than the attempt's                     | Refund; never applied as is                                       |
-| Llegó tarde               | Paid after the order was cancelled or expired                               | Refund (or ask the shopper to order again, then refund)           |
-| Pagado dos veces          | A second success for an order already paid                                  | Refund the second                                                 |
-| Transferencia sin pedido  | A SINPE Móvil transfer ONVO could not tie to a payment (custom number only) | Attach to its order if the amount is exact, or refund by transfer |
-| Pago sin intento conocido | A success naming nothing of ours (e.g. a lost creation answer)              | Accept for its order if it names one and the amount is exact      |
-| Reembolso no solicitado   | ONVO reports a refund we never asked for (made in its dashboard)            | Close with a note after checking                                  |
-| Contracargo               | A dispute. Answer in ONVO's dashboard before the deadline                   | Close with a note when settled                                    |
+| What                      | Means                                                                       | Usual resolution                                                                        |
+| ------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Monto distinto / moneda   | ONVO took another amount or currency than the attempt's                     | Refund; never applied as is                                                             |
+| Llegó tarde               | Paid after the order was cancelled or expired                               | Refund (or ask the shopper to order again, then refund)                                 |
+| Pagado dos veces          | A second success for an order already paid                                  | Refund the second                                                                       |
+| Transferencia sin pedido  | A SINPE Móvil transfer ONVO could not tie to a payment (custom number only) | Attach to its order if the amount is exact, or refund by transfer                       |
+| Pago sin intento conocido | A success naming nothing of ours (e.g. a lost creation answer)              | Accept for its order if it names one and the amount is exact                            |
+| De otro entorno           | Paid in the ONVO environment the mode had left (a page left open)           | Live money: refund (by transfer) or attach; test money: refund (nothing moves) or close |
+| Reembolso no solicitado   | ONVO reports a refund we never asked for (made in its dashboard)            | Close with a note after checking                                                        |
+| Contracargo               | A dispute. Answer in ONVO's dashboard before the deadline                   | Close with a note when settled                                                          |
 
 Each item has the same four choices: **Aplicar al pedido** (its own order,
 still waiting, same amount in colones), **Aplicar a otro pedido** (the order
 number; same rule), **Devolver** (through ONVO when there is a payment to
-refund against; otherwise by transfer), **Cerrar con nota**. A note is always
+refund against in the environment the worker serves; test money is refunded
+as a simulation; otherwise by transfer), **Cerrar con nota**. A note is always
 required. Money in this list is not in the ledger until it is applied to an
-order.
+order. Test money only pays an order taken in test, and real money never one.
+Refunding or closing an item finishes the attempt that brought the money, so
+the shopper can pay the order again while it waits. The shopper's order page
+says that money arrived and is being reviewed, being refunded or was refunded,
+whatever the order's own status (also for a cancelled order and for an order
+paid twice).
 
 ### Reembolsos
 
 Every refund the register books (decision 26) appears here until the money has
 reached the shopper:
 
-| State                          | Means                                                                                                                                                                                        |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Solicitado                     | Booked; the worker sends it to ONVO within seconds (or finance pays it, if by transfer)                                                                                                      |
-| Enviado, sin confirmar         | ONVO accepted it; waiting for `refund.succeeded`                                                                                                                                             |
-| Respuesta perdida: se verifica | The send timed out. ONVO has no idempotency key, so it is **never sent again blindly**: the worker reads the intent's refunded total first, and sends again only if ONVO holds nothing of it |
-| Completado                     | ONVO confirmed it, or finance recorded the transfer                                                                                                                                          |
-| Falló                          | ONVO refused it (`refund.failed`, or a 4xx). Nothing reached the shopper                                                                                                                     |
+| State                          | Means                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Solicitado                     | Booked; the worker sends it to ONVO within seconds (or finance pays it, if by transfer)                                                                                                                                                                                                                                                                                                                                                    |
+| Enviado, sin confirmar         | ONVO accepted it; waiting for `refund.succeeded`                                                                                                                                                                                                                                                                                                                                                                                           |
+| Respuesta perdida: se verifica | The send timed out. ONVO has no idempotency key, so it is **never sent again by itself**: for an hour (`gateway_refund_unknown_hold_minutes`) the worker reads the intent's refunded total and watches for ONVO's `refund.created`; it counts as sent only when the total covers it and every other refund of that payment whose answer was lost. After the hour it shows as **Falló** with the reason "no se supo si llegó al procesador" |
+| Completado                     | ONVO confirmed it, or finance recorded the transfer                                                                                                                                                                                                                                                                                                                                                                                        |
+| Falló                          | ONVO refused it (`refund.failed`, or a 4xx). Nothing reached the shopper                                                                                                                                                                                                                                                                                                                                                                   |
 
 The shopper's order page says **En camino** until **Completado**; the "refund
 completed" message, the payment's status (refunded or partly refunded), the
@@ -197,7 +236,15 @@ request.
 
 **A refund that failed:** check the reason in ONVO's dashboard. Then either
 **Enviar otra vez al procesador**, or pay it by bank transfer and **Ya lo
-transferí** with the bank's reference.
+transferí** with the bank's reference. For one whose answer was lost, first
+look in ONVO's dashboard whether the refund exists: if it does, do not send it
+again (its `refund.succeeded` will complete it, or close it by transfer
+reference); if it does not, send it again.
+
+This departs from the note (§6.7), which allows a resend once the intent shows
+nothing refunded: the note does not say that a refund still `pending` at ONVO
+already shows in the intent's total, so "nothing refunded" does not prove the
+first send created nothing, and a second send could pay the shopper twice.
 
 **Cash on delivery, and transfers confirmed by hand,** are always refunded by
 transfer: contact the shopper for their account (nothing collects it yet),
@@ -330,9 +377,10 @@ The fake's hosted page offers approve, decline, the bank's extra step (pass or
 fail), abandon and "never finishes". Its SINPE Móvil test numbers behave as
 ONVO's (`+50688888888` pays after 1.5 s here); any other number waits for
 `POST /_fake/sinpe/transfer {identification, amount}`. `POST /_fake/behaviour`
-makes it send every event twice, in reverse order, or not at all, and makes
-refunds fail, be refused, be held, or be created with the answer lost; see the
-file's header. The journey `tools/e2e/journeys/payments.cjs` runs the chain.
+makes it send every event twice, in reverse order, or not at all, makes
+refunds fail, be refused, be held, or be created with the answer lost, and
+makes its API slow (`{"api": "slow"}`, longer than the adapter's timeout) or
+down (`{"api": "down"}`, 503 for every call); see the file's header. The journey `tools/e2e/journeys/payments.cjs` runs the chain.
 
 ## Not verified, not built
 
@@ -347,9 +395,12 @@ file's header. The journey `tools/e2e/journeys/payments.cjs` runs the chain.
 - Payouts from ONVO to our bank (`payout.*` events) are ignored; matching them
   to the bank statement is manual.
 - A late payment for a cancelled order is refunded only once finance decides;
-  the shopper is not told automatically.
+  the shopper's order page says the money arrived and is being reviewed, but
+  no message is sent to them about it.
 - Native app: card payments open ONVO's page in the phone's browser and come
-  back by the app's link; this was checked in the web export only, never on a
-  phone.
+  back by the app's link; only a return through ONVO's own link back
+  (`?pago=retorno`) counts as a hint, while closing the browser says nothing
+  was charged. This was checked in the web export and by unit tests only,
+  never on a phone.
 - No load test of the webhook; ONVO's 10-second answer window is assumed to
   hold (the receiver makes one database call).

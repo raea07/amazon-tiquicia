@@ -902,7 +902,10 @@ order. An order is paid when the gateway's signed notification, or the
 worker's own question, says so, applied with the order's lock; the return from
 the gateway's page is only a hint. A refund is completed, booked out and
 announced only when the gateway confirms it; a send whose answer was lost is
-checked against the gateway's refunded total before it is sent again. Modes:
+never sent again by itself: the worker checks the gateway for a while, then
+finance decides. Each event applies only in the gateway environment that is
+the current mode; money taken in the environment the mode has left is kept
+for finance, never applied by itself or dropped. Modes:
 `sandbox` (simulation), `test` (the gateway's test environment), `live`;
 changed only by an administrator, with a reason, once the worker reported
 itself ready for that environment.
