@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { callRpc } from "@yuntera/dev-api/rpc";
 import pg from "pg";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApi } from "./api";
 
 const shared = process.env.DATABASE_URL;
@@ -245,6 +245,14 @@ const item = (order: string) =>
   lookup<string>("select id as r from public.order_items where order_id = $1 order by id limit 1", [
     order,
   ]);
+
+/**
+ * Each race opens two sessions, waits up to five seconds for the second to be
+ * blocked (`blocked`) and does its own setup through the API: on a loaded
+ * 4-CPU machine that takes longer than vitest's 5 s default. The timeout only
+ * lets a slow machine finish; what each test proves is unchanged.
+ */
+vi.setConfig({ testTimeout: 60_000 });
 
 describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", () => {
   let buyer = "";

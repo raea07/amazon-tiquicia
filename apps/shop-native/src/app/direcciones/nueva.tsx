@@ -18,6 +18,7 @@ import { type Pin, PinPicker } from "@/components/pin-picker";
 import { validateAddress } from "@/lib/address";
 import { useCart } from "@/lib/cart-context";
 import { useDistricts } from "@/lib/catalog";
+import { needsSignIn } from "@/lib/guard";
 
 /**
  * A delivery address the Costa Rican way: the district, the "señas" a
@@ -43,7 +44,7 @@ export default function NewAddressScreen() {
     },
   );
 
-  if (status === "signedOut")
+  if (needsSignIn(status))
     return (
       <Redirect href={signInPath(`/direcciones/nueva?siguiente=${encodeURIComponent(returnTo)}`)} />
     );

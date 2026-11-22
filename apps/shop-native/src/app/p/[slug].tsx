@@ -386,6 +386,14 @@ export default function ProductScreen() {
 
       <Reviews product={page} />
 
+      {/* As on the website's product page: anyone can report a listing. */}
+      <TextLink
+        href={{ pathname: "/reportar", params: { producto: page.id } }}
+        testID="report-listing"
+      >
+        Reportar un problema
+      </TextLink>
+
       {page.related.length > 0 ? (
         <Stack gap={3}>
           <SectionHeader

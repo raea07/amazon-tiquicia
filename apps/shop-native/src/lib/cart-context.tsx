@@ -35,6 +35,8 @@ interface CartValue {
   postalCode: string;
   locationChosen: boolean;
   setLocation(postalCode: string): void;
+  /** Empties the cart and forgets the district, here and on the phone (after an account deletion). */
+  forget(): Promise<void>;
 }
 
 const CartContext = createContext<CartValue | null>(null);
@@ -91,6 +93,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (!isPostalCode(postalCode)) return;
         setLocationState(postalCode);
         appStorage.setItem(LOCATION_KEY, postalCode).catch(() => undefined);
+      },
+      forget: async () => {
+        setItems([]);
+        itemsRef.current = [];
+        setLocationState(null);
+        await Promise.all([appStorage.removeItem(CART_KEY), appStorage.removeItem(LOCATION_KEY)]);
       },
     }),
     [ready, items, location, persist],

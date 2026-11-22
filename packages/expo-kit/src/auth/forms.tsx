@@ -1,8 +1,10 @@
 import { type AppId, apps } from "@yuntera/brand";
 import { type ReactNode, useState } from "react";
 import { View } from "react-native";
+import { accountDeletedNotice } from "../account/deleted";
+import { AccountDeletedNotice, ForgotPasswordForm } from "../account/screens";
 import { SIGN_OUT_FAILED } from "../errors";
-import { Button } from "../ui/button";
+import { Button, LinkButton } from "../ui/button";
 import { FormMessage } from "../ui/feedback";
 import { Checkbox, TextField } from "../ui/fields";
 import { Card, Screen, Stack } from "../ui/layout";
@@ -14,16 +16,30 @@ import { useSession } from "./session";
 /**
  * E-mail and password, as on the web. One message for every wrong
  * combination; the e-mail stays, the password is cleared after a failure.
+ * `onForgotPassword` adds "Olvidé mi contraseña", which the screen answers
+ * by showing ForgotPasswordForm (account/screens.tsx) in its place.
  */
-export function SignInForm({ onSignedIn }: { onSignedIn?: () => void }) {
+export function SignInForm({
+  onSignedIn,
+  onForgotPassword,
+}: {
+  onSignedIn?: () => void;
+  onForgotPassword?: () => void;
+}) {
   const { status } = useSession();
   // The password was right and the account has an authenticator app: the
   // same place asks for its code.
   if (status === "secondStep") return <SecondStepForm onSignedIn={onSignedIn} />;
-  return <PasswordForm onSignedIn={onSignedIn} />;
+  return <PasswordForm onSignedIn={onSignedIn} onForgotPassword={onForgotPassword} />;
 }
 
-function PasswordForm({ onSignedIn }: { onSignedIn?: () => void }) {
+function PasswordForm({
+  onSignedIn,
+  onForgotPassword,
+}: {
+  onSignedIn?: () => void;
+  onForgotPassword?: () => void;
+}) {
   const { signIn } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,6 +57,7 @@ function PasswordForm({ onSignedIn }: { onSignedIn?: () => void }) {
       setPassword("");
       return;
     }
+    accountDeletedNotice.dismiss();
     onSignedIn?.();
   }
 
@@ -81,6 +98,11 @@ function PasswordForm({ onSignedIn }: { onSignedIn?: () => void }) {
       >
         Ingresar
       </Button>
+      {onForgotPassword ? (
+        <Button variant="ghost" block onPress={onForgotPassword} testID="forgot-password">
+          Olvidé mi contraseña
+        </Button>
+      ) : null}
     </Stack>
   );
 }
@@ -214,7 +236,10 @@ export function SignUpForm({ onSignedIn, legal }: { onSignedIn?: () => void; leg
     const outcome = await signUp({ fullName, email, password, accepted });
     setBusy(false);
     setResult(outcome);
-    if (outcome.signedIn) onSignedIn?.();
+    if (outcome.signedIn) {
+      accountDeletedNotice.dismiss();
+      onSignedIn?.();
+    }
   }
 
   return (
@@ -267,20 +292,33 @@ export function SignUpForm({ onSignedIn, legal }: { onSignedIn?: () => void; leg
   );
 }
 
-/** The whole sign-in screen of a staff-facing app (seller, driver, warehouse). */
-export function SignInScreen({ app }: { app: AppId }) {
+/**
+ * The whole sign-in screen of a staff-facing app (seller, driver, warehouse).
+ * `website` is the shop's website, where a reset link lands (ForgotPasswordForm).
+ */
+export function SignInScreen({ app, website }: { app: AppId; website?: string }) {
   const identity = apps[app];
   const { status } = useSession();
+  const [recovering, setRecovering] = useState(false);
   return (
     <Screen edges={["top", "bottom", "left", "right"]}>
       <View style={{ flex: 1, justifyContent: "center", gap: 24 }}>
         <Logo app={app} size={36} />
+        <AccountDeletedNotice />
         <Card>
-          <Text variant="title">Ingresar</Text>
-          {status === "secondStep" ? null : (
-            <Text tint="muted">Con el correo y la contraseña de su cuenta de {identity.name}.</Text>
+          {recovering && status === "signedOut" ? (
+            <ForgotPasswordForm website={website} onBack={() => setRecovering(false)} />
+          ) : (
+            <>
+              <Text variant="title">Ingresar</Text>
+              {status === "secondStep" ? null : (
+                <Text tint="muted">
+                  Con el correo y la contraseña de su cuenta de {identity.name}.
+                </Text>
+              )}
+              <SignInForm onForgotPassword={() => setRecovering(true)} />
+            </>
           )}
-          <SignInForm />
         </Card>
       </View>
     </Screen>
@@ -289,9 +327,17 @@ export function SignInScreen({ app }: { app: AppId }) {
 
 /**
  * Shown to a signed-in account that this app is not for: what happened, what
- * to do, and a way out. The database would refuse it anyway; this says so kindly.
+ * to do, and a way out. The database would refuse it anyway; this says so
+ * kindly. `deleteHref` adds the way to delete the account (both stores
+ * require it in the app, whatever the account is for).
  */
-export function NoAccessScreen({ app }: { app: Exclude<AppId, "shop" | "ops"> }) {
+export function NoAccessScreen({
+  app,
+  deleteHref,
+}: {
+  app: Exclude<AppId, "shop" | "ops">;
+  deleteHref?: string;
+}) {
   const { viewer, reloadRoles, rolesLoading, roles, rolesError } = useSession();
   // Roles that could not be read (no connection) are not a "no": say what happened instead.
   const text =
@@ -320,6 +366,11 @@ export function NoAccessScreen({ app }: { app: Exclude<AppId, "shop" | "ops"> })
             {!roles && rolesError ? "Intentar de nuevo" : "Ya me dieron acceso: revisar de nuevo"}
           </Button>
           <SignOutButton label="Salir e ingresar con otra cuenta" testID="no-access-sign-out" />
+          {deleteHref && roles ? (
+            <LinkButton href={deleteHref as never} variant="ghost" block testID="no-access-delete">
+              Eliminar mi cuenta
+            </LinkButton>
+          ) : null}
         </Stack>
       </View>
     </Screen>

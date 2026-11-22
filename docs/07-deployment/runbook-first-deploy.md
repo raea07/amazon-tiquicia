@@ -15,6 +15,8 @@ production, with the Supabase and Vercel dashboards open.
   four apps redeployed each time: the preview has 33 migrations. What was run
   for the last four is under
   [What was done on the preview, 22 November 2026](#what-was-done-on-the-preview-22-november-2026).
+  Four more (`083510`, `083600`, `083700`, `083900`) are merged and applied
+  nowhere yet: [Migrations 083510 to 083900](#migrations-083510-to-083900).
   Each step says what was actually run and what differed from the local
   build. Places that differed, or still may, are marked ⚠.
 - **It costs money or it does not, depending on step 1.** Decide before
@@ -1031,7 +1033,8 @@ taken in sandbox counts as real money for invoicing
 (`invoice_money_documented` checks only the sandbox provider and the test
 environment), so it would be documented once an issuer is set up; the
 console's invoices page and the shopper's order page say slightly wrong
-things in simulation.
+things in simulation. Both are fixed by `083510`, merged since and not yet
+applied ([Migrations 083510 to 083900](#migrations-083510-to-083900)).
 
 **For production**, on the throwaway project built for it: do points 1 to 3
 of the 083200 section and point 1 of the 083400 section first, all four
@@ -1043,6 +1046,125 @@ as they did here on a fresh project except `125`'s last check; keep
 set-up; and with e-mail confirmation on, check that sign-up with an existing
 address and with a new one look the same, which the preview cannot show.
 
+### Migrations 083510 to 083900
+
+Four migrations merged on 22 November 2026 and **applied nowhere yet**, the
+hosted preview included (it has 33). Apply them in filename order, which is
+also the order they need, in one sitting:
+
+1. `20261121083510_invoicing_fixes.sql`: simulated money kept out of
+   invoicing, and what the console and the order page say about it.
+2. `20261121083600_seller_listings.sql`: offers on another shop's product,
+   variants on and off, a listing back to draft, the shop's description and
+   logo, offers paused below the price floor.
+3. `20261121083700_console_catalogue.sql`: categories, brands, search
+   synonyms, review moderation, staff corrections and take-downs.
+4. `20261121083900_native_accounts.sql`: the consent source on the two
+   notification-settings functions.
+
+`083510` sorts before `083600` and `083700` although it was written without
+them; none of the three redefines a function another of them changes, so the
+order is safe. None needs a worker, and none may be deployed for them: the
+invoice jobs that `083510` ends are ended by the migration itself and by the
+`invoice-sweep` job that is already scheduled, and the messages `083600` and
+`083700` add are only planned, as every other message is until a worker
+exists.
+
+What they change in a database that already has data, once:
+
+- `083510`: `payments` gains `simulated`, decided for every captured payment
+  with the payments mode in force **when it was captured** (read from the
+  `app_settings` audit trail by `private.payments_mode_at`), so applying it in
+  any mode is safe; from now on a trigger decides it at capture. Every
+  waiting invoice job for money that never gets a document (simulated money
+  while `invoicing_policy.simulated_payments` is off) ends as done with
+  `last_error` `simulated_money`: on the preview, the 3 waiting
+  `payment.captured` jobs and the 1 waiting `fiscal.refund_booked` job.
+  Redefined: `invoice_money_documented`, `open_gateway_refund`,
+  `ops_resolve_payment_review` (cash or a hand-confirmed transfer in test mode
+  is refunded by transfer), `invoice_plan` and `invoice_sweep`. New:
+  `ops_invoicing_state` (finance) and `my_order_invoicing` (the order's
+  shopper).
+- `083600` and `083700`: the paused offers, hidden reviews and waiting shop
+  and listing changes already on the preview stay as they are and appear in
+  the new screens; existing categories, brands and reviews keep their state.
+  STATUS ("Things to know", seller listings and the console catalogue) lists
+  the rules they bring.
+- `083900`: `set_my_notification_settings` and
+  `seller_set_notification_settings` are dropped and created again with one
+  more argument, `p_source`, defaulting to the website's own value
+  (`web_cuenta`, `seller_cuenta`), and granted again to `authenticated`
+  only. Nothing is rewritten. The websites keep working unchanged; the
+  shopper app already in Google Play's internal testing (built from
+  `3f251c3`) keeps working too, but its consents are still logged as given
+  on the website until it is rebuilt.
+
+Do this in order.
+
+1. **Check the starting point**: `remote-db.sh status` lists 33 applied
+   files and these four pending, and nothing else pending.
+
+   ```sql
+   select value from public.app_settings where key = 'payments_mode';             -- "sandbox" on the preview
+   select value ->> 'simulated_payments' from public.app_settings where key = 'invoicing_policy'; -- false
+   -- invoice jobs waiting now (4 on the preview: 3 captures, 1 refund)
+   select e.topic, count(*) from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
+   where j.consumer = 'invoice' and j.status <> 'done' group by 1;
+   ```
+
+2. **Apply the four** with `remote-db.sh push`; `status` then lists 37 files.
+3. **Check what they left**:
+
+   ```sql
+   -- every captured payment is decided; on the preview all of them are simulated
+   select simulated, count(*) from public.payments
+   ```
+where status in ('captured', 'partially_refunded', 'refunded') group by 1; -- no null
+-- the jobs for simulated money ended without a document
+select j.status, j.last_error, count(*) from private.outbox_jobs j where j.consumer = 'invoice' group by 1, 2;
+-- exactly one function of each name, the new form
+select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+and p.proname in ('set_my_notification_settings', 'seller_set_notification_settings'); -- two rows, each ending in ", text)"
+select has_function_privilege('anon', 'public.set_my_notification_settings(boolean, boolean, boolean, boolean, text, boolean, text, bigint, text)', 'execute'); -- false
+
+````
+
+4. **Run the suites** with `remote-db.sh test`: all 28 files, among them
+`152_invoicing_fixes.sql`, `155_seller_listings.sql`,
+`160_console_catalogue.sql` and `170_native_accounts.sql`. Each runs in
+one transaction that is rolled back and asserts only on its own rows or
+on differences from a baseline, so the preview's orders, simulated
+payments, reviews, paused offers and waiting changes do not disturb them
+(`supabase/scripts/used-db-check.sh` proves this on a lane made to look
+like the preview). Two rows say `skipped`, as before, and no other:
+`125_followups.sql` `net_grants` (the platform's grants on schema `net`,
+made by `supabase_admin`) and `100_notifications.sql` part 2 (two workers
+at once: it needs no other session on the database and a second
+connection through `dblink`, which the hosted project refuses).
+5. **Redeploy the four web apps together** (step 7): the console reads the
+new `ops_invoicing_state` fields and the catalogue screens, the shop the
+order page's invoicing texts, the brand filter and the category menu, the
+seller centre the listing and shop screens. An app deployed before the
+migrations would call functions that do not exist yet.
+6. **Rebuild the shopper and seller apps after `083900` is applied**, never
+before: they now send `p_source`, which the old functions do not accept.
+Send the store builds from that code only once the preview has all four
+migrations. The drivers' and warehouse apps call neither function.
+7. **A smoke test**: in the console's Comprobantes page the simulation
+notice and no "dinero real" while the preview is in `sandbox`; on a paid
+order's page in the shop the sentence for simulated money; the
+notification settings saved once from the shop's account page (the
+consent log row says `web_cuenta`).
+
+**Not verified anywhere but locally:** none of the four has run against the
+hosted project. Auth's rate limits on password checks and reset e-mails
+(the native apps' "Olvidé mi contraseña") are not exercised by the local API
+stand-in; the reset links the apps request go to `<shop website>/auth/confirm`,
+which must be in the hosted project's Auth redirect allow-list (set
+`EXPO_PUBLIC_SHOP_URL` in an app's build if the website's address differs
+from the planned one).
+
 ## 4. Confirm the database is what the migrations say
 
 Write these to a file and run it with `remote-db.sh sql <project-reference>
@@ -1053,8 +1175,8 @@ select count(*) from public.districts;            -- 494
 select id, active from public.delivery_zones;      -- gam-core and gam-extended active; national not
 select key, value from public.app_settings;        -- payments_mode "sandbox"
 select jobname, schedule from cron.job;            -- expire-unpaid-orders, refresh-product-signals,
-                                                   -- notify-sweep, cron-history-cleanup (082600)
-```
+                                                -- notify-sweep, cron-history-cleanup (082600)
+````
 
 Then, once the project has been up for ten minutes, check that the scheduler
 really runs the jobs:

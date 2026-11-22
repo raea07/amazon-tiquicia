@@ -38,6 +38,8 @@ select pg_temp.remember('cafetal_id', (select id::text from public.sellers where
 select pg_temp.remember('tecnocasa_id', (select id::text from public.sellers where slug = 'tecnocasa'));
 select pg_temp.remember('cafetal_offer', pg_temp.offer('cafe-molido-tarrazu-340g')::text);
 select pg_temp.remember('tecnocasa_offer', pg_temp.offer('cargador-usb-c-30w-nimbo')::text);
+-- The seed's shop and listing awaiting approval, also on a used database (_helpers.sql).
+select pg_temp.seed_awaiting_approval();
 select pg_temp.remember('pending_offer',
   (select o.id::text from public.offers o join public.sellers s on s.id = o.seller_id where s.slug = 'bazar-nuevo'));
 select pg_temp.remember('depot', (select id::text from public.warehouses where code = 'SJO1'));
@@ -48,9 +50,12 @@ select pg_temp.remember('luis_route',
 select pg_temp.remember('luis_stop',
   (select rs.id::text from public.route_stops rs where rs.route_id = current_setting('t.luis_route')::uuid limit 1));
 select pg_temp.remember('total_orders', (select count(*)::text from public.orders));
+-- What a visitor's search may find: every active product with a price. A
+-- product in a hidden category stays in search (083700); on a used database
+-- staff may have hidden one.
 select pg_temp.remember('public_products',
-  (select count(*)::text from public.products p join public.categories c on c.id = p.category_id
-   where p.status = 'active' and p.min_price_minor is not null and c.active));
+  (select count(*)::text from public.products p
+   where p.status = 'active' and p.min_price_minor is not null));
 
 -- Every table, view and sequence in the two schemas, and the statement that
 -- tries each operation on it. An API role must be refused every one of them

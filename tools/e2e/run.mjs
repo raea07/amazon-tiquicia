@@ -26,10 +26,15 @@ mkdirSync(shots, { recursive: true });
 
 const failed = [];
 for (const journey of journeys) {
-  // Every journey changes data (orders, routes, sellers), so each starts from the seed.
-  const reset = spawnSync("bash", [`${root}supabase/scripts/local-db.sh`, "reset"], {
-    stdio: ["ignore", "ignore", "inherit"],
-  });
+  // Every journey changes data (orders, routes, sellers), so each starts from the seed,
+  // except where E2E_KEEP_DATA=1 asks for a database that keeps what each journey did
+  // (supabase/scripts/used-db-check.sh uses it to make a lane look like a used project).
+  const keep = process.env.E2E_KEEP_DATA === "1";
+  const reset = keep
+    ? { status: 0 }
+    : spawnSync("bash", [`${root}supabase/scripts/local-db.sh`, "reset"], {
+        stdio: ["ignore", "ignore", "inherit"],
+      });
   if (reset.status !== 0) {
     console.error(`Could not reset the database before "${journey}".`);
     process.exit(1);

@@ -1,9 +1,13 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  callsAsVisitor,
   lockedMessage,
   needsSecondStep,
   normaliseCode,
   refusedMessage,
+  SECOND_STEP_CALLS,
   totpFactorId,
 } from "./second-step";
 
@@ -84,5 +88,40 @@ describe("second step", () => {
       { locked: false, attempts_left: 4, retry_after_seconds: 0 },
     );
     expect(text).toBe("Pasó demasiado tiempo. Escriba el código que muestra ahora su aplicación.");
+  });
+});
+
+describe("calls halfway through the second step", () => {
+  const migrations = join(__dirname, "../../../../supabase/migrations");
+
+  it("go as a visitor, except the second step's own", () => {
+    for (const fn of ["search_products", "list_categories", "list_districts", "report_content"]) {
+      expect(callsAsVisitor("secondStep", fn), fn).toBe(true);
+    }
+    for (const fn of SECOND_STEP_CALLS) expect(callsAsVisitor("secondStep", fn), fn).toBe(false);
+    for (const status of ["signedIn", "signedOut", "loading"]) {
+      expect(callsAsVisitor(status, "search_products"), status).toBe(false);
+    }
+  });
+
+  it("let through exactly what the database lets through", () => {
+    // The last migration that defines check_request holds the list.
+    const defining = readdirSync(migrations)
+      .filter((name) => name.endsWith(".sql"))
+      .sort()
+      .map((name) => readFileSync(join(migrations, name), "utf8"))
+      .filter((sql) => /function public\.check_request\(\)/.test(sql));
+    const sql = defining.at(-1) ?? "";
+    const list = /v_function not in \(([^)]*)\)/.exec(sql)?.[1] ?? "";
+    const names = [...list.matchAll(/'([a-z_]+)'/g)].map((match) => match[1]);
+    expect(names.length).toBeGreaterThan(2);
+    expect([...SECOND_STEP_CALLS].sort()).toEqual(names.sort());
+  });
+
+  it("are sent with the public key instead of the person's token", () => {
+    const provider = readFileSync(join(__dirname, "session.tsx"), "utf8").replace(/\s+/g, " ");
+    expect(provider).toContain(
+      'callsAsVisitor(statusNow.current, fn) ? call.setHeader("Authorization", `Bearer ${env.supabaseKey}`) : call;',
+    );
   });
 });

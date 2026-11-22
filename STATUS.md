@@ -1,13 +1,25 @@
 # Status
 
-Updated 22 November 2026, after two more pieces were merged on top: the
-seller actions the lockdown had closed (offers on another shop's product,
-variants on and off, a listing back to draft, the shop's description and logo,
-offers paused below the price floor; migration `083600`) and the console's
-catalogue tools (categories, brands, search synonyms, review moderation,
-staff corrections and take-downs; migration `083700`). **Neither is applied
-to the hosted preview yet**, which stays at 33 migrations; the deployment
-notes are under "Things to know". Before them, the payment gateway and
+Updated 22 November 2026, after four more pieces were merged on top. The
+invoicing fixes found on the hosted preview (simulated money, cash on
+delivery in sandbox included, never gets an electronic document; the
+console's and the order page's texts in simulation; the document writer's
+escaping proven; every database suite holds on a used database; migration
+`083510`). The seller actions the lockdown had closed (offers on another
+shop's product, variants on and off, a listing back to draft, the shop's
+description and logo, offers paused below the price floor; migration
+`083600`) and the console's catalogue tools (categories, brands, search
+synonyms, review moderation, staff corrections and take-downs; migration
+`083700`). And the account screens inside the four native apps (deleting
+the account, the password reset and change, the shopper's second step,
+reporting a listing, message channels, the seller's team, invitations, shop
+changes and notification settings; migration `083900`). **None of the four
+migrations is applied to the hosted preview yet**, which stays at 33; the
+order and the deployment notes are in the
+[runbook](docs/07-deployment/runbook-first-deploy.md#migrations-083510-to-083900)
+and under "Things to know". The shopper app's Android build was sent to
+Google Play's internal testing on 22 November 2026 and waits for you to
+release it ("What needs you", item 11). Before them, the payment gateway and
 electronic invoicing were merged on top of both follow-ups: payments through ONVO in two new modes
 (`test`, `live`) with cards on its hosted page, SINPE Móvil matched by the
 payer, refunds sent through it and completed only on its confirmation, and a
@@ -52,11 +64,13 @@ four web apps are deployed as a preview on Vercel at
 not connected to the Git repository. A shopper app for iOS and Android exists
 with every shopping flow of the website, and the seller, driver and warehouse
 apps have the flows of their web counterparts (the drivers' app also shares
-the position during a route and works without signal; the sellers' app still
-lacks the shop's team and the reviewed changes to its details, see "Not
-built"); none of those three has been built for a phone yet. The shopper
-app's first store build for Android exists and waits for your Google key to
-go to Play's internal testing; no build has run on a phone or simulator yet.
+the position during a route and works without signal); all four now delete
+the account, reset and change the password inside the app; none of those
+three has been built for a phone yet. The shopper app's Android build
+(version code 4, from commit `3f251c3`, before the account screens) is in
+Google Play's internal testing as a draft release that you still have to
+release; no iPhone build exists, and no build has run on a phone or
+simulator yet.
 Payments and electronic invoices now exist as code, run against local fakes
 of the gateway and of Hacienda: nothing has charged a card, refunded money or
 sent a document to Hacienda, and no message is sent for real (see "Not
@@ -217,13 +231,29 @@ In the order that unblocks the most.
        build to confirm.
     4. Publish a privacy policy at a public address. The account-deletion page
        exists (the shop's `/ayuda/eliminar-cuenta`) and every web app can
-       delete an account; the native apps do not yet, and both stores require
-       it in the app at the first submission.
+       delete an account. All four native apps now can too, but the store
+       builds made so far come from `3f251c3`, before that work; both stores
+       require it in the app at the first public submission. A build with it
+       must wait until the preview has migration `083900` (the apps send an
+       argument the preview's functions do not accept yet).
     5. Decide whether the four apps keep one shared icon, as the brand book
        says today, or get icons that tell them apart in the store.
     6. An Apple Developer Program membership (US$99 a year) for any iOS build on
        a phone, TestFlight or the App Store, and a Google Play Console account
        (US$25). Demo accounts on the hosted project for the stores' reviewers.
+    7. **Release the Android draft in Play Console.** The build
+       `a20ef1d8-a926-40d4-947d-823cd87be32a` (version 0.1.0, version code 4,
+       commit `3f251c3`) was sent to the internal testing track on
+       22 November 2026 (submission `8d09854a-da67-4919-afe6-114fc50f633f`);
+       your Google key is uploaded on Expo. Because the app was never
+       published, it arrived as a draft: add testers and start its rollout
+       ([store-testing.md](docs/07-deployment/store-testing.md), Part 1,
+       steps 6 to 8). No iPhone build exists yet: run the iPhone command in
+       Part 2 once, interactively, from commit `3f251c3` (`git checkout
+       3f251c3` after cloning), so both stores carry the same code as the
+       preview until the preview is updated. The team account has used 4 of
+       its 15 Android builds and 2 of its 15 iOS builds in the cycle from
+       1 November to 1 December 2026; nothing was billed.
 
 ## What is built
 
@@ -233,12 +263,12 @@ In the order that unblocks the most.
 | Seller centre        | `apps/seller`                                                      | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, a request to change the payout account, and the team (invitations that the invited person accepts) and requests to change the shop's name, fiscal details or contact. Selling an existing product of another shop (found by name, brand or barcode, no review), switching variants off and on, taking a listing back to draft, the Tienda page (description and logo, both reviewed), and offers paused below the price floor with the reason and a one-step fix. A photo manager on each listing (resized in the browser, reviewed before they show), the shop's notification settings, an optional second factor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Internal console     | `apps/ops`                                                         | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail, shop-change requests, routes released by a driver who stopped being active, recording a return's goods back, checking in a returned parcel and releasing a locked delivery code. Photo review and take-down, the messages each order produced and the stuck ones with a resend button, staff's second factor (enrolment, the second step at sign-in, an administrator's reset of a colleague's). Offers a fee change paused (`/tarifas`), a listing edit that would pause other shops' offers shown with a confirmation, shops' logos (`/catalogo/logotipos`) and descriptions (`/cambios-tienda`). Catálogo: categories (create, rename with redirect, move, order, hide, delete if unused), brands (create, rename, hide, merge), search synonyms with a preview, review moderation with reasons, and correcting, taking down and putting back a published product (the console's catalogue forms work without JavaScript), and on dispatch a door position outside the country or a closing received late. Order search by name without the name in the address; navigation that folds into a menu on a phone |
 | Routes and warehouse | `apps/field`                                                       | Driver: the day's route with each stop's district, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with the scanned code checked by the database, packing, receiving, stock lookup, checking in a returned parcel. A suspended driver sees a plain message and no route. Password reset and account deletion as in the other apps                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Database             | `supabase/`                                                        | 35 migrations, 97 tables (64 public, 33 private), 248 functions in `public` (226 for signed-in users, 17 of them also open to visitors, 22 server-side only), no table, view or sequence reachable by an app role, two storage buckets with their rules, row-level security on every table as a second lock, double-entry ledger, one register for every refund and one way back for each, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Database             | `supabase/`                                                        | 37 migrations, 97 tables (64 public, 33 private), 250 functions in `public` (228 for signed-in users, 17 of them also open to visitors, 22 server-side only), no table, view or sequence reachable by an app role, two storage buckets with their rules, row-level security on every table as a second lock, double-entry ledger, one register for every refund and one way back for each, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Domain logic         | `packages/core`                                                    | Money and IVA, fees, the offer order (one rule shared with the database by a parity test), search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. Shopper app: every shopper flow of the website. Seller app (Yuntera Vende): the seller centre's flows from packing to payouts and shop registration, except the team and the requests to change the shop's details. Drivers' app (Yuntera Ruta): every driver flow, plus position sharing during a route and work without signal; each stop shows its district, and actions queued without signal keep the time they happened. Warehouse app (Yuntera Bodega): picking by camera or hand scanner, packing, receiving, checking in returned parcels, stock lookup. The three ask for the second factor. `packages/expo-kit` is what all four share. None of the three has been built for a phone yet; until then, their users work in the web apps, too                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. Shopper app: every shopper flow of the website. Seller app (Yuntera Vende): the seller centre's flows from packing to payouts and shop registration, the team and invitations, the reviewed changes to the shop's name, fiscal details and contact, where its description and logo stand (written and uploaded in the seller centre), and the shop's notification settings. Drivers' app (Yuntera Ruta): every driver flow, plus position sharing during a route and work without signal; each stop shows its district, and actions queued without signal keep the time they happened. Warehouse app (Yuntera Bodega): picking by camera or hand scanner, packing, receiving, checking in returned parcels, stock lookup. All four delete the account (the password typed again, blockers explained, nothing left on the phone afterwards), send the password-reset link (which opens the website) and change the password; the shopper app asks for the second step inside the app, reports a listing and saves message channels with the commercial consent, the consent logged as given in the app. The three ask for the second factor. `packages/expo-kit` is what all four share. None of the three has been built for a phone yet; until then, their users work in the web apps, too                                                                                                              |
 | Notifications        | `packages/notifications`, `supabase/functions`, `tools/dev-notify` | A planner in the database turns each event into one message per person and channel, exactly once; a worker sends them by e-mail, WhatsApp, SMS and push with retries and dead letters; signed delivery reports; quiet hours; suppressions; account e-mails in the same words as Auth's templates. Runs locally against fake providers only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Payments             | `packages/payments`, `supabase/functions`, `tools/dev-notify`      | Three modes: `sandbox` (the simulation), `test` and `live` through ONVO. Cards on ONVO's hosted page (3-D Secure there), SINPE Móvil matched by the payer's identification; an order is paid only on ONVO's signed notification or the worker's own question, applied once under the order's lock. Money that does not match is kept for finance. Refunds sent once and completed only on ONVO's confirmation; cash and hand-confirmed transfers paid back by finance by transfer. A pay step on the shop's and the shopper app's order page; the console's Cobros section (review, refunds, reconciliation, mode and fees). Runs locally against a fake ONVO only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Electronic invoices  | `packages/invoicing`, `supabase/functions`, `tools/dev-hacienda`   | Version 4.4 documents issued by the platform: a tiquete (or a factura, if asked at checkout) for the delivery fee, a fee factura to each seller, credit notes on cancellations and returns; numbered without gaps, signed XAdES-EPES, sent once, answers recorded. On the shopper's order page, in the seller's statements, and in the console's Comprobantes section (rejected, waiting, unsent, replace and retry). Runs locally against a fake of Hacienda only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Electronic invoices  | `packages/invoicing`, `supabase/functions`, `tools/dev-hacienda`   | Version 4.4 documents issued by the platform: a tiquete (or a factura, if asked at checkout) for the delivery fee, a fee factura to each seller, credit notes on cancellations and returns; numbered without gaps, signed XAdES-EPES, sent once, answers recorded. Simulated money (the sandbox simulation, the gateway's test environment, cash on delivery taken while payments are in sandbox), decided once when it is captured, never gets a document unless `invoicing_policy.simulated_payments` says so; its jobs end on their own. On the shopper's order page, in the seller's statements, and in the console's Comprobantes section (rejected, waiting, unsent, replace and retry). Runs locally against a fake of Hacienda only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Shared code          | `packages/{brand,ui,db,next-kit}`                                  | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session and its lifetime, the sign-in limit, security headers, forms, cache tags)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Documentation        | `docs/`                                                            | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Brand                | `docs/brand/`, `packages/brand/`                                   | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -355,20 +385,21 @@ How the new parts work, in short:
 ## How it was checked
 
 On a development machine, after the last change, on the combination of
-everything above with both follow-ups, payments, invoicing, seller listings
-and the console catalogue merged (lanes 11 and 12 of `tools/dev/stack.sh`,
-each suite on a freshly seeded database unless it says otherwise):
+everything above with both follow-ups, payments, invoicing, the invoicing
+fixes, seller listings, the console catalogue and the native apps' account
+screens merged (lanes 13 and 14 of `tools/dev/stack.sh`, each suite on a
+freshly seeded database unless it says otherwise):
 
-| Check                | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit tests           | 1217 pass (core 281, native kit 287, notifications 271, shared web code 89, invoicing 63, payments 40, seller app 39, drivers' app 31, API client 25, brand 21, shopper app 21, local API 16, warehouse app 16, fake providers and gateway 10, fake of Hacienda 7); the offer-order parity test reads both new migrations and the definitions in force                                                                                                                                                                             |
-| Database tests       | 26 files pass on PostgreSQL 16 with the stack stopped: the 24 of the previous round, seller listings (155) and the console catalogue (160). 155 and 160 also pass twice in a row on the same database without a reset, after the seller-listings and after the console-catalogue journeys had committed their changes to it, and on a database built to `083500` with committed activity (a paused offer, a hidden review, waiting shop and listing changes) before `083600` and `083700` were applied; 110 and 150 pass there too |
-| API contract tests   | 148 pass in 19 files (the seller listings' and the catalogue's, and the catalogue's two races: two sessions changing one product's reviews, and a category created while another moves): every screen's payload, called as each role, matches the types the apps use; the race tests run two database sessions at once                                                                                                                                                                                                             |
-| Browser journeys     | 21 pass in Chromium, each on a freshly seeded database, with no console errors or server errors: the 19 of the previous round, seller listings and the console catalogue (including a catalogue form posted before the console's scripts run, the badge of a category hidden by one above it, and headings and touch targets at 390 px)                                                                                                                                                                                            |
-| Native journeys      | 5 pass (279 checks) through the web export of the native apps, in Chromium at phone size, each on a freshly seeded database; no cipher or hash implementation in any bundle                                                                                                                                                                                                                                                                                                                                                        |
-| Callers of the API   | Probed through the local API: a visitor, a shopper, staff without a factor, staff with a factor before the second step (refused everything but the second step's own calls), the notification worker's secret key (answered, about 9 ms a call on this loaded machine), and a token after sign-out (`session_ended`)                                                                                                                                                                                                               |
-| Native configuration | For the shopper app in the store variant after the merge: the introspected configuration resolves (`com.yuntera.shop`, no non-exempt encryption), `expo install --check` finds every package at Expo SDK 58's version (`expo-web-browser` ~58.1.0 included), expo-doctor passes 20 of 20, and the iOS and Android bundles export; the bundle scan finds no cipher in them, nor in the four web exports (the invoicing signer is server-side code and reaches no bundle). The other three apps did not change                       |
-| Lint and types       | No lint errors (151 warnings and 333 notes, of kinds already there) and no type errors in the 20 typecheck tasks                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Check                | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit tests           | 1301 pass in 15 packages (native kit 338, core 281, notifications 271, shared web code 89, invoicing 73, seller app 54, payments 40, drivers' app 31, shopper app 28, API client 25, brand 21, local API 16, warehouse app 16, fake providers and gateway 10, fake of Hacienda 8); the seller app's tests read the seller centre's shop page for the description and logo texts                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Database tests       | 28 files pass on PostgreSQL 16 with the stack stopped, no skipped row: the 26 of the previous round, the invoicing fixes (152) and the native accounts (170). All 28 pass again, without a reset, after the API contract tests. `supabase/scripts/used-db-check.sh 13 quick` and `13 all` (all 23 browser journeys first, on one database without resets) pass: every suite twice on a database made to look like the preview, the row count of all 109 tables unchanged, the only skipped row `125_followups` `net_grants` as designed, a suite broken on purpose failing alone, and the role the script creates removed at the end                                                                                                                                              |
+| API contract tests   | 155 pass in 21 files (the invoicing fixes' and the native accounts' among them): every screen's payload, called as each role, matches the types the apps use; the race tests run two database sessions at once, with a 60-second timeout for a loaded machine                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Browser journeys     | 23 pass in Chromium, each on a freshly seeded database, with no console errors or server errors: the 21 of the previous round, the invoicing states and the document writer's escaping                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Native journeys      | 8 pass (414 checks) through the web export of the native apps, in Chromium at phone size, each on a freshly seeded database: the 5 of the previous round and the account screens of the shopper, seller and field apps (including the shop's description and logo in the seller app); no cipher or hash implementation in any bundle                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Callers of the API   | Probed through the local API: a visitor, a shopper, staff without a factor, staff with a factor before the second step (refused everything but the second step's own calls), the notification worker's secret key (answered, about 9 ms a call on this loaded machine), and a token after sign-out (`session_ended`)                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Native configuration | For the shopper app in the store variant after the merge: the introspected configuration resolves (`com.yuntera.shop`, no non-exempt encryption), `expo install --check` finds every package at Expo SDK 58's version (`expo-web-browser` ~58.1.0 included), expo-doctor passes 20 of 20, and the iOS and Android bundles export; the bundle scan finds no cipher in them, nor in the four web exports (the invoicing signer is server-side code and reaches no bundle). The other three apps did not change. Not run again after the account screens: they added no dependency, permission, entitlement, native module or `EXPO_PUBLIC_` variable, and left `app.config.ts`, `eas.json`, versions and build numbers as they were; only the web exports and their bundle scan ran |
+| Lint and types       | No lint errors (159 warnings and 333 notes, of kinds already there) and no type errors in the 20 typecheck tasks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 Money and the documented example still hold: every ledger transaction sums to
 zero, a seller's available + pending + in transit equals the ledger balance,
@@ -529,16 +560,20 @@ What these checks do **not** cover, stated plainly:
   the camera button were not.
 - **No real phones.** The drivers' app was tested in a phone-sized desktop
   browser with a simulated location.
-- **The native apps have not run on a phone.** On 21 November 2026 the
-  shopper app was built in the cloud three times, all successful at the first
-  try: a preview Android file and an iOS Simulator build in your personal Expo
-  account (now unused), and the first Android **store** build (`.aab`, version
-  0.1.0, build 2, identifier `com.yuntera.shop`) in the project `yuntera` of
-  your Expo team account, where your company's Apple certificate and App Store
-  Connect key also live. The store build has not been sent to Google Play: that
-  waits for your Google service-account key on Expo's website
+- **The native apps have not run on a phone.** The shopper app was built in
+  the cloud in your personal Expo account (a preview Android file and an iOS
+  Simulator build, now unused) and in the project `yuntera` of your Expo team
+  account, where your company's Apple certificate and App Store Connect key
+  also live. The Android store build `a20ef1d8-a926-40d4-947d-823cd87be32a`
+  (version 0.1.0, version code 4, identifier `com.yuntera.shop`, commit
+  `3f251c3`) was sent to Google Play's internal testing track on 22 November
+  2026 as a draft release (submission
+  `8d09854a-da67-4919-afe6-114fc50f633f`), with your Google key uploaded on
+  Expo; it reaches no tester until you release it
   ([`docs/07-deployment/store-testing.md`](docs/07-deployment/store-testing.md)
-  has the steps for both stores). No iPhone store build exists yet. Nothing has
+  has the steps for both stores). No iPhone store build exists yet; run it
+  from `3f251c3`. The account screens inside the apps came after `3f251c3`
+  and are in no store build. Nothing has
   been started on a phone or a simulator: cloud simulators need a paid Expo
   plan, so the first real look will be a tester's phone. Store-testing builds
   talk to the hosted preview with demo data. While the
@@ -546,7 +581,18 @@ What these checks do **not** cover, stated plainly:
   shows a placeholder instead. The web export proves the screens, navigation,
   Spanish text and API calls; it does **not** prove the secure storage of the
   session, the fonts, permission prompts, location, camera, gestures, keyboard
-  and safe areas of a real phone.
+  and safe areas of a real phone. For the account screens in particular: the
+  removal of the session and of the app's data from the phone after a
+  deletion, entering the second-step code, and following the reset e-mail's
+  link from a phone's mail app to the website and back to the app (the
+  journey follows the link only through Auth, because the website is not
+  running during the native journeys). Auth's rate limits on password checks
+  and reset e-mails on the hosted project are not exercised locally (the
+  local API stand-in does not enforce them; unit tests use stand-ins).
+- **Nothing of the four newest migrations ran against the hosted preview.**
+  `083510`, `083600`, `083700` and `083900` and their suites were run only on
+  local lanes, including one made to look like the preview
+  (`supabase/scripts/used-db-check.sh`).
 - **No load testing**, no security review by a third party.
 
 ## Not built
@@ -596,31 +642,36 @@ and the warehouse use the web apps)
 - Taking or uploading photos from the phone: product photos in the seller app
   (the server side exists) and delivery photos in the drivers' app. The seller
   app's camera and photo texts come back with that work.
-- Password reset and account deletion inside the apps. The database function
-  for deletion exists; both stores require it in the app before the first
-  submission. The shopper app still sends an account with a second factor to
-  the website (the other three ask for the code).
+- A reset code typed into the app. The reset e-mail's link opens the
+  website, where the new password is set, and the person then signs in to
+  the app again; a code in the app needs a mail server of our own, because
+  the hosted project cannot change the e-mail's text without one.
 - Universal links (opening a yuntera.cr address in the app). No domain serves
   the files the phones check; the apps answer only addresses in their own
   schemes (`yuntera://`, `yuntera-ruta://` and so on), and those were not
   tested.
-- Seller app, compared with the seller centre: the team (inviting someone,
-  accepting or declining an invitation, changing a member's role, leaving a
-  shop) and the reviewed requests to change the shop's public name, fiscal
-  details or contact phone and e-mail. The app says to use the seller centre
-  for those. Also missing: the shop's notification settings, photos (above)
-  and "use my current location" for a pickup place (only a Plus Code; the app
-  has no location permission). Its terms and privacy links point at
+- Seller app, compared with the seller centre: writing the shop's
+  description and uploading its logo (the account screen shows where each
+  stands, lets a waiting description be withdrawn and says that both are done
+  in the seller centre, under "Tienda"), the seller actions of `083600`
+  (offers on another shop's product, variants on and off, a listing back to
+  draft, paused offers), photos (above) and "use my current location" for a
+  pickup place (only a Plus Code; the app has no location permission). Its terms and privacy links point at
   www.yuntera.cr unless `EXPO_PUBLIC_SHOP_URL` is set.
 - Drivers' app: starting a route and delivering against the code need
   signal; a driver suspended while the phone has no signal keeps the
   saved route until a call gets through (at most a day). Notification
-  settings are not in the app.
+  settings are not in the drivers' or the warehouse app, as the web field app
+  has none.
 - Warehouse app: scanning the bin as well as the product, and a cycle-count
   adjustment screen (neither is in the web app).
-- Shopper app: reporting a listing (the shop's `/reportar` page) and the
-  choice of channels for messages are on the website only (the commercial
-  consent is in the app).
+- Shopper app: a cart line whose offer sold out says it is no longer
+  available; the website offers another shop's offer for it
+  (`cart_alternatives`), the app does not yet. There is no brand filter in
+  the app's search (the website has one), and its category menu is kept for
+  up to an hour, so a category staff just hid can still show there for that
+  long (its products stay on sale, as on the website). A product taken down
+  shows "No encontramos ese producto".
 
 **Later**
 
@@ -777,12 +828,14 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     invoicing: `invoice_money_documented` treats only the sandbox provider and
     the gateway's test environment as simulated. Nothing is issued while the
     issuer is not set up, but once it is, a new sandbox cash order on the
-    preview would get documents. Needs a new migration before the issuer is
-    set up anywhere with demo cash orders.
+    preview would get documents. Fixed by `083510` (below), not yet applied
+    there: apply it before the issuer is set up anywhere with demo cash
+    orders.
   - The console's invoices page says the payments waiting "will be issued in
     order" once the issuer is set up; simulated ones never will. The shopper's
     order page without a delivery fee says both that Yuntera issues no
-    document and that it issues one for the delivery.
+    document and that it issues one for the delivery. Both fixed by `083510` and the
+    redeployed console and shop.
   - Sign-in limits were tried from a network that leaves through several
     addresses, so the strict per-address limit was met only after about 20
     wrong passwords; the per-address behaviour as such is covered by the
@@ -841,16 +894,86 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     the rating and the category depth, have contract tests). No message was
     really sent: the new messages were only planned. The native shopper app
     does not offer another shop's offer for a sold-out cart line yet, and the
-    native seller app has no screens for these seller actions.
+    native seller app has no screens for these seller actions (it shows where
+    the description and logo stand and says they are changed in the seller
+    centre).
   - A form the browser posts itself, before an app's scripts have run (or
     when they never load), does what it says, but the page Next.js sends
     back for it is empty: seen on the console's catalogue forms and on the
     sign-in of the shop and the console alike. Nothing is lost; the next
     visit shows the outcome.
-  - To put them on the preview: apply `083600`, then `083700`, then run
-    `110`, `150`, `155` and `160` there, and redeploy all four web apps
-    together. Neither needs a worker: messages are only planned until one is
-    deployed, as for every other message.
+  - To put them on the preview: with `083510` before them and `083900`
+    after, in the order of the
+    [runbook](docs/07-deployment/runbook-first-deploy.md#migrations-083510-to-083900),
+    then the suites, and redeploy all four web apps together. Neither needs
+    a worker: messages are only planned until one is deployed, as for every
+    other message.
+- **The invoicing fixes (`083510`), merged on 22 November 2026, not yet on
+  the hosted preview:**
+  - One rule decides whether money is simulated: the sandbox simulation,
+    the gateway's test environment, and cash on delivery taken while
+    payments are in `sandbox`. Cash collected while payments are in `test`
+    is real money. It is decided once, when the payment is captured, and kept
+    in `payments.simulated`; payments captured before the migration are
+    decided with the mode in force when each was captured (from the settings'
+    audit trail), so applying it in any mode is safe. Invoicing, the refund
+    channel and refunds of money kept for review all follow it: such money
+    never gets a document unless `invoicing_policy.simulated_payments` is on
+    (local work, a rehearsal), and its invoice jobs end on their own as
+    `simulated_money` instead of waiting for the issuer. On the preview the
+    migration ends the 3 waiting capture jobs and the 1 waiting refund job.
+    Real cash collected in `test` mode is documented, and refunded by
+    transfer.
+  - The console's Comprobantes page and the shopper's order page say what is
+    true in simulation, while the issuer is not set up, and once it is. The
+    console counts orders, not jobs; in a rehearsal it calls waiting simulated
+    payments "de ensayo", never "dinero real", and counts refunds waiting for
+    their credit note apart. The "Por día" explanation still describes the
+    general rule in simulation.
+  - The document writer's escaping is proven at the writer and end to end
+    against the fake of Hacienda (checked with libxml2 against the official
+    schemas): hostile text stays text, and an e-mail carrying markup is
+    refused. A product's name never reaches the platform's documents, so it
+    is proven at the writer only. The order-page sentence for a paid,
+    documented order whose document has not appeared yet, and the state where
+    the seller issues the delivery fee's document, are not checked by a
+    journey.
+  - Every database suite holds on a used database: each asserts on its own
+    fixtures or on differences from a baseline, and leaves no row behind.
+    `supabase/scripts/used-db-check.sh <lane> quick|all` proves it on a lane
+    (refusing any other database): it makes the lane look like the preview,
+    runs every suite twice, compares the row count of every table and needs a
+    suite broken on purpose to fail; it removes the role it creates when it
+    ends. CI runs `quick` (that step has not run on GitHub yet). Part 2 of
+    `100_notifications` (two workers at once) runs only when no other
+    session is connected: with a lane's stack up, and on the hosted project,
+    it shows a "skipped" row; in CI any skipped row fails the run.
+  - Expected on the preview after the migrations: `125_followups`
+    `net_grants` and `100_notifications` part 2 report "skipped", for the
+    reasons above; nothing else skips or fails.
+  - Redeploy the console and the shop after applying it: they read the new
+    functions. No worker is needed.
+- **The native apps' account screens (`083900`), merged on 22 November 2026,
+  not yet on the hosted preview:**
+  - `set_my_notification_settings` and `seller_set_notification_settings`
+    take one more argument, `p_source`: where the consent was given (`web_cuenta`
+    or `shop_app`; `seller_cuenta` or `seller_app`). The old forms are
+    dropped, so there is one function of each name. The websites send
+    nothing and keep their own value; the apps send theirs. Build the shopper
+    and seller apps only after `083900` is on the preview: the old functions
+    refuse the new argument. The shopper build already in Play's internal
+    testing (`3f251c3`) keeps working after it, its consents logged as given
+    on the website.
+  - The reset e-mail's link opens `<shop website>/auth/confirm`: that address
+    must be in the hosted project's Auth redirect allow-list, and an app's
+    build needs `EXPO_PUBLIC_SHOP_URL` if the website's address differs from
+    the planned one.
+  - Changes in the native apps are never queued while offline: they fail with
+    the network message (only the drivers' app keeps an explicit offline
+    queue). Halfway through the second step the shopper app reads the
+    catalogue as a visitor and sends personal screens to the code screen. The
+    notification screens reload what is stored after a "changed elsewhere"
+    refusal.
 
 ## Running it
 

@@ -60,7 +60,7 @@ language plpgsql as $$
 begin
   perform set_config('request.jwt.claims',
     json_build_object('sub', (select id from auth.users where email = p_email),
-                      'role', 'authenticated')::text, true);
+                      'role', 'authenticated', 'aal', 'aal2')::text, true);
 end;
 $$;
 
@@ -92,7 +92,7 @@ create function pg_temp.pay(p_order uuid) returns void
 language plpgsql as $$
 begin
   perform set_config('request.jwt.claims', json_build_object(
-    'sub', (select user_id from public.orders where id = p_order), 'role', 'authenticated')::text, true);
+    'sub', (select user_id from public.orders where id = p_order), 'role', 'authenticated', 'aal', 'aal2')::text, true);
   perform public.confirm_sandbox_payment(p_order);
   perform pg_temp.logout();
 end;

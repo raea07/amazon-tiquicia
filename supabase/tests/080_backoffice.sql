@@ -21,8 +21,7 @@ select pg_temp.remember('delivered_item', (
     and not exists (select 1 from public.return_requests r where r.order_item_id = i.id)
   order by o.placed_at, i.id limit 1));
 select pg_temp.remember('pending_sinpe', pg_temp.unpaid_order('test-unpaid-080')::text);
-select pg_temp.remember('card_order',
-  (select id::text from public.orders where idempotency_key = 'seed-today-d1'));
+select pg_temp.remember('card_order', pg_temp.paid_order('test-paid-080')::text);
 select pg_temp.remember('live_product',
   (select id::text from public.products where slug = 'cafe-molido-tarrazu-340g'));
 select pg_temp.remember('driver', (select id::text from public.drivers order by full_name limit 1));

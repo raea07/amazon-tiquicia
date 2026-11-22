@@ -1,5 +1,6 @@
 -- The per-request check (check_request, decision 23) and the new functions
--- of payments (083400), invoicing (083500) and seller listings (083600).
+-- of payments (083400), invoicing (083500), the invoicing fixes (083510),
+-- seller listings (083600) and the native apps' consent source (083900).
 --
 -- None of them is on the check's short list of what a password-only session
 -- of an account with a second factor may call: the shopper's payment and
@@ -30,12 +31,16 @@ begin
     -- invoicing
     'my_order_invoices', 'invoice_detail', 'invoice_file', 'seller_fee_invoices',
     'set_checkout_invoice_receiver', 'ops_invoices', 'ops_invoice_replace', 'ops_invoice_retry',
+    -- what the invoicing screens may say (083510)
+    'ops_invoicing_state', 'my_order_invoicing',
     -- seller listings, the shop's face and paused offers (083600)
     'seller_catalog_search', 'seller_add_offer', 'seller_set_variant_active', 'seller_unpublish_listing',
     'seller_paused_offers', 'seller_request_shop_description', 'seller_shop_front', 'seller_reserve_logo',
     'seller_finish_logo', 'seller_withdraw_logo', 'seller_remove_logo', 'ops_logos_for_review',
     'ops_review_logo', 'ops_logo_files_to_publish', 'ops_confirm_logo_published', 'get_shop',
     'cart_alternatives',
+    -- the notification settings, recreated with the consent source (083900)
+    'set_my_notification_settings', 'seller_set_notification_settings',
     -- the workers' own, if a signed-in token ever reached them
     'worker_payments_claim', 'worker_payments_event', 'worker_payments_hello', 'worker_payments_report',
     'worker_invoice_claim', 'worker_invoice_health', 'worker_invoice_hint', 'worker_invoice_plan',
@@ -59,6 +64,10 @@ begin
   perform set_config('request.path', '/rpc/my_order_invoices', true);
   perform public.check_request();
   perform set_config('request.path', '/rpc/order_payment', true);
+  perform public.check_request();
+  perform set_config('request.path', '/rpc/my_order_invoicing', true);
+  perform public.check_request();
+  perform set_config('request.path', '/rpc/set_my_notification_settings', true);
   perform public.check_request();
 end
 $$;

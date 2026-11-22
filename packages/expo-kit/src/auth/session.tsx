@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 import { AppState } from "react-native";
+import type { PasswordCheck } from "../account/flows";
 import {
   messageOf,
   SECOND_FACTOR_NOT_IN_APP,
@@ -20,9 +21,12 @@ import {
   validateSignIn,
   validateSignUp,
 } from "../errors";
+import type { PublicEnv } from "../supabase/client";
+import { passwordCheckFor } from "../supabase/probe";
 import { POLICY_VERSION } from "./policy";
 import {
   CODE_REQUIRED,
+  callsAsVisitor,
   lockedMessage,
   needsSecondStep,
   normaliseCode,
@@ -78,6 +82,11 @@ export interface SessionValue {
   verifySecondStep(code: string): Promise<string | null>;
   /** Resolves to true when this phone is signed out (see signOutDevice). */
   signOut(): Promise<boolean>;
+  /**
+   * Whether a password typed again is this account's, checked on a separate
+   * client that leaves the phone's session alone (supabase/probe.ts).
+   */
+  checkPassword: PasswordCheck;
   reloadRoles(): Promise<void>;
 }
 
@@ -98,17 +107,35 @@ function viewerOf(session: Session | null): Viewer | null {
  */
 export function SessionProvider({
   supabase,
+  env,
   secondStep = "website",
   children,
 }: {
   supabase: SupabaseClient;
+  /** The public settings, for the password check's own client. */
+  env: PublicEnv;
   secondStep?: SecondStepMode;
   children: ReactNode;
 }) {
   const queryClient = useQueryClient();
-  const api = useMemo(() => createApi({ rpc: (fn, args) => supabase.rpc(fn, args) }), [supabase]);
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<SessionStatus>("loading");
+  // Read by the transport at call time, so a call made just after the
+  // second step is passed already carries the person's token.
+  const statusNow = useRef<SessionStatus>(status);
+  statusNow.current = status;
+  const api = useMemo(
+    () =>
+      createApi({
+        rpc: (fn, args) => {
+          const call = supabase.rpc(fn, args);
+          return callsAsVisitor(statusNow.current, fn)
+            ? call.setHeader("Authorization", `Bearer ${env.supabaseKey}`)
+            : call;
+        },
+      }),
+    [supabase, env.supabaseKey],
+  );
   const [roles, setRoles] = useState<Roles | null>(null);
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [rolesLoading, setRolesLoading] = useState(false);
@@ -282,6 +309,8 @@ export function SessionProvider({
     return signedOut;
   }, [supabase, queryClient]);
 
+  const checkPassword = useMemo(() => passwordCheckFor(env), [env]);
+
   const value = useMemo<SessionValue>(
     () => ({
       status,
@@ -295,6 +324,7 @@ export function SessionProvider({
       signUp,
       verifySecondStep,
       signOut,
+      checkPassword,
       reloadRoles,
     }),
     [
@@ -309,6 +339,7 @@ export function SessionProvider({
       signUp,
       verifySecondStep,
       signOut,
+      checkPassword,
       reloadRoles,
     ],
   );

@@ -16,13 +16,14 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-nat
 import { SafeAreaView } from "react-native-safe-area-context";
 import { OrderStatusBadge } from "@/components/badges";
 import { ProductImage } from "@/components/product";
+import { needsSignIn } from "@/lib/guard";
 
 /** "Sus pedidos": every order, newest first, each opening its tracking page. */
 export default function OrdersScreen() {
   const { status } = useSession();
   const orders = useApiQuery(["orders"], (api) => api.myOrders(50), { personal: true });
 
-  if (status === "signedOut") return <Redirect href={signInPath("/pedidos")} />;
+  if (needsSignIn(status)) return <Redirect href={signInPath("/pedidos")} />;
   if (orders.isPending) return <LoadingState label="Cargando sus pedidos…" />;
   if (orders.isError)
     return <ErrorState error={orders.error} onRetry={() => void orders.refetch()} />;

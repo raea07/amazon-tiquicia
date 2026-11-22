@@ -17,8 +17,10 @@ import { catalogueApi, catalogueErrors } from "./catalogue";
 import { followupsApi, followupsErrors } from "./followups";
 import { integrityApi, integrityErrors } from "./integrity";
 import { invoicingApi, invoicingErrors } from "./invoicing";
+import { invoicingFixesApi, invoicingFixesErrors } from "./invoicing-fixes";
 import { limitsApi, limitsErrors } from "./limits";
 import { listingsApi, listingsErrors } from "./listings";
+import { nativeAccountsApi, nativeAccountsErrors } from "./native-accounts";
 import * as notifications from "./notifications";
 import { paymentsApi, paymentsErrors } from "./payments";
 import * as peoplePayouts from "./people-payouts";
@@ -27,7 +29,7 @@ import { sellerListingsApi, sellerListingsErrors } from "./seller-listings";
 import type { Caller, Messages } from "./types";
 import { webFollowupsApi, webFollowupsErrors } from "./web-followups";
 
-// The listings, integrity, limits, followups, payments, invoicing, seller-listings and catalogue areas name their exports uniquely, so
+// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue and native-accounts areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
 // would clash with each other, so their schemas and types are re-exported by
 // name.
@@ -58,8 +60,10 @@ export * from "./catalogue";
 export * from "./followups";
 export * from "./integrity";
 export * from "./invoicing";
+export * from "./invoicing-fixes";
 export * from "./limits";
 export * from "./listings";
+export * from "./native-accounts";
 export {
   type ChannelChoicesInput,
   COMMERCIAL_CONSENT_VERSION,
@@ -104,8 +108,10 @@ export const areaErrors = {
   ...webFollowupsErrors,
   ...paymentsErrors,
   ...invoicingErrors,
+  ...invoicingFixesErrors,
   ...sellerListingsErrors,
   ...catalogueErrors,
+  ...nativeAccountsErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -119,10 +125,12 @@ export const areaApi = (caller: Caller) => ({
   ...webFollowupsApi(caller),
   ...paymentsApi(caller),
   ...invoicingApi(caller),
+  ...invoicingFixesApi(caller),
   // After listings and limits: some of its methods replace theirs (see seller-listings.ts).
   ...sellerListingsApi(caller),
   // Replaces the core searchProducts with one that also filters by brand.
   ...catalogueApi(caller),
+  ...nativeAccountsApi(caller),
   // Last: some of its methods replace core ones (see followups.ts).
   ...followupsApi(caller),
 });

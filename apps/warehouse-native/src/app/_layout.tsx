@@ -41,6 +41,10 @@ function Navigator() {
       <Stack.Protected guard={access === "denied" || access === "unavailable"}>
         <Stack.Screen name="sin-acceso" />
       </Stack.Protected>
+      {/* Last, so it is never where the app opens. Any signed-in account may delete itself. */}
+      <Stack.Protected guard={access === "allowed" || access === "denied"}>
+        <Stack.Screen name="eliminar-cuenta" />
+      </Stack.Protected>
     </Stack>
   );
 }

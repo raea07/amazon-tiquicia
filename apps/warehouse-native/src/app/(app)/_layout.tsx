@@ -63,6 +63,7 @@ export default function AppLayout() {
         <Stack.Screen name="recibir/[id]" options={{ title: "Recibir mercadería" }} />
         <Stack.Screen name="devuelto/[id]" options={{ title: "Paquete devuelto" }} />
         <Stack.Screen name="buscar" options={{ title: "Buscar un producto" }} />
+        <Stack.Screen name="cuenta" options={{ title: "Su cuenta" }} />
       </Stack>
     </WarehouseProvider>
   );

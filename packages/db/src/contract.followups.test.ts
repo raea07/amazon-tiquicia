@@ -40,6 +40,12 @@ describe.skipIf(!db.enabled)("follow-ups contract (against a seeded database)", 
     if (returnId) {
       await db.query("delete from public.order_events where note like 'Retiró su solicitud%'");
       await db.query("delete from public.return_requests where id = $1", [returnId]);
+      // Its events too: nothing in the API deletes a return, so an event about
+      // one that is gone would fail to plan in every later notification run.
+      await db.query(
+        "delete from private.outbox_events where payload ->> 'return_request_id' = $1",
+        [returnId],
+      );
     }
     await db.close();
   });

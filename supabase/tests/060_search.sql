@@ -2,6 +2,17 @@
 
 begin;
 \ir _helpers.sql
+select pg_temp.seed_awaiting_approval();
+-- Every product a visitor may find (26 in the seed; a used database may have
+-- more, listed and approved since, or fewer, taken down). A product in a
+-- hidden category stays in search (083700), so the category's state does not
+-- count here.
+select pg_temp.remember('catalogue',
+  (select count(*)::text from public.products p
+   where p.status = 'active' and p.min_price_minor is not null));
+select pg_temp.remember('catalogue_slugs',
+  (select array_agg(slug order by slug)::text from public.products
+   where status = 'active' and min_price_minor is not null));
 
 select pg_temp.login_anon();
 
@@ -43,9 +54,18 @@ begin
 
   -- No query: the full catalogue, paged.
   select count(*) into n from public.search_products(null, null, null, null, false, false, 'relevance', 60);
-  assert n = 26, format('browse returns the whole catalogue, got %s', n);
+  assert n = least(current_setting('t.catalogue')::integer, 60) and n > 0,
+    format('browse returns the whole catalogue, got %s of %s', n, current_setting('t.catalogue'));
+  -- Not only as many: the same products (all of them when they fit on a page).
+  if current_setting('t.catalogue')::integer <= 60 then
+    assert (select array_agg(slug order by slug)
+            from public.search_products(null, null, null, null, false, false, 'relevance', 60))
+         = current_setting('t.catalogue_slugs')::text[],
+      'browse returns exactly the products on sale';
+  end if;
   assert (select count(*) from public.search_products(p_limit => 5)) = 5, 'limit is honoured';
-  assert (select max(total_count) from public.search_products(p_limit => 5)) = 26, 'total count spans all pages';
+  assert (select max(total_count) from public.search_products(p_limit => 5)) = current_setting('t.catalogue')::integer,
+    'total count spans all pages';
   assert (select count(*) from public.search_products(p_limit => 500)) <= 60, 'page size is capped';
   assert not exists (
     select 1 from public.search_products(p_limit => 13, p_offset => 0) a

@@ -61,7 +61,7 @@ declare
   r jsonb;
 begin
   perform set_config('request.jwt.claims',
-    json_build_object('sub', v_user, 'role', 'authenticated')::text, true);
+    json_build_object('sub', v_user, 'role', 'authenticated', 'aal', 'aal2')::text, true);
   r := public.place_order(
     jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.' || p_offer), 'quantity', p_quantity)),
     (select id from public.addresses where user_id = v_user and is_default), p_method, p_key);

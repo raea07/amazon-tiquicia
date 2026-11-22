@@ -39,6 +39,7 @@ import {
   WithdrawReturn,
 } from "@/components/order-actions";
 import { ProductImage } from "@/components/product";
+import { needsSignIn } from "@/lib/guard";
 import { PAYMENT_LABEL, SHIPMENT_STATUS_LABEL } from "@/lib/labels";
 import { returnNextStep, returnTitle } from "@/lib/returns";
 
@@ -147,7 +148,7 @@ export default function OrderScreen() {
     },
   });
 
-  if (status === "signedOut") return <Redirect href={signInPath(`/pedidos/${number}`)} />;
+  if (needsSignIn(status)) return <Redirect href={signInPath(`/pedidos/${number}`)} />;
   if (order.isPending) return <LoadingState label="Cargando su pedido…" />;
   if (order.isError) {
     // Someone else's order and one that does not exist look the same: not found.

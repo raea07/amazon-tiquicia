@@ -14,32 +14,37 @@ Expo **team** account (the team account that already holds the company's
 Apple credentials), not in the personal account. The project in the personal
 account is an earlier one and is no longer used for store builds.
 
-**Where things stand (21 November 2026).**
+**Where things stand (22 November 2026).**
 
-- **Android.** The build to send to internal testing is
-  `591659eb-3812-42d6-8c3d-6f99062b5c75` (version 0.1.0, version code 3,
-  made from the current main line with the secure-store session). Its
-  page: <https://expo.dev/accounts/raulea07s-team/projects/yuntera/builds/591659eb-3812-42d6-8c3d-6f99062b5c75>.
-  The upload slot in Part 1, step 5 exists; the Google service account key
-  is **not** uploaded yet, so nothing has been sent to Google Play. Once the
-  owner has uploaded it, the developer side sends that build with:
-
-  ```bash
-  cd apps/shop-native
-  npx eas-cli submit --platform android --profile production --id 591659eb-3812-42d6-8c3d-6f99062b5c75 --non-interactive
-  ```
-
-  It arrives in Play Console as a draft release on the internal track; the
-  owner then starts its rollout (Part 1, step 7).
-
-- **iPhone.** No iPhone build exists yet. Expo's tool refused to start one
-  without questions: _"Credentials are not set up. Run this command again
-  in interactive mode."_ The company's distribution certificate and App
-  Store Connect key are in the team account, but neither is yet attached to
+- **Android: sent, waiting for the owner.** The build
+  `a20ef1d8-a926-40d4-947d-823cd87be32a` (version 0.1.0, version code 4,
+  made from commit `3f251c3`, the code the hosted preview runs) was sent to
+  Google Play's internal testing track on 22 November 2026 (Expo submission
+  `8d09854a-da67-4919-afe6-114fc50f633f`). The Google service account key
+  is uploaded on Expo (Part 1, step 5, done). Because the app has never been
+  published, the build arrived in Play Console as a **draft** release: it
+  reaches no tester until the owner releases it (Part 1, steps 6 to 8). Its
+  page is in the team account's project **yuntera**, under **Builds**.
+- **iPhone: no build yet.** Expo's tool refused to start one without
+  questions: _"Credentials are not set up. Run this command again in
+  interactive mode."_ The company's distribution certificate and App Store
+  Connect key are in the team account, but neither is yet attached to
   `com.yuntera.shop`, and attaching them, registering the identifier with
   Apple and making its provisioning profile can only be done in an
-  interactive run. The owner does that once (Part 2). Nothing was created
-  at Apple.
+  interactive run. The owner does that once (Part 2), from commit `3f251c3`,
+  so that both stores carry the same code as the hosted preview until the
+  preview is updated. Nothing was created at Apple.
+- **Builds used** in the team account's cycle from 1 November to
+  1 December 2026, after the Android build above: Android 4 of 15, iOS 2 of
+  15. Nothing was billed.
+- **Newer code is not in the stores.** The account screens inside the app
+  (deleting the account, the password reset and change, the second step,
+  reporting a listing, message channels) came after `3f251c3`. A build of
+  them must wait until the hosted preview has migration `083900`
+  ([runbook](runbook-first-deploy.md#migrations-083510-to-083900)), because
+  the app now sends an argument the preview's functions do not accept yet.
+  Apple's review asks for account deletion inside the app before the App
+  Store; internal TestFlight testing has no review.
 
 ## Part 1: Android (Google Play internal testing)
 
@@ -53,7 +58,7 @@ with the package name **`com.yuntera.shop`**. This is already done. The
 package name can never be changed afterwards, and every build must carry
 exactly this one.
 
-### 2. Create a Google Cloud service account and its key
+### 2. Create a Google Cloud service account and its key (done)
 
 Expo uploads builds to Google Play with a "service account", a robot user
 that belongs to the owner's Google Cloud project.
@@ -73,13 +78,13 @@ that belongs to the owner's Google Cloud project.
 Expo's own walkthrough with screenshots:
 [Creating a Google Service Account key](https://expo.fyi/creating-google-service-account).
 
-### 3. Enable the Google Play Android Developer API
+### 3. Enable the Google Play Android Developer API (done)
 
 In the same Google Cloud project, open **APIs & Services** > **Library**,
 search for **Google Play Android Developer API**, open it and click
 **Enable**.
 
-### 4. Invite the service account in Play Console
+### 4. Invite the service account in Play Console (done)
 
 In Play Console, **Users and permissions** > **Invite new users**:
 
@@ -94,7 +99,9 @@ In Play Console, **Users and permissions** > **Invite new users**:
 3. Click **Invite user**, then **Send invite**. A service account does not
    need to accept the invitation.
 
-### 5. Upload the key on Expo's website
+### 5. Upload the key on Expo's website (done)
+
+Done on 22 November 2026. Kept here for a new key or another app.
 
 The slot belongs to the Android credentials the first store build created in
 the team account's project. Make sure the page shows the team account and
@@ -196,10 +203,12 @@ that the developer side builds and uploads every later version alone.
 
 ### Build and send to TestFlight
 
-In a terminal, from an up-to-date copy (clone) of the Yuntera repository's
-main branch. On a Mac or Linux:
+In a terminal, from a copy (clone) of the Yuntera repository, at commit
+`3f251c3`: the code the hosted preview and the Android build run, so both
+stores carry the same code until the preview is updated. On a Mac or Linux:
 
 ```bash
+git checkout 3f251c3
 corepack enable
 pnpm install
 cd apps/shop-native
@@ -207,7 +216,8 @@ npx eas-cli@latest login
 EXPO_APPLE_TEAM_ID=6MQVM5UNDL npx eas-cli@latest build --platform ios --profile production --auto-submit
 ```
 
-On Windows (PowerShell), the last line is instead:
+`git checkout 3f251c3` leaves the copy on that commit alone ("detached"),
+which is expected. On Windows (PowerShell), the last line is instead:
 
 ```powershell
 $env:EXPO_APPLE_TEAM_ID="6MQVM5UNDL"; npx eas-cli@latest build --platform ios --profile production --auto-submit

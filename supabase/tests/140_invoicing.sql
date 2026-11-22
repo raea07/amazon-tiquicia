@@ -118,17 +118,31 @@ begin
 end
 $$;
 
-select pg_temp.remember('capture_jobs', (
-  select count(*)::text from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
-  where j.consumer = 'invoice' and e.topic = 'payment.captured'));
--- Every job waiting for invoicing: the captured payments' and, on a used
--- preview, those of refunds booked there since the migration.
-select pg_temp.remember('invoice_jobs', (
-  select count(*)::text from private.outbox_jobs where consumer = 'invoice'));
+-- What this section plans: every waiting job. Its checks are about the jobs
+-- of captured payments whose order has no document yet (on a fresh seed:
+-- every captured payment), and about what this run adds to what was there
+-- (on a fresh seed: nothing was), so they hold on a used database too.
+create temporary table plan_jobs on commit drop as
+select j.event_id, e.topic, (e.payload ->> 'order_id')::uuid as order_id, j.attempts
+from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
+where j.consumer = 'invoice' and j.status = 'pending';
+create temporary table plan_orders on commit drop as
+select distinct p.order_id from plan_jobs p
+where p.topic = 'payment.captured'
+  and not exists (select 1 from public.electronic_invoices d where d.order_id = p.order_id and d.kind is not null);
+create temporary table docs_before on commit drop as select id from public.electronic_invoices;
+create temporary table counters_before on commit drop as
+select document_type, last_number from private.fiscal_counters;
+grant select on plan_jobs, plan_orders, docs_before, counters_before to authenticated, anon, service_role;
+
+select pg_temp.remember('capture_jobs', (select count(*)::text from plan_jobs where topic = 'payment.captured'));
+-- Fresh: nothing documented or numbered yet, and every waiting job is a new order's capture.
+select pg_temp.remember('fresh', (not exists (select 1 from docs_before) and not exists (select 1 from counters_before)
+  and (select count(*) from plan_orders) = (select count(*) from plan_jobs))::text);
 
 do $$
 begin
-  assert current_setting('t.capture_jobs')::integer >= 10, 'every captured payment of the seed has an invoice job';
+  assert (select count(*) from plan_orders) >= 10, 'every captured payment of the seed has an invoice job';
   assert not exists (select 1 from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
                      where j.consumer = 'invoice' and e.topic not in ('payment.captured', 'fiscal.refund_booked')),
     'only the two topics are routed to invoicing';
@@ -142,10 +156,14 @@ reset role;
 do $$
 begin
   assert current_setting('t.planned_unready')::integer = 0, 'nothing is planned before the issuer is ready';
-  assert not exists (select 1 from public.electronic_invoices), 'no document';
-  assert not exists (select 1 from private.fiscal_counters), 'no number taken';
-  assert (select count(*) from private.outbox_jobs where consumer = 'invoice' and status = 'pending' and attempts = 0)
-         = current_setting('t.invoice_jobs')::integer, 'the jobs wait, uncounted';
+  assert not exists (select 1 from public.electronic_invoices e where not exists (select 1 from docs_before b where b.id = e.id)),
+    'no document';
+  assert not exists (select 1 from private.fiscal_counters f
+                     where f.last_number is distinct from (select b.last_number from counters_before b
+                                                           where b.document_type = f.document_type)),
+    'no number taken';
+  assert not exists (select 1 from plan_jobs p join private.outbox_jobs j on j.event_id = p.event_id and j.consumer = 'invoice'
+                     where j.status <> 'pending' or j.attempts <> p.attempts), 'the jobs wait, uncounted';
 end
 $$;
 update public.app_settings set value = jsonb_set(value, '{ready}', 'true') where key = 'invoicing_issuer';
@@ -174,35 +192,54 @@ select pg_temp.remember('planned', public.worker_invoice_plan(1000)::text);
 select pg_temp.remember('planned_again', public.worker_invoice_plan(1000)::text);
 reset role;
 
+-- The documents this run made.
+create temporary table new_docs on commit drop as
+select e.* from public.electronic_invoices e
+where not exists (select 1 from docs_before b where b.id = e.id);
+grant select on new_docs to authenticated, anon, service_role;
+
 do $$
 declare
-  v_docs integer := (select count(*) from public.electronic_invoices);
   v_fees integer := (select count(*) from public.seller_order_fees f
-                     where f.fees_net_minor > 0
+                     where f.fees_net_minor > 0 and f.order_id in (select order_id from plan_orders)
                        and exists (select 1 from public.ledger_transactions t
                                    where t.order_id = f.order_id and t.kind = 'order_capture'));
   v_delivery integer := (select count(*) from public.orders o where o.shipping_minor > 0
+                         and o.id in (select order_id from plan_orders)
                          and exists (select 1 from public.ledger_transactions t
                                      where t.order_id = o.id and t.kind = 'order_capture'));
 begin
-  assert current_setting('t.planned')::integer = current_setting('t.capture_jobs')::integer, 'every job planned';
+  assert current_setting('t.planned')::integer >= (select count(*) from plan_orders), 'every job planned';
+  assert not exists (select 1 from plan_jobs p join private.outbox_jobs j on j.event_id = p.event_id and j.consumer = 'invoice'
+                     where p.order_id in (select order_id from plan_orders) and p.topic = 'payment.captured'
+                       and j.status <> 'done'),
+    'every job of a new order is done';
+  if current_setting('t.fresh')::boolean then
+    assert current_setting('t.planned')::integer = current_setting('t.capture_jobs')::integer,
+      'every job planned, and only those';
+  end if;
   assert current_setting('t.planned_again')::integer = 0, 'a second run plans nothing';
-  assert (select count(*) from public.electronic_invoices where kind = 'fees') = v_fees,
+  assert (select count(*) from new_docs where kind = 'fees' and order_id in (select order_id from plan_orders)) = v_fees,
     format('one fee factura per seller and paid order (%s)', v_fees);
-  assert (select count(*) from public.electronic_invoices where kind = 'delivery') = v_delivery,
-    format('one delivery document per paid order with shipping (%s)', v_delivery);
-  assert v_docs = v_fees + v_delivery, 'and nothing else';
-  assert not exists (select 1 from public.electronic_invoices where kind = 'fees' and document_type <> '01'),
-    'fees go on a factura';
-  assert not exists (select 1 from public.electronic_invoices where kind = 'delivery' and document_type <> '04'),
+  assert (select count(*) from new_docs where kind = 'delivery' and order_id in (select order_id from plan_orders))
+         = v_delivery, format('one delivery document per paid order with shipping (%s)', v_delivery);
+  assert (select count(*) from new_docs where order_id in (select order_id from plan_orders)) = v_fees + v_delivery,
+    'and nothing else for them';
+  if current_setting('t.fresh')::boolean then
+    assert (select count(*) from new_docs) = v_fees + v_delivery, 'and nothing else at all';
+  end if;
+  assert not exists (select 1 from new_docs where kind = 'fees' and document_type <> '01'), 'fees go on a factura';
+  assert not exists (select 1 from new_docs d join public.orders o on o.id = d.order_id
+                     where d.kind = 'delivery' and d.document_type <> '04' and o.idempotency_key like 'seed-%'),
     'the seed''s shoppers asked for no factura: tiquetes';
-  assert not exists (select 1 from public.electronic_invoices where status <> 'pending'), 'all wait for the worker';
+  assert not exists (select 1 from new_docs where status <> 'pending'), 'all wait for the worker';
 end
 $$;
 
--- Planning the same event again changes nothing: no document, no number.
+-- Planning the same events again changes nothing: no document, no number.
 select pg_temp.remember('counter_before', (select sum(last_number)::text from private.fiscal_counters));
-update private.outbox_jobs set status = 'pending' where consumer = 'invoice';
+update private.outbox_jobs j set status = 'pending' from plan_jobs p
+where j.consumer = 'invoice' and j.event_id = p.event_id;
 select pg_temp.login_worker();
 select public.worker_invoice_plan(1000);
 reset role;
@@ -215,23 +252,31 @@ begin
 end
 $$;
 
--- Numbers: per counter 1, 2, 3 … with no gap and no repeat; the clave as the annex defines it.
+-- Numbers: per counter, this run's documents take the next numbers one by
+-- one, with no gap and no repeat (on a fresh seed: 1, 2, 3 …); no number was
+-- ever given twice; the clave as the annex defines it.
 do $$
 declare
   c record;
 begin
   for c in
     select e.document_type, count(*) as n, min(e.sequence_number) as lo, max(e.sequence_number) as hi,
-           count(distinct e.sequence_number) as distinct_n, max(f.last_number) as counter
-    from public.electronic_invoices e
+           count(distinct e.sequence_number) as distinct_n, max(f.last_number) as counter,
+           coalesce(max(b.last_number), 0) as before
+    from new_docs e
     join private.fiscal_counters f on f.document_type = e.document_type
+    left join counters_before b on b.document_type = e.document_type
     group by e.document_type
   loop
-    assert c.lo = 1 and c.hi = c.n and c.distinct_n = c.n and c.counter = c.n,
-      format('type %s: numbers 1..%s without gaps (%s..%s, counter %s)', c.document_type, c.n, c.lo, c.hi, c.counter);
+    assert c.lo = c.before + 1 and c.hi = c.before + c.n and c.distinct_n = c.n and c.counter = c.hi,
+      format('type %s: numbers %s..%s without gaps (%s..%s, counter %s)', c.document_type, c.before + 1,
+             c.before + c.n, c.lo, c.hi, c.counter);
   end loop;
+  assert not exists (select 1 from public.electronic_invoices e
+                     group by e.issuer ->> 'id_number', e.establishment, e.terminal, e.document_type, e.sequence_number
+                     having count(*) > 1), 'no number was ever given twice';
   assert not exists (
-    select 1 from public.electronic_invoices e
+    select 1 from new_docs e
     where e.clave <> '506' || to_char((e.issued_at at time zone 'UTC') - interval '6 hours', 'DDMMYY')
                     || lpad(e.issuer ->> 'id_number', 12, '0') || e.consecutivo || '1' || e.security_code
        or e.consecutivo <> '001' || '00001' || e.document_type || lpad(e.sequence_number::text, 10, '0')
@@ -251,7 +296,7 @@ begin
   for f in
     select s.*, e.lines, e.summary, e.total_minor as doc_total
     from public.seller_order_fees s
-    join public.electronic_invoices e on e.dedupe_key = 'fees:' || s.order_id || ':' || s.seller_id
+    join new_docs e on e.dedupe_key = 'fees:' || s.order_id || ':' || s.seller_id
   loop
     assert (select sum((l ->> 'total')::numeric) * 100 from jsonb_array_elements(f.lines) l) = f.fees_net_minor,
       'the factura''s net amounts are the statement''s fees, to the céntimo';
@@ -262,7 +307,8 @@ begin
       'the IVA at five decimals is within a céntimo of the IVA the ledger booked';
   end loop;
 
-  -- Over the whole ledger: each revenue account of the captures equals the documents' lines.
+  -- Over the ledger of those orders (on a fresh seed, the whole ledger): each
+  -- revenue account of the captures equals the documents' lines.
   select sum(-x.amount_minor) filter (where a.code = 'commission_revenue') as commission,
          sum(-x.amount_minor) filter (where a.code = 'fulfillment_revenue') as fulfillment,
          sum(-x.amount_minor) filter (where a.code = 'payment_fee_revenue') as payment,
@@ -270,35 +316,39 @@ begin
   into v_capture
   from public.ledger_entries x
   join public.ledger_transactions t on t.id = x.transaction_id and t.kind = 'order_capture'
-  join public.ledger_accounts a on a.id = x.account_id;
-  assert (select sum((l ->> 'total')::numeric) * 100 from public.electronic_invoices e, jsonb_array_elements(e.lines) l
+  join public.ledger_accounts a on a.id = x.account_id
+  where t.order_id in (select order_id from plan_orders);
+  assert (select sum((l ->> 'total')::numeric) * 100 from new_docs e, jsonb_array_elements(e.lines) l
           where e.kind = 'fees' and l ->> 'unit' = 'Cm') = v_capture.commission, 'commission = the ledger';
-  assert (select sum((l ->> 'total')::numeric) * 100 from public.electronic_invoices e, jsonb_array_elements(e.lines) l
+  assert (select sum((l ->> 'total')::numeric) * 100 from new_docs e, jsonb_array_elements(e.lines) l
           where e.kind = 'fees' and l ->> 'cabys' = '6729000000000') = v_capture.fulfillment,
     'warehouse fees = the ledger';
-  assert (select sum((l ->> 'total')::numeric) * 100 from public.electronic_invoices e, jsonb_array_elements(e.lines) l
+  assert (select sum((l ->> 'total')::numeric) * 100 from new_docs e, jsonb_array_elements(e.lines) l
           where e.kind = 'fees' and l ->> 'cabys' = '7119002009900') = v_capture.payment,
     'payment fees = the ledger';
-  assert abs((select sum((l ->> 'total')::numeric) * 100 from public.electronic_invoices e,
+  assert abs((select sum((l ->> 'total')::numeric) * 100 from new_docs e,
               jsonb_array_elements(e.lines) l where e.kind = 'delivery') - v_capture.shipping)
-         < (select count(*) from public.electronic_invoices where kind = 'delivery'),
+         < (select count(*) from new_docs where kind = 'delivery'),
     'the delivery fees net of IVA are the ledger''s, within a céntimo each';
-  assert not exists (select 1 from public.electronic_invoices e join public.orders o on o.id = e.order_id
+  assert not exists (select 1 from new_docs e join public.orders o on o.id = e.order_id
                      where e.kind = 'delivery' and (e.total_minor <> o.shipping_minor
                        or (e.summary ->> 'total')::numeric * 100 - o.shipping_minor not between 0 and 1)),
     'each delivery document is what the shopper paid for delivery';
-  assert not exists (select 1 from public.electronic_invoices e join public.orders o on o.id = e.order_id
+  assert not exists (select 1 from new_docs e join public.orders o on o.id = e.order_id
                      where e.kind = 'delivery' and e.payments -> 0 ->> 'code' <> private.invoice_payment_code(o.payment_method)),
     'with how the shopper paid';
-  assert not exists (select 1 from public.electronic_invoices e
+  assert not exists (select 1 from new_docs e
                      where e.kind = 'fees' and (e.payments -> 0 ->> 'code' <> '99' or e.payments -> 0 ->> 'other' is null)),
     'fees netted from the payout: code 99 with the setting''s text';
   -- Receivers as the annex requires: a factura names its receiver; a tiquete names nobody.
-  assert not exists (select 1 from public.electronic_invoices e join public.seller_private p on p.seller_id = e.receiver_seller_id
+  assert not exists (select 1 from new_docs e join public.seller_private p on p.seller_id = e.receiver_seller_id
                      where e.kind = 'fees' and (e.receiver ->> 'id_number' <> p.id_number
                        or e.receiver ->> 'id_type' <> private.invoice_id_code(p.id_type)
-                       or e.receiver ->> 'name' <> p.legal_name)), 'the seller''s registered identification';
-  assert not exists (select 1 from public.electronic_invoices where document_type = '04' and receiver is not null),
+                       -- the legal name as the writer takes it: control characters out, at most
+                       -- 100 characters (a shop may register up to 160; the journeys do)
+                       or e.receiver ->> 'name' <> private.invoice_clean_text(p.legal_name, 100))),
+    'the seller''s registered identification';
+  assert not exists (select 1 from new_docs where document_type = '04' and receiver is not null),
     'a tiquete to an anonymous final consumer has no receiver';
 end
 $$;
@@ -374,6 +424,9 @@ begin
   update auth.users set deleted_at = null where id = v_user;
 end
 $$;
+
+-- Documents Hacienda had accepted before (none on a fresh seed).
+select pg_temp.remember('accepted_before', (select count(*)::text from public.electronic_invoices where status = 'accepted'));
 
 -- ═══ 5. The worker's functions ══════════════════════════════════════════════
 
@@ -587,7 +640,7 @@ begin
   assert jsonb_array_length(v -> 'unsent') >= 1, 'the held document is among those not sent';
   assert (v -> 'worker' ->> 'certificate_not_after')::timestamptz = '2027-11-22T00:00:00Z', 'the certificate''s expiry';
   assert jsonb_array_length(v -> 'daily') = 14, 'fourteen days of counts';
-  assert (v -> 'counts' ->> 'accepted')::integer = 1, 'one accepted';
+  assert (v -> 'counts' ->> 'accepted')::integer = current_setting('t.accepted_before')::integer + 1, 'one accepted';
   perform public.ops_invoice_retry(current_setting('t.other_id')::uuid);
   assert pg_temp.code_of(format('select public.ops_invoice_retry(%L)', current_setting('t.factura_id')))
          = 'invoice_not_retryable', 'an accepted document is not sent again';
@@ -1164,19 +1217,28 @@ begin
 end
 $$;
 
--- After all of it, still no gap and no repeat in any counter.
+-- After all of it, still no gap and no repeat in any counter: every number
+-- this suite took follows the last one taken before it (on a fresh seed,
+-- 1..n), and no number was given twice.
 do $$
 declare
   c record;
 begin
   for c in
     select e.document_type, count(*) as n, min(e.sequence_number) as lo, max(e.sequence_number) as hi,
-           max(f.last_number) as counter
+           count(distinct e.sequence_number) as distinct_n, max(f.last_number) as counter,
+           coalesce(max(b.last_number), 0) as before
     from public.electronic_invoices e join private.fiscal_counters f on f.document_type = e.document_type
+    left join counters_before b on b.document_type = e.document_type
+    where not exists (select 1 from docs_before x where x.id = e.id)
     group by e.document_type
   loop
-    assert c.lo = 1 and c.hi = c.n and c.counter = c.n, format('type %s: 1..%s without gaps', c.document_type, c.n);
+    assert c.lo = c.before + 1 and c.hi = c.before + c.n and c.distinct_n = c.n and c.counter = c.hi,
+      format('type %s: %s..%s without gaps', c.document_type, c.before + 1, c.before + c.n);
   end loop;
+  assert not exists (select 1 from public.electronic_invoices e
+                     group by e.issuer ->> 'id_number', e.establishment, e.terminal, e.document_type, e.sequence_number
+                     having count(*) > 1), 'and no number twice';
 end
 $$;
 

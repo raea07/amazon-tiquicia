@@ -66,7 +66,7 @@ language plpgsql as $$
 begin
   perform set_config('request.jwt.claims',
     json_build_object('sub', (select id from auth.users where email = p_email),
-                      'role', 'authenticated')::text, true);
+                      'role', 'authenticated', 'aal', 'aal2')::text, true);
 end;
 $$;
 
@@ -97,7 +97,7 @@ create function pg_temp.pay(p_order uuid) returns void
 language plpgsql as $$
 begin
   perform set_config('request.jwt.claims', json_build_object(
-    'sub', (select user_id from public.orders where id = p_order), 'role', 'authenticated')::text, true);
+    'sub', (select user_id from public.orders where id = p_order), 'role', 'authenticated', 'aal', 'aal2')::text, true);
   perform public.confirm_sandbox_payment(p_order);
   perform pg_temp.logout();
 end;
@@ -1222,14 +1222,103 @@ $$;
 -- net_grants: where the schema exists (the hosted project, and the local shim
 -- that copies it), visitors and signed-in users can neither use it, call its
 -- request functions nor read its responses.
+--
+-- On Supabase's platform the grants on schema net (usage to PUBLIC, anon and
+-- authenticated; everything on its tables and functions to PUBLIC) were made
+-- by the platform's own role, supabase_admin. The migration role is not a
+-- member of it, so 083200's revoke runs and changes nothing (runbook,
+-- "Migrations 083200 and 083300"). Where a grant made by a role we can act
+-- for is left, that is our failure and this fails. Where every grant left was
+-- made by a role the current role is not a member of (memberships as granted,
+-- pg_auth_members; the platform's migration role is not a superuser, so a
+-- superuser's power to act for anyone is deliberately not counted), what can
+-- still be guaranteed is asserted, and the rest ends in a "skipped" row that
+-- says so: the accepted platform limit and its compensating controls are in
+-- docs/05-security-compliance/security-program.md.
+create function pg_temp.acts_for(p_grantor oid) returns boolean
+language sql stable as $$
+  with recursive mine (role_id) as (
+    select r.oid from pg_roles r where r.rolname = current_user
+    union
+    select m.roleid from pg_auth_members m join mine on m.member = mine.role_id
+  )
+  select exists (select 1 from mine where role_id = p_grantor)
+$$;
+
+-- Every privilege on schema net and its objects held by PUBLIC, anon or
+-- authenticated, with who granted it.
+create temporary table net_grants on commit drop as
+select 'schema net'::text as what, a.grantee, a.grantor, a.privilege_type
+from pg_namespace n, aclexplode(n.nspacl) a where n.nspname = 'net'
+union all
+select format('table net.%I', c.relname), a.grantee, a.grantor, a.privilege_type
+from pg_class c, aclexplode(c.relacl) a where c.relnamespace = (select oid from pg_namespace where nspname = 'net')
+union all
+select format('function net.%I', p.proname), a.grantee, a.grantor, a.privilege_type
+from pg_proc p, aclexplode(p.proacl) a where p.pronamespace = (select oid from pg_namespace where nspname = 'net');
+delete from net_grants
+where not (grantee = 0 or grantee in (select oid from pg_roles where rolname in ('anon', 'authenticated')));
+
+select set_config('t.net_skipped', '', true);
 do $$
 declare
   r text;
+  v_ours text;
+  v_theirs text;
 begin
   if not exists (select 1 from pg_namespace where nspname = 'net') then
     return;
   end if;
-  -- Using anything in a schema takes USAGE on it first: without it, an
+
+  -- What our own roles granted to the API roles or everyone: nothing, except
+  -- PostgreSQL's default EXECUTE for PUBLIC on a function, which cannot be
+  -- used without USAGE on the schema (and that is checked here too).
+  select string_agg(format('%s %s to %s', g.privilege_type, g.what,
+                           case when g.grantee = 0 then 'PUBLIC' else g.grantee::regrole::text end), '; ')
+  into v_ours from net_grants g
+  where pg_temp.acts_for(g.grantor)
+    and not (g.grantee = 0 and g.privilege_type = 'EXECUTE' and g.what like 'function %');
+  assert v_ours is null, format('net_grants: granted by a role we act for: %s', v_ours);
+
+  -- Nothing of ours calls it on a caller's behalf: no function the API can
+  -- reach mentions the schema, and the only functions that do are the
+  -- workers' wake-ups (fixed address and token from Vault), which no API role
+  -- may execute.
+  assert not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                     where n.nspname = 'public' and p.prosrc ~ '\mnet\.'),
+    'net_grants: a function the API exposes uses schema net';
+  select string_agg(p.oid::regprocedure::text, ', ') into v_ours
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'private' and p.prosrc ~ '\mnet\.http_'
+    and (p.proname !~ '_kick$'
+         or has_function_privilege('anon', p.oid, 'execute')
+         or has_function_privilege('authenticated', p.oid, 'execute'));
+  assert v_ours is null, format('net_grants: functions that send requests beyond the wake-ups: %s', v_ours);
+  -- The Data API's exposed schemas, where they are readable from SQL.
+  assert not exists (select 1 from pg_roles r, unnest(coalesce(r.rolconfig, '{}')) c
+                     where r.rolname = 'authenticator' and c like 'pgrst.db_schemas=%'
+                       and 'net' = any (string_to_array(replace(split_part(c, '=', 2), ' ', ''), ','))),
+    'net_grants: the Data API exposes schema net';
+
+  select string_agg(x.line, '; ' order by x.line) into v_theirs
+  from (select format('%s to %s by %s', g.what,
+                      string_agg(distinct case when g.grantee = 0 then 'PUBLIC' else g.grantee::regrole::text end,
+                                 ', '), g.grantor::regrole) as line
+        from net_grants g
+        where not (g.grantee = 0 and g.privilege_type = 'EXECUTE' and g.what like 'function %'
+                   and pg_temp.acts_for(g.grantor))
+        group by g.what, g.grantor) x;
+  if v_theirs is not null then
+    perform set_config('t.net_skipped', format(
+      'net_grants: the full check is not run: every grant left on schema net was made by a role this one '
+      || 'is not a member of, so the migration''s revoke cannot remove it (accepted platform limit, '
+      || 'security-program.md). Still checked: our roles granted nothing, no exposed function uses it, '
+      || 'the API does not expose it. Granted: %s', left(v_theirs, 600)), true);
+    return;
+  end if;
+
+  -- Where we could revoke (locally, and on a project whose grants we made):
+  -- using anything in a schema takes USAGE on it first; without it, an
   -- execute or select privilege (PUBLIC's default execute on functions
   -- included) cannot be used. The extension itself keeps its own rights.
   assert not exists (select 1 from pg_namespace n, aclexplode(n.nspacl) a
@@ -1251,7 +1340,7 @@ $$;
 select pg_temp.login('seguimiento1@yuntera.example');
 do $$
 begin
-  if exists (select 1 from pg_namespace where nspname = 'net') then
+  if exists (select 1 from pg_namespace where nspname = 'net') and current_setting('t.net_skipped') = '' then
     begin
       perform net.http_post('https://example.invalid');
       raise exception 'net_grants: a signed-in user sent a request';
@@ -1264,4 +1353,6 @@ $$;
 reset role;
 
 select 'ok' as followups;
+-- Last, so psql and remote-db.sh show it: the part that could not run here, and why.
+select current_setting('t.net_skipped') as skipped where current_setting('t.net_skipped') <> '';
 rollback;

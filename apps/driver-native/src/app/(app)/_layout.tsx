@@ -56,6 +56,7 @@ export default function AppLayout() {
         <Stack.Screen name="index" options={{ headerShown: false, title: "Mi ruta" }} />
         <Stack.Screen name="parada/[id]" options={{ title: "Parada" }} />
         <Stack.Screen name="ubicacion" options={{ title: "Su ubicación", presentation: "modal" }} />
+        <Stack.Screen name="cuenta" options={{ title: "Su cuenta" }} />
       </Stack>
     </>
   );

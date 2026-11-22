@@ -23,6 +23,10 @@ begin;
 \ir _helpers.sql
 select pg_temp.allow_inspection();
 \ir _money_helpers.sql
+-- The seed's shop and listing awaiting approval wait again for this
+-- transaction (on a used database staff may have approved them since):
+-- section B relies on both.
+select pg_temp.seed_awaiting_approval();
 
 -- ── Fixtures ────────────────────────────────────────────────────────────────
 

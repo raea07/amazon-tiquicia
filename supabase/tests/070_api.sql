@@ -10,6 +10,8 @@ select pg_temp.remember('depot', (select id::text from public.warehouses where c
 select pg_temp.remember('seller_wh', (select id::text from public.warehouses where code = 'HIG-HER'));
 select pg_temp.remember('cafe', pg_temp.offer('cafe-molido-tarrazu-340g')::text);
 select pg_temp.remember('laptop', pg_temp.offer('laptop-14-nimbo-libro')::text);
+-- The seed's shop and listing awaiting approval, also on a used database (_helpers.sql).
+select pg_temp.seed_awaiting_approval();
 select pg_temp.remember('pending_offer',
   (select o.id::text from public.offers o join public.sellers s on s.id = o.seller_id where s.slug = 'bazar-nuevo'));
 select pg_temp.remember('buyer2_order',
@@ -286,6 +288,10 @@ select pg_temp.remember('tecnocasa_offers',
    where seller_id = current_setting('t.tecnocasa')::uuid and status <> 'archived'));
 select pg_temp.remember('tecnocasa_stock',
   (select count(*)::text from public.stock_levels where seller_id = current_setting('t.tecnocasa')::uuid));
+-- The shop's bank account as it stands (the seed's ends in 6789; a used
+-- database may hold one the shop changed since).
+select pg_temp.remember('tecnocasa_iban',
+  (select payout_iban from public.seller_private where seller_id = current_setting('t.tecnocasa')::uuid));
 
 select pg_temp.login('vendedor@yuntera.example');
 
@@ -300,7 +306,8 @@ begin
 
   v := public.seller_overview(current_setting('t.tecnocasa')::uuid);
   assert v #>> '{seller,trade_name}' = 'TecnoCasa', 'overview';
-  assert v #>> '{account,payout_iban_masked}' like 'CR••%6789' and v #>> '{account,payout_iban_masked}' not like '%0200009123%',
+  assert v #>> '{account,payout_iban_masked}' like 'CR••%' || right(current_setting('t.tecnocasa_iban'), 4)
+     and v #>> '{account,payout_iban_masked}' not like '%' || substr(current_setting('t.tecnocasa_iban'), 5, 10) || '%',
     'the bank account is masked';
   assert (v ->> 'payable_minor')::bigint > 0, 'amount owed comes from the ledger';
   assert (v #>> '{sales_30d,orders}')::integer > 0, 'recent sales';
@@ -415,6 +422,8 @@ reset role;
 
 -- ── Driver ─────────────────────────────────────────────────────────────────
 
+-- The check below compares what the driver is given with the route itself.
+select pg_temp.allow_inspection();
 select pg_temp.login('repartidor@yuntera.example');
 do $$
 declare
@@ -422,10 +431,20 @@ declare
 begin
   assert d #>> '{driver,full_name}' like 'Carlos%', 'driver';
   assert d #>> '{routes,0,status}' = 'in_progress', 'the route in progress comes first';
-  assert jsonb_array_length(d #> '{routes,0,stops}') = 2, 'its stops';
+  -- Its stops, as the route has them (two in the seed: cash first, then a
+  -- prepaid parcel; a used database may have moved on to other routes).
+  assert jsonb_array_length(d #> '{routes,0,stops}') > 0
+     and jsonb_array_length(d #> '{routes,0,stops}')
+         = (select count(*) from public.route_stops where route_id = (d #>> '{routes,0,route_id}')::uuid),
+    'its stops';
   assert d #>> '{routes,0,stops,0,senas}' <> '' and d #>> '{routes,0,stops,0,phone}' like '+506%',
     'what is needed at the door';
-  assert (d #>> '{routes,0,stops,0,cod_amount_minor}')::bigint > 0, 'cash to collect';
+  assert (select coalesce(sum((x ->> 'cod_amount_minor')::bigint), 0) from jsonb_array_elements(d #> '{routes,0,stops}') x)
+         = (select coalesce(sum(cod_amount_minor), 0) from public.route_stops
+            where route_id = (d #>> '{routes,0,route_id}')::uuid), 'the cash to collect at each door';
+  assert (d #>> '{routes,0,stops,0,cod_amount_minor}')::bigint > 0
+      or (select code from public.routes where id = (d #>> '{routes,0,route_id}')::uuid) <> 'R-1003',
+    'cash to collect (the seed''s route starts with its cash stop)';
   -- The driver never receives the PIN: the shopper reads it to them.
   assert d::text !~* 'delivery_pin', 'no PIN in the driver payload';
   assert not exists (
@@ -434,6 +453,7 @@ begin
 end
 $$;
 reset role;
+select pg_temp.stop_inspection();
 
 -- ── Staff ──────────────────────────────────────────────────────────────────
 
@@ -448,6 +468,13 @@ select pg_temp.remember('ready',
    where sh.status in ('packed', 'delivery_failed')
      and not exists (select 1 from public.route_stops rs
                      where rs.shipment_id = sh.id and rs.status in ('pending', 'arrived'))));
+-- Shops and listings waiting for staff (one shop and two listings here on a
+-- fresh seed: the seeded ones and the one the seller block above submitted),
+-- drivers and counted cash, as the tables have them.
+select pg_temp.remember('sellers_pending', (select count(*)::text from public.sellers where status = 'pending'));
+select pg_temp.remember('in_review', (select count(*)::text from public.products where status = 'pending_review'));
+select pg_temp.remember('drivers', (select count(*)::text from public.drivers where status = 'active'));
+select pg_temp.remember('settled', (select count(*)::text from public.driver_settlements where status <> 'open'));
 
 select pg_temp.login('central@yuntera.example');
 do $$
@@ -458,9 +485,9 @@ declare
 begin
   assert public.my_roles() ->> 'staff_role' = 'admin', 'staff role';
   assert (o #>> '{orders,delivered}')::integer = current_setting('t.orders_delivered')::integer
-         and (o ->> 'sellers_pending')::integer = 1
-         -- two in review: the seeded one, and the one the seller block above submitted
-         and (o ->> 'listings_in_review')::integer = 2
+         and (o ->> 'sellers_pending')::integer = current_setting('t.sellers_pending')::integer
+         and (o ->> 'listings_in_review')::integer = current_setting('t.in_review')::integer
+         and current_setting('t.sellers_pending')::integer >= 1 and current_setting('t.in_review')::integer >= 2
          and (o ->> 'awaiting_dispatch')::integer = current_setting('t.packed')::integer,
     format('overview: %s', o);
   assert o ->> 'payments_mode' = 'sandbox', 'the console shows which payment mode is live';
@@ -470,17 +497,20 @@ begin
     'filtered by status';
   assert (select count(*) from public.ops_orders(null, 'sofia')) > 0, 'search by name, accent-insensitive';
   assert (select count(*) from public.ops_orders(null, '%')) = 0, 'wildcards are literal';
-  assert (select count(*) from public.ops_sellers('pending')) = 1, 'sellers awaiting approval';
-  assert (select count(*) = 2 and bool_and(title like 'Lámpara%') from public.ops_listings_for_review()),
+  assert (select count(*) from public.ops_sellers('pending')) = current_setting('t.sellers_pending')::integer,
+    'sellers awaiting approval';
+  assert (select count(*) = current_setting('t.in_review')::integer
+                 and count(*) filter (where title like 'Lámpara%') >= 2 from public.ops_listings_for_review()),
     'listings awaiting review';
 
   assert jsonb_array_length(b -> 'ready') = current_setting('t.ready')::integer
-         and jsonb_array_length(b -> 'drivers') = 2
+         and jsonb_array_length(b -> 'drivers') = current_setting('t.drivers')::integer
          and jsonb_array_length(b -> 'depots') = 1, format('dispatch board: %s', b);
   assert b #>> '{routes,0,status}' = 'in_progress', 'live route first';
   assert (b #>> '{ready,0,lat}')::numeric between 8 and 11.25, 'coordinates for the route planner';
 
-  assert (select count(*) from public.ops_settlements('settled')) = 2, 'settled cash counts';
+  assert (select count(*) from public.ops_settlements('settled')) = current_setting('t.settled')::integer,
+    'settled cash counts';
   q := public.ops_care_queues();
   assert q ? 'complaints' and q ? 'returns' and q ? 'reports', 'care queues';
 

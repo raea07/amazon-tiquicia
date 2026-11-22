@@ -3,13 +3,63 @@
 begin;
 \ir _helpers.sql
 select pg_temp.allow_inspection();
+\ir _money_helpers.sql
 
--- The seed leaves these orders at known stages.
-select pg_temp.remember('to_pick', (select id::text from public.orders where idempotency_key = 'seed-today-d2'));
-select pg_temp.remember('packed', (select id::text from public.orders where idempotency_key = 'seed-today-c1'));
-select pg_temp.remember('seller_order', (select id::text from public.orders where idempotency_key = 'seed-today-f1'));
+-- The seed leaves these orders at known stages: paid and waiting to be
+-- picked, packed and waiting for a route, a seller's parcel to pack, and cash
+-- on delivery out on a started route. On a used database people have moved
+-- them on; there the suite places its own orders, as the same shopper would,
+-- and brings each to the same stage (the same products, the same steps the
+-- seed takes), for this transaction only.
+do $$
+declare
+  v_seed boolean := exists (
+      select 1 from public.orders o join public.shipments s on s.order_id = o.id
+      where o.idempotency_key = 'seed-today-d2' and s.status = 'pending')
+    and exists (
+      select 1 from public.orders o join public.shipments s on s.order_id = o.id
+      where o.idempotency_key = 'seed-today-c1' and s.status = 'packed'
+        and not exists (select 1 from public.route_stops rs where rs.shipment_id = s.id))
+    and exists (
+      select 1 from public.orders o join public.shipments s on s.order_id = o.id
+      where o.idempotency_key = 'seed-today-f1' and s.status = 'pending')
+    and exists (
+      select 1 from public.orders o join public.shipments s on s.order_id = o.id
+      join public.route_stops rs on rs.shipment_id = s.id join public.routes r on r.id = rs.route_id
+      where o.idempotency_key = 'seed-today-b1' and rs.status in ('pending', 'arrived') and r.status = 'in_progress');
+  v_order uuid;
+begin
+  if v_seed then
+    perform pg_temp.remember('to_pick', (select id::text from public.orders where idempotency_key = 'seed-today-d2'));
+    perform pg_temp.remember('packed', (select id::text from public.orders where idempotency_key = 'seed-today-c1'));
+    perform pg_temp.remember('seller_order', (select id::text from public.orders where idempotency_key = 'seed-today-f1'));
+    perform pg_temp.remember('cod_order', (select id::text from public.orders where idempotency_key = 'seed-today-b1'));
+    perform pg_temp.remember('packed_owner', 'comprador3@yuntera.example');
+    return;
+  end if;
+  perform pg_temp.shopper('entregas050@yuntera.example', 'María Fernández Solís');
+  v_order := pg_temp.place('entregas050@yuntera.example',
+    pg_temp.items('carreta-decorativa-pintada-20cm:1', 'cafe-molido-tarrazu-340g:4'), 'card', 'test-050-d2');
+  perform pg_temp.pay(v_order);
+  perform pg_temp.remember('to_pick', v_order::text);
+  v_order := pg_temp.place('entregas050@yuntera.example',
+    pg_temp.items('alimento-perro-adulto-tinamu-8kg:1', 'botella-termica-sendero-750ml:1'), 'card', 'test-050-c1');
+  perform pg_temp.pay(v_order);
+  perform pg_temp.pack(pg_temp.shipment(v_order, 'platform'));
+  perform pg_temp.remember('packed', v_order::text);
+  v_order := pg_temp.place('entregas050@yuntera.example',
+    pg_temp.items('taladro-inalambrico-roble-20v:1', 'bombillo-led-9w-4u:2'), 'card', 'test-050-f1');
+  perform pg_temp.pay(v_order);
+  perform pg_temp.remember('seller_order', v_order::text);
+  v_order := pg_temp.place('entregas050@yuntera.example',
+    pg_temp.items('olla-arrocera-volcan-1-8l:1'), 'cash_on_delivery', 'test-050-b1');
+  perform pg_temp.pack(pg_temp.shipment(v_order, 'platform'));
+  perform pg_temp.route(pg_temp.shipment(v_order, 'platform'));
+  perform pg_temp.remember('cod_order', v_order::text);
+  perform pg_temp.remember('packed_owner', 'entregas050@yuntera.example');
+end
+$$;
 select pg_temp.remember('unpaid', pg_temp.unpaid_order('test-unpaid-050')::text);
-select pg_temp.remember('cod_order', (select id::text from public.orders where idempotency_key = 'seed-today-b1'));
 select pg_temp.remember('depot', (select id::text from public.warehouses where code = 'SJO1'));
 select pg_temp.remember('carlos', (select id::text from public.drivers where full_name like 'Carlos%'));
 select pg_temp.remember('to_pick_shipment',
@@ -485,7 +535,7 @@ $$;
 
 -- ── Reviews and returns after delivery ─────────────────────────────────────
 
-select pg_temp.login('comprador3@yuntera.example');
+select pg_temp.login(current_setting('t.packed_owner'));
 do $$
 declare
   v_item uuid := (select id from public.order_items where order_id = current_setting('t.packed')::uuid limit 1);
