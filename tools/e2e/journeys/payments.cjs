@@ -6,7 +6,8 @@
 //   0. An administrator switches the payments mode to the gateway's test
 //      environment in the console (refused without a reason).
 //   1. A card payment on the gateway's page, with the bank's extra step.
-//   2. A declined card, then a new attempt that succeeds.
+//   2. A declined card, then a new attempt that succeeds; the gateway's API
+//      down, the shopper told nothing was charged, and a retry once it is back.
 //   3. SINPE Móvil confirmed by the gateway, with no one at Yuntera involved.
 //   4. A SINPE Móvil transfer the gateway could not match (another account),
 //      settled by finance: attached to its order.
@@ -211,6 +212,30 @@ async function until(what, fn, seconds = 40) {
   await shop.waitForURL((u) => u.href.startsWith(WEB));
   await paid(shop, declined);
   log("ok: the second attempt paid", declined);
+
+  // The gateway's API is down: nothing can be prepared, nothing is charged.
+  await behave({ api: "down" });
+  const outage = await buy(shop, "card");
+  await shop.click('main button:visible:has-text("con tarjeta")');
+  await until("the outage to show", async () => {
+    await fresh(shop);
+    return (
+      (await shop.getByText("No pudimos preparar el pago").filter({ visible: true }).count()) > 0
+    );
+  });
+  const outageText = await text(shop.locator("body"));
+  check(
+    outageText.includes("No se le cobró nada") && outageText.includes("Le quedan 4 intentos"),
+    `the shopper knows nothing was charged, and may try again: ${outageText.slice(0, 300)}`,
+  );
+  await shop.screenshot({ path: `${SHOTS}/p05b-gateway-down.png`, fullPage: true });
+  await behave({ api: "up" });
+  await shop.click('main button:visible:has-text("Intentar de nuevo")');
+  await shop.waitForURL((u) => u.href.startsWith(FAKE_PAY + "/pay/"));
+  await shop.click('[data-testid="fake-approve"]');
+  await shop.waitForURL((u) => u.href.startsWith(WEB));
+  await paid(shop, outage);
+  log("ok: once the gateway is back, a new attempt paid", outage);
 
   // ── 3. SINPE Móvil confirmed by the gateway ──────────────────────────────
   const sinpePhone = await (await browser.newContext(phone)).newPage();

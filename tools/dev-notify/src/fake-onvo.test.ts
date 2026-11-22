@@ -1,6 +1,11 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { normaliseOnvoEvent, onvoGateway, verifyOnvoSignature } from "@yuntera/payments";
+import {
+  type CreatePaymentInput,
+  normaliseOnvoEvent,
+  onvoGateway,
+  verifyOnvoSignature,
+} from "@yuntera/payments";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createFakeOnvo } from "./fake-onvo.ts";
 
@@ -62,8 +67,14 @@ describe("the fake payment gateway", () => {
       sinpeDelayMs: 50,
       refundDelayMs: 50,
     });
+    // In process, as fetch would be over the network: an aborted request rejects.
     const impl = ((input: string | URL | Request, init?: RequestInit) =>
-      fake.handle(new Request(input, init))) as typeof fetch;
+      new Promise<Response>((resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("The operation was aborted.", "AbortError")),
+        );
+        fake.handle(new Request(input, init)).then(resolve, reject);
+      })) as typeof fetch;
     gateway = onvoGateway(
       {
         baseUrl: "http://fake.test",
@@ -201,5 +212,36 @@ describe("the fake payment gateway", () => {
     expect((await gateway.getPayment({ reference: payment.reference })).refundedMinor).toBe(
       100_000,
     );
+  });
+  it("can be down or slow at its API, which the adapter reports as an unknown outcome", async () => {
+    const input: CreatePaymentInput = {
+      attemptId: "a-down",
+      paymentId: "p",
+      orderId: "o",
+      orderNumber: "YT-4",
+      amountMinor: 500_000,
+      currency: "CRC",
+      method: "card",
+      customer: {},
+      returnUrl: "http://shop.test/retorno",
+      cancelUrl: "http://shop.test/cancelado",
+      expiresAt: new Date(Date.now() + 30 * 60_000),
+    };
+    const set = (behaviour: Record<string, unknown>) =>
+      fake.handle(
+        new Request("http://fake.test/_fake/behaviour", {
+          method: "POST",
+          body: JSON.stringify(behaviour),
+        }),
+      );
+    await set({ api: "down" });
+    await expect(gateway.createPayment(input)).rejects.toMatchObject({ kind: "unknown" });
+    await set({ api: "slow", apiDelayMs: 1500 });
+    await expect(gateway.createPayment(input)).rejects.toMatchObject({
+      kind: "unknown",
+      code: "timeout",
+    });
+    await set({ api: "up" });
+    expect((await gateway.createPayment(input)).nextAction).toMatchObject({ kind: "redirect" });
   });
 });

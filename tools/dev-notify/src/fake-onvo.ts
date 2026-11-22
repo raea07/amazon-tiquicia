@@ -21,10 +21,12 @@
  *   GET  /_fake/health
  *   GET  /_fake/state                         sessions, intents, refunds, events sent
  *   POST /_fake/reset
- *   POST /_fake/behaviour {refunds?, duplicate?, reorder?, drop?}
+ *   POST /_fake/behaviour {refunds?, duplicate?, reorder?, drop?, api?, apiDelayMs?}
  *        refunds: succeed (default) | fail | reject (422) | lose (created, answer lost: 504) | hold
  *        duplicate: send every event twice; reorder: send pairs in reverse order;
  *        drop: send no webhook at all (only a check by the worker finds out)
+ *        api: up (default) | slow (every /v1 answer waits apiDelayMs, default 15 s,
+ *        longer than the adapter's timeout) | down (every /v1 call answers 503)
  *   POST /_fake/sinpe/transfer {identification, amount, description?}
  *   POST /_fake/refunds/<id>/complete {outcome: succeeded | failed}
  *   POST /_fake/resend/<event id>             deliver an event again, late (same id)
@@ -137,7 +139,15 @@ export function createFakeOnvo(options: FakeOnvoOptions) {
   let methods = new Map<string, Json>();
   let refunds = new Map<string, Refund>();
   let events: SentEvent[] = [];
-  let behaviour = { refunds: "succeed", duplicate: false, reorder: false, drop: false };
+  const normal = () => ({
+    refunds: "succeed",
+    duplicate: false,
+    reorder: false,
+    drop: false,
+    api: "up" as "up" | "slow" | "down",
+    apiDelayMs: 15_000,
+  });
+  let behaviour = normal();
 
   async function deliver(event: SentEvent, attempt = 1): Promise<void> {
     if (!options.webhookUrl) return;
@@ -420,7 +430,7 @@ export function createFakeOnvo(options: FakeOnvoOptions) {
         methods = new Map();
         refunds = new Map();
         events = [];
-        behaviour = { refunds: "succeed", duplicate: false, reorder: false, drop: false };
+        behaviour = normal();
         return json(200, { reset: true });
       }
       const body = (await request.json().catch(() => ({}))) as Json;
@@ -482,6 +492,16 @@ export function createFakeOnvo(options: FakeOnvoOptions) {
 
     // ── The API ──────────────────────────────────────────────────────────
     if (!path.startsWith("/v1/")) return json(404, { statusCode: 404, message: "Not Found" });
+    // The provider being down or slow: the adapter must treat what it cannot
+    // know as unknown, and the shopper be told nothing was charged.
+    if (behaviour.api === "down") {
+      return json(503, { statusCode: 503, message: "Service Unavailable" });
+    }
+    if (behaviour.api === "slow") {
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.max(0, Number(behaviour.apiDelayMs))),
+      );
+    }
     const auth = request.headers.get("authorization") ?? "";
     if (!/^Bearer onvo_test_secret_key_[A-Za-z0-9_]+$/.test(auth)) {
       return domainError(401, "unauthorized", "Invalid API key", path);
