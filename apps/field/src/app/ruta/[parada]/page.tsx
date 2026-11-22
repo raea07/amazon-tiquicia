@@ -1,3 +1,4 @@
+import { LOCKED_CODE_MESSAGE } from "@yuntera/core";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { Alert, buttonClass, formatPrice, Skeleton } from "@yuntera/ui";
@@ -110,7 +111,7 @@ async function Stop({ params }: Pick<PageProps<"/ruta/[parada]">, "params">) {
             {stop.pin_attempts_left <= 2 ? (
               <p className="mt-1 text-sm font-semibold text-danger">
                 {stop.pin_attempts_left === 0
-                  ? "Código bloqueado por demasiados intentos. Llame a Central."
+                  ? LOCKED_CODE_MESSAGE
                   : `Le quedan ${stop.pin_attempts_left} intento(s) de código.`}
               </p>
             ) : null}

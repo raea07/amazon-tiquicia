@@ -6,7 +6,7 @@
  * driver acts only on their own route and a worker only in their own warehouse.
  */
 
-import { parseColones } from "@yuntera/core";
+import { LOCKED_CODE_MESSAGE, parseColones } from "@yuntera/core";
 import {
   type ActionState,
   attempt,
@@ -104,12 +104,16 @@ export async function completeStop(
     if (!result.ok) {
       // Door-side problems come back as data: the attempt is recorded either way.
       const message = {
-        wrong_pin: `Ese código no es. ${
-          result.attempts_left === 1
-            ? "Queda 1 intento"
-            : `Quedan ${result.attempts_left ?? 0} intentos`
-        }. Pídale al cliente que lo lea de su pedido.`,
-        pin_locked: "Demasiados intentos. No entregue el paquete y llame a Central.",
+        // The last attempt used up: say the same as the lock, not "Quedan 0 intentos".
+        wrong_pin:
+          result.attempts_left === 0
+            ? LOCKED_CODE_MESSAGE
+            : `Ese código no es. ${
+                result.attempts_left === 1
+                  ? "Queda 1 intento"
+                  : `Quedan ${result.attempts_left ?? 0} intentos`
+              }. Pídale al cliente que lo lea de su pedido.`,
+        pin_locked: LOCKED_CODE_MESSAGE,
         cod_amount_mismatch: `Debe cobrar exactamente ${formatPrice(result.expected_minor ?? 0)}. Sin el monto completo no se entrega.`,
         recipient_required: "Escriba el nombre de quien recibe.",
       }[result.error];

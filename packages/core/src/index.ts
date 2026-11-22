@@ -3,6 +3,7 @@ export * from "./cr/compliance";
 export * from "./cr/geo";
 export * from "./cr/iban";
 export * from "./cr/identity";
+export * from "./delivery-code";
 export * from "./fees";
 export * from "./lifecycle";
 export * from "./money";
