@@ -35,7 +35,9 @@ export type PaymentsMode = z.infer<typeof paymentsMode>;
  *   confirming   back from the gateway's page, waiting for its word
  *   failed       declined; may try again
  *   error        could not be prepared; may try again
- *   review       money arrived but did not match: finance is checking
+ *   review       money arrived but did not match (or came after the order
+ *                was cancelled, or in the gateway environment the mode had
+ *                left): finance is checking; see `money_in_review`
  */
 export const paymentStage = z.enum([
   "cash",
@@ -65,6 +67,28 @@ export const gatewayRefundStatus = z.enum([
 export type GatewayRefundStatus = z.infer<typeof gatewayRefundStatus>;
 export const refundChannel = z.enum(["gateway", "transfer", "simulated"]);
 export type RefundChannel = z.infer<typeof refundChannel>;
+
+export const paymentReviewKind = z.enum([
+  "unknown_reference",
+  "amount_mismatch",
+  "currency_mismatch",
+  "late",
+  "paid_twice",
+  "unmatched_transfer",
+  "unknown_refund",
+  "wrong_environment",
+  "dispute",
+]);
+export type PaymentReviewKind = z.infer<typeof paymentReviewKind>;
+
+export const paymentReviewStatus = z.enum([
+  "open",
+  "accepted",
+  "attached",
+  "refunding",
+  "refunded",
+  "dismissed",
+]);
 
 export const orderPayment = z.object({
   order_id: id,
@@ -97,6 +121,20 @@ export const orderPayment = z.object({
       intent_reference: z.string().nullable(),
     })
     .nullable(),
+  /**
+   * Money the gateway took for this order that finance is deciding about
+   * (open), or is sending back (refunding, refunded): the shopper paid, so
+   * the page says so whatever the order's status. Null when there is none.
+   */
+  money_in_review: z
+    .object({
+      kind: paymentReviewKind,
+      status: paymentReviewStatus,
+      amount_minor: money.nullable(),
+      currency: z.string().nullable(),
+      created_at: timestamp,
+    })
+    .nullable(),
   refunds: z.array(
     z.object({
       id,
@@ -121,22 +159,10 @@ export interface SinpePayer {
   phone: string;
 }
 
-export const paymentReviewKind = z.enum([
-  "unknown_reference",
-  "amount_mismatch",
-  "currency_mismatch",
-  "late",
-  "paid_twice",
-  "unmatched_transfer",
-  "unknown_refund",
-  "dispute",
-]);
-export type PaymentReviewKind = z.infer<typeof paymentReviewKind>;
-
 export const paymentReview = z.object({
   id,
   kind: paymentReviewKind,
-  status: z.enum(["open", "accepted", "attached", "refunding", "refunded", "dismissed"]),
+  status: paymentReviewStatus,
   provider: z.string(),
   environment: z.string().nullable(),
   order_number: z.string().nullable(),
@@ -225,9 +251,13 @@ export const paymentReconciliation = z.object({
   attempts: z.object({
     created: z.number().int(),
     succeeded: z.number().int(),
+    /** succeeded + failed + review + stopped + waiting = created. */
     failed: z.number().int(),
+    review: z.number().int(),
     stopped: z.number().int(),
     waiting: z.number().int(),
+    /** Every attempt the gateway declined, also those stopped since (the shopper tried again). */
+    declined: z.number().int(),
     checked_by_worker: z.number().int(),
   }),
   events: z.array(z.object({ outcome: z.string(), count: z.number().int() })),
@@ -331,6 +361,11 @@ export const paymentsErrors = {
   payment_review_closed: {
     "es-CR": "Ese movimiento ya se resolvió. Recargue la página para ver cómo quedó.",
     en: "That item was already settled. Reload the page to see how.",
+  },
+  payment_review_applied: {
+    "es-CR":
+      "Ese dinero ya es el pago de un pedido: no se puede aplicar ni devolver otra vez desde aquí. Ciérrelo con una nota.",
+    en: "That money is already an order's payment: it cannot be applied or refunded again from here. Close it with a note.",
   },
   payment_review_mismatch: {
     "es-CR":

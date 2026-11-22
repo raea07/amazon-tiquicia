@@ -402,6 +402,71 @@ describe.skipIf(!shared)("payments: payloads and races", () => {
         [order.order_id],
       ),
     ).toBe(1);
+    // The shopper's cancelled order still says that the money arrived.
+    const seen = await api(SHOPPER).orderPayment(order.order_number);
+    expect(seen.stage).toBe("review");
+    expect(seen.money_in_review).toMatchObject({ kind: "late", status: "open" });
+  });
+
+  it("the intent's event, before the session names it, and the session's at once: one capture, nothing kept", async () => {
+    const order = await place("card", "race-intent");
+    await api(SHOPPER).startPayment(order.order_id);
+    // The gateway's session is known, its intent not yet.
+    const [task] = (
+      await worker<Array<Record<string, string>>>("worker_payments_claim", {
+        p_worker: "contract",
+        p_limit: 50,
+        p_lease_seconds: 60,
+      })
+    ).filter((t) => t.kind === "create" && t.order_id === order.order_id);
+    await worker("worker_payments_report", {
+      p_worker: "contract",
+      p_report: {
+        kind: "created",
+        attempt_id: task?.attempt_id,
+        outcome: "created",
+        session_reference: `cs_intent_${RUN}`,
+        checkout_url: `https://checkout.onvopay.com/pay/cs_intent_${RUN}`,
+        status: "open",
+      },
+    });
+    const base = await succeeded(order.order_id, "intent-first");
+    const intent = {
+      ...base,
+      provider_type: "payment_intent.succeeded",
+      payment: {
+        ...base.payment,
+        reference: `pi_intent_${RUN}`,
+        session_reference: null,
+        metadata: { attemptId: task?.attempt_id, orderId: order.order_id },
+      },
+    };
+    const session = {
+      ...base,
+      event_id: `intent-second-${RUN}`,
+      payment: { ...base.payment, reference: `pi_intent_${RUN}` },
+    };
+
+    const a = await open("worker");
+    expect(await one(a, EVENT, [JSON.stringify(intent)])).toBe("applied");
+    const b = await open("worker");
+    const second = one(b, EVENT, [JSON.stringify(session)]);
+    expect(await blocked(b.pid)).toBe(true);
+    await end(a, "commit");
+    expect(await second).toBe("duplicate");
+    await end(b, "commit");
+    expect(
+      await lookup<number>(
+        "select count(*)::int as r from private.payment_reviews where payment_reference like $1",
+        [`%intent%${RUN}`],
+      ),
+    ).toBe(0);
+    expect(
+      await lookup<string>(
+        "select gateway_reference as r from public.payments where order_id = $1",
+        [order.order_id],
+      ),
+    ).toBe(`pi_intent_${RUN}`);
   });
 
   it("a payment confirmed while the shopper cancels: payment first, the cancellation refunds it", async () => {

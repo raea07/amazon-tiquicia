@@ -73,8 +73,9 @@ insert into public.app_settings (key, value, description) values
    || 'docs/06-operations/payments.md. Not the fee charged to sellers (that is the fee schedule).'),
   ('max_payment_attempts_per_order', '5',
    'How many times a shopper may start a payment at the gateway for one order.'),
-  ('sinpe_movil_warning_minor', '10000000',
-   'Above this total the checkout warns that many banks limit SINPE Móvil to ₡100 000 a day.')
+  ('gateway_refund_unknown_hold_minutes', '60',
+   'How long a refund whose send got no answer is checked at the gateway before finance is asked to '
+   || 'settle it (it is never sent again by itself: the gateway has no idempotency key).')
 on conflict (key) do nothing;
 
 create or replace function private.payments_mode() returns text
@@ -126,7 +127,10 @@ as $$
 begin
   if new.provider in ('test', 'live') then
     new.environment := new.provider;
-    new.provider := private.payment_gateway();
+    -- Only cards and SINPE Móvil go through the gateway; a bank transfer is
+    -- still confirmed by finance by hand.
+    new.provider := case when new.method in ('card', 'sinpe_movil') then private.payment_gateway()
+                         else 'manual' end;
   end if;
   return new;
 end;
@@ -184,6 +188,9 @@ create table private.payment_attempts (
   payer_number text check (payer_number ~ '^[0-9]{9,12}$'),
   payer_phone text check (payer_phone ~ '^\+506[5-8][0-9]{7}$'),
   failure_code text check (char_length(failure_code) <= 80),
+  -- When the gateway declined it (kept when the attempt is later stopped, so
+  -- the day's declines can be counted).
+  declined_at timestamptz,
   provider_updated_at timestamptz,
   expires_at timestamptz not null,
   -- When the worker should next look at it, and its lease while it does.
@@ -255,6 +262,7 @@ create table private.payment_reviews (
     'paid_twice',          -- the order was already paid
     'unmatched_transfer',  -- a transfer the gateway could not tie to a payment
     'unknown_refund',      -- a refund we did not ask for
+    'wrong_environment',   -- paid in the gateway environment the mode has left
     'dispute')),           -- a chargeback
   event_id bigint references private.payment_events (id),
   order_id uuid references public.orders (id),
@@ -302,6 +310,9 @@ create table private.gateway_refunds (
   failure_code text check (char_length(failure_code) <= 80),
   provider_updated_at timestamptz,
   send_count smallint not null default 0,
+  -- Since when the answer to a send is lost (status unknown): decides how
+  -- long the worker keeps checking before finance is asked.
+  unknown_at timestamptz,
   work_after timestamptz not null default now(),
   locked_until timestamptz,
   locked_by text,
@@ -535,9 +546,21 @@ begin
   where order_id = new.order_id and status in ('captured', 'partially_refunded', 'refunded')
   order by created_at limit 1;
 
+  -- Through the gateway only in the environment that took the payment, and
+  -- only while the mode is that environment: the worker works for the current
+  -- mode alone, so a refund for another environment would never be sent.
+  -- Money that was never real (taken in sandbox, or in the gateway's test
+  -- environment) is refunded as a simulation; real money taken in live and
+  -- refunded after the mode left live, a transfer confirmed by hand, or cash
+  -- is paid back by finance by bank transfer.
   v_channel := case
-    when private.payments_mode() = 'sandbox' and v_payment.gateway_reference is null then 'simulated'
-    when v_payment.gateway_reference is not null then 'gateway'
+    when v_payment.gateway_reference is not null and v_payment.environment = private.payments_mode()
+      then 'gateway'
+    when v_payment.provider = 'sandbox' and v_payment.gateway_reference is null
+         and (private.payments_mode() = 'sandbox' or v_payment.method in ('card', 'sinpe_movil'))
+      then 'simulated'
+    when v_payment.environment = 'test' and v_payment.gateway_reference is not null
+      then 'simulated'
     else 'transfer' end;
 
   -- A cancelled order's reversal took the money straight off the gateway
@@ -561,10 +584,12 @@ begin
 
   insert into private.gateway_refunds
     (refund_id, order_id, payment_id, provider, environment, channel, amount_minor, currency,
-     payment_reference)
+     payment_reference, note)
   values
     (new.id, new.order_id, v_payment.id, v_payment.provider, v_payment.environment, v_channel,
-     new.amount_minor, coalesce(v_payment.currency, 'CRC'), v_payment.gateway_reference)
+     new.amount_minor, coalesce(v_payment.currency, 'CRC'), v_payment.gateway_reference,
+     case when v_channel = 'simulated' and private.payments_mode() <> 'sandbox'
+          then 'Pago de prueba (sin dinero real): el reembolso se da por hecho sin mover dinero.' end)
   returning id into v_id;
 
   if v_channel = 'simulated' then
@@ -820,7 +845,10 @@ begin
   if v_method is null or v_method not in ('sinpe_movil', 'bank_transfer') then
     perform private.fail('order_not_payable', coalesce(v_method::text, ''));
   end if;
-  if v_provider = private.payment_gateway() and private.payments_mode() <> 'sandbox' then
+  -- Outside sandbox a SINPE Móvil payment is the gateway's to confirm, also
+  -- one placed in sandbox (the shopper pays it through the gateway now).
+  if private.payments_mode() <> 'sandbox'
+     and (v_provider = private.payment_gateway() or (v_provider = 'sandbox' and v_method = 'sinpe_movil')) then
     perform private.fail('confirmed_by_gateway');
   end if;
 
@@ -841,6 +869,7 @@ as $$
 declare
   p public.payments%rowtype;
   a private.payment_attempts%rowtype;
+  r private.payment_reviews%rowtype;
   v_mode text := private.payments_mode();
   v_gateway text := private.payment_gateway();
   v_expires timestamptz := p_order.placed_at
@@ -849,27 +878,46 @@ declare
   v_max integer := coalesce((private.setting('max_payment_attempts_per_order'))::integer, 5);
   v_stage text;
   v_can_start boolean;
+  v_takeover boolean;
 begin
   select * into p from public.payments where order_id = p_order.id order by created_at desc limit 1;
   select * into a from private.payment_attempts where order_id = p_order.id
   order by created_at desc limit 1;
   select count(*) into v_tries from private.payment_attempts where order_id = p_order.id;
+  -- Money the gateway took for this order that waits for finance, or that
+  -- finance sent back: the shopper paid, so the page must say so whatever
+  -- the order's own status.
+  select * into r from private.payment_reviews x
+  where x.order_id = p_order.id
+    and x.kind in ('unknown_reference', 'amount_mismatch', 'currency_mismatch', 'late', 'paid_twice',
+                   'wrong_environment')
+    and x.status in ('open', 'refunding', 'refunded')
+  order by x.created_at desc, x.id limit 1;
+
+  -- A card or SINPE Móvil order placed in another mode (sandbox, or the
+  -- gateway's other environment) and not yet paid is paid through the
+  -- gateway of the current mode: start_payment moves it there.
+  v_takeover := p.status = 'pending' and p.method in ('card', 'sinpe_movil') and v_mode <> 'sandbox'
+    and (p.provider is distinct from v_gateway or p.environment is distinct from v_mode);
 
   v_can_start := p_order.status in ('pending_payment', 'payment_review')
-    and p.status = 'pending' and p.provider = v_gateway and v_mode <> 'sandbox'
-    and p.environment = v_mode and p.method in ('card', 'sinpe_movil')
+    and p.status = 'pending' and v_mode <> 'sandbox' and p.method in ('card', 'sinpe_movil')
+    and ((p.provider = v_gateway and p.environment = v_mode) or v_takeover)
     and v_tries < v_max and v_expires > now() + interval '2 minutes'
     and (a.id is null or a.status not in ('creating', 'open', 'processing', 'review'));
 
   v_stage := case
     when p.method = 'cash_on_delivery' then 'cash'
     when p.status in ('captured', 'partially_refunded', 'refunded') then 'paid'
-    when p_order.status in ('cancelled', 'refunded') then 'cancelled'
-    when p.provider = 'sandbox' then case when v_mode = 'sandbox' then 'simulated' else 'manual' end
+    when p_order.status in ('cancelled', 'refunded') then
+      case when r.status in ('open', 'refunding') then 'review' else 'cancelled' end
+    when a.status = 'review' then 'review'
+    when v_mode = 'sandbox' and p.status = 'pending' then 'simulated'
+    when p.method not in ('card', 'sinpe_movil') then 'manual'
+    when v_takeover and (a.id is null or a.environment is distinct from v_mode) then 'start'
     when p.provider <> v_gateway then 'manual'
     when a.id is null then 'start'
     when a.status = 'creating' then 'preparing'
-    when a.status = 'review' then 'review'
     when a.status in ('open', 'processing') and a.method = 'sinpe_movil' then 'transfer'
     when a.status = 'open' and a.returned_at is null then 'pay'
     when a.status in ('open', 'processing') then 'confirming'
@@ -891,8 +939,8 @@ begin
     'expires_at', v_expires,
     'can_start', v_can_start,
     'attempts_left', greatest(v_max - v_tries, 0),
-    'manual_confirmation', p.status = 'pending' and p.method in ('sinpe_movil', 'bank_transfer')
-                           and (p.provider <> v_gateway or v_mode = 'sandbox'),
+    'manual_confirmation', p.status = 'pending'
+                           and (p.method = 'bank_transfer' or (p.method = 'sinpe_movil' and v_mode = 'sandbox')),
     'attempt', case when a.id is null then null else jsonb_build_object(
       'id', a.id,
       'status', a.status,
@@ -905,6 +953,13 @@ begin
       'created_at', a.created_at,
       'session_reference', case when p_staff then a.session_reference end,
       'intent_reference', case when p_staff then a.intent_reference end) end,
+    -- open: finance is deciding; refunding / refunded: it goes, or went, back.
+    'money_in_review', case when r.id is null then null else jsonb_build_object(
+      'kind', r.kind,
+      'status', r.status,
+      'amount_minor', r.amount_minor,
+      'currency', r.currency,
+      'created_at', r.created_at) end,
     'refunds', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', g.id,
@@ -971,8 +1026,7 @@ begin
   end if;
   select * into p from public.payments where order_id = o.id order by created_at desc limit 1 for update;
   if o.status not in ('pending_payment', 'payment_review') or p.status is distinct from 'pending'
-     or p.method not in ('card', 'sinpe_movil') or p.provider <> private.payment_gateway()
-     or p.environment is distinct from v_mode then
+     or p.method not in ('card', 'sinpe_movil') then
     perform private.fail('payment_not_startable');
   end if;
 
@@ -988,6 +1042,16 @@ begin
   end if;
   if (select count(*) from private.payment_attempts where order_id = o.id) >= v_max then
     perform private.fail('payment_attempts_exhausted');
+  end if;
+
+  -- Placed in another mode (sandbox, or the gateway's other environment) and
+  -- never paid: from now on it is paid through the gateway of this mode.
+  -- Nothing of it is open at the old one (the mode changes only when no
+  -- attempt there can still be paid).
+  if p.provider is distinct from private.payment_gateway() or p.environment is distinct from v_mode then
+    update public.payments set provider = private.payment_gateway(), environment = v_mode
+    where id = p.id
+    returning * into p;
   end if;
 
   if p.method = 'sinpe_movil' then
@@ -1079,6 +1143,29 @@ begin
 end;
 $$;
 
+-- The same money was applied to its order after all: an item kept as money
+-- of no known attempt (its events came in an order that hid the match) is
+-- closed, so that it can never be refunded on top of the order's own refunds.
+create or replace function private.payment_reviews_close_applied(
+  p_provider text,
+  p_order uuid,
+  p_intent text,
+  p_session text,
+  p_reference text
+) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  update private.payment_reviews
+  set status = 'dismissed', resolved_at = now(), resolved_order_id = p_order,
+      resolution_note = 'Cerrado solo: el mismo pago se aplicó al pedido '
+                        || (select order_number from public.orders where id = p_order) || '.'
+  where provider = p_provider and kind = 'unknown_reference' and status = 'open'
+    and payment_reference in (p_intent, p_session, p_reference);
+end;
+$$;
+
 -- A payment event (normalised by the worker's adapter). Returns its outcome.
 create or replace function private.payments_apply_payment(p_row bigint, p_event jsonb) returns text
 language plpgsql security definer
@@ -1106,27 +1193,32 @@ declare
 begin
   select x.id, x.order_id into v_attempt_id, v_order_id
   from private.payment_attempts x
-  where x.provider = v_provider
+  where x.provider = v_provider and x.environment = v_env
     and ((v_session is not null and x.session_reference = v_session)
       or (v_intent is not null and x.intent_reference = v_intent))
   order by x.created_at desc limit 1;
 
-  -- An attempt whose creation answer was lost knows no reference yet. The
-  -- event is signed, and only we create objects with our key, so its own
-  -- id in the metadata identifies it; amounts are still checked below.
-  if v_attempt_id is null and v_meta_attempt ~ '^[0-9a-f-]{36}$' then
+  -- An attempt that does not know this intent yet: a card's intent event
+  -- can come before the session event that names the intent, and a create
+  -- whose answer was lost knows no reference at all. The event is signed and
+  -- only we create objects with our key, so our attempt id in its metadata
+  -- identifies the attempt, as long as the attempt holds no other intent
+  -- (and no other session); amounts are still checked below. Otherwise the
+  -- same capture would also be kept as unknown money, and could be refunded
+  -- while the order is fulfilled.
+  if v_attempt_id is null and v_meta_attempt ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
     select x.id, x.order_id into v_attempt_id, v_order_id
     from private.payment_attempts x
-    where x.id = v_meta_attempt::uuid and x.provider = v_provider
-      and x.session_reference is null and x.intent_reference is null
-      and x.create_outcome = 'unknown';
+    where x.id = v_meta_attempt::uuid and x.provider = v_provider and x.environment = v_env
+      and (x.intent_reference is null or x.intent_reference = v_intent)
+      and (v_session is null or x.session_reference is null or x.session_reference = v_session);
   end if;
 
   if v_attempt_id is null then
-    -- A card's intent event can come before its session event has told us
-    -- the intent's id (ONVO does not say the intent inherits the session's
-    -- metadata): the session event, or a check, settles it. Only a session
-    -- nobody knows, or an intent carrying our own metadata, is money to keep.
+    -- An intent event without our metadata, before the session event that
+    -- names it: the session event, or a check, settles it. Only a session
+    -- nobody knows, or an intent carrying our own metadata (of an attempt
+    -- that holds another intent, or of none of ours), is money to keep.
     if v_type = 'payment.succeeded' and (v_session is not null or v_meta_attempt is not null) then
       perform private.payment_review_add('unknown_reference', p_row, v_provider, v_env,
         (select id from public.orders where v_meta_order ~ '^[0-9a-f-]{36}$' and id = v_meta_order::uuid),
@@ -1149,6 +1241,9 @@ begin
 
   if v_type = 'payment.succeeded' then
     if a.status in ('succeeded', 'review') then
+      if a.status = 'succeeded' then
+        perform private.payment_reviews_close_applied(v_provider, o.id, v_intent, v_session, v_reference);
+      end if;
       return 'duplicate'; -- the same money, already applied or already kept
     end if;
     if v_currency is distinct from a.currency then
@@ -1186,6 +1281,7 @@ begin
     update public.payments set gateway_reference = v_reference
     where id = p.id and v_reference not like 'session:%';
     perform private.record_gateway_fee(p.id, v_fee, 'gateway');
+    perform private.payment_reviews_close_applied(v_provider, o.id, v_intent, v_session, v_reference);
     return 'applied';
   end if;
 
@@ -1208,6 +1304,7 @@ begin
     update private.payment_attempts
     set status = case when status in ('creating', 'open', 'processing') then 'failed' else status end,
         failure_code = left(coalesce(v_pay ->> 'failure_code', 'declined'), 80),
+        declined_at = coalesce(declined_at, now()),
         provider_updated_at = coalesce(v_updated, provider_updated_at)
     where id = a.id;
     update public.payments set failure_reason = left(coalesce(v_pay ->> 'failure_code', 'declined'), 200)
@@ -1244,11 +1341,12 @@ declare
   g private.gateway_refunds%rowtype;
 begin
   select x.id, x.order_id into v_id, v_order from private.gateway_refunds x
-  where x.provider = v_provider and x.provider_refund_reference = v_rref;
+  where x.provider = v_provider and x.environment = v_env and x.provider_refund_reference = v_rref;
   if v_id is null then
     -- Sent, but its answer was lost: the gateway's first word about it names it.
     select x.id, x.order_id into v_id, v_order from private.gateway_refunds x
-    where x.provider = v_provider and x.payment_reference = v_pref and x.amount_minor = v_amount
+    where x.provider = v_provider and x.environment = v_env and x.channel = 'gateway'
+      and x.payment_reference = v_pref and x.amount_minor = v_amount
       and x.provider_refund_reference is null and x.status in ('sending', 'sent', 'unknown')
     order by x.requested_at, x.id limit 1;
   end if;
@@ -1309,6 +1407,60 @@ begin
 end;
 $$;
 
+-- A payment taken in the gateway environment the mode has left: kept for
+-- finance (kind wrong_environment), with its attempt marked as in review so
+-- the shopper's page says the money arrived.
+create or replace function private.payments_keep_other_environment(p_row bigint, p_event jsonb) returns text
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_provider text := p_event ->> 'provider';
+  v_env text := p_event ->> 'environment';
+  v_pay jsonb := coalesce(p_event -> 'payment', '{}'::jsonb);
+  v_session text := nullif(v_pay ->> 'session_reference', '');
+  v_intent text := nullif(v_pay ->> 'reference', '');
+  v_meta_attempt text := v_pay #>> '{metadata,attemptId}';
+  v_meta_order text := v_pay #>> '{metadata,orderId}';
+  v_attempt_id uuid;
+  v_order_id uuid;
+  a private.payment_attempts%rowtype;
+begin
+  select x.id, x.order_id into v_attempt_id, v_order_id
+  from private.payment_attempts x
+  where x.provider = v_provider and x.environment = v_env
+    and ((v_session is not null and x.session_reference = v_session)
+      or (v_intent is not null and x.intent_reference = v_intent)
+      or (v_meta_attempt ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          and x.id = v_meta_attempt::uuid and (x.intent_reference is null or x.intent_reference = v_intent)))
+  order by x.created_at desc limit 1;
+
+  if v_attempt_id is not null then
+    perform 1 from public.orders where id = v_order_id for update;
+    select * into a from private.payment_attempts where id = v_attempt_id for update;
+    update private.payment_events set attempt_id = a.id, order_id = a.order_id where id = p_row;
+    if a.status in ('succeeded', 'review') then
+      return 'duplicate';
+    end if;
+    update private.payment_attempts
+    set status = 'review', finished_at = now(),
+        intent_reference = coalesce(intent_reference, v_intent),
+        locked_until = null, locked_by = null
+    where id = a.id;
+  else
+    v_order_id := (select id from public.orders
+                   where v_meta_order ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                     and id = v_meta_order::uuid);
+  end if;
+
+  perform private.payment_review_add('wrong_environment', p_row, v_provider, v_env, v_order_id, v_attempt_id,
+    coalesce(v_intent, 'session:' || v_session), (v_pay ->> 'amount_minor')::bigint, v_pay ->> 'currency',
+    format('Pagado en el entorno %s de la pasarela cuando el modo de pagos ya era %s.',
+           v_env, private.payments_mode()));
+  return 'wrong_environment';
+end;
+$$;
+
 -- Every event, once. The event's id is recorded first, in the same
 -- transaction as its effect: a second delivery (or one running in parallel,
 -- which waits on the unique index) finds it and changes nothing.
@@ -1353,8 +1505,22 @@ begin
     return 'duplicate';
   end if;
 
-  if v_env is distinct from private.payments_mode() or v_provider <> private.payment_gateway() then
+  if v_provider <> private.payment_gateway() or v_env is null or v_env not in ('test', 'live') then
     v_outcome := 'wrong_mode';
+  elsif v_env is distinct from private.payments_mode() then
+    -- From the environment the mode has left (the mode changes only when
+    -- nothing is open there, but a page can still be paid, and events
+    -- arrive late). Money taken there is never applied to an order by
+    -- itself, and never silently dropped: it is kept for finance. A refund
+    -- there can still complete (it only settles what we owe). Anything else
+    -- changes nothing.
+    if v_type = 'payment.succeeded' then
+      v_outcome := private.payments_keep_other_environment(v_row, p_event);
+    elsif v_type like 'refund.%' then
+      v_outcome := private.payments_apply_refund(v_row, p_event);
+    else
+      v_outcome := 'wrong_mode';
+    end if;
   elsif v_type like 'payment.%' then
     v_outcome := private.payments_apply_payment(v_row, p_event);
   elsif v_type like 'refund.%' then
@@ -1449,7 +1615,8 @@ begin
       finished_at = now(), locked_until = null, locked_by = null
   where status = 'creating' and locked_until < now();
   update private.gateway_refunds
-  set status = 'unknown', locked_until = null, locked_by = null, work_after = now() + interval '1 minute'
+  set status = 'unknown', unknown_at = coalesce(unknown_at, now()), locked_until = null, locked_by = null,
+      work_after = now() + interval '1 minute'
   where status = 'sending' and locked_until < now();
   -- Never created at the gateway: nothing to stop there.
   update private.payment_attempts
@@ -1550,6 +1717,7 @@ declare
   v_order uuid;
   v_refunded bigint;
   v_known bigint;
+  v_hold_minutes integer := coalesce((private.setting('gateway_refund_unknown_hold_minutes'))::integer, 60);
 begin
   perform private.require_worker();
 
@@ -1645,6 +1813,7 @@ begin
     if v_kind = 'release_refund' then
       update private.gateway_refunds
       set status = case when status = 'sending' then 'unknown' else status end,
+          unknown_at = case when status in ('sending', 'unknown') then coalesce(unknown_at, now()) end,
           locked_until = null, locked_by = null,
           work_after = now() + make_interval(secs => least(coalesce((p_report ->> 'retry_after_seconds')::integer, 60), 3600))
       where id = g.id;
@@ -1676,34 +1845,41 @@ begin
         where id = g.id;
       else
         update private.gateway_refunds
-        set status = 'unknown', locked_until = null, locked_by = null, work_after = now() + interval '2 minutes'
+        set status = 'unknown', unknown_at = coalesce(unknown_at, now()),
+            locked_until = null, locked_by = null, work_after = now() + interval '2 minutes'
         where id = g.id;
       end if;
       return 'recorded';
     end if;
 
-    -- refund_checked: how much the gateway has refunded on that payment, to
-    -- decide whether a send whose answer was lost exists.
+    -- refund_checked: a send whose answer was lost. The gateway has no
+    -- idempotency key, and the note does not say that a refund still pending
+    -- there already shows in the intent's refunded total, so reading "nothing
+    -- refunded" does not prove it was never created. It is never sent again
+    -- by itself: while the hold lasts (longer than the gateway's first
+    -- webhook deliveries) the worker keeps asking, and refund.created or
+    -- refund.succeeded, matched by payment and amount, settles it; the
+    -- intent's refunded total settles it when it covers every refund of that
+    -- payment we know of, this one and any other whose answer was lost.
+    -- After the hold, finance is asked (failed, send_unconfirmed): they check
+    -- the gateway's dashboard and send it again or pay it by transfer.
     v_refunded := (p_report ->> 'provider_refunded_minor')::bigint;
     select coalesce(sum(x.amount_minor), 0) into v_known from private.gateway_refunds x
     where x.provider = g.provider and x.payment_reference = g.payment_reference and x.id <> g.id
-      and x.status in ('sent', 'succeeded');
-    if v_refunded is null then
-      update private.gateway_refunds set locked_until = null, locked_by = null,
-        work_after = now() + interval '5 minutes' where id = g.id;
-    elsif v_refunded >= v_known + g.amount_minor then
+      and x.channel = 'gateway' and x.status in ('sent', 'succeeded', 'sending', 'unknown');
+    if v_refunded is not null and v_refunded >= v_known + g.amount_minor then
       update private.gateway_refunds
       set status = 'sent', sent_at = coalesce(sent_at, now()), locked_until = null, locked_by = null,
           work_after = now() + interval '10 minutes'
       where id = g.id;
-    elsif v_refunded <= v_known then
-      -- The gateway holds nothing of it: safe to send.
-      update private.gateway_refunds
-      set status = 'requested', locked_until = null, locked_by = null, work_after = now()
-      where id = g.id;
-    else
+    elsif coalesce(g.unknown_at, now()) > now() - make_interval(mins => v_hold_minutes) then
       update private.gateway_refunds set locked_until = null, locked_by = null,
         work_after = now() + interval '5 minutes' where id = g.id;
+    else
+      update private.gateway_refunds
+      set status = 'failed', failed_at = now(), failure_code = 'send_unconfirmed',
+          locked_until = null, locked_by = null
+      where id = g.id;
     end if;
     return 'recorded';
   end if;
@@ -1726,6 +1902,28 @@ $$;
 
 -- ═══ 10. Finance ═══════════════════════════════════════════════════════════
 
+-- Whether the gateway's id of some money is already the payment of an order
+-- (applied by its own event, or by finance): then it must not be applied or
+-- refunded again from a review.
+create or replace function private.payment_reference_applied(p_provider text, p_reference text) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select p_reference is not null and exists (
+    select 1 from public.payments p
+    where p.status in ('captured', 'partially_refunded', 'refunded')
+      and (p.gateway_reference = p_reference or (p.provider = p_provider and p.provider_reference = p_reference)));
+$$;
+
+-- Money of the gateway's test environment pays only an order of that
+-- environment, and real money never an order taken in test.
+create or replace function private.payment_environments_fit(p_money text, p_payment text) returns boolean
+language sql immutable security definer
+set search_path = ''
+as $$
+  select not ('test' in (coalesce(p_money, ''), coalesce(p_payment, '')) and p_money is distinct from p_payment);
+$$;
+
 create or replace function private.payment_review_json(r private.payment_reviews) returns jsonb
 language sql stable security definer
 set search_path = ''
@@ -1739,12 +1937,16 @@ as $$
     'currency', r.currency, 'detail', r.detail, 'created_at', r.created_at,
     'resolved_order_number', (select o.order_number from public.orders o where o.id = r.resolved_order_id),
     'resolution_note', r.resolution_note, 'resolved_at', r.resolved_at,
-    'can_refund', r.status = 'open' and r.amount_minor > 0 and r.kind not in ('unknown_refund', 'dispute'),
-    'can_accept', r.status = 'open' and r.kind not in ('unknown_refund', 'dispute') and exists (
+    'can_refund', r.status = 'open' and r.amount_minor > 0 and r.kind not in ('unknown_refund', 'dispute')
+                  and not private.payment_reference_applied(r.provider, r.payment_reference),
+    'can_accept', r.status = 'open' and r.kind not in ('unknown_refund', 'dispute')
+                  and not private.payment_reference_applied(r.provider, r.payment_reference) and exists (
       select 1 from public.orders o join public.payments p on p.order_id = o.id
       where o.id = r.order_id and o.status in ('pending_payment', 'payment_review')
-        and p.status = 'pending' and p.amount_minor = r.amount_minor and r.currency = p.currency),
-    'can_attach', r.status = 'open' and r.amount_minor > 0 and r.kind not in ('unknown_refund', 'dispute'),
+        and p.status = 'pending' and p.amount_minor = r.amount_minor and r.currency = p.currency
+        and private.payment_environments_fit(r.environment, p.environment)),
+    'can_attach', r.status = 'open' and r.amount_minor > 0 and r.kind not in ('unknown_refund', 'dispute')
+                  and not private.payment_reference_applied(r.provider, r.payment_reference),
     'refund', (select jsonb_build_object('status', g.status, 'channel', g.channel)
                from private.gateway_refunds g where g.review_id = r.id));
 $$;
@@ -1783,6 +1985,8 @@ declare
   p public.payments%rowtype;
   v_note text := left(nullif(trim(p_note), ''), 500);
   v_reference text;
+  v_channel text;
+  v_refund uuid;
 begin
   if not private.has_staff_role('finance') then
     perform private.fail('forbidden');
@@ -1811,6 +2015,11 @@ begin
   if r.status <> 'open' then
     perform private.fail('payment_review_closed');
   end if;
+  -- The same money is already an order's payment (its events arrived in an
+  -- order that kept it here too): neither apply it again nor refund it.
+  if p_action <> 'dismiss' and private.payment_reference_applied(r.provider, r.payment_reference) then
+    perform private.fail('payment_review_applied');
+  end if;
 
   if p_action in ('accept', 'attach') then
     if r.kind in ('unknown_refund', 'dispute') then
@@ -1818,7 +2027,8 @@ begin
     end if;
     select * into p from public.payments where order_id = o.id order by created_at desc limit 1 for update;
     if o.status not in ('pending_payment', 'payment_review') or p.status is distinct from 'pending'
-       or p.amount_minor is distinct from r.amount_minor or p.currency is distinct from r.currency then
+       or p.amount_minor is distinct from r.amount_minor or p.currency is distinct from r.currency
+       or not private.payment_environments_fit(r.environment, p.environment) then
       perform private.fail('payment_review_mismatch');
     end if;
     v_reference := coalesce(r.payment_reference, 'review:' || r.id);
@@ -1837,23 +2047,57 @@ begin
     if r.kind in ('unknown_refund', 'dispute') or coalesce(r.amount_minor, 0) <= 0 then
       perform private.fail('payment_review_action_invalid');
     end if;
+    -- Through the gateway only for money with an intent id, of the
+    -- environment the worker now serves; test money is not real (nothing to
+    -- send back); any other real money finance pays back by transfer.
+    v_channel := case
+      when r.payment_reference is not null and r.payment_reference not like 'session:%'
+           and r.kind <> 'unmatched_transfer' and r.environment = private.payments_mode() then 'gateway'
+      when r.environment = 'test' then 'simulated'
+      else 'transfer' end;
     insert into private.gateway_refunds
       (review_id, order_id, provider, environment, channel, amount_minor, currency, payment_reference, note)
     values
-      (r.id, r.order_id, r.provider, r.environment,
-       case when r.payment_reference is not null and r.kind <> 'unmatched_transfer' then 'gateway' else 'transfer' end,
-       r.amount_minor, coalesce(r.currency, 'CRC'), r.payment_reference, v_note);
+      (r.id, r.order_id, r.provider, r.environment, v_channel,
+       r.amount_minor, coalesce(r.currency, 'CRC'), r.payment_reference, v_note)
+    returning id into v_refund;
     update private.payment_reviews
     set status = 'refunding', resolution_note = v_note, resolved_by = (select auth.uid()), resolved_at = now()
     where id = r.id;
+    if v_channel = 'simulated' then
+      perform private.complete_gateway_refund(v_refund);
+    end if;
   else
     update private.payment_reviews
     set status = 'dismissed', resolution_note = v_note, resolved_by = (select auth.uid()), resolved_at = now()
     where id = r.id;
   end if;
 
+  -- The attempt that brought the money is finished either way: the shopper
+  -- may start a new one while the order still waits for its payment.
+  update private.payment_attempts
+  set status = case when p_action in ('accept', 'attach') and o.id = order_id then 'succeeded' else 'cancelled' end,
+      finished_at = coalesce(finished_at, now())
+  where id = r.attempt_id and status = 'review';
+
   return private.payment_review_json((select x from private.payment_reviews x where x.id = r.id));
+exception
+  when unique_violation then
+    perform private.fail('payment_review_applied');
 end;
+$$;
+
+-- Which refunds finance may pay by bank transfer: those meant for it, those
+-- the gateway refused, and those left for an environment the mode has left
+-- (never sent: the worker serves the current mode only).
+create or replace function private.gateway_refund_transferable(g private.gateway_refunds) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select (g.channel = 'transfer' and g.status = 'requested')
+      or (g.channel = 'gateway' and g.status = 'failed')
+      or (g.channel = 'gateway' and g.status = 'requested'
+          and g.environment is distinct from private.payments_mode());
 $$;
 
 create or replace function private.gateway_refund_json(g private.gateway_refunds) returns jsonb
@@ -1871,8 +2115,7 @@ as $$
     'sent_at', g.sent_at, 'completed_at', g.completed_at, 'failed_at', g.failed_at,
     'bank_reference', g.bank_reference,
     'can_retry', g.channel = 'gateway' and g.status = 'failed',
-    'can_record_transfer', (g.channel = 'transfer' and g.status = 'requested')
-                           or (g.channel = 'gateway' and g.status = 'failed'));
+    'can_record_transfer', private.gateway_refund_transferable(g));
 $$;
 
 create or replace function public.ops_gateway_refunds(p_open_only boolean default true) returns jsonb
@@ -1915,7 +2158,7 @@ begin
   end if;
   update private.gateway_refunds
   set status = 'requested', failure_code = null, failed_at = null, provider_refund_reference = null,
-      work_after = now()
+      unknown_at = null, work_after = now()
   where id = p_id;
   return private.gateway_refund_json((select x from private.gateway_refunds x where x.id = p_id));
 end;
@@ -1948,7 +2191,7 @@ begin
     perform 1 from public.orders where id = g.order_id for update;
   end if;
   select * into g from private.gateway_refunds where id = p_id for update;
-  if not ((g.channel = 'transfer' and g.status = 'requested') or (g.channel = 'gateway' and g.status = 'failed')) then
+  if not private.gateway_refund_transferable(g) then
     perform private.fail('gateway_refund_state');
   end if;
   update private.gateway_refunds
@@ -2073,10 +2316,15 @@ begin
     'attempts', (
       select jsonb_build_object(
         'created', count(*),
+        -- succeeded + failed + review + stopped + waiting = created; declined
+        -- counts every attempt the gateway declined, also those stopped since
+        -- (a declined attempt is stopped when the shopper tries again).
         'succeeded', count(*) filter (where status = 'succeeded'),
         'failed', count(*) filter (where status = 'failed'),
+        'review', count(*) filter (where status = 'review'),
         'stopped', count(*) filter (where status in ('cancelled', 'expired', 'cancel_requested', 'error')),
         'waiting', count(*) filter (where status in ('creating', 'open', 'processing')),
+        'declined', count(*) filter (where declined_at is not null),
         'checked_by_worker', count(*) filter (where checks > 0))
       from private.payment_attempts where private.cr_local(created_at)::date = v_day),
     'events', coalesce((
@@ -2114,10 +2362,12 @@ begin
         'recent', s.reported_at > now() - interval '15 minutes') order by s.environment)
       from private.payment_gateway_status s where s.provider = private.payment_gateway()), '[]'::jsonb),
     'open_work', jsonb_build_object(
-      'attempts', (select count(*) from private.payment_attempts
-                   where status in ('creating', 'open', 'processing', 'cancel_requested')),
-      'refunds', (select count(*) from private.gateway_refunds
-                  where channel = 'gateway' and status in ('requested', 'sending', 'sent', 'unknown'))));
+      'attempts', (select count(*) from private.payment_attempts a
+                   where a.environment = private.payments_mode()
+                     and a.status in ('creating', 'open', 'processing', 'failed', 'cancel_requested')),
+      'refunds', (select count(*) from private.gateway_refunds g
+                  where g.channel = 'gateway' and g.environment = private.payments_mode()
+                    and g.status in ('requested', 'sending', 'sent', 'unknown'))));
 end;
 $$;
 
@@ -2152,10 +2402,15 @@ begin
       and s.keys_ready and s.webhook_ready and s.reported_at > now() - interval '15 minutes') then
     perform private.fail('payments_provider_not_ready');
   end if;
-  if exists (select 1 from private.payment_attempts
-             where status in ('creating', 'open', 'processing', 'cancel_requested'))
-     or exists (select 1 from private.gateway_refunds
-                where channel = 'gateway' and status in ('requested', 'sending', 'sent', 'unknown')) then
+  -- What the worker of the environment being left still has to do there.
+  -- A declined attempt counts: the gateway's page can still be paid until
+  -- the worker stops it.
+  if exists (select 1 from private.payment_attempts a
+             where a.environment = v_old
+               and a.status in ('creating', 'open', 'processing', 'failed', 'cancel_requested'))
+     or exists (select 1 from private.gateway_refunds g
+                where g.channel = 'gateway' and g.environment = v_old
+                  and g.status in ('requested', 'sending', 'sent', 'unknown')) then
     perform private.fail('payments_work_open');
   end if;
 
@@ -2300,6 +2555,11 @@ revoke all on function
   private.payments_stop_attempts(),
   private.order_payment_json(public.orders, boolean),
   private.payment_review_add(text, bigint, text, text, uuid, uuid, text, bigint, text, text),
+  private.payment_reviews_close_applied(text, uuid, text, text, text),
+  private.payments_keep_other_environment(bigint, jsonb),
+  private.payment_reference_applied(text, text),
+  private.payment_environments_fit(text, text),
+  private.gateway_refund_transferable(private.gateway_refunds),
   private.payments_apply_payment(bigint, jsonb),
   private.payments_apply_refund(bigint, jsonb),
   private.payments_apply_event(jsonb),

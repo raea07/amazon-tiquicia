@@ -787,9 +787,17 @@ begin
       'amount_minor', 5000, 'currency', 'CRC', 'metadata', '{}'::jsonb))) = 'unmatched', 'unknown';
   assert exists (select 1 from private.payment_reviews where payment_reference = 'pi_nobody'
                  and kind = 'unknown_reference'), 'kept for finance';
-  -- A test event while the database is in another environment changes nothing.
+  -- A payment from another environment of the gateway is never applied, and
+  -- never dropped: it names no attempt of that environment, and is kept.
   assert pg_temp.apply(jsonb_set(pg_temp.pay_event('evt_f_live', 'payment.succeeded', v_order),
-           '{environment}', '"live"')) = 'wrong_mode', 'another environment';
+           '{environment}', '"live"')) = 'wrong_environment', 'another environment';
+  assert exists (select 1 from private.payment_reviews where kind = 'wrong_environment' and environment = 'live'
+                 and event_id = (select id from private.payment_events where event_id = 'evt_f_live')),
+    'kept for finance';
+  assert (pg_temp.last_attempt(v_order)).status = 'review', 'the test attempt is untouched';
+  -- Anything else from another environment changes nothing.
+  assert pg_temp.apply(jsonb_set(pg_temp.pay_event('evt_f_live_fail', 'payment.failed', v_order),
+           '{environment}', '"live"')) = 'wrong_mode', 'not a payment';
   -- And an event that is not an event is refused outright.
   perform pg_temp.work();
   begin
@@ -1078,7 +1086,9 @@ end
 $$;
 select pg_temp.check_money('I. partial completed');
 
--- A lost answer for a refund the gateway never created: safe to send again.
+-- A lost answer for a refund the gateway shows nothing of: never sent again
+-- by itself (a refund still pending there may not show yet). The worker keeps
+-- asking during the hold; after it, finance decides.
 do $$
 declare
   g uuid;
@@ -1098,7 +1108,24 @@ begin
   perform jsonb_array_elements(pg_temp.claim());
   perform pg_temp.report(jsonb_build_object('kind', 'refund_checked', 'gateway_refund_id', g,
     'provider_refunded_minor', 0));
-  assert (select status from private.gateway_refunds where id = g) = 'requested', 'not at the gateway: send again';
+  assert (select status || ':' || send_count from private.gateway_refunds where id = g) = 'unknown:1',
+    'nothing shown yet: asked again later, not sent again';
+  assert (select work_after from private.gateway_refunds where id = g) > now(), 'later';
+  -- The hold is over and the gateway still shows nothing: finance is asked.
+  update private.gateway_refunds set work_after = now(), unknown_at = now() - interval '2 hours' where id = g;
+  perform jsonb_array_elements(pg_temp.claim());
+  perform pg_temp.report(jsonb_build_object('kind', 'refund_checked', 'gateway_refund_id', g,
+    'provider_refunded_minor', 0));
+  assert (select status || ':' || failure_code || ':' || send_count from private.gateway_refunds where id = g)
+         = 'failed:send_unconfirmed:1', format('for finance: %s',
+           (select row_to_json(x) from private.gateway_refunds x where x.id = g));
+  -- Finance checked the gateway's dashboard and sends it again.
+  perform pg_temp.act('pagos-finanzas@yuntera.example');
+  assert public.ops_retry_gateway_refund(g) ->> 'status' = 'requested', 'sent again by finance';
+  perform pg_temp.logout();
+  assert (select unknown_at from private.gateway_refunds where id = g) is null, 'a fresh send';
+  -- Left for the next block as it was.
+  update private.gateway_refunds set work_after = now() + interval '1 day' where id = g;
 end
 $$;
 
@@ -1233,5 +1260,412 @@ end
 $$;
 select pg_temp.logout();
 select pg_temp.check_money('L. live');
+
+
+-- ═══ M. Events out of order across kinds, money left in another environment ═
+-- (from the reviews of this suite: each case failed before its fix)
+
+create function pg_temp.live(p_event jsonb) returns jsonb
+language sql as $$ select jsonb_set(p_event, '{environment}', '"live"') $$;
+
+select pg_temp.shopper('pagos-m' || n || '@yuntera.example', 'Prueba Pagos M' || n) from generate_series(1, 5) n;
+
+-- M1. A card's intent event, carrying our metadata, arrives before the
+-- session event that names the intent: one capture, nothing left for finance
+-- to refund, and one refund when the shopper cancels.
+select pg_temp.remember('m_card', pg_temp.place('pagos-m1@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1'), 'card', 'pay-m-card-0001')::text);
+do $$
+declare
+  v_order uuid := current_setting('t.m_card')::uuid;
+  t jsonb;
+  a private.payment_attempts;
+begin
+  perform pg_temp.start('pagos-m1@yuntera.example', v_order);
+  t := (select x from jsonb_array_elements(pg_temp.claim()) x where x ->> 'order_id' = v_order::text);
+  perform pg_temp.report(jsonb_build_object('kind', 'created', 'attempt_id', t ->> 'attempt_id',
+    'outcome', 'created', 'session_reference', 'cs_m_card', 'checkout_url', 'https://checkout.onvopay.com/pay/cs_m_card',
+    'status', 'open'));
+  a := pg_temp.last_attempt(v_order);
+  assert a.environment = 'live' and a.intent_reference is null, 'a session only';
+  assert pg_temp.apply(pg_temp.live(jsonb_build_object('provider', 'onvo', 'event_id', 'evt_m_intent',
+    'source', 'webhook', 'type', 'payment.succeeded', 'provider_type', 'payment_intent.succeeded',
+    'payment', jsonb_build_object('reference', 'pi_m_card', 'amount_minor', a.amount_minor, 'currency', 'CRC',
+      'metadata', jsonb_build_object('attemptId', a.id, 'orderId', v_order))))) = 'applied',
+    'recognised by our attempt id';
+  assert pg_temp.apply(pg_temp.live(jsonb_build_object('provider', 'onvo', 'event_id', 'evt_m_session',
+    'source', 'webhook', 'type', 'payment.succeeded', 'provider_type', 'checkout_session.succeeded',
+    'payment', jsonb_build_object('reference', 'pi_m_card', 'session_reference', 'cs_m_card',
+      'amount_minor', a.amount_minor, 'currency', 'CRC', 'metadata', '{}'::jsonb)))) = 'duplicate',
+    'the session event is the same money';
+  assert (select gateway_reference || ':' || status from public.payments where order_id = v_order)
+         = 'pi_m_card:captured', 'captured against the intent';
+  assert not exists (select 1 from private.payment_reviews where payment_reference in ('pi_m_card', 'cs_m_card')),
+    'nothing kept for finance';
+  -- Even if an item for that money existed, finance could not refund it.
+  insert into private.payment_reviews (provider, environment, kind, payment_reference, amount_minor, currency)
+  values ('onvo', 'live', 'unknown_reference', 'pi_m_card', a.amount_minor, 'CRC');
+end
+$$;
+select pg_temp.remember('m_card_review', (select id::text from private.payment_reviews where payment_reference = 'pi_m_card'));
+select pg_temp.remember('live_order_number',
+  (select order_number from public.orders where id = current_setting('t.live_order')::uuid));
+select pg_temp.login('pagos-finanzas@yuntera.example');
+do $$
+declare
+  r jsonb := (select x from jsonb_array_elements(public.ops_payment_reviews(true)) x
+              where x ->> 'payment_reference' = 'pi_m_card');
+begin
+  assert not (r ->> 'can_refund')::boolean and not (r ->> 'can_attach')::boolean, format('no action: %s', r);
+end
+$$;
+select pg_temp.refused(format('select public.ops_resolve_payment_review(%L, ''refund'', null, ''Devolver el cobro'')',
+  current_setting('t.m_card_review')), 'payment_review_applied');
+select pg_temp.refused(format('select public.ops_resolve_payment_review(%L, ''attach'', %L, ''A otro pedido'')',
+  current_setting('t.m_card_review'), current_setting('t.live_order_number')), 'payment_review_applied');
+select public.ops_resolve_payment_review(current_setting('t.m_card_review')::uuid,
+  'dismiss', null, 'Es el pago del pedido, ya aplicado.') ->> 'status' as m1_dismissed;
+reset role;
+select pg_temp.act('pagos-m1@yuntera.example');
+select public.cancel_order(current_setting('t.m_card')::uuid) ->> 'status' as m1_cancelled;
+select pg_temp.logout();
+do $$
+begin
+  assert (select count(*) || ':' || sum(amount_minor) from private.gateway_refunds
+          where payment_reference = 'pi_m_card')
+         = '1:' || (select amount_minor from public.payments where order_id = current_setting('t.m_card')::uuid),
+    'one refund of the capture, through the gateway';
+  assert (select channel from private.gateway_refunds where payment_reference = 'pi_m_card') = 'gateway', 'gateway';
+end
+$$;
+select pg_temp.check_money('M1. intent before session');
+
+-- An item kept for money that later turns out to be an order's own payment
+-- is closed by itself when the payment is applied.
+select pg_temp.remember('m_close', pg_temp.place('pagos-m2@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1'), 'card', 'pay-m-close-0001')::text);
+do $$
+declare
+  v_order uuid := current_setting('t.m_close')::uuid;
+  t jsonb;
+  a private.payment_attempts;
+begin
+  perform pg_temp.start('pagos-m2@yuntera.example', v_order);
+  t := (select x from jsonb_array_elements(pg_temp.claim()) x where x ->> 'order_id' = v_order::text);
+  perform pg_temp.report(jsonb_build_object('kind', 'created', 'attempt_id', t ->> 'attempt_id',
+    'outcome', 'created', 'session_reference', 'cs_m_close', 'status', 'open'));
+  a := pg_temp.last_attempt(v_order);
+  insert into private.payment_reviews (provider, environment, kind, payment_reference, amount_minor, currency)
+  values ('onvo', 'live', 'unknown_reference', 'pi_m_close', a.amount_minor, 'CRC');
+  assert pg_temp.apply(pg_temp.live(jsonb_build_object('provider', 'onvo', 'event_id', 'evt_m_close',
+    'source', 'webhook', 'type', 'payment.succeeded', 'provider_type', 'checkout_session.succeeded',
+    'payment', jsonb_build_object('reference', 'pi_m_close', 'session_reference', 'cs_m_close',
+      'amount_minor', a.amount_minor, 'currency', 'CRC', 'metadata', '{}'::jsonb)))) = 'applied', 'applied';
+  assert (select status from private.payment_reviews where payment_reference = 'pi_m_close') = 'dismissed',
+    'the item closed itself';
+end
+$$;
+
+-- M2. An older "processing" after a newer decline leaves it declined.
+select pg_temp.remember('m_stale', pg_temp.place('pagos-m2@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1'), 'card', 'pay-m-stale-0001')::text);
+select pg_temp.start('pagos-m2@yuntera.example', current_setting('t.m_stale')::uuid) ->> 'stage' as m2_preparing;
+select pg_temp.create_due() as m2_created;
+do $$
+declare
+  v_order uuid := current_setting('t.m_stale')::uuid;
+begin
+  assert pg_temp.apply(pg_temp.live(pg_temp.pay_event('evt_m2_failed', 'payment.failed', v_order,
+    p_updated => now() + interval '2 seconds'))) = 'applied', 'declined at t2';
+  assert pg_temp.apply(pg_temp.live(pg_temp.pay_event('evt_m2_processing', 'payment.processing', v_order,
+    p_updated => now() + interval '1 second'))) = 'stale', 'processing from t1';
+  assert (pg_temp.last_attempt(v_order)).status = 'failed', 'still declined';
+  -- A newer one (the shopper tries again on the same page) does move it on.
+  assert pg_temp.apply(pg_temp.live(pg_temp.pay_event('evt_m2_processing2', 'payment.processing', v_order,
+    p_updated => now() + interval '3 seconds'))) = 'applied', 'processing from t3';
+  assert (pg_temp.last_attempt(v_order)).status = 'processing', 'processing again';
+end
+$$;
+
+-- M3. Money kept for finance: the shopper is told, whatever the order's
+-- status, and once finance refunds it the order can be paid again.
+select pg_temp.remember('m_review', pg_temp.place('pagos-m3@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1'), 'card', 'pay-m-review-0001')::text);
+select pg_temp.start('pagos-m3@yuntera.example', current_setting('t.m_review')::uuid) ->> 'stage' as m3_preparing;
+select pg_temp.create_due() as m3_created;
+select pg_temp.apply(pg_temp.live(pg_temp.pay_event('evt_m3_amount', 'payment.succeeded',
+  current_setting('t.m_review')::uuid, p_amount => 200))) as m3_mismatch;
+select pg_temp.act('pagos-m3@yuntera.example');
+do $$
+declare
+  v jsonb := public.order_payment((select order_number from public.orders where id = current_setting('t.m_review')::uuid));
+begin
+  assert v ->> 'stage' = 'review' and not (v ->> 'can_start')::boolean, format('review: %s', v);
+  assert v -> 'money_in_review' ->> 'kind' = 'amount_mismatch' and v -> 'money_in_review' ->> 'status' = 'open',
+    'the shopper sees money arrived';
+end
+$$;
+select pg_temp.logout();
+select pg_temp.remember('m_review_id', (select id::text from private.payment_reviews
+  where order_id = current_setting('t.m_review')::uuid));
+select pg_temp.login('pagos-finanzas@yuntera.example');
+select public.ops_resolve_payment_review(current_setting('t.m_review_id')::uuid,
+  'refund', null, 'Monto distinto; se devuelve al cliente.') ->> 'status' as m3_refunding;
+reset role;
+select pg_temp.act('pagos-m3@yuntera.example');
+do $$
+declare
+  v_order uuid := current_setting('t.m_review')::uuid;
+  v jsonb := public.order_payment((select order_number from public.orders where id = v_order));
+begin
+  assert (pg_temp.last_attempt(v_order)).status = 'cancelled', 'the attempt is finished';
+  assert v ->> 'stage' = 'start' and (v ->> 'can_start')::boolean, format('can pay again: %s', v);
+  assert v -> 'money_in_review' ->> 'status' = 'refunding', 'and sees the money going back';
+  v := public.start_payment(v_order);
+  assert v ->> 'stage' = 'preparing', format('a new attempt: %s', v);
+end
+$$;
+select pg_temp.logout();
+
+-- A payment that arrives after the order was cancelled: the cancelled order's
+-- page says the money arrived and what happens to it.
+select pg_temp.remember('m_late', pg_temp.place('pagos-m3@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1'), 'card', 'pay-m-late-0001')::text);
+select pg_temp.start('pagos-m3@yuntera.example', current_setting('t.m_late')::uuid) ->> 'stage' as m3_late_preparing;
+select pg_temp.create_due() as m3_late_created;
+select pg_temp.act('pagos-m3@yuntera.example');
+select public.cancel_order(current_setting('t.m_late')::uuid) ->> 'status' as m3_late_cancelled;
+select pg_temp.logout();
+select pg_temp.apply(pg_temp.live(pg_temp.pay_event('evt_m3_late', 'payment.succeeded',
+  current_setting('t.m_late')::uuid))) as m3_late;
+select pg_temp.act('pagos-m3@yuntera.example');
+do $$
+declare
+  v jsonb := public.order_payment((select order_number from public.orders where id = current_setting('t.m_late')::uuid));
+begin
+  assert v ->> 'order_status' = 'cancelled' and v ->> 'stage' = 'review', format('not just cancelled: %s', v);
+  assert v -> 'money_in_review' ->> 'kind' = 'late', 'money that came late';
+end
+$$;
+select pg_temp.logout();
+
+-- The day's reconciliation counts a decline even after the shopper tried
+-- again (the declined attempt is then stopped), and its buckets add up.
+select pg_temp.login('pagos-finanzas@yuntera.example');
+do $$
+declare
+  v jsonb := public.ops_payment_reconciliation(null) -> 'attempts';
+begin
+  assert (v ->> 'declined')::integer >= 3, format('declines: %s', v);
+  assert (v ->> 'created')::integer = (v ->> 'succeeded')::integer + (v ->> 'failed')::integer
+    + (v ->> 'review')::integer + (v ->> 'stopped')::integer + (v ->> 'waiting')::integer,
+    format('the buckets add up: %s', v);
+end
+$$;
+reset role;
+select pg_temp.check_money('M3. money in review');
+
+-- M4. Two refunds of one payment whose answers were both lost: the gateway's
+-- total must cover both before either counts as sent.
+do $$
+declare
+  v_order uuid := current_setting('t.m_card')::uuid;
+  g1 uuid;
+  g2 uuid;
+begin
+  select id into g1 from private.gateway_refunds where payment_reference = 'pi_m_card';
+  -- A second (made-up) refund on the same intent, both now unknown.
+  insert into private.gateway_refunds (review_id, order_id, provider, environment, channel, amount_minor,
+                                       payment_reference, status, unknown_at)
+  values ((select id from private.payment_reviews where payment_reference = 'pi_m_close'), v_order,
+          'onvo', 'live', 'gateway', 1000, 'pi_m_card', 'unknown', now())
+  returning id into g2;
+  update private.gateway_refunds set status = 'unknown', unknown_at = now(), send_count = 1, work_after = now()
+  where id = g1;
+  perform pg_temp.claim();
+  perform pg_temp.report(jsonb_build_object('kind', 'refund_checked', 'gateway_refund_id', g2,
+    'provider_refunded_minor', 1000));
+  assert (select status from private.gateway_refunds where id = g2) = 'unknown',
+    'the 1 000 refunded may be the other one: not counted as sent';
+  perform pg_temp.report(jsonb_build_object('kind', 'refund_checked', 'gateway_refund_id', g1,
+    'provider_refunded_minor', 1000 + (select amount_minor from private.gateway_refunds where id = g1)));
+  assert (select status from private.gateway_refunds where id = g1) = 'sent', 'both are covered: sent';
+  delete from private.gateway_refunds where id = g2;
+  update private.gateway_refunds set status = 'requested', unknown_at = null, work_after = now() where id = g1;
+end
+$$;
+
+-- M5. Changing the mode: a declined attempt can still be paid on the
+-- gateway's page, so it is open work; money paid there after the change is
+-- kept for finance, never dropped; refunds are never left for an environment
+-- the worker no longer serves.
+select pg_temp.remember('m_switch', pg_temp.place('pagos-m4@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1'), 'card', 'pay-m-switch-0001')::text);
+select pg_temp.start('pagos-m4@yuntera.example', current_setting('t.m_switch')::uuid) ->> 'stage' as m5_preparing;
+select pg_temp.create_due() as m5_created;
+select pg_temp.apply(pg_temp.live(pg_temp.pay_event('evt_m5_failed', 'payment.failed',
+  current_setting('t.m_switch')::uuid))) as m5_declined;
+-- Everything else of this suite is finished, so that only the declined attempt is open.
+update private.payment_attempts set status = 'cancelled'
+where status in ('creating', 'open', 'processing', 'cancel_requested', 'failed')
+  and order_id <> current_setting('t.m_switch')::uuid;
+update private.gateway_refunds set status = 'failed' where channel = 'gateway' and status <> 'succeeded'
+  and payment_reference <> 'pi_m_card';
+-- The refund of block M1 is still to be sent in live; it is sent and completed.
+do $$
+declare
+  g uuid := (select id from private.gateway_refunds where payment_reference = 'pi_m_card');
+begin
+  perform pg_temp.send_refunds();
+  perform pg_temp.apply(pg_temp.live(pg_temp.refund_event('evt_m5_rf_ok', 'refund.succeeded', g)));
+  assert (select status from private.gateway_refunds where id = g) = 'succeeded', 'completed';
+end
+$$;
+select pg_temp.work();
+select public.worker_payments_hello('onvo', 'test', 'acct_1', true, true) ->> 'active' as m5_test_ready;
+select pg_temp.logout();
+select pg_temp.login('central@yuntera.example');
+select pg_temp.refused('select public.ops_set_payments_mode(''test'', ''Volver a pruebas un momento'')',
+                       'payments_work_open');
+reset role;
+-- The declined attempt is stopped at the gateway (as when the order expires);
+-- then the mode can change.
+update private.payment_attempts set status = 'cancelled', finished_at = now()
+where order_id = current_setting('t.m_switch')::uuid and status = 'failed';
+select pg_temp.login('central@yuntera.example');
+select public.ops_set_payments_mode('test', 'Volver a pruebas un momento') ->> 'mode' as m5_test;
+reset role;
+do $$
+declare
+  v_order uuid := current_setting('t.m_switch')::uuid;
+begin
+  -- The page was paid anyway (the gateway's cancel came too late): live
+  -- money while the mode is test.
+  assert pg_temp.apply(pg_temp.live(pg_temp.pay_event('evt_m5_paid', 'payment.succeeded', v_order)))
+    = 'wrong_environment', 'not applied';
+  assert (select status from public.payments where order_id = v_order) = 'pending', 'the order is not paid by it';
+  assert exists (select 1 from private.payment_reviews where order_id = v_order and kind = 'wrong_environment'
+                 and status = 'open' and environment = 'live'), 'kept for finance';
+  assert pg_temp.apply(pg_temp.live(pg_temp.pay_event('evt_m5_paid', 'payment.succeeded', v_order)))
+    = 'duplicate', 'once';
+end
+$$;
+select pg_temp.act('pagos-m4@yuntera.example');
+do $$
+declare
+  v jsonb := public.order_payment((select order_number from public.orders where id = current_setting('t.m_switch')::uuid));
+begin
+  assert v ->> 'stage' = 'review' and v -> 'money_in_review' ->> 'kind' = 'wrong_environment',
+    format('the shopper knows: %s', v);
+end
+$$;
+select pg_temp.logout();
+-- Real money, and the worker now serves test: finance pays it back by transfer.
+select pg_temp.remember('m_switch_review', (select id::text from private.payment_reviews
+  where order_id = current_setting('t.m_switch')::uuid and kind = 'wrong_environment'));
+select pg_temp.login('pagos-finanzas@yuntera.example');
+select public.ops_resolve_payment_review(current_setting('t.m_switch_review')::uuid, 'refund', null,
+  'Pagó después del cambio de modo; se devuelve.') -> 'refund' ->> 'channel' as m5_by_transfer;
+reset role;
+do $$
+begin
+  assert (select g.channel || ':' || g.status from private.gateway_refunds g join private.payment_reviews r
+          on r.id = g.review_id where r.order_id = current_setting('t.m_switch')::uuid) = 'transfer:requested',
+    'by transfer';
+end
+$$;
+
+-- The order of M1's sibling (paid in live) is cancelled now, in test: its
+-- refund cannot go through the live gateway, so finance transfers it.
+select pg_temp.act('pagos-m2@yuntera.example');
+select public.cancel_order(current_setting('t.m_close')::uuid) ->> 'status' as m5_cancelled;
+select pg_temp.logout();
+do $$
+declare
+  g private.gateway_refunds;
+begin
+  select * into g from private.gateway_refunds where order_id = current_setting('t.m_close')::uuid;
+  assert g.channel = 'transfer' and g.status = 'requested' and g.environment = 'live',
+    format('for finance: %s', row_to_json(g));
+end
+$$;
+-- A refund left from before for the other environment can be transferred too.
+update private.gateway_refunds set channel = 'gateway'
+where order_id = current_setting('t.m_close')::uuid;
+select pg_temp.remember('m_close_refund', (select id::text from private.gateway_refunds
+  where order_id = current_setting('t.m_close')::uuid));
+select pg_temp.login('pagos-finanzas@yuntera.example');
+select public.ops_record_refund_transfer(current_setting('t.m_close_refund')::uuid,
+  'BNCR-778899', 'Transferido al cliente') ->> 'status' as m5_transferred;
+reset role;
+select pg_temp.check_money('M5. mode changes');
+
+-- Test money refunded once the mode is live is not real: nothing to send back.
+select pg_temp.remember('m_testmoney', pg_temp.place('pagos-m4@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1'), 'card', 'pay-m-test-0001')::text);
+select pg_temp.start('pagos-m4@yuntera.example', current_setting('t.m_testmoney')::uuid) ->> 'stage' as m5b_preparing;
+select pg_temp.create_due() as m5b_created;
+select pg_temp.apply(pg_temp.pay_event('evt_m5b_paid', 'payment.succeeded', current_setting('t.m_testmoney')::uuid))
+  as m5b_paid;
+update private.payment_attempts set status = 'cancelled' where status in ('creating', 'open', 'processing', 'failed', 'cancel_requested');
+select pg_temp.work();
+select public.worker_payments_hello('onvo', 'live', 'acct_live', true, true) ->> 'active' as m5b_live_ready;
+select pg_temp.logout();
+select pg_temp.login('central@yuntera.example');
+select public.ops_set_payments_mode('live', 'De vuelta a producción') ->> 'mode' as m5b_live;
+reset role;
+select pg_temp.act('pagos-m4@yuntera.example');
+select public.cancel_order(current_setting('t.m_testmoney')::uuid) ->> 'status' as m5b_cancelled;
+select pg_temp.logout();
+do $$
+declare
+  g private.gateway_refunds;
+begin
+  select * into g from private.gateway_refunds where order_id = current_setting('t.m_testmoney')::uuid;
+  assert g.channel = 'simulated' and g.status = 'succeeded', format('test money: %s', row_to_json(g));
+  assert (select status from public.orders where id = current_setting('t.m_testmoney')::uuid) = 'refunded',
+    'the order is refunded';
+end
+$$;
+select pg_temp.check_money('M5. test money');
+
+-- M6. An order placed in another mode and never paid is paid through the
+-- gateway of the current mode; a bank transfer stays with finance.
+update public.app_settings set value = '"sandbox"' where key = 'payments_mode';
+select pg_temp.remember('m_sandbox', pg_temp.place('pagos-m5@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1'), 'card', 'pay-m-sandbox-0001')::text);
+update public.app_settings set value = '"live"' where key = 'payments_mode';
+select pg_temp.remember('m_bank', pg_temp.place('pagos-m5@yuntera.example',
+  pg_temp.items('parlante-bluetooth-nimbo-ola:1'), 'bank_transfer', 'pay-m-bank-0001')::text);
+select pg_temp.act('pagos-m5@yuntera.example');
+do $$
+declare
+  v_order uuid := current_setting('t.m_sandbox')::uuid;
+  v jsonb := public.order_payment((select order_number from public.orders where id = v_order));
+begin
+  assert v ->> 'provider' = 'sandbox' and v ->> 'stage' = 'start' and (v ->> 'can_start')::boolean,
+    format('payable through the gateway, no simulation: %s', v);
+  v := public.start_payment(v_order);
+  assert v ->> 'stage' = 'preparing' and v ->> 'provider' = 'onvo', format('moved: %s', v);
+  assert (select environment from public.payments where order_id = v_order) = 'live', 'in live';
+end
+$$;
+select pg_temp.logout();
+do $$
+begin
+  assert (select provider || ':' || environment from public.payments where order_id = current_setting('t.m_bank')::uuid)
+         = 'manual:live', 'a bank transfer is not the gateway''s';
+end
+$$;
+select pg_temp.login('pagos-finanzas@yuntera.example');
+select public.ops_confirm_payment(current_setting('t.m_bank')::uuid, 'BCR-445566');
+reset role;
+do $$
+begin
+  assert (select status from public.payments where order_id = current_setting('t.m_bank')::uuid) = 'captured',
+    'confirmed by hand';
+end
+$$;
+select pg_temp.check_money('M6. orders from another mode');
 
 rollback;
