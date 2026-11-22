@@ -1357,7 +1357,13 @@ Catálogo). Chosen where the work offered a choice:
   (`listing_changed_since_take_down`); a staff correction while it is down
   keeps it restorable. A take-down ends when the listing leaves `rejected` any
   other way (the seller sends it to review, review decides), so a listing
-  review turned down cannot be "put back" either.
+  review turned down cannot be "put back" either. A taken-down listing whose
+  shop closes passes, still taken down, to the shop that inherits it under
+  [decision 39](#39-one-offer-order-everywhere-and-shared-listings-without-review),
+  so it can still be put back as it was reviewed.
+- **Hidden means hidden all the way up.** A category shows only when it and
+  every category above it is active; the same rule decides what sellers may
+  file under, find to offer on, or have an edit approved into.
 
 **Consequences.**
 
