@@ -225,7 +225,7 @@ This matters when reading the algorithm documents:
 | `search.ts`          | Mirrored in SQL (`public.search_products`) and used by the storefront                                                                                                  |
 | `promise.ts`         | Mirrored in SQL (`private.compute_promise`) and used at quote and checkout                                                                                             |
 | `lifecycle.ts`       | Mirrored in SQL transition triggers                                                                                                                                    |
-| `offers.ts`          | Run by the storefront's product page on the offers the database returns; listings use a simpler SQL rule (cheapest buyable new offer)                                  |
+| `offers.ts`          | The offer order, run by the product page; the same order in SQL (`private.refresh_product_summary`, `get_product`) for search, categories and the seller's badge       |
 | `routing.ts`         | Intended to run in the ops console before `ops_create_route`; the console is in progress                                                                               |
 | `allocation.ts`      | Specification only. `place_order` uses a simpler rule: each line ships from one location that has all its units                                                        |
 | `risk.ts`            | Specification only. The `orders.risk_score` and `risk_decision` columns exist but nothing fills them; the live controls are the cash-on-delivery limit and zone switch |
@@ -234,16 +234,17 @@ This matters when reading the algorithm documents:
 
 ## Parity tests
 
-| What must agree                                                                   | Checked by                                | How                                                                                                     |
-| --------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Order and shipment transitions in `lifecycle.ts` and in the database triggers     | `packages/core/src/cr/compliance.test.ts` | Reads the migration between `-- BEGIN/END order_transitions` markers and compares the tables            |
-| Order and shipment status enums, in the same order                                | Same test                                 | Parses `create type` from the foundation migration                                                      |
-| Fee schedule: payment fees, fulfilment tiers, defaults, version                   | Same test                                 | Parses the `insert into public.fee_*` rows in the finance migration                                     |
-| Search constants: text-relevance tiers, quality weights, exponent, typo threshold | Same test                                 | Parses the search migration                                                                             |
-| Fee arithmetic, to the céntimo                                                    | `supabase/tests/040_money.sql`            | Replays the cases from `fees.test.ts` through real orders and compares every fee line                   |
-| Delivery promise dates                                                            | `supabase/tests/010_promise.sql`          | Same scenarios as `promise.test.ts`                                                                     |
-| Error codes raised in SQL and messages in the client                              | `packages/db/src/errors.test.ts`          | Reads every `private.fail('…')` in the migrations                                                       |
-| Payload shapes returned by functions and the client's schemas                     | `packages/db/src/contract.test.ts`        | Calls the real functions as each role and validates the responses; runs only when `DATABASE_URL` is set |
+| What must agree                                                                   | Checked by                                | How                                                                                                                                               |
+| --------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Order and shipment transitions in `lifecycle.ts` and in the database triggers     | `packages/core/src/cr/compliance.test.ts` | Reads the migration between `-- BEGIN/END order_transitions` markers and compares the tables                                                      |
+| Order and shipment status enums, in the same order                                | Same test                                 | Parses `create type` from the foundation migration                                                                                                |
+| Fee schedule: payment fees, fulfilment tiers, defaults, version                   | Same test                                 | Parses the `insert into public.fee_*` rows in the finance migration                                                                               |
+| Search constants: text-relevance tiers, quality weights, exponent, typo threshold | Same test                                 | Parses the search migration                                                                                                                       |
+| Fee arithmetic, to the céntimo                                                    | `supabase/tests/040_money.sql`            | Replays the cases from `fees.test.ts` through real orders and compares every fee line                                                             |
+| Delivery promise dates                                                            | `supabase/tests/010_promise.sql`          | Same scenarios as `promise.test.ts`                                                                                                               |
+| The offer order: in stock, lowest total, oldest, id                               | `packages/core/src/offers.parity.test.ts` | Reads the ORDER BY between the `offer_order` markers of `…083600_seller_listings.sql`; `155_seller_listings.sql` replays `offers.test.ts`'s cases |
+| Error codes raised in SQL and messages in the client                              | `packages/db/src/errors.test.ts`          | Reads every `private.fail('…')` in the migrations                                                                                                 |
+| Payload shapes returned by functions and the client's schemas                     | `packages/db/src/contract.test.ts`        | Calls the real functions as each role and validates the responses; runs only when `DATABASE_URL` is set                                           |
 
 ## Scaling path
 

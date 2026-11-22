@@ -1266,3 +1266,37 @@ says so: locally, never on a real project.
   account is deleted, with access closed (privacy.md).
 - Only proven against a local fake of Hacienda; signature acceptance needs
   the sandbox credentials.
+
+## 39. One offer order everywhere, and shared listings without review
+
+**Context.** The lockdown closed the table writes through which a shop could
+offer on another shop's listing, switch a variant off, take a listing back to
+draft, or change its description and logo. Bringing an offer on an existing
+product back raised three questions: which offer a shopper sees first, whether
+such an offer needs review, and who owns a listing several shops sell.
+
+**Decision.**
+
+- One deterministic order for a variant's offers, in SQL and TypeScript: in
+  stock first, then the lowest total for the shopper, then the older offer,
+  then the id. The weighted featured-offer score is retired: it disagreed with
+  what search showed, could not run in the database, and its seller part was
+  a constant. A parity test reads the SQL order (`offers.parity.test.ts`).
+- An offer on another shop's product needs no review (its content was
+  reviewed); only verified, active shops may add one, at most 30 a day.
+- The creating shop keeps the content and edits it through review; nobody
+  else does. It cannot archive or draft a listing another active shop sells.
+  When it closes, each such listing passes to the shop with the oldest live
+  offer. An approved package or category edit pauses other shops' offers it
+  left below the price floor rather than being refused.
+- The shop's description is a reviewed shop change; its logo goes through the
+  photo pipeline; both are shown as text or images only, never markup.
+
+**Consequences.**
+
+- A faster offer no longer beats a slightly cheaper one; every offer's
+  delivery date is shown next to its price. Bringing speed back is a change to
+  both sides and the help page.
+- A shop that takes over a listing cannot remove the photos the closed shop
+  uploaded; staff can. No message tells a shop a listing edit paused its offer.
+- Details: [offers and the product page](../04-algorithms/featured-offer.md).
