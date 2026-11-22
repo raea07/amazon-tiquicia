@@ -369,6 +369,9 @@ async function until(what, fn, seconds = 40) {
     await fresh(shop);
     return (await text(shop.locator('[data-testid="refund"]').first())).includes("Completado");
   });
+  // The page reads the order and its refunds in two calls: the confirmation
+  // may land between them, so read a page made wholly after it.
+  await fresh(shop);
   const after = await text(shop.locator('aside[aria-label="Resumen"]:visible'));
   check(after.includes("reembolsado"), `the payment shows refunded: ${after}`);
   await shop.screenshot({ path: `${SHOTS}/p10-refund-completed.png`, fullPage: true });
