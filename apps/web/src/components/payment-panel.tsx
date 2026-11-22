@@ -196,8 +196,10 @@ export function PaymentPanel({ payment }: { payment: OrderPayment }) {
           {payment.can_start ? (
             <>
               <p className="mt-3 text-sm">
-                Puede intentarlo de nuevo{card ? " con la misma u otra tarjeta" : ""}. Le quedan{" "}
-                {payment.attempts_left} intentos.
+                Puede intentarlo de nuevo{card ? " con la misma u otra tarjeta" : ""}.{" "}
+                {payment.attempts_left === 1
+                  ? "Le queda 1 intento."
+                  : `Le quedan ${payment.attempts_left} intentos.`}
               </p>
               <div className="mt-3">
                 {card ? (
@@ -226,22 +228,58 @@ export function PaymentPanel({ payment }: { payment: OrderPayment }) {
       );
 
     case "review":
-      return frame(
-        "wait",
-        <>
-          <h2 id="pago" className="text-lg font-bold">
-            Estamos revisando su pago
-          </h2>
-          <p className="mt-2 text-sm">
-            Recibimos un pago que no coincide con este pedido (por ejemplo, otro monto). Nuestro
-            equipo de finanzas lo está revisando y le escribirá. <strong>No vuelva a pagar.</strong>
-          </p>
-        </>,
-      );
+      return <MoneyInReview payment={payment} />;
 
     default:
       return null;
   }
+}
+
+/** What happened to money the gateway took that was not applied as the order's payment. */
+export function moneyInReviewText(payment: OrderPayment): { title: string; text: string } {
+  const review = payment.money_in_review;
+  const amount = formatPrice(review?.amount_minor ?? payment.amount_minor);
+  if (review?.status === "refunding") {
+    return {
+      title: `Le estamos devolviendo ${amount}`,
+      text: "Va de vuelta al mismo medio con el que pagó, o por transferencia si no se puede. Le avisamos cuando se complete; no tiene que hacer nada.",
+    };
+  }
+  if (review?.status === "refunded") {
+    return {
+      title: `Le devolvimos ${amount}`,
+      text: "El reembolso se completó. Su banco puede tardar unos días en mostrarlo.",
+    };
+  }
+  const why =
+    review?.kind === "late"
+      ? `Recibimos su pago de ${amount} cuando el pedido ya se había cancelado, así que no lo aplicamos.`
+      : review?.kind === "paid_twice"
+        ? `Recibimos un segundo pago de ${amount} por este pedido, que ya estaba pagado.`
+        : review?.kind === "wrong_environment"
+          ? `Recibimos su pago de ${amount}, pero llegó justo cuando cambiamos nuestro sistema de pagos, así que no se aplicó solo.`
+          : `Recibimos un pago de ${amount} que no coincide con este pedido (por ejemplo, otro monto), así que no lo aplicamos.`;
+  return {
+    title: "Recibimos un pago que estamos revisando",
+    text: `${why} Nuestro equipo de finanzas lo revisa y le escribirá: lo aplicará al pedido o se lo devolverá. No vuelva a pagar.`,
+  };
+}
+
+/** Money that arrived and waits for finance, or goes back: shown whatever the order's status. */
+export function MoneyInReview({ payment }: { payment: OrderPayment }) {
+  const { title, text } = moneyInReviewText(payment);
+  return (
+    <section
+      aria-labelledby="pago-revision"
+      className="rounded-lg border border-maiz-300 bg-maiz-50 p-5"
+      data-testid="money-in-review"
+    >
+      <h2 id="pago-revision" className="text-lg font-bold">
+        {title}
+      </h2>
+      <p className="mt-2 text-sm">{text}</p>
+    </section>
+  );
 }
 
 const REFUND_STATE = {

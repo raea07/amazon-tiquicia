@@ -22,7 +22,7 @@ import {
   ReviewForm,
   SimulatePaymentForm,
 } from "@/components/order-actions";
-import { PaymentPanel, RefundList } from "@/components/payment-panel";
+import { MoneyInReview, PaymentPanel, RefundList } from "@/components/payment-panel";
 import { ReturnStatusList } from "@/components/return-status";
 import { requireViewer } from "@/lib/session";
 import { sessionApi } from "@/lib/supabase";
@@ -113,7 +113,13 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div className="flex flex-col gap-6">
           {awaitingPayment && throughGateway ? <PaymentPanel payment={payment} /> : null}
-          {awaitingPayment && !throughGateway ? <PaymentInstructions order={order} /> : null}
+          {awaitingPayment && !throughGateway ? (
+            <PaymentInstructions order={order} payment={payment} />
+          ) : null}
+          {/* Money that arrived and waits for finance, or goes back: said whatever the order's status. */}
+          {payment.money_in_review && !(awaitingPayment && payment.stage === "review") ? (
+            <MoneyInReview payment={payment} />
+          ) : null}
           <RefundList payment={payment} />
 
           {order.delivery_pin ? (
@@ -361,8 +367,21 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
   );
 }
 
-function PaymentInstructions({ order }: { order: OrderDetail }) {
-  const sandbox = order.payment?.provider === "sandbox";
+function PaymentInstructions({ order, payment }: { order: OrderDetail; payment: OrderPayment }) {
+  // The simulation only while the site is in sandbox mode, whatever mode the order was placed in.
+  const sandbox = payment.stage === "simulated";
+  if (order.payment_method === "card" && !sandbox) {
+    // A card order no gateway can take any more (placed before the payments set-up changed).
+    return (
+      <section className="rounded-lg border border-maiz-300 bg-maiz-50 p-5">
+        <h2 className="text-lg font-bold">Este pedido ya no se puede pagar en línea</h2>
+        <p className="mt-2 text-sm">
+          No se le ha cobrado nada. Haga el pedido de nuevo para pagarlo con tarjeta; este se
+          cancela solo cuando se acabe el tiempo de reserva.
+        </p>
+      </section>
+    );
+  }
   return (
     <section className="rounded-lg border border-maiz-300 bg-maiz-50 p-5">
       <h2 className="text-lg font-bold">Falta el pago de {formatPrice(order.total_minor)}</h2>

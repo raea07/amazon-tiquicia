@@ -81,17 +81,25 @@ export async function startCardPayment(
   if (!(await getViewer())) redirect(signInUrl(`/pedidos/${parsed.data.orderNumber}`));
 
   let page: string | null = null;
+  let stage: OrderPayment["stage"] | null = null;
   try {
     const api = await sessionApi();
     await api.startPayment(parsed.data.orderId, { returnTo: "web" });
     const payment = await waitFor(api, parsed.data.orderNumber, (p) => p.stage !== "preparing");
     page = gatewayPage(payment.attempt?.checkout_url);
+    stage = payment.stage;
   } catch (error) {
     if (isRedirect(error)) throw error;
     return { error: messageOf(error) };
   }
   if (page) redirect(page as Route);
   refresh();
+  if (stage === "error") {
+    return {
+      error:
+        "No pudimos conectar con el procesador de pagos. No se le cobró nada; inténtelo de nuevo en un momento.",
+    };
+  }
   return { ok: "Estamos preparando la página de pago. Esta página se actualiza sola." };
 }
 

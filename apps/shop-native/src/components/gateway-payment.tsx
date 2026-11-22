@@ -17,6 +17,12 @@ import {
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
+import {
+  attemptsLeftText,
+  BACKED_OUT,
+  browserOutcome,
+  moneyInReviewText,
+} from "@/lib/gateway-payment";
 
 /** Stages in which the payment goes through the gateway (test and live modes). */
 export const GATEWAY_STAGES: ReadonlyArray<OrderPayment["stage"]> = [
@@ -93,9 +99,17 @@ export function GatewayPayment({ payment }: { payment: OrderPayment }) {
         url = (await prepared(api, payment.order_number)).attempt?.checkout_url ?? null;
       }
       if (url) {
-        await WebBrowser.openAuthSessionAsync(url, `yuntera://pedidos/${payment.order_number}`);
-        // Back from the gateway's page: only a hint, a check is asked for now.
-        await api.paymentReturned(payment.order_id).catch(() => null);
+        const closed = await WebBrowser.openAuthSessionAsync(
+          url,
+          `yuntera://pedidos/${payment.order_number}`,
+        );
+        if (browserOutcome(closed) === "returned") {
+          // Back through the gateway's link: only a hint, a check is asked for now.
+          await api.paymentReturned(payment.order_id).catch(() => null);
+        } else {
+          // Closed the browser, or the gateway's cancel link: nothing was paid.
+          setResult({ ok: BACKED_OUT });
+        }
       }
     } catch (error) {
       setResult({ error: messageOf(error) });
@@ -273,6 +287,11 @@ export function GatewayPayment({ payment }: { payment: OrderPayment }) {
               : "Hubo un problema al conectar con el procesador de pagos. No se le cobró nada."}
           </Text>
           {payment.can_start ? (
+            <Text variant="small">
+              Puede intentarlo de nuevo. {attemptsLeftText(payment.attempts_left)}
+            </Text>
+          ) : null}
+          {payment.can_start ? (
             card ? (
               cardButton(`Intentar de nuevo: pagar ${amount}`)
             ) : (
@@ -288,22 +307,26 @@ export function GatewayPayment({ payment }: { payment: OrderPayment }) {
       );
       break;
     case "review":
-      body = (
-        <>
-          <Text variant="heading">Estamos revisando su pago</Text>
-          <Text variant="small">
-            Recibimos un pago que no coincide con este pedido. Nuestro equipo de finanzas lo está
-            revisando y le escribirá. No vuelva a pagar.
-          </Text>
-        </>
-      );
-      break;
+      return <MoneyInReview payment={payment} />;
     default:
       return null;
   }
   return (
     <View style={styles.box} testID="gateway-payment">
       <Stack gap={3}>{body}</Stack>
+    </View>
+  );
+}
+
+/** Money that arrived and waits for finance, or goes back: shown whatever the order's status. */
+export function MoneyInReview({ payment }: { payment: OrderPayment }) {
+  const { title, text } = moneyInReviewText(payment);
+  return (
+    <View style={styles.box} testID="money-in-review">
+      <Stack gap={3}>
+        <Text variant="heading">{title}</Text>
+        <Text variant="small">{text}</Text>
+      </Stack>
     </View>
   );
 }

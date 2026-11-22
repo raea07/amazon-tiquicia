@@ -22,7 +22,12 @@ import { staffCancelOrder } from "@/app/integrity-actions";
 import { DeliveryCodePanel, ReturnedParcelForm } from "@/components/integrity-forms";
 import { NotificationLine } from "@/components/notification-list";
 import { PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
-import { REFUND_CHANNEL, REFUND_STATUS } from "@/lib/payment-labels";
+import {
+  ATTEMPT_STATUS,
+  gatewayFailure,
+  REFUND_CHANNEL,
+  REFUND_STATUS,
+} from "@/lib/payment-labels";
 import { canSee, requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Pedido" };
@@ -206,12 +211,15 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
           ) : null}
           {gateway.attempt ? (
             <p className="mt-2 break-all text-ink-muted">
-              Procesador: intento {gateway.attempt.status}
+              Procesador: intento{" "}
+              {ATTEMPT_STATUS[gateway.attempt.status] ?? "en un estado desconocido"}
               {gateway.attempt.intent_reference ? ` · ${gateway.attempt.intent_reference}` : ""}
               {gateway.attempt.session_reference
                 ? ` · sesión ${gateway.attempt.session_reference}`
                 : ""}
-              {gateway.attempt.failure_code ? ` · rechazo: ${gateway.attempt.failure_code}` : ""}
+              {gateway.attempt.failure_code
+                ? ` · motivo: ${gatewayFailure(gateway.attempt.failure_code)}`
+                : ""}
             </p>
           ) : null}
           {gateway.refunds.length > 0 ? (

@@ -119,7 +119,7 @@ async function Day({ searchParams }: Pick<PageProps<"/cobros">, "searchParams">)
           <Stat
             label="Intentos de pago"
             value={recon.attempts.created}
-            hint={`${recon.attempts.succeeded} pagados · ${recon.attempts.failed} rechazados · ${recon.attempts.waiting} esperando`}
+            hint={`${recon.attempts.succeeded} pagados · ${recon.attempts.waiting} esperando · ${recon.attempts.failed} rechazados sin reintento · ${recon.attempts.review} con dinero por revisar · ${recon.attempts.stopped} detenidos. Rechazos del día: ${recon.attempts.declined}.`}
           />
           <Stat
             label="Verificados por consulta"

@@ -47,7 +47,7 @@ export async function resolvePaymentReview(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const values = typed(formData, "note", "orderNumber");
+  const values = typed(formData, "resolution", "note", "orderNumber");
   const review = uuid(formData, "reviewId");
   const action = z
     .enum(["accept", "attach", "refund", "dismiss"])

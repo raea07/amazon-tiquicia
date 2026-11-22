@@ -9,7 +9,7 @@ import { Suspense } from "react";
 import { recordRefundTransfer, retryGatewayRefund } from "@/app/payment-actions";
 import { PaymentNav } from "@/components/payment-nav";
 import { PAYMENT_METHOD } from "@/lib/labels";
-import { REFUND_CHANNEL, REFUND_REASON, REFUND_STATUS } from "@/lib/payment-labels";
+import { gatewayFailure, REFUND_CHANNEL, REFUND_REASON, REFUND_STATUS } from "@/lib/payment-labels";
 import { requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Reembolsos" };
@@ -112,7 +112,7 @@ async function Refunds({ searchParams }: Pick<PageProps<"/cobros/reembolsos">, "
                       <Badge tone={status.tone}>{status.label}</Badge>
                       {refund.failure_code ? (
                         <span className="block text-xs text-ink-muted">
-                          Motivo: {refund.failure_code}
+                          Motivo: {gatewayFailure(refund.failure_code)}
                         </span>
                       ) : null}
                     </td>
@@ -156,7 +156,7 @@ function RefundCard({ refund }: { refund: GatewayRefund }) {
       </div>
       <p className="mt-1">
         <Badge tone={status.tone}>{status.label}</Badge> {REFUND_CHANNEL[refund.channel]}
-        {refund.failure_code ? ` · motivo del procesador: ${refund.failure_code}` : ""}
+        {refund.failure_code ? ` · motivo: ${gatewayFailure(refund.failure_code)}` : ""}
       </p>
       {refund.can_retry ? (
         <div className="mt-3">
