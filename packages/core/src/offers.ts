@@ -1,148 +1,92 @@
 /**
- * Featured-offer selection.
+ * Which offer a shopper sees first.
  *
- * One catalogue product can be sold by several sellers. The product page shows
- * one offer by default ("oferta destacada") and lists the rest. This module
- * decides which, and — deliberately — explains why.
+ * One catalogue product can be sold by several shops: each shop has its own
+ * offer on a variant (price, stock, how it ships), and the product page,
+ * search results and category pages show one of them by default. This module
+ * is the rule, written once and shared by the website and the shopper app;
+ * the database applies the same rule to the listing summary that search and
+ * category pages read (private.refresh_product_summary) and to the order in
+ * which get_product returns a variant's offers. A parity test
+ * (offers.parity.test.ts) reads that SQL and compares it with OFFER_ORDER_SQL.
  *
- * Design rules:
- *  1. The score is a published formula over facts a seller can change: landed
- *     price, delivery speed, their own performance. No hidden inputs.
- *  2. The platform's own retail offers, if it ever has any, compete under the
- *     same formula. `fulfilledByPlatform` earns a bonus because it measurably
- *     improves delivery reliability, and any seller can opt into it.
- *  3. Ties are broken deterministically so the result is stable across requests.
+ * The order, deterministic and published (docs/04-algorithms/featured-offer.md):
+ *   1. an offer that has units to sell comes before one that has none;
+ *   2. then the lower total for the shopper: the price plus the shipping the
+ *      shopper would pay for this offer (shipping is charged once per order
+ *      by zone today, so it is the same for every offer and the price decides);
+ *   3. then the older offer (it was listed first);
+ *   4. then the offer id, so two offers listed in the same instant still
+ *      come out the same way on every request and on both sides.
+ *
+ * The offer shown first is the first NEW offer in that order; refurbished and
+ * used offers are listed with the others and can be bought, never shown first.
+ * Nothing else is weighed: not the shop's size, not what it pays Yuntera, not
+ * Yuntera's commission, and not the seller score, which no job computes yet.
  */
 
 export interface OfferCandidate {
   offerId: string;
+  /** The shop that sells it (any stable key; the page uses the shop's slug). */
   sellerId: string;
-  /** Tax-inclusive item price in minor units. */
+  /** Tax-inclusive item price in céntimos. */
   priceMinor: number;
-  /** Shipping the buyer would pay for this offer to their address. */
+  /** Shipping the shopper would pay for this offer, in céntimos (0 while it is per order). */
   shippingMinor: number;
   availableQuantity: number;
-  /** Calendar days until the promised delivery date (0 = today). */
-  promiseDays: number;
-  fulfilledByPlatform: boolean;
-  /** Seller performance score, 0–100 (see sellers/score.ts). */
-  sellerScore: number;
-  sellerStatus: "active" | "at_risk" | "suspended";
   condition: "new" | "refurbished" | "used";
-  /** ISO timestamp the offer was created; older wins a full tie. */
+  /** When the offer was created, as the database returns it (ISO 8601). */
   listedAt: string;
 }
 
-export interface OfferWeights {
-  price: number;
-  speed: number;
-  seller: number;
-  platformFulfillment: number;
+/**
+ * The ORDER BY the database uses for the same rule, as written in
+ * 20261121083600_seller_listings.sql between `-- BEGIN offer_order` and
+ * `-- END offer_order`. offers.parity.test.ts keeps the two equal.
+ */
+export const OFFER_ORDER_SQL =
+  "(o.available_quantity > 0) desc, o.price_minor asc, o.created_at asc, o.id asc";
+
+/** Price plus shipping: what the shopper pays for one unit of this offer. */
+export const totalForShopper = (offer: OfferCandidate) => offer.priceMinor + offer.shippingMinor;
+
+/** Compares two ISO timestamps by the instant they name, then by their text. */
+function compareInstants(a: string, b: string): number {
+  const left = Date.parse(a);
+  const right = Date.parse(b);
+  if (Number.isFinite(left) && Number.isFinite(right) && left !== right) return left - right;
+  // Same millisecond (or unreadable): the database's text keeps the microseconds.
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
-export interface OfferSelectionConfig {
-  weights: OfferWeights;
-  /** Offers costing more than this multiple of the cheapest landed price are not featured. */
-  maxLandedPriceRatio: number;
-  /** Sellers below this score are listed but never featured. */
-  minSellerScore: number;
+/**
+ * The order of the rule above. Ids are compared as plain text, which for the
+ * lowercase canonical form of a UUID is the order PostgreSQL gives uuids.
+ */
+export function compareOffers(a: OfferCandidate, b: OfferCandidate): number {
+  const stocked = Number(b.availableQuantity > 0) - Number(a.availableQuantity > 0);
+  if (stocked !== 0) return stocked;
+  const total = totalForShopper(a) - totalForShopper(b);
+  if (total !== 0) return total;
+  const listed = compareInstants(a.listedAt, b.listedAt);
+  if (listed !== 0) return listed;
+  const left = a.offerId.toLowerCase();
+  const right = b.offerId.toLowerCase();
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
-export const DEFAULT_OFFER_CONFIG: OfferSelectionConfig = {
-  weights: { price: 0.55, speed: 0.25, seller: 0.15, platformFulfillment: 0.05 },
-  maxLandedPriceRatio: 1.15,
-  minSellerScore: 60,
-};
-
-export type IneligibleReason =
-  | "out_of_stock"
-  | "seller_suspended"
-  | "seller_score_too_low"
-  | "not_new"
-  | "price_not_competitive";
-
-export interface ScoredOffer {
-  offer: OfferCandidate;
-  landedMinor: number;
-  eligible: boolean;
-  ineligibleReason: IneligibleReason | null;
-  score: number;
-  /** Each component's contribution, already multiplied by its weight. */
-  breakdown: { price: number; speed: number; seller: number; platformFulfillment: number };
+export interface OfferSelection<T extends OfferCandidate = OfferCandidate> {
+  /** The offer shown first: the first new offer in order, or null when there is none. */
+  featured: T | null;
+  /** Every offer, in order, the featured one included. */
+  ranked: T[];
 }
 
-export interface OfferSelection {
-  featured: ScoredOffer | null;
-  /** Every candidate, best first; ineligible offers sort after eligible ones. */
-  ranked: ScoredOffer[];
-}
-
-export function selectFeaturedOffer(
-  candidates: readonly OfferCandidate[],
-  config: OfferSelectionConfig = DEFAULT_OFFER_CONFIG,
-): OfferSelection {
-  const { weights } = config;
-  const weightTotal = weights.price + weights.speed + weights.seller + weights.platformFulfillment;
-  if (Math.abs(weightTotal - 1) > 1e-9) {
-    throw new RangeError(`Offer weights must sum to 1, got ${weightTotal}`);
-  }
-
-  const landed = (o: OfferCandidate) => o.priceMinor + o.shippingMinor;
-
-  // Pass 1: eligibility that does not depend on other offers.
-  const baseReason = (o: OfferCandidate): IneligibleReason | null => {
-    if (o.availableQuantity <= 0) return "out_of_stock";
-    if (o.sellerStatus === "suspended") return "seller_suspended";
-    if (o.sellerScore < config.minSellerScore) return "seller_score_too_low";
-    if (o.condition !== "new") return "not_new";
-    return null;
-  };
-
-  const viable = candidates.filter((o) => baseReason(o) === null);
-  const cheapest = viable.length ? Math.min(...viable.map(landed)) : 0;
-  const fastest = viable.length ? Math.min(...viable.map((o) => o.promiseDays)) : 0;
-
-  const scored: ScoredOffer[] = candidates.map((offer) => {
-    const landedMinor = landed(offer);
-    let reason = baseReason(offer);
-    if (!reason && cheapest > 0 && landedMinor > cheapest * config.maxLandedPriceRatio) {
-      reason = "price_not_competitive";
-    }
-
-    // Price: 1.0 for the cheapest landed price, falling in proportion.
-    const priceScore = landedMinor > 0 ? Math.min(1, cheapest / landedMinor) : 1;
-    // Speed: 1.0 for the fastest promise; each extra day costs progressively less.
-    const speedScore = 1 / (1 + Math.max(0, offer.promiseDays - fastest));
-    const sellerScore = Math.min(100, Math.max(0, offer.sellerScore)) / 100;
-
-    const breakdown = {
-      price: weights.price * priceScore,
-      speed: weights.speed * speedScore,
-      seller: weights.seller * sellerScore,
-      platformFulfillment: offer.fulfilledByPlatform ? weights.platformFulfillment : 0,
-    };
-    const score =
-      breakdown.price + breakdown.speed + breakdown.seller + breakdown.platformFulfillment;
-
-    return {
-      offer,
-      landedMinor,
-      eligible: reason === null,
-      ineligibleReason: reason,
-      score,
-      breakdown,
-    };
-  });
-
-  scored.sort(
-    (a, b) =>
-      Number(b.eligible) - Number(a.eligible) ||
-      b.score - a.score ||
-      a.landedMinor - b.landedMinor ||
-      a.offer.listedAt.localeCompare(b.offer.listedAt) ||
-      a.offer.offerId.localeCompare(b.offer.offerId),
-  );
-
-  const top = scored[0];
-  return { featured: top?.eligible ? top : null, ranked: scored };
+/** Orders a variant's offers and picks the one shown first. Does not change its input. */
+export function selectFeaturedOffer<T extends OfferCandidate>(
+  candidates: readonly T[],
+): OfferSelection<T> {
+  const ranked = [...candidates].sort(compareOffers);
+  const featured = ranked.find((offer) => offer.condition === "new") ?? null;
+  return { featured, ranked };
 }

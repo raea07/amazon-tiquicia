@@ -445,6 +445,7 @@ name it here and in the test, and say why in the pull request.
 - `checkout_quote`
 - `delivery_estimate`
 - `get_product`
+- `get_shop` (a shop's public page: name, description, logo and what it sells; only an active shop has one)
 - `list_categories`
 - `list_districts`
 - `report_content`

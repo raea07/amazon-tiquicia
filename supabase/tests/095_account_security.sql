@@ -1411,7 +1411,11 @@ begin
       -- what a shopper typed at checkout for a factura (083500): erased by
       -- delete_my_account (and by a trigger on deleted_at as a second guard),
       -- and used up when the document is made
-      'private.invoice_checkout_receivers.user_id');
+      'private.invoice_checkout_receivers.user_id',
+      -- who added an offer to another shop's listing, uploaded or decided a
+      -- shop's logo (083600): kept as a bare id; the logo is the shop's, and
+      -- a shop that closes (also with nobody left in charge) loses its logo
+      'private.offer_additions.added_by', 'shop_logos.created_by', 'shop_logos.decided_by');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end
 $$;

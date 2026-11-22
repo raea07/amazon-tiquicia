@@ -30,7 +30,7 @@ create temporary table allowed (role text, schema text, fn text) on commit drop;
 insert into allowed (role, schema, fn)
 -- BEGIN visitor functions
 select 'anon', 'public', unnest(array[
-  'auth_limit_release', 'auth_limit_reserve', 'cart_lines', 'check_request', 'checkout_quote', 'delivery_estimate', 'get_product',
+  'auth_limit_release', 'auth_limit_reserve', 'cart_lines', 'check_request', 'checkout_quote', 'delivery_estimate', 'get_product', 'get_shop',
   'list_categories', 'list_districts', 'report_content', 'search_products', 'shop_path_exists',
   'suggest_products'
 ])
