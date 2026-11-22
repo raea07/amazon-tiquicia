@@ -20,6 +20,11 @@
 # exactly as the local stand-in renders them. After sending, it reads the
 # configuration back and lists any field that did not take the value sent:
 # a field name the API does not know is ignored rather than refused.
+#
+# `apply` with "preview" weakens a project on purpose (e-mail confirmation may
+# be off, the redirect list allows preview addresses), so it asks for
+# YUNTERA_PREVIEW_CONFIRM set to the project reference, as `remote-db.sh seed`
+# does: preview settings can never land on production by a mistyped reference.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,10 +33,15 @@ REF="${2:-}"
 ENVIRONMENT="${3:-}"
 API="https://api.supabase.com/v1/projects/$REF/config/auth"
 
-usage() { sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2; }
 [ -n "$COMMAND" ] && [ -n "$REF" ] && [ -n "$ENVIRONMENT" ] || usage
 [[ "$COMMAND" =~ ^(plan|apply)$ ]] || usage
 [ -f "$ROOT/auth/$ENVIRONMENT.json" ] || { echo "No settings file supabase/auth/$ENVIRONMENT.json" >&2; exit 2; }
+if [ "$COMMAND" = "apply" ] && [ "$ENVIRONMENT" = "preview" ] && [ "${YUNTERA_PREVIEW_CONFIRM:-}" != "$REF" ]; then
+  echo "Refusing: this applies the PREVIEW sign-in settings to $REF. If that project is a preview," >&2
+  echo "set YUNTERA_PREVIEW_CONFIRM=$REF and run again." >&2
+  exit 1
+fi
 
 auth_config() {
   [ -z "${SUPABASE_ACCESS_TOKEN:-}" ] || printf 'header = "Authorization: Bearer %s"\n' "$SUPABASE_ACCESS_TOKEN"

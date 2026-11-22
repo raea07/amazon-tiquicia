@@ -6,7 +6,7 @@
  * Pure functions with no React Native import.
  */
 
-import { format, money, parseColones } from "@yuntera/core";
+import { format, LOCKED_CODE_MESSAGE, money, parseColones } from "@yuntera/core";
 // The day as driver_today gives it since 083200: each stop with its district.
 import type {
   PlacedDriverDay as DriverDay,
@@ -236,9 +236,9 @@ export function checkDelivery(input: {
  * A locked code: after five wrong codes on an ORDER (counted across its
  * parcels, stops and routes) the database refuses every code, the right one
  * included, until Central releases it, which gives the shopper a new code.
+ * The text is shared with the web field app (packages/core/src/delivery-code.ts).
  */
-export const LOCKED_CODE_MESSAGE =
-  "El código de este pedido quedó bloqueado por demasiados intentos. No entregue el paquete. Llame a Central: si lo desbloquean, el cliente verá un código nuevo en su pedido; si no, márquelo como no entregado.";
+export { LOCKED_CODE_MESSAGE };
 
 /** What the driver is told for each door-side refusal of `driver_complete_stop`. */
 export function refusalMessage(result: {

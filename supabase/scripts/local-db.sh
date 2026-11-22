@@ -18,6 +18,37 @@ DB_URL="${ADMIN_URL%/*}/${DB_NAME}"
 
 run() { psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 "$@"; }
 
+# `reset` drops the database. It is for a server on this machine (or CI's
+# service container): refuse any other host, so a PG_ADMIN_URL copied from a
+# hosted project can never be wiped by mistake. The host is worked out the way
+# psql would: `host`/`hostaddr` in the URL's query, else the URL's host, else
+# PGHOSTADDR/PGHOST, else the local socket. Anything that is not a
+# postgres:// URL (a libpq keyword string, say) is refused rather than guessed.
+local_only() {
+  local hosts host
+  hosts="$(node -e '
+    let url;
+    try { url = new URL(process.argv[1]); } catch { process.exit(3); }
+    if (!/^postgres(ql)?:$/.test(url.protocol)) process.exit(3);
+    const query = url.searchParams.get("hostaddr") || url.searchParams.get("host");
+    const named = query || decodeURIComponent(url.hostname)
+      || process.env.PGHOSTADDR || process.env.PGHOST || "/socket";
+    console.log(named.split(",").map((h) => h.trim()).join("\n"));
+  ' "$ADMIN_URL")" || {
+    echo "Refusing: PG_ADMIN_URL must be a postgres:// URL for local-db.sh reset." >&2
+    exit 1
+  }
+  while IFS= read -r host; do
+    case "$host" in
+      127.0.0.1 | localhost | "[::1]" | ::1 | /*) continue ;;
+    esac
+    if [ -n "$host" ] && [ "${YUNTERA_LOCAL_DB_HOST_OK:-}" = "$host" ]; then continue; fi
+    echo "Refusing: ${host:-an unnamed host} is not this machine. local-db.sh drops and rebuilds databases;" >&2
+    echo "it is for a local server only. For a disposable server elsewhere, set YUNTERA_LOCAL_DB_HOST_OK=$host." >&2
+    exit 1
+  done <<< "$hosts"
+}
+
 case "${1:-}" in
   up)
     if pg_isready -q -d "$ADMIN_URL"; then
@@ -32,6 +63,7 @@ case "${1:-}" in
     ;;
 
   reset)
+    local_only
     psql "$ADMIN_URL" -X -q -v ON_ERROR_STOP=1 \
       -c "drop database if exists \"$DB_NAME\" with (force)" \
       -c "create database \"$DB_NAME\""

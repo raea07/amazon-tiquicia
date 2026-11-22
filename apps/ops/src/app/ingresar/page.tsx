@@ -1,5 +1,10 @@
 import { SignInForm } from "@yuntera/next-kit/client";
-import { getViewer, redirectTo, safeReturnPath } from "@yuntera/next-kit/server";
+import {
+  endedSessionNotice,
+  getViewer,
+  redirectTo,
+  safeReturnPath,
+} from "@yuntera/next-kit/server";
 import { Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
 import { Suspense } from "react";
@@ -30,7 +35,7 @@ async function Access({ searchParams }: Pick<PageProps<"/ingresar">, "searchPara
       <p className="mt-1 mb-5 text-sm text-ink-muted">
         Solo para personal de Yuntera. Todo lo que se hace aquí queda registrado con su nombre.
       </p>
-      <SignInForm action={signIn} returnTo={returnTo} />
+      <SignInForm action={signIn} returnTo={returnTo} notice={await endedSessionNotice()} />
     </div>
   );
 }

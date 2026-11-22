@@ -41,6 +41,8 @@ its own entry, not something that happens by drift.
 | 32  | [Delivered and returned parcels end an order as delivered](#32-delivered-and-returned-parcels-end-an-order-as-delivered)                            | Built; not on the preview yet            |
 | 33  | [A fee change pauses offers below the price floor](#33-a-fee-change-pauses-offers-below-the-price-floor)                                            | Built; not on the preview yet            |
 | 34  | ["Refund completed" waits for a recorded confirmation](#34-refund-completed-waits-for-a-recorded-confirmation)                                      | Built; gateway not built                 |
+| 35  | [The web apps' own sign-in limit, per visitor and per account](#35-the-web-apps-own-sign-in-limit-per-visitor-and-per-account) | Built; not on the preview yet |
+| 36  | [Session lifetimes per app](#36-session-lifetimes-per-app) | Built; not on the preview yet |
 
 ---
 
@@ -1019,3 +1021,170 @@ handler when the gateway or the bank says the money went out.
 - Staff-approved return refunds now get a "refund completed" message too.
 - Until the gateway work exists, live-mode refunds are never announced as
   completed.
+
+## 35. The web apps' own sign-in limit, per visitor and per account
+
+**Context.** Sign-in, sign-up, password reset, e-mailed codes and token
+refreshes all reach Supabase Auth from the apps' servers, so Auth's limits by
+network address (a bucket of 30 on `/auth/v1/token`, for example) count the
+server, not the visitor: one visitor could spend them for everybody, and they
+stop nobody in particular (WEB-2 of the review of 21 November 2026). Auth can
+count a forwarded address (`Sb-Forwarded-For`), but only on requests made with
+a **secret** key, with the setting switched on per project; publishable keys
+are not accepted. The apps hold no secret key, by design (decision 2).
+
+**Decision.**
+
+- **Not `Sb-Forwarded-For`, for now.** Using it would mean giving the apps a
+  secret key, or moving sign-in into a server-side function that holds one.
+  The second is the better long-term shape and is left for when sign-in moves
+  behind such a function; nothing below has to change for it.
+- **The apps' own limit, kept in the database**
+  (`auth_limit_reserve` / `auth_limit_release`, migration `083300`), in front
+  of every call to Auth a visitor can repeat: sign-in, sign-up, reset and
+  confirmation e-mails, e-mailed codes, the current password asked again, and
+  the proxy's token refreshes. Counted before the call, under a lock, so a
+  burst cannot outrun it; a right password or code, and a refresh Auth
+  accepted, give their attempt back.
+
+  Three buckets per action: the visitor address; the account from that one
+  address (the strict limit a single guesser meets); and the account from all
+  addresses together (a higher ceiling against a guesser with many addresses).
+
+  | What                           | Per address | Per account, one address | Per account, all | Window     |
+  | ------------------------------ | ----------- | ------------------------ | ---------------- | ---------- |
+  | Wrong passwords                | 20          | 5                        | 50               | 15 minutes |
+  | Sign-ups                       | 10          | 3                        | 10               | 1 hour     |
+  | Reset and confirmation e-mails | 10          | 5                        | 20               | 1 hour     |
+  | Wrong e-mailed codes           | 20          | 5                        | 30               | 15 minutes |
+  | Current password asked again   | 20          | —                        | 5 (signed in)    | 15 minutes |
+  | Refused token refreshes        | 120         | —                        | —                | 10 minutes |
+
+  Without a trusted visitor address, "per account, one address" becomes the
+  account alone at the strict limit.
+
+- **Only keyed hashes are stored**, for two hours: HMAC-SHA-256 of the
+  address and of the e-mail typed, with `AUTH_GUARD_KEY`, a server-only key
+  the database never sees. A caller without the key cannot compute anyone
+  else's hash, so calling the functions directly (they are open to visitors,
+  since sign-in comes before a session) cannot count against a real person.
+- **Only the apps may add attempts, once the project says so.** Every
+  reservation carries `p_caller`, an HMAC of a fixed text with
+  `AUTH_GUARD_KEY`. When the project keeps that value's SHA-256 in Vault as
+  `auth_limit_caller_digest`, a caller without it is refused
+  (`auth_limit_caller`) and adds nothing; without the secret (local runs, CI, a
+  project not yet set up) any caller is accepted. The runbook step is
+  `select vault.create_secret('<digest>', 'auth_limit_caller_digest')`, with
+  `<digest>` from
+  `printf %s "$(printf %s auth-limit-caller | openssl dgst -sha256 -hmac "$AUTH_GUARD_KEY" -r | cut -d' ' -f1)" | sha256sum | cut -d' ' -f1`;
+  set it after the apps run with the new key, and again whenever the key changes.
+- **Nothing looks the account up**: an address with no account is counted and
+  answered word for word like one with an account.
+- **A stranger cannot keep an honest person out.** One guesser fills only
+  its own "one address" share: the owner, from any other address, signs in,
+  asks for a reset e-mail and types the right code as usual. A browser that
+  signed in to the account before (a signed `yt-dispositivo` cookie, at most
+  three accounts) skips both account buckets, for passwords, codes, e-mails and
+  sign-ups; the per-address limit still applies there. Only a guesser with
+  many addresses (10 for passwords, 6 for codes, 4 for e-mails) can fill the
+  account's total, for one window at a time; the owner's usual browser is not
+  held even then, and the link in any reset e-mail already sent (including the
+  ones the guesser triggered) counts per address only, so it still gets them
+  in. The e-mail limit's message does not tell the reader they asked for the
+  e-mails, and points to the latest one.
+- **Which header says who the visitor is.** On Vercel, `x-vercel-forwarded-for`
+  (which Vercel writes and a proxy in front cannot replace), then `x-real-ip`;
+  Vercel overwrites both. Elsewhere only what the operator names in
+  `AUTH_CLIENT_IP_HEADER` and `AUTH_CLIENT_IP_HOPS` (the entry written by the
+  proxy nearest the app; entries further left are the visitor's own words).
+  Without either, there is no per-address limit: one shared bucket for every
+  visitor would recreate the outage this fixes. IPv6 is counted per /64.
+- **Fails closed**: outside a local run, a missing, short or example
+  `AUTH_GUARD_KEY`, or a database that does not answer, stops sign-in with a
+  generic message rather than letting attempts through uncounted. The one
+  exception is a refresh, which goes ahead if the limit cannot be asked: a
+  fault in the limit must not sign everybody out.
+- **A refused refresh never signs anyone out.** Only refreshes Auth refused
+  count (made-up or revoked tokens), so people behind one shared address (a
+  mobile carrier's CGNAT, an office) are not counted for their own refreshes.
+  If someone sharing their address fills the bucket, the refresh does not go
+  to Auth and the cookie writers in the proxy and the session client keep the
+  browser's cookies untouched: that person is treated as signed out for that
+  request only, and the next request after the wait renews the token.
+- **What counts as a local run.** Not on Vercel, the API and site on
+  loopback, and either not a production build (`next dev`, tests) or
+  `YUNTERA_LOCAL_RUN=1`, which `tools/dev/stack.sh` and CI set. A self-hosted
+  production server whose API happens to be on loopback is therefore treated as
+  deployed: the published local guard key and example refresh keys are
+  refused there. Never set `YUNTERA_LOCAL_RUN` on a deployment.
+- **The human check is wired in and off.** Cloudflare Turnstile, which Auth
+  verifies once its CAPTCHA protection is on: the widget appears on the
+  sign-in, sign-up, reset, resend, password-change and deletion forms when
+  `NEXT_PUBLIC_AUTH_CAPTCHA_SITE_KEY` is set at build time, and the token goes
+  to Auth as `captchaToken`. The content-security policy adds Turnstile's
+  origin only then.
+
+This refines decision 27 for sign-in only: the other limits stay per account
+and per target, because the database cannot see a trustworthy address; these
+can, because the apps' server reads it from a header the host guarantees.
+
+**Consequences.**
+
+- Someone with many addresses gets 50 wrong passwords per account per 15
+  minutes, about 4 800 a day per account, against passwords that must pass the
+  rules in `auth-rules.ts`; and 30 wrong codes per account per 15 minutes
+  against a 6-digit code that expires within the hour (about 1 in 8 000 per
+  code's life). That is the price of not letting one stranger lock the owner
+  out. The edge (Vercel's firewall) and the human check are the next layers.
+- Until `auth_limit_caller_digest` is set in Vault, calling
+  `auth_limit_reserve` directly with the public key can add rows with made-up
+  hashes; they touch nobody and are gone within two hours.
+- Auth's own limits still apply behind ours, per server address. Ours are set
+  below them per visitor, so a single visitor can no longer exhaust them;
+  enough honest traffic from one server address still could (no different from
+  before).
+
+## 36. Session lifetimes per app
+
+**Context.** Every app kept @supabase/ssr's default cookie of 400 days, and
+Supabase refresh tokens do not expire by default, so a warehouse handheld or a
+staff laptop stayed signed in for over a year (WEB-5). Auth's own time-box and
+inactivity timeout exist but are a Pro-plan setting; the preview project is on
+the free plan.
+
+**Decision.** Each app has a lifetime, enforced by the apps whatever the plan
+(`SESSION_POLICIES` in `packages/next-kit/src/guard.ts`, chosen by
+`baseConfig({ app })`):
+
+| App           | From sign-in | Idle       | Why                                                                     |
+| ------------- | ------------ | ---------- | ----------------------------------------------------------------------- |
+| Shop          | 90 days      | —          | A personal device; checkout re-checks everything that matters           |
+| Seller centre | 30 days      | —          | Money and payout requests behind it, usually an own device              |
+| Staff console | 12 hours     | 30 minutes | One working day; away from the desk ends it; the audit names the person |
+| Field app     | 12 hours     | —          | One shift on a shared handheld                                          |
+
+The time from sign-in comes from Auth's signed `amr` claim, so it survives
+token refreshes; the console's last activity is a cookie signed for that
+session (`yt-actividad`), renewed by every request except background
+prefetches. The proxy checks both on every request. A session past either is
+ended closed: its refresh token is revoked at Auth (`signOut` for this
+session), the cookies are removed, the page sends the person to sign in with
+the address they were on, and sign-in says why and brings them back. The
+session cookies also carry the app's lifetime as their `Max-Age`.
+
+**Consequences.**
+
+- How it fits Auth's tokens: the access token still lasts one hour and is
+  renewed by the proxy; these limits end the whole session on top. A refresh
+  token copied out of the browser before the end keeps working against Auth
+  directly until Auth's own time-box ends it, which on the free plan is never:
+  turn on Auth's time-box (12 hours) and inactivity timeout on the production
+  project as well.
+- Someone at the console when the 12 hours run out signs in again, even if
+  active. A page that polls would count as activity; none does today.
+- Sessions of the native apps are not covered (they keep the session in the
+  phone's secure store, decision 18).
+- What one person's work leaves in the browser (today the console's order
+  search, `PER_PERSON_COOKIES` in guard.ts) is removed when a session begins,
+  when the person signs out and when the proxy ends a session, so the next
+  person at a shared desk does not see it.

@@ -2,8 +2,10 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { type Api, createApi, type RpcTransport } from "@yuntera/db";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { connection } from "next/server";
+import { addressHash, callerProof, clientAddress, guardKey, sessionPolicy } from "../guard";
+import { keepCookiesIfLimited, refreshLimiter } from "./refresh-limit";
 
 /**
  * Two ways to reach the API, with a deliberate difference:
@@ -42,6 +44,13 @@ export const SESSION_COOKIE = {
   path: "/",
 } as const;
 
+/**
+ * The session cookies themselves also last no longer than this app's session
+ * (guard.ts, SESSION_POLICIES): not @supabase/ssr's default of 400 days. The
+ * proxy ends a session past its lifetime in any case (WEB-5).
+ */
+export const sessionCookieMaxAge = () => sessionPolicy(process.env.YUNTERA_APP).maxAgeSeconds;
+
 const transportFor = (client: SupabaseClient): RpcTransport => ({
   rpc: (fn, args) => client.rpc(fn, args),
 });
@@ -68,19 +77,31 @@ export async function sessionClient(): Promise<SupabaseClient> {
   // sense for a live request — never for a page prepared ahead of time.
   await connection();
   const { url, key } = apiEnv();
+  const guard = guardKey(process.env);
+  const address = clientAddress(await headers(), process.env);
+  // A refresh the limit refused leaves the cookies exactly as they came.
+  const limiter = refreshLimiter(
+    guard.ok && address ? addressHash(guard.value, address) : null,
+    guard.ok ? callerProof(guard.value) : null,
+  );
   return createServerClient(url, key, {
+    global: { fetch: limiter.fetch },
     cookies: {
       getAll: () => store.getAll(),
-      setAll: (list) => {
+      setAll: keepCookiesIfLimited(limiter, (list) => {
         try {
           for (const { name, value, options } of list) {
-            store.set(name, value, { ...options, ...SESSION_COOKIE });
+            store.set(name, value, {
+              ...options,
+              ...SESSION_COOKIE,
+              ...(value ? { maxAge: sessionCookieMaxAge() } : {}),
+            });
           }
         } catch {
           // Server Components cannot set cookies. The proxy refreshes the
           // session on every request, so a skipped write here is harmless.
         }
-      },
+      }),
     },
   });
 }

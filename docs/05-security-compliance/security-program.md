@@ -237,7 +237,9 @@ and all of them pass on the merged database.
   categories, brands, synonyms, fees, zones, the calendar and settings, and
   ops creating warehouse locations.
 - Nothing limits one person using many free accounts, and there is no edge
-  rate limit.
+  rate limit. Sign-in, sign-up, account e-mails and codes have the apps' own
+  limit per visitor and per account (decision 35), not Auth's alone, which
+  counts the apps' server.
 - The hardening is verified locally only; it is not applied to the hosted
   preview yet.
 - A new fee schedule does not re-check offers against the price floor.
@@ -322,8 +324,9 @@ evidence are in [access control](../03-data/access-control.md),
 
 **Known gaps in what is built**
 
-- No limit on calls per minute beyond platform defaults; the database's own
-  limits are per account and per target.
+- No limit on calls per minute beyond platform defaults, except the apps'
+  sign-in limit (per visitor address and per account, decision 35); the
+  database's other limits are per account and per target.
 - **Accepted limit: no request-size limit of our own on the hosted Data API.**
   The database refuses an oversized cart, order or search before it does any
   work (`max_lines_per_order`, the search text bounds), but the API in front
@@ -345,6 +348,11 @@ evidence are in [access control](../03-data/access-control.md),
   proxy or edge function of our own in front of the Data API with a body
   limit, or Supabase documenting a setting (ask support before launch).
   Recheck the documentation when the platform's API gateway settings change.
+- Sessions end after 90 days in the shop, 30 in the seller centre, 12 hours in
+  the console and the field app, and after 30 idle minutes in the console
+  (decision 36); Auth's own time-box is not switched on (a Pro-plan setting).
+- The human check (Turnstile) is wired into the sign-in forms but off until
+  its keys are set in the apps and in Auth.
 - The hardening of 21 November 2026 (migrations `082800` to `083100`) is
   verified on a local PostgreSQL only and is not applied to the hosted
   preview yet.

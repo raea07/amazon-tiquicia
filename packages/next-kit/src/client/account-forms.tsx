@@ -20,6 +20,7 @@ import {
 } from "../server/account-actions";
 import type { ActionState } from "../types";
 import { FormMessage, SubmitButton } from "./forms";
+import { HumanCheck } from "./human-check";
 
 const initial: ActionState = {};
 
@@ -142,6 +143,7 @@ export function RecoveryForm() {
           inputMode="email"
           defaultValue={sent.values?.email}
         />
+        <HumanCheck resetKey={sent} />
         <FormMessage state={sent} />
         <SubmitButton block size="lg" pendingLabel="Enviando…">
           Enviarme un enlace
@@ -166,8 +168,9 @@ export function RecoveryForm() {
           Continuar con el código
         </SubmitButton>
       </form>
-      <form action={send}>
+      <form action={send} className="flex flex-col gap-2">
         <input type="hidden" name="email" value={email} />
+        <HumanCheck resetKey={sent} />
         <SubmitButton variant="ghost" size="sm" pendingLabel="Enviando…">
           Enviarme otro correo
         </SubmitButton>
@@ -283,6 +286,7 @@ export function ConfirmEmailPanel({
       <form action={resend} className="flex flex-col gap-2 border-t border-border pt-4">
         <input type="hidden" name="email" value={email} />
         <p className="text-sm text-ink-muted">¿No le llegó?</p>
+        <HumanCheck resetKey={resent} />
         <FormMessage state={resent} />
         <div>
           <SubmitButton variant="secondary" size="sm" pendingLabel="Enviando…">
@@ -313,6 +317,7 @@ export function ChangePasswordForm() {
         autoComplete="current-password"
       />
       <NewPasswordFields />
+      <HumanCheck resetKey={state} />
       <FormMessage state={state} />
       <div>
         <SubmitButton pendingLabel="Guardando…">Cambiar la contraseña</SubmitButton>
@@ -464,6 +469,7 @@ export function DeleteAccountForm() {
         />
         <span>Entiendo que mi cuenta se elimina para siempre y que no se puede recuperar.</span>
       </label>
+      <HumanCheck resetKey={state} />
       <FormMessage state={state} />
       <div>
         <SubmitButton variant="danger" pendingLabel="Eliminando…">

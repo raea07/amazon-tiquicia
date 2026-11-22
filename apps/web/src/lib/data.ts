@@ -1,5 +1,6 @@
 import "server-only";
 import type { SearchInput } from "@yuntera/db";
+import { CATALOG_TAG, productPageTags, suggestionTags } from "@yuntera/next-kit/cache-tags";
 import { cacheLife, cacheTag } from "next/cache";
 import { publicApi } from "./supabase";
 
@@ -14,6 +15,11 @@ import { publicApi } from "./supabase";
  *     stock in the database and refuses with a clear message if they differ.
  *
  * Nothing user-specific may be read here — these results are served to everyone.
+ *
+ * Tags (packages/next-kit/src/cache-tags.ts): every catalogue read carries
+ * `catalog`, which only the protected refresh endpoint drops; a product page
+ * also carries its product and its offers, which the shop's own actions drop
+ * when they change them, and nothing more.
  */
 
 export async function getCategories() {
@@ -33,19 +39,23 @@ export async function getDistricts() {
 export async function searchCatalog(input: SearchInput) {
   "use cache";
   cacheLife("minutes");
-  cacheTag("catalog");
+  cacheTag(CATALOG_TAG);
   return publicApi().searchProducts(input);
 }
 
 export async function getProductPage(slug: string, postalCode: string | null) {
   "use cache";
   cacheLife("minutes");
-  cacheTag("catalog", `product:${slug}`);
-  return publicApi().getProduct(slug, postalCode);
+  const product = await publicApi().getProduct(slug, postalCode);
+  const offers = product?.skus.flatMap((sku) => sku.offers.map((offer) => offer.offer_id)) ?? [];
+  cacheTag(...productPageTags(slug, offers));
+  return product;
 }
 
 export async function getSuggestions(prefix: string) {
   "use cache";
   cacheLife("minutes");
+  // Tagged so a take-down drops the suggestions too (WEB-6).
+  cacheTag(...suggestionTags());
   return publicApi().suggestProducts(prefix, 6);
 }

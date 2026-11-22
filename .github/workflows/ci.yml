@@ -13,6 +13,11 @@ on:
     branches: [main]
   pull_request:
 
+# Read-only, and nothing here holds a secret: a pull request from a fork runs
+# with the same read-only token and no secrets (it is `pull_request`, never
+# `pull_request_target`). Actions are pinned to commits, not tags, so a moved
+# tag cannot change what runs; Dependabot proposes the new commit with its
+# version in the trailing comment.
 permissions:
   contents: read
 
@@ -27,6 +32,12 @@ env:
   PG_ADMIN_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
   DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/yuntera_local
   NEXT_TELEMETRY_DISABLED: "1"
+  # Nothing stands in front of the apps here, so the journeys may say who the
+  # visitor is (the sign-in limit per address); see tools/dev/stack.sh.
+  AUTH_CLIENT_IP_HEADER: x-forwarded-for
+  # These production builds run against the local stand-in: the readable local
+  # keys are accepted only with this said explicitly (guard.ts, isLocalRun).
+  YUNTERA_LOCAL_RUN: "1"
 
 jobs:
   checks:
@@ -45,9 +56,12 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Later steps run the repository's own scripts; none of them needs the token.
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -83,9 +97,12 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Later steps run the repository's own scripts; none of them needs the token.
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -133,7 +150,7 @@ jobs:
 
       - name: Keep screenshots and logs when something fails
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: journeys
           path: |
@@ -160,9 +177,12 @@ jobs:
       EXPO_NO_TELEMETRY: "1"
       CI: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Later steps run the repository's own scripts; none of them needs the token.
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -198,7 +218,7 @@ jobs:
 
       - name: Keep screenshots and logs when something fails
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: native
           path: |

@@ -24,6 +24,7 @@ import {
   messageOf,
   passwordSignIn,
   redirectTo,
+  refreshShopCatalog,
   sessionApi,
   signInPath,
   typed,
@@ -68,6 +69,8 @@ export async function setSellerStatus(
     "/vendedores",
     async (api) => {
       await api.opsSetSellerStatus(sellerId.data, status.data, note(formData) || null);
+      // A suspended or closed shop's offers leave the shop at once (WEB-6).
+      if (status.data !== "active") await refreshShopCatalog();
       return status.data === "active" ? "Vendedor verificado y activo." : "Estado actualizado.";
     },
     typed(formData, "note"),
@@ -145,6 +148,8 @@ export async function resolveReport(
     "/atencion",
     async (api) => {
       await api.opsResolveReport(reportId.data, act, note(formData));
+      // Content taken down must stop showing now, not when the cache expires (WEB-6).
+      if (act) await refreshShopCatalog();
       return act ? "Reporte atendido y contenido retirado." : "Reporte descartado.";
     },
     typed(formData, "note"),

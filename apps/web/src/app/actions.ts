@@ -10,6 +10,7 @@
  */
 
 import { parsePhone } from "@yuntera/core";
+import { tagsForOffers, tagsForProducts } from "@yuntera/next-kit/cache-tags";
 import {
   type ActionState,
   endSession,
@@ -212,7 +213,9 @@ export async function placeOrder(_previous: ActionState, formData: FormData): Pr
   }
 
   await writeCart([]);
-  updateTag("catalog"); // stock changed: refresh cached availability
+  // Stock changed for the offers bought: those product pages, nothing else
+  // (WEB-3: an action any shopper can repeat must not empty the whole cache).
+  for (const tag of tagsForOffers(cart.map((line) => line.offerId))) updateTag(tag);
   redirect(`/pedidos/${orderNumber}?nuevo=1` as Route);
 }
 
@@ -260,8 +263,22 @@ export async function cancelOrder(
       ? "Pedido cancelado. El reembolso va por el mismo medio con el que usted pagó."
       : "Pedido cancelado. No se le cobró nada.";
   });
-  if (state.ok) updateTag("catalog");
+  if (state.ok) await forgetProductsOf(orderNumber);
   return state;
+}
+
+/**
+ * The stock or the reviews of an order's products changed: drop those
+ * product pages only (WEB-3). Best effort: they refresh within the minute anyway.
+ */
+async function forgetProductsOf(orderNumber: string, itemId?: string): Promise<void> {
+  try {
+    const order = await (await sessionApi()).getOrder(orderNumber);
+    const items = itemId ? order.items.filter((item) => item.id === itemId) : order.items;
+    for (const tag of tagsForProducts(items.map((item) => item.product_slug))) updateTag(tag);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+  }
 }
 
 export async function submitReview(
@@ -282,11 +299,12 @@ export async function submitReview(
   const values = typed(formData, "rating", "body");
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? GENERIC, values };
 
-  const state = await orderAction(String(formData.get("orderNumber") ?? ""), async (api) => {
+  const orderNumber = String(formData.get("orderNumber") ?? "");
+  const state = await orderAction(orderNumber, async (api) => {
     await api.submitReview({ ...parsed.data, body: parsed.data.body || null });
     return "Gracias por su reseña. Ya está publicada.";
   });
-  if (state.ok) updateTag("catalog");
+  if (state.ok) await forgetProductsOf(orderNumber, parsed.data.orderItemId);
   return state.error ? { ...state, values } : state;
 }
 

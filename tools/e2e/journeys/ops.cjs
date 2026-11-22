@@ -132,7 +132,12 @@ async function rpcAs(email, calls) {
   await page.screenshot({ path: SHOTS + "/o2-order.png", fullPage: true });
 
   // 3. Search
-  await page.goto(BASE + "/pedidos?q=Andr%C3%A9s", { waitUntil: "networkidle" });
+  // Sent by POST, so the shopper's name never reaches the address bar (WEB-4).
+  await page.goto(BASE + "/pedidos", { waitUntil: "networkidle" });
+  await page.fill("main:visible #q", "Andrés");
+  await page.click('main:visible button:has-text("Buscar pedidos")');
+  await page.waitForSelector("main:visible >> text=Quitar la búsqueda");
+  if (/Andr/i.test(decodeURIComponent(page.url()))) throw new Error("the name went into the URL");
   log('search "Andrés" rows:', await page.locator("main:visible tbody tr").count());
 
   // 4. Catalogue review: reject needs a reason, typed text survives the error

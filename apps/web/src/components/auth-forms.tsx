@@ -13,8 +13,8 @@ import { FormMessage, SubmitButton } from "./forms";
 
 const initial: ActionState = {};
 
-export function SignInForm({ returnTo }: { returnTo: string }) {
-  return <KitSignInForm action={signIn} returnTo={returnTo} />;
+export function SignInForm({ returnTo, notice }: { returnTo: string; notice?: string | null }) {
+  return <KitSignInForm action={signIn} returnTo={returnTo} notice={notice} />;
 }
 
 export function SignUpForm({ returnTo }: { returnTo: string }) {

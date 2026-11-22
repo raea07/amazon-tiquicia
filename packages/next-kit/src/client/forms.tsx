@@ -13,6 +13,7 @@ import { type ReactNode, useActionState, useEffect, useRef, useState } from "rea
 import { useFormStatus } from "react-dom";
 import type { ActionState } from "../types";
 import { ConfirmEmailPanel, PasswordRules } from "./account-forms";
+import { HumanCheck } from "./human-check";
 
 type FormAction = (previous: ActionState, formData: FormData) => Promise<ActionState>;
 
@@ -129,8 +130,17 @@ export function ActionForm({
 /**
  * E-mail and password. The action decides where to go next. An account whose
  * address is not confirmed yet is told so, with the code entry and a resend.
+ * `notice` says why the person is here (a session that ended), above the form.
  */
-export function SignInForm({ action, returnTo }: { action: FormAction; returnTo: string }) {
+export function SignInForm({
+  action,
+  returnTo,
+  notice,
+}: {
+  action: FormAction;
+  returnTo: string;
+  notice?: string | null;
+}) {
   const [state, formAction] = useActionState(action, initial);
   if (state.step === "confirm-email" && state.values?.email) {
     return (
@@ -143,6 +153,11 @@ export function SignInForm({ action, returnTo }: { action: FormAction; returnTo:
   }
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      {notice && !state.error ? (
+        <Alert tone="info" title="Ingrese de nuevo">
+          {notice}
+        </Alert>
+      ) : null}
       <input type="hidden" name="siguiente" value={returnTo} />
       <TextField
         label="Correo electrónico"
@@ -158,6 +173,7 @@ export function SignInForm({ action, returnTo }: { action: FormAction; returnTo:
         type="password"
         autoComplete="current-password"
       />
+      <HumanCheck resetKey={state} />
       <FormMessage state={state} />
       <SubmitButton block size="lg" pendingLabel="Ingresando…">
         Ingresar
@@ -237,6 +253,7 @@ export function SignUpForm({
           .
         </span>
       </label>
+      <HumanCheck resetKey={state} />
       <FormMessage state={state} />
       <SubmitButton block size="lg" pendingLabel="Creando su cuenta…">
         Crear cuenta

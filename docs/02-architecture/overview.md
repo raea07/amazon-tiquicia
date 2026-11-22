@@ -165,13 +165,20 @@ The storefront uses Next.js 16 with Cache Components (partial prerendering).
 Each page is a static shell that is served immediately, with holes that are
 filled as data arrives.
 
-| Kind of content                                                               | Where it is read                                              | Lifetime                                                                                      | Invalidated by                                                 |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Categories                                                                    | `getCategories` in `apps/web/src/lib/data.ts`                 | `hours` profile                                                                               | Tag `categories`                                               |
-| Districts and zones                                                           | `getDistricts`                                                | `days` profile                                                                                | Tag `districts`                                                |
-| Search results, category pages, home shelves                                  | `searchCatalog`                                               | `minutes` profile: served stale for up to 5 minutes, refreshed in the background every minute | Tag `catalog`, updated by actions that change stock or reviews |
-| Product page                                                                  | `getProductPage`                                              | `minutes` profile                                                                             | Tags `catalog` and `product:<slug>`                            |
-| Anything about the signed-in person: account, cart contents, orders, checkout | Read per request inside a `<Suspense>` boundary, never cached | —                                                                                             | —                                                              |
+| Kind of content                                                               | Where it is read                                              | Lifetime                                                                                      | Invalidated by                                                                                                                                                           |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Categories                                                                    | `getCategories` in `apps/web/src/lib/data.ts`                 | `hours` profile                                                                               | Tag `categories`                                                                                                                                                         |
+| Districts and zones                                                           | `getDistricts`                                                | `days` profile                                                                                | Tag `districts`                                                                                                                                                          |
+| Search results, category pages, home shelves                                  | `searchCatalog`                                               | `minutes` profile: served stale for up to 5 minutes, refreshed in the background every minute | Tag `catalog`, dropped only by the protected refresh endpoint                                                                                                            |
+| Product page                                                                  | `getProductPage`                                              | `minutes` profile                                                                             | Tags `catalog`, `product:<slug>` and `offer:<id>` per offer: an order drops its offers' pages, a cancellation or a review its products' pages, never the whole catalogue |
+| Search suggestions                                                            | `getSuggestions`                                              | `minutes` profile                                                                             | Tags `catalog` and `suggestions`                                                                                                                                         |
+| Anything about the signed-in person: account, cart contents, orders, checkout | Read per request inside a `<Suspense>` boundary, never cached | —                                                                                             | —                                                                                                                                                                        |
+
+The whole `catalog` tag is dropped only through the shop's refresh endpoint,
+which asks for `SHOP_REFRESH_KEY`: by the console when content is taken down,
+a shop is suspended or closed, or a listing is rejected or an edit approved,
+and by the seller centre when a listing is archived. An action any shopper
+can repeat drops only the pages it changed (`packages/next-kit/src/cache-tags.ts`).
 
 Two rules keep this safe.
 
@@ -278,11 +285,15 @@ These are not built. They are listed here so that no reader assumes otherwise.
 - **Uploads are product photos only.** Proof-of-delivery photos and photos
   from the phone apps are not built, and nothing deletes unused photo files on
   a schedule.
-- **No limit per minute or on request size.** The database limits what each
-  account may have open and bounds every input
-  ([decision 27](decisions.md#27-limits-are-per-account-and-per-target-never-per-address));
-  nothing limits calls per minute beyond what the platforms provide by
-  default.
+- **No limit per minute outside sign-in, nor on request size.** The database
+  limits what each account may have open and bounds every input
+  ([decision 27](decisions.md#27-limits-are-per-account-and-per-target-never-per-address)).
+  Sign-in, sign-up, account e-mails, codes and token refreshes have the apps'
+  own limit per visitor and per account
+  ([decision 35](decisions.md#35-the-web-apps-own-sign-in-limit-per-visitor-and-per-account)),
+  because Auth's limits see the apps' server, not the visitor. Search,
+  checkout and the rest have no limit per minute beyond the platforms'
+  defaults.
 - **No English interface.** The schema and error messages carry English; the
   apps render Spanish only.
 - **Not run on real Supabase.** See the status note at the top.

@@ -1,3 +1,4 @@
+import { endedSessionNotice } from "@yuntera/next-kit/server";
 import { Skeleton } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
@@ -40,7 +41,11 @@ async function Access({ searchParams }: Pick<PageProps<"/ingresar">, "searchPara
           ? "Para comprar y seguir sus pedidos."
           : "Con el correo y la contraseña de su cuenta."}
       </p>
-      {creating ? <SignUpForm returnTo={returnTo} /> : <SignInForm returnTo={returnTo} />}
+      {creating ? (
+        <SignUpForm returnTo={returnTo} />
+      ) : (
+        <SignInForm returnTo={returnTo} notice={await endedSessionNotice()} />
+      )}
       <p className="mt-5 border-t border-border pt-4 text-sm">
         {creating ? "¿Ya tiene cuenta? " : "¿Es su primera vez? "}
         <Link href={other} className="font-semibold text-link underline">

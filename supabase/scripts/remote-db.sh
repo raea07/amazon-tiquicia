@@ -4,7 +4,7 @@
 #
 #   remote-db.sh status <project-ref>             which migrations are applied, which are pending
 #   remote-db.sh push   <project-ref>             apply pending migrations in order; stops at the first error
-#   remote-db.sh sql    <project-ref> <file.sql>  run one SQL file
+#   remote-db.sh sql    <project-ref> <file.sql>  run one SQL file (never the seed, the shim or a suite)
 #   remote-db.sh test   <project-ref>             run supabase/tests against the project (each rolls itself back;
 #                                                 a part that cannot run there is reported as skipped)
 #   remote-db.sh seed   <project-ref>             load supabase/seed.sql: demo accounts and orders (PREVIEW ONLY)
@@ -23,14 +23,16 @@
 # only its bcrypt hash goes into the seed.
 #
 # Never apply supabase/scripts/local-shim.sql to a hosted project: it imitates
-# roles and schemas that Supabase already provides.
+# roles and schemas that Supabase already provides. `sql` refuses it, the seed
+# (demo data goes in only through the guarded `seed` command) and the suites
+# (use `test`), and the seed itself refuses to run without the hash `seed` sets.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMMAND="${1:-}"
 REF="${2:-}"
 API="https://api.supabase.com/v1/projects/$REF/database/query"
-USAGE_LINES='2,26p'
+USAGE_LINES='2,29p'
 
 [ -n "$COMMAND" ] && [ -n "$REF" ] || { sed -n "$USAGE_LINES" "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2; }
 
@@ -129,6 +131,24 @@ case "$COMMAND" in
 
   sql)
     file="${3:?usage: remote-db.sh sql <project-ref> <file.sql>}"
+    [ -f "$file" ] || { echo "No such file: $file" >&2; exit 2; }
+    real="$(cd "$(dirname "$file")" && pwd -P)/$(basename "$file")"
+    case "$real" in
+      "$(cd "$ROOT" && pwd -P)/seed.sql" | */seed.sql)
+        echo "Refusing: demo data goes in only through \`remote-db.sh seed <project-ref>\` (preview only)." >&2
+        exit 1 ;;
+      */scripts/local-shim.sql)
+        echo "Refusing: the local shim imitates what a hosted project already has. Never apply it there." >&2
+        exit 1 ;;
+      "$(cd "$ROOT" && pwd -P)"/tests/*)
+        echo "Refusing: run the database suites with \`remote-db.sh test <project-ref>\`." >&2
+        exit 1 ;;
+    esac
+    # A copy of the seed under another name is refused by its content too.
+    if grep -qE 'pg_temp\.seed_user|app\.seed_password' "$file"; then
+      echo "Refusing: $(basename "$file") creates demo accounts; use \`remote-db.sh seed\` on a preview." >&2
+      exit 1
+    fi
     run_sql < "$file"
     echo
     ;;

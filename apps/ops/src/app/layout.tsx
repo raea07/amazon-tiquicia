@@ -74,6 +74,7 @@ async function Sections() {
   if (!staff) return null;
   return (
     <NavLinks
+      menu
       items={SECTIONS.filter((section) => canSee(staff.staff_role, section.roles)).map(
         ({ href, label }) => ({ href, label }),
       )}

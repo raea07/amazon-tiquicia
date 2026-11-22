@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
 // The internal console needs neither location nor camera, and tells search
 // engines to stay out.
 const nextConfig: NextConfig = {
-  ...baseConfig({ internal: true }),
+  ...baseConfig({ app: "ops", internal: true }),
 };
 
 export default nextConfig;

@@ -27,6 +27,7 @@ import {
   qrDataUri,
 } from "./account";
 import { GENERIC_ERROR, isRedirect, messageOf } from "./actions";
+import { captchaToken, reserveAttempt } from "./auth-guard";
 import { getViewer, redirectTo } from "./session";
 import { apiFor, sessionApi, sessionClient } from "./supabase";
 
@@ -64,8 +65,14 @@ export async function requestPasswordReset(
 ): Promise<ActionState> {
   const email = field(formData, "email").toLowerCase();
   if (!isEmail(email)) return { error: "Escriba un correo válido.", values: { email } };
+  // Counted per visitor and per address typed, whether or not it has an account.
+  const attempt = await reserveAttempt("email", { email });
+  if ("error" in attempt) return { error: attempt.error, values: { email } };
   const supabase = await sessionClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: confirmUrl() });
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: confirmUrl(),
+    captchaToken: captchaToken(formData),
+  });
   // A limit hit or an unknown address must look exactly like success: anything
   // else would tell a stranger whether the address has an account here.
   if (error && error.code !== "over_email_send_rate_limit") console.error(error.code);
@@ -86,9 +93,12 @@ export async function verifyRecoveryCode(
   const values = { email };
   if (!isEmail(email)) return { error: "Escriba un correo válido.", values, step: "code" };
   if (!code) return { error: "El código tiene 6 dígitos.", values, step: "code" };
+  const attempt = await reserveAttempt("code", { email });
+  if ("error" in attempt) return { error: attempt.error, values, step: "code" };
   const supabase = await sessionClient();
   const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "recovery" });
   if (error) return { error: authErrorMessage(error), values, step: "code" };
+  await attempt.succeeded();
   await markRecoverySession(data.session?.access_token);
   redirectTo("/recuperar/nueva");
 }
@@ -148,10 +158,15 @@ export async function confirmEmailLink(
   if (!isTokenHash(tokenHash) || !isLinkType(type)) {
     return { error: authErrorMessage({ code: "otp_expired" }), data: { type: String(type) } };
   }
+  // A link's token cannot be guessed; this counts the visitor's address only,
+  // so one visitor cannot spend Auth's limit on verifications for everyone.
+  const attempt = await reserveAttempt("code", {});
+  if ("error" in attempt) return { error: attempt.error, data: { type } };
   const supabase = await sessionClient();
   // Exactly these two keys: anything else in the body makes Auth refuse it.
   const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
   if (error) return { error: authErrorMessage(error), data: { type } };
+  await attempt.succeeded();
 
   if (type === "recovery") {
     await markRecoverySession(data.session?.access_token);
@@ -170,9 +185,12 @@ export async function confirmEmailCode(
   const code = normaliseCode(formData.get("code"));
   const values = { email };
   if (!code) return { error: "El código tiene 6 dígitos.", values, step: "confirm-email" };
+  const attempt = await reserveAttempt("code", { email });
+  if ("error" in attempt) return { error: attempt.error, values, step: "confirm-email" };
   const supabase = await sessionClient();
   const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
   if (error) return { error: authErrorMessage(error), values, step: "confirm-email" };
+  await attempt.succeeded();
   redirectTo(await settleSignUp(data.user?.user_metadata));
 }
 
@@ -184,11 +202,13 @@ export async function resendConfirmation(
   const email = field(formData, "email").toLowerCase();
   const values = { email };
   if (!isEmail(email)) return { error: "Escriba un correo válido.", values, step: "confirm-email" };
+  const attempt = await reserveAttempt("email", { email });
+  if ("error" in attempt) return { error: attempt.error, values, step: "confirm-email" };
   const supabase = await sessionClient();
   const { error } = await supabase.auth.resend({
     type: "signup",
     email,
-    options: { emailRedirectTo: confirmUrl() },
+    options: { emailRedirectTo: confirmUrl(), captchaToken: captchaToken(formData) },
   });
   if (error) return { error: authErrorMessage(error), values, step: "confirm-email" };
   return {
@@ -214,9 +234,12 @@ export async function changePassword(
     email: viewer.email,
   });
   if (problem) return { error: problem };
-  if (!(await passwordIsCorrect(viewer.email, current))) {
+  const attempt = await reserveAttempt("reauth", { userId: viewer.id });
+  if ("error" in attempt) return { error: attempt.error };
+  if (!(await passwordIsCorrect(viewer.email, current, captchaToken(formData)))) {
     return { error: "La contraseña actual no coincide." };
   }
+  await attempt.succeeded();
   const supabase = await sessionClient();
   // `current_password` is ignored unless the project requires it; sent so the
   // form keeps working if that setting is switched on.
@@ -373,9 +396,13 @@ export async function deleteAccount(
     };
   }
   const password = String(formData.get("password") ?? "");
-  if (!password || !(await passwordIsCorrect(viewer.email, password))) {
+  if (!password) return { error: "La contraseña no coincide. Escríbala de nuevo para confirmar." };
+  const attempt = await reserveAttempt("reauth", { userId: viewer.id });
+  if ("error" in attempt) return { error: attempt.error };
+  if (!(await passwordIsCorrect(viewer.email, password, captchaToken(formData)))) {
     return { error: "La contraseña no coincide. Escríbala de nuevo para confirmar." };
   }
+  await attempt.succeeded();
   try {
     await (await sessionApi()).deleteMyAccount();
   } catch (error) {

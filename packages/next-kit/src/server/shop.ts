@@ -1,4 +1,5 @@
 import "server-only";
+import { checkSecret } from "../guard";
 
 /**
  * Tells the shop that its catalogue changed (an edit was approved, a listing
@@ -9,7 +10,8 @@ import "server-only";
  * the shop catches up by itself if this call is lost. It therefore never
  * throws and never waits long. It needs NEXT_PUBLIC_SHOP_URL and the
  * server-only SHOP_REFRESH_KEY that the shop also has; without them it does
- * nothing.
+ * nothing. Outside a local run a short or example key is refused here too,
+ * and logged, exactly as the shop refuses it (WEB-8).
  *
  * Only the shop's own answer, 204, counts as done. Redirects are not followed:
  * in front of a deployment that sits behind a login (Vercel Authentication on
@@ -19,8 +21,13 @@ import "server-only";
  */
 export async function refreshShopCatalog(): Promise<void> {
   const shop = process.env.NEXT_PUBLIC_SHOP_URL;
-  const key = process.env.SHOP_REFRESH_KEY;
-  if (!shop || !key) return;
+  if (!shop || !process.env.SHOP_REFRESH_KEY) return;
+  const check = checkSecret("SHOP_REFRESH_KEY", process.env.SHOP_REFRESH_KEY, process.env);
+  if (!check.ok) {
+    console.error(`The shop was not asked to refresh its catalogue: ${check.reason}.`);
+    return;
+  }
+  const key = check.value;
   try {
     const response = await fetch(new URL("/api/catalogo/refrescar", shop), {
       method: "POST",

@@ -16,6 +16,7 @@ import { Suspense } from "react";
 import { AddToCart } from "@/components/add-to-cart";
 import { ProductGrid } from "@/components/product-card";
 import { ProductGallery } from "@/components/product-gallery";
+import { ZoneFreshness } from "@/components/zone-freshness";
 import { readLocation } from "@/lib/cart";
 import { getProductPage } from "@/lib/data";
 
@@ -172,7 +173,9 @@ async function Product({ params, searchParams }: PageProps<"/p/[slug]">) {
           </Link>
         </div>
 
-        <BuyBox product={product} featured={featured} chosenLocation={location.chosen} />
+        <ZoneFreshness postalCode={location.postalCode}>
+          <BuyBox product={product} featured={featured} chosenLocation={location.chosen} />
+        </ZoneFreshness>
       </div>
 
       {others.length > 0 ? (

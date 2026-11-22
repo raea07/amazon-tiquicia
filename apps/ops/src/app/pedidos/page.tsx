@@ -1,4 +1,4 @@
-import { ORDER_STATUS_LABEL, ORDER_STATUSES, type OrderStatus } from "@yuntera/core";
+import { ORDER_STATUSES } from "@yuntera/core";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { DataTable, PageHeader } from "@yuntera/next-kit/shell";
 import {
@@ -12,10 +12,14 @@ import {
   Skeleton,
 } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { Suspense } from "react";
+import { OrderSearchForm } from "@/components/order-search";
 import { PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
+import { ORDER_SEARCH_COOKIE, ORDER_SEARCH_MAX } from "@/lib/order-search";
 import { requireStaff } from "@/lib/staff";
+import { clearOrderSearch } from "../order-search-actions";
 
 export const metadata: Metadata = { title: "Pedidos" };
 
@@ -23,7 +27,8 @@ export default function OrdersPage({ searchParams }: PageProps<"/pedidos">) {
   return (
     <div className="shell py-8">
       <PageHeader title="Pedidos">
-        Busque por número de pedido, nombre de quien recibe o teléfono.
+        Busque por número de pedido o por el nombre de quien recibe. Lo que escribe no queda en la
+        dirección de la página.
       </PageHeader>
       <div className="mt-6">
         <Suspense fallback={<Skeleton className="h-96" />}>
@@ -39,48 +44,28 @@ const one = (value: string | string[] | undefined) => (Array.isArray(value) ? va
 async function Orders({ searchParams }: Pick<PageProps<"/pedidos">, "searchParams">) {
   await requireStaff("/pedidos", ["ops", "support", "finance"]);
   const query = await searchParams;
-  const text = (one(query.q) ?? "").trim().slice(0, 80);
+  // The text searched for comes from a cookie, never from the address (WEB-4).
+  const text = ((await cookies()).get(ORDER_SEARCH_COOKIE)?.value ?? "")
+    .trim()
+    .slice(0, ORDER_SEARCH_MAX);
   const status = ORDER_STATUSES.find((candidate) => candidate === one(query.estado)) ?? null;
   const orders = await (await sessionApi()).opsOrders({ status, query: text || null, limit: 100 });
 
   return (
     <div className="flex flex-col gap-4">
-      <form action="/pedidos" className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="q" className="text-sm font-semibold">
-            Buscar
-          </label>
-          <input
-            id="q"
-            name="q"
-            type="search"
-            defaultValue={text}
-            placeholder="YT-100012, nombre o teléfono"
-            className="min-h-11 w-72 max-w-full rounded-md border border-border-strong bg-surface px-3"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="estado" className="text-sm font-semibold">
-            Estado
-          </label>
-          <select
-            id="estado"
-            name="estado"
-            defaultValue={status ?? ""}
-            className="min-h-11 rounded-md border border-border-strong bg-surface px-3"
-          >
-            <option value="">Todos</option>
-            {ORDER_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {ORDER_STATUS_LABEL[value as OrderStatus]["es-CR"]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button type="submit" className={buttonClass({ variant: "secondary" })}>
-          Filtrar
-        </button>
-      </form>
+      {/* Keyed by the search, so clearing it also empties the field. */}
+      <OrderSearchForm key={text} text={text} status={status} />
+      {text ? (
+        <form action={clearOrderSearch} className="flex flex-wrap items-center gap-3 text-sm">
+          <input type="hidden" name="estado" value={status ?? ""} />
+          <span>
+            Mostrando los pedidos que coinciden con «<span className="font-semibold">{text}</span>».
+          </span>
+          <button type="submit" className={buttonClass({ variant: "ghost", size: "sm" })}>
+            Quitar la búsqueda
+          </button>
+        </form>
+      ) : null}
 
       {orders.length === 0 ? (
         <EmptyState title="Ningún pedido coincide">
