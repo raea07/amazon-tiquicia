@@ -6,11 +6,14 @@
 //    opens the shop's website; the new password is set there (on the local
 //    shop when the lane's web apps run, otherwise through Auth as that page
 //    would) and the shopper signs in to the app with it.
-// 2. An account with an authenticator app gives its code in the app.
+// 2. An account with an authenticator app gives its code in the app; a
+//    screen for signed-in shoppers opened halfway through leads to the code.
 // 3. A visitor reports a listing, with the website's refusals first; the
 //    report reaches staff's queue once.
 // 4. The demo shopper chooses WhatsApp and gives the commercial consent;
-//    both are saved and read back.
+//    both are saved and read back, the consent as given in the app. A save
+//    after a change on another device is refused and the screen shows what
+//    is stored now; reopened, the screen shows the latest settings.
 // 5. The password changed while signed in, after a wrong current one.
 // 6. Deletion: the demo shopper is told what blocks it; a throwaway shopper
 //    with a cart deletes the account, and nothing of it stays on the phone.
@@ -216,6 +219,21 @@ async function webIsUp() {
   );
   await b.noSideways("second step");
   await b.shot("accounts-shop-05-second-step");
+  // Halfway through, the shop itself is read as a visitor reads it: the
+  // token would be refused for anything but the second step (any refused
+  // call would fail this journey).
+  await b.page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  await b.page.locator('[data-testid^="home-product"]').first().waitFor();
+  check(true, "halfway through the second step, the shop's home shows its products");
+  // Halfway through, a screen for signed-in shoppers (here the orders, as
+  // from a notification) leads to the code instead of waiting forever.
+  await b.page.goto(`${BASE}/pedidos`, { waitUntil: "networkidle" });
+  await b.on("second-step").waitFor({ timeout: 10_000 });
+  check(
+    new URL(b.page.url()).pathname === "/ingresar" &&
+      new URL(b.page.url()).searchParams.get("siguiente") === "/pedidos",
+    "halfway through the second step, the orders screen leads to the code, then back",
+  );
   // Halfway through, the account tab asks for nothing the database would
   // refuse (any refused call would fail this journey) and leads back here.
   await b.page.goto(`${BASE}/cuenta`, { waitUntil: "networkidle" });
@@ -326,6 +344,68 @@ async function webIsUp() {
   check(
     /Lo aceptó el/.test(await d.said("notify-commercial")),
     "the consent says when it was given",
+  );
+  check(
+    saved.commercial.source === "shop_app",
+    `the consent is recorded as given in the shopper app (${saved.commercial.source})`,
+  );
+
+  // Another device saves while the screen is open: push off.
+  const elsewhere = (push) =>
+    rpcAs(SHOPPER, "set_my_notification_settings", {
+      p_email: true,
+      p_whatsapp: true,
+      p_sms: false,
+      p_push: push,
+      p_phone: "88881234",
+      p_version: null,
+    });
+  check(
+    (await d.on("notify-push").getAttribute("aria-checked")) === "true",
+    "push is on as the screen opens",
+  );
+  await elsewhere(false);
+  await d.on("notify-sms").click();
+  d.expect(/status of 4\d\d/);
+  await d.on("notify-save").click();
+  await d.page
+    .getByTestId("notify-message")
+    .filter({ visible: true, hasText: "cambiaron en otro teléfono o en el sitio web" })
+    .first()
+    .waitFor();
+  d.expect(null);
+  const refusal = await d.said("notify-message");
+  check(
+    !/Recargue la página/.test(refusal),
+    `a save after a change elsewhere is refused: ${refusal}`,
+  );
+  check(
+    (await d.on("notify-push").getAttribute("aria-checked")) === "false" &&
+      (await d.on("notify-sms").getAttribute("aria-checked")) === "false",
+    "and the screen now shows what is stored (push off), not what it was opened with",
+  );
+  await d.on("notify-save").click();
+  await d.page
+    .getByTestId("notify-message")
+    .filter({ visible: true, hasText: "Guardamos sus preferencias" })
+    .first()
+    .waitFor();
+  check(
+    (await rpcAs(SHOPPER, "my_notification_settings")).push_enabled === false,
+    "saving again works and keeps what was stored",
+  );
+  // Leave the screen inside the app, change elsewhere, open it again.
+  await d.page.goto(`${BASE}/cuenta`, { waitUntil: "networkidle" });
+  await d.on("account-notifications").click();
+  await d.on("notify-push").waitFor();
+  await d.page.goBack();
+  await d.on("account-notifications").waitFor();
+  await elsewhere(true);
+  await d.on("account-notifications").click();
+  await d.on("notify-push").waitFor();
+  check(
+    (await d.on("notify-push").getAttribute("aria-checked")) === "true",
+    "reopened inside the app, the screen shows the latest settings, not a cached copy",
   );
 
   // ── 6a. The demo shopper is told what stands in the way ──────────────────

@@ -10,11 +10,15 @@
 // 4. The member leaves the shop (the box first), is back on the screen for
 //    an account without a shop, which says so, and deletes the account
 //    there: nothing of it stays on the phone.
-// 4b. The owner removes another member, and a third account declines its
-//    invitation in the app.
-// 5. The owner asks to rename the shop (a name too short first) and
-//    withdraws the request.
-// 6. The owner saves the shop's notification settings.
+// 4b. Offline, removing a member or sending an invitation fails at once with
+//    the network message, and nothing is sent once the connection is back.
+//    The owner then removes that member, and the list says so; a third
+//    account declines its invitation in the app.
+// 5. The owner asks to rename the shop (a name too short first; offline,
+//    nothing is sent) and withdraws the request.
+// 6. The owner saves the shop's notification settings, the consent recorded
+//    as given in the app; a save after a change elsewhere is refused and the
+//    screen shows what is stored now.
 // 7. The owner is told why the account cannot be deleted while running the
 //    shop, and the sign-in screen offers the password reset.
 //
@@ -95,7 +99,10 @@ const OWNER = "vendedor@yuntera.example";
     .getByTestId("team-invitation")
     .filter({ visible: true, hasText: other })
     .waitFor({ state: "detached" });
-  check(true, "a second invitation is withdrawn and leaves the list");
+  check(
+    (await o.said("team-notice")) === "Invitación retirada.",
+    "a second invitation is withdrawn, leaves the list, and the list says so",
+  );
   const pending = (await rpcAs(OWNER, "seller_team", { p_seller_id: shop.id })).invitations;
   check(
     pending.length === 1 && pending[0].email === member,
@@ -186,6 +193,34 @@ const OWNER = "vendedor@yuntera.example";
   await o.page.reload({ waitUntil: "networkidle" });
   const otherRow = o.page.getByTestId("team-member").filter({ visible: true, hasText: other });
   await otherRow.waitFor();
+
+  // Offline: nothing waits to be sent later.
+  const unsent = `sin-red-${Date.now()}@correo.example`;
+  await o.context.setOffline(true);
+  o.expect(/ERR_INTERNET_DISCONNECTED|Failed to fetch/);
+  await otherRow.getByTestId("member-remove").click();
+  await otherRow
+    .getByTestId("member-message")
+    .filter({ hasText: "No pudimos conectarnos" })
+    .waitFor({ timeout: 10_000 });
+  await o.on("invite-email").fill(unsent);
+  await o.on("invite-submit").click();
+  await o.page
+    .getByTestId("invite-message")
+    .filter({ visible: true, hasText: "No pudimos conectarnos" })
+    .first()
+    .waitFor({ timeout: 10_000 });
+  await o.shot("accounts-seller-04c-offline", true);
+  await o.context.setOffline(false);
+  await o.page.waitForTimeout(3000);
+  o.expect(null);
+  const untouched = await rpcAs(OWNER, "seller_team", { p_seller_id: shop.id });
+  check(
+    untouched.members.some((person) => person.email === other) &&
+      untouched.invitations.every((invitation) => invitation.email !== unsent),
+    "offline, a removal and an invitation fail at once, and neither is sent when the connection returns",
+  );
+
   await otherRow.getByTestId("member-remove").click();
   await otherRow.waitFor({ state: "detached" });
   check(
@@ -193,6 +228,10 @@ const OWNER = "vendedor@yuntera.example";
       (person) => person.email !== other,
     ),
     "the owner removes a member, who leaves the list and the team",
+  );
+  check(
+    (await o.said("team-notice")) === "La persona ya no es parte del equipo.",
+    "and the list says so after the row is gone",
   );
 
   const declines = await throwaway("rechaza", "Rita Rechaza");
@@ -234,6 +273,24 @@ const OWNER = "vendedor@yuntera.example";
     "a name too short is refused",
   );
   const newName = `${shop.trade_name} Express`;
+  await o.context.setOffline(true);
+  o.expect(/ERR_INTERNET_DISCONNECTED|Failed to fetch/);
+  await o.on("shop-name-new").fill(newName);
+  await o.on("shop-name-submit").click();
+  await o.page
+    .getByTestId("shop-name-message")
+    .filter({ visible: true, hasText: "No pudimos conectarnos" })
+    .first()
+    .waitFor({ timeout: 10_000 });
+  await o.context.setOffline(false);
+  await o.page.waitForTimeout(3000);
+  o.expect(null);
+  check(
+    !(await rpcAs(OWNER, "seller_shop_changes", { p_seller_id: shop.id })).requests.some(
+      (r) => r.kind === "shop_name" && r.status === "pending",
+    ),
+    "offline, the request fails at once and is not sent when the connection returns",
+  );
   await o.on("shop-name-new").fill(newName);
   await o.on("shop-name-submit").click();
   await o.on("shop-change-pending").waitFor();
@@ -265,6 +322,9 @@ const OWNER = "vendedor@yuntera.example";
     await o.on("notify-whatsapp").click();
   }
   await o.on("notify-phone").fill("8777-0101");
+  if ((await o.on("notify-commercial").getAttribute("aria-checked")) !== "true") {
+    await o.on("notify-commercial").click();
+  }
   await o.on("notify-save").click();
   await o.page
     .getByTestId("notify-message")
@@ -276,6 +336,36 @@ const OWNER = "vendedor@yuntera.example";
     settings.whatsapp_enabled === true && settings.phone === "+50687770101",
     "the shop's WhatsApp and number are stored",
   );
+  check(
+    settings.commercial.opt_in === true && settings.commercial.source === "seller_app",
+    `the shop's consent is recorded as given in the seller app (${settings.commercial.source})`,
+  );
+  // Another device saves while the screen is open.
+  await rpcAs(OWNER, "seller_set_notification_settings", {
+    p_seller_id: shop.id,
+    p_whatsapp: true,
+    p_push: !settings.push_enabled,
+    p_phone: "+50687770101",
+  });
+  o.expect(/status of 4\d\d/);
+  await o.on("notify-save").click();
+  await o.page
+    .getByTestId("notify-message")
+    .filter({ visible: true, hasText: "cambiaron en otro teléfono o en el sitio web" })
+    .first()
+    .waitFor();
+  o.expect(null);
+  check(
+    (await o.on("notify-push").getAttribute("aria-checked")) === String(!settings.push_enabled),
+    "a save after a change elsewhere is refused, and the screen shows what is stored now",
+  );
+  await o.on("notify-save").click();
+  await o.page
+    .getByTestId("notify-message")
+    .filter({ visible: true, hasText: "Guardamos las preferencias de su tienda." })
+    .first()
+    .waitFor();
+  check(true, "saving again works");
   await o.noSideways("shop notifications");
   await o.shot("accounts-seller-07-shop-notifications", true);
 
