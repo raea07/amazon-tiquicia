@@ -59,9 +59,17 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     await context.close();
     return result;
   };
-  const menu = async () => {
-    const page = await shop("/");
-    return page.locator('header nav[aria-label="Categorías"] a').allInnerTexts();
+  // The menu sits in every page's prepared shell and is refreshed in the
+  // background: the first visitor after a change may still get the old one.
+  const menu = async (expected) => {
+    let items = [];
+    for (let visit = 0; visit < 4; visit += 1) {
+      const page = await shop("/");
+      items = await page.locator('header nav[aria-label="Categorías"] a').allInnerTexts();
+      if (expected === undefined || expected(items)) break;
+      await page.waitForTimeout(1000);
+    }
+    return items;
   };
   const found = async (query) => {
     const page = await shop(`/buscar?q=${encodeURIComponent(query)}`);
@@ -116,7 +124,10 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     (await text(empty.locator("main"))).includes("Todavía no hay productos aquí"),
     "new category page",
   );
-  check(!(await menu()).includes("Regalos ticos"), "an empty department is in the menu");
+  check(
+    !(await menu((items) => !items.includes("Regalos ticos"))).includes("Regalos ticos"),
+    "an empty department is in the menu",
+  );
 
   // ── 2. A product's category corrected by staff ─────────────────────────────
   await staff.goto(OPS + "/catalogo/productos?producto=chorreador-madera-artesanal", {
@@ -141,7 +152,7 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   await staff.waitForSelector('main dd[data-current-category="regalos-ticos"]');
   await staff.screenshot({ path: SHOTS + "/cc2-product-corrected.png", fullPage: true });
 
-  const inMenu = await menu();
+  const inMenu = await menu((items) => items.includes("Regalos ticos"));
   log("menu after the correction:", inMenu);
   check(inMenu.includes("Regalos ticos"), "the department with a product is not in the menu");
   const filed = await shop("/c/regalos-ticos");
@@ -177,7 +188,7 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   check(moved.includes("movida"), `move refused: ${moved}`);
 
   check(
-    !(await menu()).includes("Regalos ticos"),
+    !(await menu((items) => !items.includes("Regalos ticos"))).includes("Regalos ticos"),
     "a sub-category is still a department in the menu",
   );
   const hogar = await shop("/c/hogar");

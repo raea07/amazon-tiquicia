@@ -12,8 +12,14 @@
 
 export const CATALOG_TAG = "catalog";
 export const SUGGESTIONS_TAG = "suggestions";
-/** The category menu; dropped by the refresh endpoint only when staff changed categories. */
+/** The category tree the category pages read; dropped when staff changed categories. */
 export const CATEGORIES_TAG = "categories";
+/**
+ * The category menu in the header and on the home page. It is part of every
+ * page's prepared shell, so it is refreshed in the background (the next visitor
+ * still gets the prepared page, the one after the new menu), never thrown away.
+ */
+export const CATEGORY_MENU_TAG = "category-menu";
 /** At most this many tags are dropped by one action; a cart has at most 20 lines. */
 const MAX_TAGS = 40;
 

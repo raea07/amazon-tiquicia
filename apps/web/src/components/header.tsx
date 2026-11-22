@@ -3,7 +3,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { cartUnits, readCart, readLocation } from "@/lib/cart";
-import { getCategories, getDistricts } from "@/lib/data";
+import { getDistricts, getMenuCategories } from "@/lib/data";
 import { getViewer } from "@/lib/session";
 
 /**
@@ -113,7 +113,9 @@ async function CartLink() {
 }
 
 async function CategoryBar() {
-  const categories = (await getCategories()).filter((c) => !c.parent_slug && c.product_count > 0);
+  const categories = (await getMenuCategories()).filter(
+    (c) => !c.parent_slug && c.product_count > 0,
+  );
   return (
     <nav aria-label="Categorías" className="border-t border-border">
       <ul className="shell flex gap-1 overflow-x-auto py-1 text-sm">

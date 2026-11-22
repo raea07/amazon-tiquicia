@@ -3,6 +3,7 @@ import type { CatalogSearchInput } from "@yuntera/db";
 import {
   CATALOG_TAG,
   CATEGORIES_TAG,
+  CATEGORY_MENU_TAG,
   productPageTags,
   suggestionTags,
 } from "@yuntera/next-kit/cache-tags";
@@ -31,10 +32,20 @@ import { publicApi } from "./supabase";
 export async function getCategories() {
   "use cache";
   cacheLife("hours");
-  // Not the catalogue tag: the menu is part of every page's prepared shell, which
-  // must survive an ordinary catalogue refresh. When staff change categories the
-  // console asks the refresh endpoint to drop this tag as well.
+  // Dropped by the refresh endpoint when staff change categories.
   cacheTag(CATEGORIES_TAG);
+  return publicApi().listCategories();
+}
+
+/**
+ * The same list for the menu in the header and on the home page, which are
+ * part of every page's prepared shell: its own tag, refreshed in the background
+ * when categories change, so the shells are never thrown away.
+ */
+export async function getMenuCategories() {
+  "use cache";
+  cacheLife("hours");
+  cacheTag(CATEGORY_MENU_TAG);
   return publicApi().listCategories();
 }
 
