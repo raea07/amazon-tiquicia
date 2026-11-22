@@ -20,6 +20,7 @@ import * as notifications from "./notifications";
 import * as peoplePayouts from "./people-payouts";
 import { photosApi, photosErrors } from "./photos";
 import type { Caller, Messages } from "./types";
+import { webFollowupsApi, webFollowupsErrors } from "./web-followups";
 
 // The listings, integrity and limits areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
@@ -79,6 +80,7 @@ export type {
 } from "./people-payouts";
 export * from "./photos";
 export type { Caller, Messages } from "./types";
+export * from "./web-followups";
 
 export const areaErrors = {
   ...peoplePayouts.errors,
@@ -88,6 +90,7 @@ export const areaErrors = {
   ...photosErrors,
   ...integrityErrors,
   ...limitsErrors,
+  ...webFollowupsErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -98,4 +101,5 @@ export const areaApi = (caller: Caller) => ({
   ...photosApi(caller),
   ...integrityApi(caller),
   ...limitsApi(caller),
+  ...webFollowupsApi(caller),
 });

@@ -401,6 +401,10 @@ name it here and in the test, and say why in the pull request.
 
 <!-- BEGIN visitor functions -->
 
+- `auth_limit_release` (gives back a sign-in or code attempt that succeeded)
+- `auth_limit_reserve` (the apps' limit on sign-in, sign-up, account e-mails,
+  codes and refreshes, asked before anyone is signed in; it takes only keyed
+  hashes, see [Limits on signing in](#limits-on-signing-in))
 - `cart_lines`
 - `check_request` (the Data API runs it before every request, a visitor's
   included; for a visitor it returns at once)
@@ -566,13 +570,60 @@ The general lesson for this codebase: a row-level-security mistake does not
 raise an error. The only defence is a test, per role, for both what must be
 visible and what must not.
 
+## Limits on signing in
+
+Supabase Auth limits sign-in, sign-up, e-mails, codes and token refreshes by
+network address, but every one of those calls comes from an app's server, so
+Auth sees the server's address for everybody. The apps therefore keep their
+own limit in front of each call, in the database
+([decision 30](../02-architecture/decisions.md#30-the-web-apps-own-sign-in-limit-per-visitor-and-per-account)):
+
+- `auth_limit_reserve(action, address hash, account hash, known device)`
+  counts one attempt before the call to Auth, or answers how many seconds to
+  wait; `auth_limit_release(attempt)` gives back an attempt that succeeded (a
+  right password or code). Both are open to visitors, because sign-in comes
+  before any session.
+- The numbers: 5 wrong passwords per account and 20 per visitor address in 15
+  minutes; 3 sign-ups per e-mail address and 10 per visitor an hour; 5 account
+  e-mails per account and 10 per visitor an hour; 5 wrong e-mailed codes per
+  account and 20 per visitor in 15 minutes; the same for the current password
+  asked again; 120 token refreshes per visitor in 10 minutes.
+- Stored in `private.auth_attempts`, which no API role can read: only
+  HMAC-SHA-256 hashes made with `AUTH_GUARD_KEY`, a server-only key of the
+  apps that the database never sees, the action and the time; nothing older
+  than two hours is kept. Without the key nobody can compute the hash of
+  someone else's address or e-mail, so calling the functions directly cannot
+  count against a real person.
+- Nothing looks the account up, and the answer is the same whether the e-mail
+  has an account or not, and whichever limit was reached.
+- A browser that signed in to an account before (a signed cookie) is not held
+  by that account's limit, only by its own address's, so guessing someone's
+  password cannot lock them out of the browser they use; and a reset code
+  always works.
+- The visitor's address comes from `x-vercel-forwarded-for` (then
+  `x-real-ip`) on Vercel, and elsewhere only from the header the operator names
+  in `AUTH_CLIENT_IP_HEADER`. Without one, only the per-account limits apply.
+
+Tested in `supabase/tests/130_web_followups.sql`, the contract tests in
+`packages/db/src/contract.web-followups.test.ts`, the unit tests in
+`packages/next-kit` and the `web-followups` journey.
+
+**What sign-up still shows.** With e-mail confirmation on (production), an
+address that already has an account gets exactly the screen a new address
+gets: "check your e-mail", and Auth sends nothing. With confirmation off, as on
+the hosted preview, Auth refuses an existing address and signs a new one in at
+once: the apps then show the existing address the same "check your e-mail"
+screen, but a new address is visibly signed in, so a stranger can still tell
+the two apart there (at most 3 tries per address an hour, 10 per visitor).
+Only confirmation on closes it.
+
 ## What is not in place yet
 
-- **Rate limiting by time.** The limits above cap what one account can have
-  open and bound what a visitor can send; nothing counts calls per minute, and
-  sign-in attempts are limited only by the platform. Supabase Auth counts the
-  app server's address, not the visitor's, because sign-in runs on the
-  server. A request body size limit at the API gateway is also not set here.
+- **Rate limiting by time, outside sign-in.** The limits above cap what one
+  account can have open and bound what a visitor can send; apart from the
+  sign-in limit, nothing counts calls per minute (search, checkout) and there
+  is no limit at the edge. A request body size limit at the API gateway is
+  also not set here.
 - **Row-level security is enabled, not forced.** Table owners acting directly
   in the database are not subject to it. API roles are, which is what matters
   for requests; it means SQL run by an administrator in the dashboard sees
