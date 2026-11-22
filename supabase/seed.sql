@@ -693,4 +693,12 @@ select private.refresh_product_signals();
 update public.products set views_30d = 40 + units_sold_30d * 22 + (random() * 60)::integer
 where status = 'active';
 
+-- Electronic invoices are issued in the demo under Hacienda's own fictitious
+-- legal entity (3101123456), to the local fake of its API only
+-- (tools/dev-hacienda). A real project keeps `ready` false until the
+-- company's registration is entered (docs/06-operations/invoicing.md).
+update public.app_settings
+set value = jsonb_set(value, '{ready}', 'true')
+where key = 'invoicing_issuer' and value ->> 'id_number' = '3101123456';
+
 commit;

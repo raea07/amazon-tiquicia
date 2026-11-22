@@ -1197,7 +1197,10 @@ begin
       'return_requests.received_by', 'private.delivery_codes.released_by', 'private.refunds.created_by',
       'seller_invitations.invited_by', 'seller_invitations.answered_by',
       'seller_change_requests.requested_by', 'seller_change_requests.decided_by',
-      'seller_private.payout_approved_by');
+      'seller_private.payout_approved_by',
+      -- what a shopper typed at checkout for a factura (083500): erased by a
+      -- trigger when the account is deleted, and used up when the document is made
+      'private.invoice_checkout_receivers.user_id');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end
 $$;

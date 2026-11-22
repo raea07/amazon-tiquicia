@@ -179,7 +179,20 @@ export function summarize(lines: Line[]): Summary {
   };
 }
 
-const EMAIL = /^\s*\w+([-+.']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*\s*$/;
+/** The shape the database accepts for e-mails; Hacienda's own pattern (ANX p. 22) is stricter. */
+const EMAIL = /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/;
+
+/** JSON with object keys sorted: the database returns its objects in its own key order. */
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
 
 /** Checks everything the annex can reject on arithmetic or shape; throws InvalidDocument. */
 export function validate(doc: FiscalDocument): void {
@@ -268,7 +281,7 @@ export function validate(doc: FiscalDocument): void {
 
   const expected = summarize(doc.lines);
   for (const field of Object.keys(expected) as Array<keyof Summary>) {
-    if (JSON.stringify(expected[field]) !== JSON.stringify(doc.summary[field])) {
+    if (stable(expected[field]) !== stable(doc.summary[field] ?? null)) {
       fail(`summary_${field}`);
     }
   }

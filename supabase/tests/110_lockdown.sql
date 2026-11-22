@@ -71,6 +71,11 @@ select 'service_role', unnest(array[
   'worker_push_disable', 'worker_push_receipts_due'
 ])
 union all
+select 'service_role', unnest(array[
+  'worker_invoice_claim', 'worker_invoice_health', 'worker_invoice_hint', 'worker_invoice_plan',
+  'worker_invoice_record', 'worker_invoice_signed'
+])
+union all
 select 'supabase_auth_admin', unnest(array['hook_mfa_verification_attempt'])
 -- END server-side functions
 ;
