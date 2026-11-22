@@ -32,6 +32,7 @@ import {
 } from "@/components/order-actions";
 import { ProductImage } from "@/components/product";
 import { PAYMENT_LABEL, SHIPMENT_STATUS_LABEL } from "@/lib/labels";
+import { returnNextStep, returnTitle } from "@/lib/returns";
 
 function describeEvent(event: OrderDetail["timeline"][number]): string {
   if (event.kind === "note") return event.note ?? "Nota";
@@ -108,6 +109,11 @@ export default function OrderScreen() {
   const number = oneParam(params.numero) ?? "";
   const { status } = useSession();
   const order = useApiQuery(["order", number], (api) => api.getOrder(number), { personal: true });
+  // Where each return stands, so the screen can say what happens next.
+  const returns = useApiQuery(["order-returns", number], (api) => api.myOrderReturns(number), {
+    personal: true,
+    enabled: order.isSuccess,
+  });
 
   if (status === "signedOut") return <Redirect href={signInPath(`/pedidos/${number}`)} />;
   if (order.isPending) return <LoadingState label="Cargando su pedido…" />;
@@ -222,6 +228,9 @@ export default function OrderScreen() {
         <Text variant="heading">Productos</Text>
         {o.items.map((item) => {
           const returnable = item.quantity - item.returned_quantity;
+          const itemReturns = (returns.data ?? []).filter(
+            (entry) => entry.order_item_id === item.id,
+          );
           return (
             <Card key={item.id}>
               <View style={styles.item}>
@@ -264,12 +273,22 @@ export default function OrderScreen() {
                         withdrawalOpen={withdrawalOpen}
                       />
                     </Expandable>
-                  ) : item.returned_quantity > 0 ? (
-                    <Text variant="small" tint="muted">
-                      Devolución en trámite.
-                    </Text>
                   ) : null}
                 </>
+              ) : null}
+              {itemReturns.length > 0 ? (
+                <View style={styles.returns} testID="return-status">
+                  {itemReturns.map((entry) => (
+                    <View key={entry.id} style={styles.returnRow}>
+                      <Text variant="smallStrong">{returnTitle(entry)}</Text>
+                      <Text variant="small">{returnNextStep(entry)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : item.returned_quantity > 0 && returns.isPending ? (
+                <Text variant="small" tint="muted">
+                  Devolución en trámite.
+                </Text>
               ) : null}
             </Card>
           );
@@ -294,6 +313,7 @@ export default function OrderScreen() {
           {PAYMENT_LABEL[o.payment_method]}
           {o.payment?.status === "captured" ? " · recibido" : ""}
           {o.payment?.status === "refunded" ? " · reembolsado" : ""}
+          {o.payment?.status === "partially_refunded" ? " · reembolsado en parte" : ""}
         </Text>
       </Card>
 
@@ -347,6 +367,13 @@ export default function OrderScreen() {
 }
 
 const styles = StyleSheet.create({
+  returns: { gap: space[2] },
+  returnRow: {
+    gap: space[1],
+    padding: space[3],
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceMuted,
+  },
   flex: { flex: 1, gap: 2 },
   payment: {
     gap: space[3],
