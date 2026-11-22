@@ -35,7 +35,8 @@ const webBack =
 /**
  * The screens of the app proper, shown only to an account assigned to a
  * warehouse: the board, and on top of it a parcel's pick list, an inbound
- * shipment to receive, and the stock lookup. A screen opened directly (a
+ * shipment to receive, a parcel that came back undelivered, and the stock
+ * lookup. A screen opened directly (a
  * reload) gets the board underneath, so there is always a way back.
  */
 export const unstable_settings = { initialRouteName: "index" };
@@ -60,6 +61,7 @@ export default function AppLayout() {
         <Stack.Screen name="index" options={{ headerShown: false, title: "Bodega" }} />
         <Stack.Screen name="paquete/[id]" options={{ title: "Paquete" }} />
         <Stack.Screen name="recibir/[id]" options={{ title: "Recibir mercadería" }} />
+        <Stack.Screen name="devuelto/[id]" options={{ title: "Paquete devuelto" }} />
         <Stack.Screen name="buscar" options={{ title: "Buscar un producto" }} />
       </Stack>
     </WarehouseProvider>

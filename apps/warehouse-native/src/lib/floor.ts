@@ -99,21 +99,27 @@ export function parsePack(
 export const MAX_RECEIVE = 100_000;
 
 /**
- * What receiving one inbound line asks for, with the web's words. A count
- * above what is still to receive is not recorded on the first try: stock
- * received becomes sellable, so a slip at the dock ("120" for "12") would
- * be sold. The screen asks the worker to confirm it (`surplus`) first.
+ * What a count above what is still to receive is told. The database refuses
+ * it (`over_receipt`): a line takes no more than the seller announced, so a
+ * slip at the dock ("120" for "12") or a double scan never becomes stock that
+ * is sold. Units that really came in extra go in on a new inbound from the
+ * seller.
  */
+export function overReceiptMessage(surplus: number, pending: number): string {
+  return `Escribió ${plural(surplus, "unidad", "unidades")} más de las que faltan por recibir (${
+    pending === 0 ? "no falta ninguna" : `faltan ${pending}`
+  }). No se puede recibir más de lo que el vendedor anunció. Cuente de nuevo; si de verdad llegaron de más, registre ${
+    pending === 0 ? "nada en esta línea" : `las ${pending} que faltan`
+  } y avise al encargado: el vendedor debe anunciar otro ingreso por el resto.`;
+}
+
+/** What receiving one inbound line asks for, with the web's words. */
 export function parseReceive(input: {
   good: string;
   damaged: string;
   locationId: string | null;
   pending: number;
-  surplusConfirmed?: boolean;
-}):
-  | { goodQuantity: number; damagedQuantity: number; locationId: string }
-  | { error: string }
-  | { surplus: number } {
+}): { goodQuantity: number; damagedQuantity: number; locationId: string } | { error: string } {
   if (!input.locationId) return { error: "Elija dónde lo guarda." };
   const good = input.good.trim() || "0";
   const damaged = input.damaged.trim() || "0";
@@ -127,7 +133,7 @@ export function parseReceive(input: {
   }
   if (goodQuantity + damagedQuantity === 0) return { error: "Indique cuántas unidades recibió." };
   const surplus = goodQuantity + damagedQuantity - input.pending;
-  if (surplus > 0 && !input.surplusConfirmed) return { surplus };
+  if (surplus > 0) return { error: overReceiptMessage(surplus, input.pending) };
   return { goodQuantity, damagedQuantity, locationId: input.locationId };
 }
 

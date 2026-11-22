@@ -1,4 +1,5 @@
 import type { WmsBoard } from "@yuntera/db";
+import { ApiError } from "@yuntera/db";
 import { messageOf, useApi } from "@yuntera/expo-kit/api";
 import { useApiMutation, useApiQuery } from "@yuntera/expo-kit/data";
 import { oneParam } from "@yuntera/expo-kit/paths";
@@ -8,7 +9,7 @@ import {
   matchScan,
   type ScanFeedback,
 } from "@yuntera/expo-kit/scanner";
-import { colors, radius, space, tone } from "@yuntera/expo-kit/theme";
+import { colors, radius, space } from "@yuntera/expo-kit/theme";
 import {
   Alert,
   Badge,
@@ -45,18 +46,22 @@ function ReceiveForm({
   line,
   bins,
   onReceived,
+  onStale,
 }: {
   line: Line;
   bins: Bin[];
   onReceived: (message: string) => void;
+  /**
+   * The database refused the count because the line moved on since the screen
+   * read it (another phone, a second scan): says why, and reads it again.
+   */
+  onStale: (message: string) => void;
 }) {
   const pending = pendingUnits(line);
   const [good, setGood] = useState(String(pending));
   const [damaged, setDamaged] = useState("0");
   const [locationId, setLocationId] = useState<string | null>(bins[0]?.id ?? null);
   const [error, setError] = useState<string | null>(null);
-  // More than is still to receive: shown, and recorded only once the worker confirms it.
-  const [surplus, setSurplus] = useState<number | null>(null);
   const receive = useApiMutation(
     (
       client,
@@ -69,11 +74,12 @@ function ReceiveForm({
     ) => client.wmsReceive(input),
     { invalidates: [["wms-board"]] },
   );
-  const save = async (surplusConfirmed: boolean) => {
-    const input = parseReceive({ good, damaged, locationId, pending, surplusConfirmed });
+  const save = async () => {
+    // More than is still to receive is refused here, with the reason, before
+    // the database refuses it.
+    const input = parseReceive({ good, damaged, locationId, pending });
     if ("error" in input) return setError(input.error);
     setError(null);
-    if ("surplus" in input) return setSurplus(input.surplus);
     try {
       await receive.mutateAsync({ inboundLineId: line.line_id, ...input });
       const bin = bins.find((candidate) => candidate.id === input.locationId)?.code ?? "";
@@ -85,7 +91,16 @@ function ReceiveForm({
         } de ${product(line)}${input.goodQuantity > 0 && bin ? `, guardadas en ${bin}` : ""}.`,
       );
     } catch (failure) {
-      setSurplus(null);
+      // Someone else counted this line meanwhile (another phone, a second
+      // scan): the database refused the count. The screen says so above the
+      // lines, which are read again (this form may then close).
+      if (
+        failure instanceof ApiError &&
+        ["over_receipt", "inbound_line_complete", "inbound_not_receivable"].includes(failure.code)
+      ) {
+        onStale(messageOf(failure));
+        return;
+      }
       setError(messageOf(failure));
     }
   };
@@ -96,10 +111,7 @@ function ReceiveForm({
           label="Buenas"
           aria-label={`Unidades buenas de ${line.title}`}
           value={good}
-          onChangeText={(text) => {
-            setGood(text);
-            setSurplus(null);
-          }}
+          onChangeText={setGood}
           keyboardType="number-pad"
           inputMode="numeric"
           style={styles.half}
@@ -109,10 +121,7 @@ function ReceiveForm({
           label="Dañadas"
           aria-label={`Unidades dañadas de ${line.title}`}
           value={damaged}
-          onChangeText={(text) => {
-            setDamaged(text);
-            setSurplus(null);
-          }}
+          onChangeText={setDamaged}
           keyboardType="number-pad"
           inputMode="numeric"
           style={styles.half}
@@ -129,32 +138,14 @@ function ReceiveForm({
           testID="receive-bin"
         />
       </Stack>
-      <FormMessage error={error} />
-      {surplus !== null ? (
-        <Alert tone="warning" title="Son más de las que faltan" testID="receive-surplus">
-          <Text variant="small" style={{ color: tone.warning.fg }}>
-            {`Escribió ${plural(surplus, "unidad", "unidades")} más de las que faltan por recibir (${
-              pending === 0 ? "no falta ninguna" : `faltan ${pending}`
-            }). Cuente de nuevo. Si de verdad llegaron de más, confírmelo y avise al encargado.`}
-          </Text>
-          <Button
-            variant="secondary"
-            onPress={() => void save(true)}
-            loading={receive.isPending}
-            loadingLabel="Guardando…"
-            testID="receive-surplus-confirm"
-          >
-            {`Sí, llegaron ${surplus} de más`}
-          </Button>
-        </Alert>
-      ) : null}
+      <FormMessage error={error} testID="receive-error" />
       <Button
         size="lg"
         block
         loading={receive.isPending}
         loadingLabel="Guardando…"
         testID="receive-submit"
-        onPress={() => void save(false)}
+        onPress={() => void save()}
       >
         Registrar recepción
       </Button>
@@ -183,6 +174,12 @@ export default function ReceiveScreen() {
   );
   const [chosen, setChosen] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [refused, setRefused] = useState<string | null>(null);
+  const refusedNotice = refused ? (
+    <Alert tone="warning" title="No se registró esa recepción" testID="receive-refused">
+      {refused}
+    </Alert>
+  ) : null;
 
   if (board.isPending || locations.isPending) return <LoadingState label="Cargando el envío…" />;
   if (board.isError || locations.isError) {
@@ -201,6 +198,7 @@ export default function ReceiveScreen() {
     // The last line was counted in: the shipment is closed and leaves the board.
     return (
       <Screen>
+        {refusedNotice}
         <Alert tone="success" title="Envío recibido" testID="receive-result">
           {lastResult}
         </Alert>
@@ -217,7 +215,7 @@ export default function ReceiveScreen() {
         title="Ese envío ya no está por recibir"
         action={<LinkButton href="/">Volver a la bodega</LinkButton>}
       >
-        Puede que ya se haya recibido completo o que sea de otra bodega.
+        {refused ?? "Puede que ya se haya recibido completo o que sea de otra bodega."}
       </EmptyState>
     );
   }
@@ -268,6 +266,7 @@ export default function ReceiveScreen() {
         </Text>
       </Stack>
 
+      {refusedNotice}
       {lastResult ? (
         <Alert tone="success" testID="receive-result">
           {lastResult}
@@ -320,7 +319,14 @@ export default function ReceiveScreen() {
                   key={`${line.line_id}:${pending}`}
                   line={line}
                   bins={bins}
-                  onReceived={setLastResult}
+                  onReceived={(message) => {
+                    setRefused(null);
+                    setLastResult(message);
+                  }}
+                  onStale={(message) => {
+                    setRefused(message);
+                    void board.refetch();
+                  }}
                 />
               ) : pending > 0 ? (
                 <Button variant="secondary" onPress={() => setChosen(line.line_id)}>

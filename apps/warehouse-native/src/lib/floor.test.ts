@@ -6,6 +6,7 @@ import {
   isPutawayBin,
   isToDo,
   nextTask,
+  overReceiptMessage,
   parsePack,
   parsePicked,
   parseReceive,
@@ -137,15 +138,18 @@ describe("form checks, with the web's words", () => {
     });
   });
 
-  it("does not record more than is still to receive until the worker confirms it", () => {
+  it("never sends more than is still to receive, and says why the database would refuse it", () => {
     const count = { good: "120", damaged: "0", locationId: "bin", pending: 12 };
-    assert.deepEqual(parseReceive(count), { surplus: 108 });
-    assert.deepEqual(parseReceive({ ...count, good: "11", damaged: "2" }), { surplus: 1 });
-    assert.deepEqual(parseReceive({ ...count, surplusConfirmed: true }), {
-      goodQuantity: 120,
-      damagedQuantity: 0,
-      locationId: "bin",
+    const refused = parseReceive(count);
+    assert.ok("error" in refused);
+    assert.match(refused.error, /108 unidades más de las que faltan por recibir \(faltan 12\)/);
+    assert.match(refused.error, /No se puede recibir más de lo que el vendedor anunció/);
+    assert.match(refused.error, /registre las 12 que faltan/);
+    assert.match(refused.error, /anunciar otro ingreso/);
+    assert.deepEqual(parseReceive({ ...count, good: "11", damaged: "2" }), {
+      error: overReceiptMessage(1, 12),
     });
+    assert.match(overReceiptMessage(1, 0), /1 unidad más .*no falta ninguna/);
     assert.deepEqual(parseReceive({ ...count, good: "12" }), {
       goodQuantity: 12,
       damagedQuantity: 0,
@@ -154,7 +158,7 @@ describe("form checks, with the web's words", () => {
   });
 
   it("caps each count as the web does", () => {
-    const count = { damaged: "0", locationId: "bin", pending: 200_000, surplusConfirmed: true };
+    const count = { damaged: "0", locationId: "bin", pending: 200_000 };
     assert.deepEqual(parseReceive({ ...count, good: "100001" }), {
       error: "Indique cuántas unidades recibió.",
     });

@@ -21,8 +21,9 @@ import { keys, useWarehouse } from "@/lib/warehouse";
 
 /**
  * The board: everything on the floor of the worker's warehouse now, as on
- * the web's /bodega. Parcels to pick (in picking first), packed ones, and the
- * stock sellers have announced, each opening its own screen. Someone assigned
+ * the web's /bodega. Parcels to pick (in picking first), packed ones, parcels
+ * on their way back after a failed delivery, and the stock sellers have
+ * announced, each opening its own screen. Someone assigned
  * to several warehouses chooses which one they are in.
  */
 export default function BoardScreen() {
@@ -31,12 +32,20 @@ export default function BoardScreen() {
   const board = useApiQuery(keys.board(warehouse.id), (api) => api.wmsBoard(warehouse.id), {
     personal: true,
   });
+  const returning = useApiQuery(
+    keys.returning(warehouse.id),
+    (api) => api.wmsReturningShipments(warehouse.id),
+    { personal: true },
+  );
 
   return (
     <Screen
       edges={["top", "bottom", "left", "right"]}
-      refreshing={board.isRefetching}
-      onRefresh={() => void board.refetch()}
+      refreshing={board.isRefetching || returning.isRefetching}
+      onRefresh={() => {
+        void board.refetch();
+        void returning.refetch();
+      }}
     >
       <View style={styles.top}>
         <Logo app="warehouse" size={30} />
@@ -110,6 +119,41 @@ export default function BoardScreen() {
                     />
                   );
                 })}
+              </View>
+            )}
+          </Stack>
+
+          <Stack gap={3}>
+            <Text variant="heading" testID="returning-heading">
+              Paquetes devueltos por recibir
+              {returning.data ? ` (${returning.data.length})` : ""}
+            </Text>
+            {returning.isError ? (
+              <ErrorState error={returning.error} onRetry={() => void returning.refetch()} />
+            ) : !returning.data ? (
+              <LoadingState label="Cargando los paquetes devueltos…" />
+            ) : returning.data.length === 0 ? (
+              <Text tint="muted">Ningún paquete viene de vuelta.</Text>
+            ) : (
+              <View style={styles.list}>
+                {returning.data.map((parcel) => (
+                  <FloorRow
+                    key={parcel.shipment_id}
+                    href={{ pathname: "/devuelto/[id]", params: { id: parcel.shipment_id } }}
+                    title={parcel.tracking_code}
+                    details={`${plural(parcel.units, "unidad", "unidades")} en ${plural(
+                      parcel.lines,
+                      "línea",
+                      "líneas",
+                    )} · pedido ${parcel.order_number} · ${plural(
+                      parcel.attempt_count,
+                      "intento de entrega",
+                      "intentos de entrega",
+                    )}`}
+                    badges={<Badge tone="warning">De vuelta</Badge>}
+                    testID="returned-row"
+                  />
+                ))}
               </View>
             )}
           </Stack>
