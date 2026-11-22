@@ -8,6 +8,7 @@ import {
   EmptyState,
   ErrorState,
   formatPrice,
+  LinkButton,
   LoadingState,
   Logo,
   Screen,
@@ -240,6 +241,9 @@ export default function RouteScreen() {
             envía cuando vuelva a ingresar con su cuenta.
           </Text>
         ) : null}
+        <LinkButton href="/cuenta" variant="secondary" block testID="open-account">
+          Su cuenta
+        </LinkButton>
         <SignOutButton signOut={driver.signOut} />
       </Stack>
     </Screen>
