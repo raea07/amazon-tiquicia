@@ -14,6 +14,7 @@
 
 import { clean, colones, fullDate, longDate } from "../format.ts";
 import { FOLLOWUP_TEMPLATES } from "./followups.ts";
+import { STAFF_CATALOGUE_TEMPLATES } from "./staff-catalogue.ts";
 
 export type Vars = Record<string, unknown>;
 
@@ -701,6 +702,8 @@ export const TEMPLATES: Record<string, Template> = {
 
   // Messages added with migration 083200 (./followups.ts).
   ...FOLLOWUP_TEMPLATES,
+  // The message added with migration 083700 (./staff-catalogue.ts).
+  ...STAFF_CATALOGUE_TEMPLATES,
 };
 
 export const TEMPLATE_NAMES = Object.keys(TEMPLATES).sort();
