@@ -268,6 +268,101 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   check(badge === "Oculta", `hide did not take: ${badge}`);
   await staff.screenshot({ path: SHOTS + "/cc4-category-hidden.png", fullPage: true });
 
+  // ── 5b. Without JavaScript the catalogue forms still work, and a category
+  // hidden by one above it names the nearest hidden one ─────────────────────
+  const plainContext = await browser.newContext({
+    javaScriptEnabled: false,
+    viewport: { width: 1280, height: 900 },
+    locale: "es-CR",
+  });
+  const plain = await plainContext.newPage();
+  watch(plain);
+  await signIn(plain, OPS, "central@yuntera.example");
+  // Posts a form the way a browser without scripts does: the page comes back
+  // drawn with the action's outcome.
+  const post = async (form, button) => {
+    await Promise.all([
+      plain.waitForNavigation({ waitUntil: "load" }),
+      form.locator(`button:has-text("${button}")`).last().click(),
+    ]);
+  };
+  const plainRow = (slug) => plain.locator(`li[data-category="${slug}"]`);
+  const plainCreate = async (name, parent) => {
+    await plain.goto(OPS + "/catalogo/categorias", { waitUntil: "load" });
+    const form = plain.locator('section[aria-labelledby="nueva"]');
+    await form.locator('input[name="name"]').fill(name);
+    if (parent) {
+      const value = await form
+        .locator('select[name="parentId"] option', { hasText: parent })
+        .first()
+        .getAttribute("value");
+      await form.locator('select[name="parentId"]').selectOption(value);
+    }
+    await post(form, "Crear categoría");
+    return text(
+      plain
+        .locator(
+          'section[aria-labelledby="nueva"] [role="status"], section[aria-labelledby="nueva"] [role="alert"]',
+        )
+        .first(),
+    );
+  };
+  const plainHide = async (slug, name) => {
+    await plain.goto(OPS + "/catalogo/categorias", { waitUntil: "load" });
+    await plainRow(slug)
+      .locator("summary", { hasText: `Cambiar «${name}»` })
+      .click();
+    await plainRow(slug).locator("summary", { hasText: "Ocultar de la tienda" }).click();
+    await post(
+      plainRow(slug).locator("form", {
+        has: plain.locator('button:has-text("Ocultar la categoría")'),
+      }),
+      "Ocultar la categoría",
+    );
+  };
+  const badgeOf = async (slug) =>
+    text(plainRow(slug).locator("span", { hasText: "Oculta" }).first());
+
+  const madeDept = await plainCreate("Pruebas sin guion");
+  log("without scripts, created:", madeDept);
+  check(madeDept.includes("/c/pruebas-sin-guion"), `no-script create refused: ${madeDept}`);
+  const madeTwo = await plainCreate("Nivel dos", "Pruebas sin guion");
+  check(madeTwo.includes("/c/nivel-dos"), `no-script create (level two): ${madeTwo}`);
+  const plainAgain = await plainCreate("Pruebas sin guion");
+  log("without scripts, the same name again:", plainAgain);
+  check(
+    plainAgain.includes("La dirección que hacemos a partir del nombre"),
+    `a refusal without scripts: ${plainAgain}`,
+  );
+  await plainHide("pruebas-sin-guion", "Pruebas sin guion");
+  check(
+    (await badgeOf("pruebas-sin-guion")) === "Oculta",
+    `no-script hide did not take: ${await badgeOf("pruebas-sin-guion")}`,
+  );
+  const madeThree = await plainCreate("Nivel tres", "Nivel dos");
+  log("under a hidden department:", madeThree);
+  check(
+    madeThree.includes("/c/nivel-tres") && madeThree.includes("No se ve en la tienda"),
+    `a category made under a hidden one says it does not show: ${madeThree}`,
+  );
+  // Nivel dos is active itself: the badge of Nivel tres names the department.
+  const byDept = await badgeOf("nivel-tres");
+  log("badge, department hidden:", byDept);
+  check(
+    byDept === "Oculta: Pruebas sin guion está oculta",
+    `the badge does not name the hidden department: ${byDept}`,
+  );
+  // Nivel dos hidden too: now it is the nearest hidden one above.
+  await plainHide("nivel-dos", "Nivel dos");
+  const byParent = await badgeOf("nivel-tres");
+  log("badge, its parent hidden too:", byParent);
+  check(
+    byParent === "Oculta: Nivel dos está oculta",
+    `the badge does not name the nearest hidden category: ${byParent}`,
+  );
+  await plain.screenshot({ path: SHOTS + "/cc4b-no-script-categories.png", fullPage: true });
+  await plainContext.close();
+
   const gone = await status("/c/regalos-hechos-a-mano");
   log("hidden category page:", gone.status);
   check(gone.status === 404, "a hidden category still has a page");
@@ -468,6 +563,7 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   watch(m);
   for (const [path, shot] of [
     ["/catalogo", "cc8-mobile-review-queue"],
+    ["/catalogo/logotipos", "cc8b-mobile-logos"],
     ["/catalogo/categorias", "cc9-mobile-categories"],
     ["/catalogo/marcas", "cc10-mobile-brands"],
     ["/catalogo/busqueda?q=refri", "cc11-mobile-search"],
@@ -482,6 +578,41 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     const px = await overflow(m);
     log(`mobile ${path} overflow px:`, px);
     check(px <= 0, `ops ${path} scrolls sideways on a phone`);
+    // One page title, no heading said twice, and every control a full touch
+    // target (a checkbox or radio counts with its label).
+    const layout = await m.evaluate(() => {
+      const visible = (el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
+      };
+      const headings = [...document.querySelectorAll("main h1, main h2")]
+        .filter(visible)
+        .map((h) => `${h.tagName}:${h.innerText.trim()}`);
+      const small = [];
+      for (const el of document.querySelectorAll(
+        "main button, main select, main input, main textarea, nav[aria-label='Catálogo'] a",
+      )) {
+        if (!visible(el) || el.type === "hidden") continue;
+        let box = el.getBoundingClientRect();
+        if (el.type === "checkbox" || el.type === "radio") {
+          const label = el.closest("label") ?? document.querySelector(`label[for="${el.id}"]`);
+          if (label) box = label.getBoundingClientRect();
+        }
+        if (box.height < 44)
+          small.push(
+            `${el.tagName}:${(el.innerText || el.name || "").trim().slice(0, 30)}:${Math.round(box.height)}`,
+          );
+      }
+      return {
+        h1: headings.filter((h) => h.startsWith("H1")).length,
+        repeated: headings.filter((h, i) => headings.indexOf(h) !== i),
+        small,
+      };
+    });
+    log(`mobile ${path} headings and targets:`, JSON.stringify(layout));
+    check(layout.h1 === 1, `ops ${path} has ${layout.h1} page titles`);
+    check(layout.repeated.length === 0, `ops ${path} repeats a heading: ${layout.repeated}`);
+    check(layout.small.length === 0, `ops ${path} has controls under 44 px: ${layout.small}`);
     await m.screenshot({ path: `${SHOTS}/${shot}.png`, fullPage: true });
   }
   const shopPhone = await (

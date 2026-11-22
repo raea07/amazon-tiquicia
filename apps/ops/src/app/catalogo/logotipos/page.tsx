@@ -6,9 +6,9 @@ import { PageHeader } from "@yuntera/next-kit/shell";
 import { ShopLogo } from "@yuntera/next-kit/shop-logo";
 import { Alert, Badge, EmptyState, formatDateTime, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 import { retryLogoPublishing, reviewLogo } from "@/app/logo-actions";
+import { CatalogueNav } from "@/components/catalogue-nav";
 import { SELLER_STATUS } from "@/lib/labels";
 import { requireStaff } from "@/lib/staff";
 
@@ -22,11 +22,7 @@ export const metadata: Metadata = { title: "Logotipos por revisar" };
 export default function LogoReviewPage() {
   return (
     <div className="shell py-8">
-      <p className="text-sm">
-        <Link href="/catalogo" className="inline-flex min-h-11 items-center text-link underline">
-          ← Catálogo
-        </Link>
-      </p>
+      <CatalogueNav current="/catalogo/logotipos" />
       <PageHeader title="Logotipos por revisar">
         El logotipo aparece junto al nombre de la tienda en sus productos y en su página. Revise que
         sea de la tienda, que no use la marca de otra empresa ni de Yuntera y que no muestre datos

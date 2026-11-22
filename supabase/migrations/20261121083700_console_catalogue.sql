@@ -184,20 +184,10 @@ begin
 end;
 $$;
 
--- A category shows in the shop when it and every category above it is active.
-create or replace function private.category_visible(p_category_id uuid) returns boolean
-language sql stable security definer
-set search_path = ''
-as $$
-  with recursive up as (
-    select c.id, c.parent_id, c.active, 0 as depth from public.categories c where c.id = p_category_id
-    union all
-    select c.id, c.parent_id, c.active, up.depth + 1
-    from public.categories c join up on c.id = up.parent_id
-    where up.depth < 10
-  )
-  select exists (select 1 from up) and bool_and(up.active) from up;
-$$;
+-- A category shows in the shop when it and every category above it is
+-- active: private.category_visible(uuid), created in
+-- 20261121083600_seller_listings.sql (which runs first and already needs it
+-- for the seller's catalogue search, adding an offer and listing edits).
 
 -- How deep a category sits: 1 for a department, 2 under it, and so on.
 create or replace function private.category_depth(p_category_id uuid) returns integer
@@ -497,9 +487,11 @@ as $$
   order by (parent.slug is not null), coalesce(parent.sort, c.sort), c.sort, c.slug;
 $$;
 
--- Replaces the version in 20261121083000_limits.sql: a category address
--- exists while the category shows. (An old address is answered by
--- category_redirect, below.)
+-- Replaces the version in 20261121083600_seller_listings.sql (itself replacing
+-- 20261121083000_limits.sql) and includes it: a category address exists while
+-- the category shows (an old address is answered by category_redirect,
+-- below), and a shop's page (/tienda/<slug>, added by 083600) while the shop
+-- is active.
 create or replace function public.shop_path_exists(p_kind text, p_slug text)
 returns boolean
 language sql
@@ -513,6 +505,8 @@ as $$
       where p.slug = p_slug and p.status = 'active' and private.product_page_open(p.id))
     when 'category' then exists (
       select 1 from public.categories c where c.slug = p_slug and private.category_visible(c.id))
+    when 'shop' then exists (
+      select 1 from public.sellers s where s.slug = p_slug and s.status = 'active')
     else false
   end;
 $$;
@@ -766,8 +760,15 @@ as $$
     least(greatest(coalesce(p_offset, 0), 0), 10000), left(p_brand_slug, 60));
 $$;
 
--- The product page's body, replacing the version in 20261121082800_lockdown.sql
--- (behind the gate of 20261121083000_limits.sql). Changes:
+-- The product page's body. It supersedes the version in
+-- 20261121083600_seller_listings.sql and includes it (that one replaced
+-- 20261121082800_lockdown.sql's, behind the gate of 20261121083000_limits.sql).
+-- From 083600, kept here:
+--   * each offer names its shop's logo;
+--   * a variant's offers come in the documented offer order (between the
+--     offer_order markers, which packages/core/src/offers.parity.test.ts reads
+--     in both files).
+-- Changes of this migration:
 --   * a product in a hidden category still has its page; the breadcrumbs show
 --     only the categories that show (staff see them all);
 --   * a seller's reply that staff hid is not shown.
@@ -833,7 +834,8 @@ as $$
           select jsonb_agg(jsonb_build_object(
             'offer_id', o.id,
             'seller', jsonb_build_object(
-              'slug', s.slug, 'trade_name', s.trade_name, 'score', s.score, 'health', s.health),
+              'slug', s.slug, 'trade_name', s.trade_name, 'score', s.score, 'health', s.health,
+              'logo', s.logo_path),
             'price_minor', o.price_minor,
             'list_price_minor', o.list_price_minor,
             'condition', o.condition,
@@ -846,7 +848,11 @@ as $$
               select jsonb_build_object('earliest', e.earliest, 'latest', e.latest)
               from public.delivery_estimate(p_postal_code, o.handling_days) e
               where e.zone_active)
-          ) order by o.price_minor, o.created_at, o.id)
+          )
+          -- BEGIN offer_order
+          order by (o.available_quantity > 0) desc, o.price_minor asc, o.created_at asc, o.id asc
+          -- END offer_order
+          )
           from public.offers o
           join public.sellers s on s.id = o.seller_id
           where o.sku_id = k.id and o.status = 'active' and s.status = 'active'), '[]'::jsonb)
@@ -1030,7 +1036,8 @@ begin
                     where c.parent_id is not distinct from p_parent_id), 1),
           true)
   returning id into v_id;
-  return jsonb_build_object('id', v_id, 'slug', v_slug);
+  -- Whether it shows: a category created under a hidden one does not.
+  return jsonb_build_object('id', v_id, 'slug', v_slug, 'visible', private.category_visible(v_id));
 end;
 $$;
 
@@ -1246,6 +1253,271 @@ begin
   end if;
   delete from public.categories where id = c.id;
   perform private.renumber_categories(c.parent_id);
+end;
+$$;
+
+-- A seller files a new listing, or an edit, only under a category that shows.
+-- These replace the versions in 20261121083000_limits.sql, unchanged but for
+-- that: they checked only the category's own active flag, so a seller could
+-- still list under a sub-category whose department staff had hidden (the
+-- shop's menus and the seller's own category list leave it out).
+create or replace function public.seller_create_listing(
+  p_seller_id uuid,
+  p_title text,
+  p_category_slug text,
+  p_description text,
+  p_bullet_points text[],
+  p_price_minor bigint,
+  p_fulfillment public.fulfillment_type,
+  p_handling_days smallint,
+  p_weight_grams integer,
+  p_length_cm numeric,
+  p_width_cm numeric,
+  p_height_cm numeric,
+  p_submit boolean default true
+) returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  c_max_price_minor constant bigint := 10000000000; -- ₡100 000 000
+  v_category public.categories%rowtype;
+  v_status public.seller_status;
+  v_slug text;
+  v_product uuid;
+  v_sku uuid;
+  v_offer uuid;
+  v_problem text;
+begin
+  if not private.is_seller_member(p_seller_id) then
+    perform private.fail('forbidden');
+  end if;
+  -- One listing at a time per shop, so the counts below hold.
+  select status into v_status from public.sellers where id = p_seller_id for update;
+  if coalesce(p_submit, false) and v_status = 'pending' then
+    perform private.fail('shop_not_approved');
+  elsif v_status = 'closed' or (coalesce(p_submit, false) and v_status <> 'active') then
+    perform private.fail('shop_not_active');
+  end if;
+
+  v_problem := private.listing_problem(p_title, p_description, p_bullet_points, p_weight_grams,
+                                       p_length_cm, p_width_cm, p_height_cm);
+  if v_problem = 'package_over_limit' then
+    perform private.fail('package_over_limit');
+  end if;
+  if v_problem is not null or p_price_minor is null or p_price_minor <= 0
+     or p_price_minor > c_max_price_minor or p_fulfillment is null then
+    perform private.fail('invalid_listing');
+  end if;
+  if p_fulfillment = 'seller' and (p_handling_days is null or p_handling_days not between 0 and 10) then
+    perform private.fail('invalid_handling_days');
+  end if;
+  if p_fulfillment = 'platform'
+     and not private.fits_warehouse(p_weight_grams, round(p_length_cm, 1), round(p_width_cm, 1),
+                                    round(p_height_cm, 1)) then
+    perform private.fail('too_large_for_warehouse');
+  end if;
+
+  if coalesce(p_submit, false) then
+    if private.listings_in_review(p_seller_id) >= private.limit_value('max_listings_in_review_per_seller', 50) then
+      perform private.fail('too_many_listings_in_review');
+    end if;
+  elsif (select count(*) from public.products p
+         where p.created_by_seller_id = p_seller_id and p.status = 'draft')
+        >= private.limit_value('max_draft_listings_per_seller', 200) then
+    perform private.fail('too_many_draft_listings');
+  end if;
+
+  -- A category that shows: a sub-category of a department staff hid is out of
+  -- sellers' choices as well (decision 40).
+  select * into v_category from public.categories c
+  where c.slug = p_category_slug and private.category_visible(c.id);
+  if not found then
+    perform private.fail('category_not_found');
+  end if;
+
+  -- A readable, unique address for the product page.
+  v_slug := trim(both '-' from regexp_replace(private.fold(p_title), '[^a-z0-9]+', '-', 'g'));
+  v_slug := trim(both '-' from left(v_slug, 100));
+  if v_slug = '' then
+    perform private.fail('invalid_listing');
+  end if;
+  if exists (select 1 from public.products where slug = v_slug) then
+    v_slug := v_slug || '-' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 6);
+  end if;
+
+  insert into public.products
+    (slug, title, description, bullet_points, category_id, status, created_by_seller_id, tax_rate_bps)
+  values
+    (v_slug, trim(p_title), nullif(trim(p_description), ''),
+     array(select trim(b) from unnest(coalesce(p_bullet_points, '{}')) b),
+     v_category.id, case when p_submit then 'pending_review' else 'draft' end::public.product_status,
+     p_seller_id, v_category.default_tax_rate_bps)
+  returning id into v_product;
+
+  insert into public.skus (product_id, code, weight_grams, length_cm, width_cm, height_cm)
+  values (v_product, 'YT-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8)),
+          p_weight_grams, round(p_length_cm, 1), round(p_width_cm, 1), round(p_height_cm, 1))
+  returning id into v_sku;
+
+  insert into public.offers (sku_id, seller_id, price_minor, fulfillment, handling_days)
+  values (v_sku, p_seller_id, p_price_minor, p_fulfillment,
+          case when p_fulfillment = 'platform' then 0 else p_handling_days end)
+  returning id into v_offer;
+
+  return jsonb_build_object('product_id', v_product, 'slug', v_slug, 'sku_id', v_sku, 'offer_id', v_offer);
+exception
+  when check_violation or not_null_violation or numeric_value_out_of_range then
+    perform private.fail('invalid_listing');
+end;
+$$;
+
+create or replace function public.seller_update_listing(
+  p_product_id uuid,
+  p_title text,
+  p_category_slug text,
+  p_description text,
+  p_bullet_points text[],
+  p_weight_grams integer,
+  p_length_cm numeric,
+  p_width_cm numeric,
+  p_height_cm numeric,
+  p_sku_id uuid default null,
+  p_submit boolean default true
+) returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  p public.products%rowtype;
+  v_category public.categories%rowtype;
+  v_shop public.seller_status;
+  v_sku uuid;
+  v_title text := trim(p_title);
+  v_description text := nullif(trim(p_description), '');
+  v_bullets text[] := coalesce(p_bullet_points, '{}');
+  -- The package is stored to a tenth of a centimetre; check what will be stored.
+  v_length numeric := round(p_length_cm, 1);
+  v_width numeric := round(p_width_cm, 1);
+  v_height numeric := round(p_height_cm, 1);
+  v_proposed jsonb;
+  v_status public.product_status;
+  v_request uuid;
+  v_problem text;
+begin
+  select * into p from public.products where id = p_product_id for update;
+  if not found or p.created_by_seller_id is null
+     or not private.is_seller_member(p.created_by_seller_id) then
+    perform private.fail('listing_not_found');
+  end if;
+  if p.status = 'archived' then
+    perform private.fail('listing_not_editable');
+  end if;
+  select status into v_shop from public.sellers where id = p.created_by_seller_id for update;
+  if (p.status = 'active' or coalesce(p_submit, false)) and v_shop = 'pending' then
+    perform private.fail('shop_not_approved');
+  elsif v_shop = 'closed' or ((p.status = 'active' or coalesce(p_submit, false)) and v_shop <> 'active') then
+    perform private.fail('shop_not_active');
+  end if;
+
+  select k.id into v_sku from public.skus k
+  where k.product_id = p.id and (p_sku_id is null or k.id = p_sku_id)
+  order by k.created_at, k.id limit 1;
+  if v_sku is null then
+    perform private.fail('listing_not_found');
+  end if;
+
+  -- A category that shows: a sub-category of a department staff hid is out of
+  -- sellers' choices as well (decision 40).
+  select * into v_category from public.categories c
+  where c.slug = p_category_slug and private.category_visible(c.id);
+  if not found then
+    perform private.fail('category_not_found');
+  end if;
+
+  v_problem := private.listing_problem(v_title, v_description, v_bullets, p_weight_grams,
+                                       p_length_cm, p_width_cm, p_height_cm);
+  if v_problem = 'package_over_limit' then
+    perform private.fail('package_over_limit');
+  elsif v_problem is not null then
+    perform private.fail('invalid_listing');
+  end if;
+  v_bullets := array(select trim(b) from unnest(v_bullets) b);
+
+  if not private.fits_warehouse(p_weight_grams, v_length, v_width, v_height)
+     and exists (select 1 from public.offers o
+                 where o.sku_id = v_sku and o.fulfillment = 'platform' and o.status <> 'archived') then
+    perform private.fail('too_large_for_warehouse');
+  end if;
+
+  if (p.status = 'active' or coalesce(p_submit, false))
+     and private.listings_in_review(p.created_by_seller_id, p.id)
+         >= private.limit_value('max_listings_in_review_per_seller', 50) then
+    perform private.fail('too_many_listings_in_review');
+  end if;
+
+  if p.status = 'active' then
+    v_proposed := jsonb_build_object(
+      'title', v_title,
+      'description', v_description,
+      'bullet_points', to_jsonb(v_bullets),
+      'category_slug', v_category.slug,
+      'category_name', v_category.name_es,
+      'sku_id', v_sku,
+      'weight_grams', p_weight_grams,
+      'length_cm', v_length,
+      'width_cm', v_width,
+      'height_cm', v_height);
+    if v_proposed = private.listing_content(p.id, v_sku) then
+      perform private.fail('listing_unchanged');
+    end if;
+
+    -- A newer proposal replaces the one that was waiting. It gets a new id, so
+    -- staff looking at the old one cannot approve text they have not read.
+    update public.product_change_requests
+    set status = 'withdrawn', decided_by = (select auth.uid()), decided_at = clock_timestamp()
+    where product_id = p.id and status = 'pending';
+
+    insert into public.product_change_requests (product_id, seller_id, proposed, submitted_by)
+    values (p.id, p.created_by_seller_id, v_proposed, (select auth.uid()))
+    returning id into v_request;
+
+    perform private.emit('product.edit_submitted',
+      jsonb_build_object('product_id', p.id, 'request_id', v_request));
+    return jsonb_build_object('product_id', p.id, 'slug', p.slug, 'status', p.status,
+                              'outcome', 'in_review');
+  end if;
+
+  -- Not public yet: change it in place. Sending it puts it in the review queue;
+  -- saving without sending takes it out of the queue so the seller can keep working.
+  v_status := case
+    when p_submit then 'pending_review'
+    when p.status = 'pending_review' then 'draft'
+    else p.status
+  end;
+
+  update public.products
+  set title = v_title,
+      description = v_description,
+      bullet_points = v_bullets,
+      category_id = v_category.id,
+      -- The tax rate came from the category when the listing was created; it follows a new one.
+      tax_rate_bps = case when category_id is distinct from v_category.id
+                          then v_category.default_tax_rate_bps else tax_rate_bps end,
+      status = v_status,
+      rejection_reason = case when p_submit then null else rejection_reason end
+  where id = p.id;
+
+  update public.skus
+  set weight_grams = p_weight_grams, length_cm = v_length, width_cm = v_width,
+      height_cm = v_height
+  where id = v_sku;
+
+  return jsonb_build_object('product_id', p.id, 'slug', p.slug, 'status', v_status,
+                            'outcome', case when p_submit then 'submitted' else 'saved' end);
+exception
+  when check_violation or not_null_violation or numeric_value_out_of_range then
+    perform private.fail('invalid_listing');
 end;
 $$;
 
@@ -2065,6 +2337,63 @@ begin
 end;
 $$;
 
+-- Replaces the version in 20261121083600_seller_listings.sql and includes it,
+-- with one change: a listing staff took down passes on as well, still taken
+-- down. Before, only a listing on sale passed, so a taken-down listing whose
+-- shop then closed stayed with the closed shop: staff could never put it back
+-- (listing_shop_not_active) and the other shops' offers on it could never
+-- sell again. It passes with its take-down and its digest (who owns it is not
+-- part of the digest), so staff can still put it back exactly as it was
+-- reviewed, and anything the new shop changes first goes through review.
+create or replace function private.sellers_hand_over_on_close() returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  r record;
+begin
+  for r in
+    select p.id as product_id,
+           (select o.seller_id from public.offers o
+            join public.skus k on k.id = o.sku_id
+            join public.sellers s on s.id = o.seller_id
+            where k.product_id = p.id and o.seller_id <> new.id
+              and o.status in ('active', 'paused') and s.status = 'active'
+            order by (o.status = 'active') desc, o.created_at, o.id limit 1) as heir
+    from public.products p
+    where p.created_by_seller_id = new.id
+      and (p.status = 'active' or (p.status = 'rejected' and p.taken_down_at is not null))
+    order by p.id
+    for update of p
+  loop
+    continue when r.heir is null;
+    update public.product_change_requests
+    set status = 'withdrawn', decided_at = clock_timestamp()
+    where product_id = r.product_id and status = 'pending';
+    -- Photos it added that nobody approved yet do not pass to the new shop.
+    update public.product_photos
+    set state = 'removed', remove_requested_at = null
+    where product_id = r.product_id and seller_id = new.id and state in ('uploading', 'pending');
+    update public.product_photos
+    set remove_requested_at = null, position = live_position, alt = live_alt
+    where product_id = r.product_id and state = 'approved' and live_position is not null;
+    update public.products set created_by_seller_id = r.heir where id = r.product_id;
+    perform private.emit('product.handed_over', jsonb_build_object(
+      'product_id', r.product_id, 'from_seller_id', new.id, 'to_seller_id', r.heir));
+  end loop;
+
+  update public.shop_logos
+  set state = 'removed', decided_at = coalesce(decided_at, clock_timestamp())
+  where seller_id = new.id and state in ('uploading', 'pending', 'approved');
+  update public.sellers set logo_path = null, description = null
+  where id = new.id and (logo_path is not null or description is not null);
+  update public.seller_change_requests
+  set status = 'withdrawn', decided_at = now()
+  where seller_id = new.id and status = 'pending';
+  return null;
+end;
+$$;
+
 -- Puts back a product staff took down (by this screen or from a report),
 -- exactly as it was when it was taken down. Not one the seller has changed
 -- since (listing_changed_since_take_down), nor one the seller sent to review
@@ -2350,7 +2679,6 @@ revoke all on function
   private.slugify(text),
   private.reserved_category_slug(text),
   private.check_category_slug(text, uuid),
-  private.category_visible(uuid),
   private.category_depth(uuid),
   private.category_subtree(uuid),
   private.category_max_depth(),

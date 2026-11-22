@@ -10,6 +10,7 @@ const PAGES = [
   { href: "/catalogo/busqueda", label: "Búsqueda" },
   { href: "/catalogo/resenas", label: "Reseñas" },
   { href: "/catalogo/fotos", label: "Retirar fotos" },
+  { href: "/catalogo/logotipos", label: "Logotipos" },
 ] as const;
 
 export function CatalogueNav({ current }: { current: (typeof PAGES)[number]["href"] }) {

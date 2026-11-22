@@ -12,15 +12,22 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { OFFER_ORDER_SQL } from "./offers";
 
-const sql = readFileSync(
-  fileURLToPath(
-    new URL("../../../supabase/migrations/20261121083600_seller_listings.sql", import.meta.url),
-  ),
-  "utf8",
-);
+/**
+ * The migrations that write the rule. 083600 has the listing summary, the
+ * first product page body and the cart's alternatives; 083700 replaces the
+ * product page body (it must keep the rule, and its markers).
+ */
+const FILES = ["20261121083600_seller_listings.sql", "20261121083700_console_catalogue.sql"];
+
+function read(file: string): string {
+  return readFileSync(
+    fileURLToPath(new URL(`../../../supabase/migrations/${file}`, import.meta.url)),
+    "utf8",
+  );
+}
 
 /** Every ORDER BY written between `-- BEGIN offer_order` and `-- END offer_order`. */
-function marked(): string[] {
+function marked(sql: string): string[] {
   const found: string[] = [];
   const pattern = /-- BEGIN offer_order\n([\s\S]*?)-- END offer_order/g;
   for (const match of sql.matchAll(pattern)) {
@@ -34,12 +41,40 @@ function marked(): string[] {
   return found;
 }
 
+/** The body of the last definition of a function across the files, in migration order. */
+function lastBody(name: string): string {
+  let last = "";
+  for (const file of FILES) {
+    const sql = read(file);
+    const pattern = new RegExp(
+      `create or replace function ${name.replace(".", "\\.")}\\([\\s\\S]*?\\n\\$\\$;`,
+      "g",
+    );
+    for (const match of sql.matchAll(pattern)) last = match[0];
+  }
+  return last;
+}
+
 describe("the offer order in SQL and TypeScript", () => {
-  it("is marked in the summary and in the product page", () => {
-    expect(marked().length).toBeGreaterThanOrEqual(2);
+  it("is marked in the summary, the product page and the cart's alternatives", () => {
+    expect(marked(read(FILES[0] ?? "")).length).toBeGreaterThanOrEqual(3);
+    expect(marked(read(FILES[1] ?? "")).length).toBeGreaterThanOrEqual(1);
   });
 
   it("is the same rule on both sides", () => {
-    for (const order of marked()) expect(order).toBe(OFFER_ORDER_SQL);
+    for (const file of FILES)
+      for (const order of marked(read(file))) expect(order).toBe(OFFER_ORDER_SQL);
+  });
+
+  it("is what the definitions in force use", () => {
+    for (const name of [
+      "private.refresh_product_summary",
+      "private.get_product_page",
+      "public.cart_alternatives",
+    ]) {
+      const body = lastBody(name);
+      expect(body, name).not.toBe("");
+      expect(marked(body), name).toEqual([OFFER_ORDER_SQL]);
+    }
   });
 });

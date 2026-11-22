@@ -72,6 +72,26 @@ as $$
       and o.status = 'active' and s.status = 'active');
 $$;
 
+-- Does a category show: it is active, and so is every category above it? A
+-- department staff hid takes its sub-categories with it. Created here, not in
+-- 20261121083700_console_catalogue.sql (which introduced it), because the
+-- seller functions below already need it: a seller may not find or offer on a
+-- product filed under a hidden department, nor may an edit move a listing
+-- there. 083700 uses it for the menus, category pages and breadcrumbs.
+create or replace function private.category_visible(p_category_id uuid) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  with recursive up as (
+    select c.id, c.parent_id, c.active, 0 as depth from public.categories c where c.id = p_category_id
+    union all
+    select c.id, c.parent_id, c.active, up.depth + 1
+    from public.categories c join up on c.id = up.parent_id
+    where up.depth < 10
+  )
+  select exists (select 1 from up) and bool_and(up.active) from up;
+$$;
+
 -- ═══ 1. The offer order ═════════════════════════════════════════════════════
 
 -- Replaces the version in the catalogue migration. The rule is unchanged (it
@@ -138,6 +158,8 @@ create trigger skus_summary_refresh after update of active on public.skus
 -- 083000_limits.sql), with two changes: each offer names its shop's logo,
 -- and a variant's offers come in the order of the rule above (they came by
 -- price alone, so an offer without stock could be listed first).
+-- 20261121083700_console_catalogue.sql replaces this body again and keeps
+-- both changes (its offer order is marked for the parity test too).
 create or replace function private.get_product_page(p_slug text, p_postal_code text default null)
 returns jsonb
 language sql
@@ -392,7 +414,7 @@ begin
             where k.product_id = p.id and k.active), '[]'::jsonb)
         ) as item
       from public.products p
-      join public.categories c on c.id = p.category_id and c.active
+      join public.categories c on c.id = p.category_id and private.category_visible(c.id)
       left join public.brands b on b.id = p.brand_id
       left join public.sellers cs on cs.id = p.created_by_seller_id
       where p.status = 'active'
@@ -452,7 +474,7 @@ begin
   select * into v_product from public.products where id = v_sku.product_id for update;
   select * into v_sku from public.skus where id = p_sku_id for update;
   if v_product.status <> 'active' or not v_sku.active
-     or not exists (select 1 from public.categories c where c.id = v_product.category_id and c.active)
+     or not private.category_visible(v_product.category_id)
      or not private.product_page_open(v_product.id) then
     perform private.fail('variant_not_found');
   end if;
@@ -925,7 +947,7 @@ as $$
                 else greatest(k.length_cm, k.width_cm, k.height_cm) end as longest
     from public.product_change_requests r
     join public.products p on p.id = r.product_id
-    join public.categories c on c.slug = r.proposed ->> 'category_slug' and c.active
+    join public.categories c on c.slug = r.proposed ->> 'category_slug' and private.category_visible(c.id)
     join public.skus k on k.product_id = p.id
     join public.offers o on o.sku_id = k.id
     join public.sellers s on s.id = o.seller_id
@@ -1043,8 +1065,8 @@ begin
       -- Taken down since the seller proposed this; there is no published page to change.
       perform private.fail('listing_not_editable');
     end if;
-    select * into v_category from public.categories
-    where slug = r.proposed ->> 'category_slug' and active;
+    select * into v_category from public.categories c
+    where c.slug = r.proposed ->> 'category_slug' and private.category_visible(c.id);
     if not found then
       perform private.fail('category_not_found');
     end if;
@@ -2056,7 +2078,10 @@ $$;
 
 -- A shop as shoppers see it: name, description, logo, since when it sells,
 -- and the products it sells now with its own price. Only an active shop has
--- a page; any other answers null, as a shop that does not exist does.
+-- a page; any other answers null, as a shop that does not exist does. A
+-- product filed under a category staff hid is listed too: hiding a category
+-- takes it out of the menus, not off sale (decision 40), so the shop's page
+-- shows what search and the product's own address show.
 create or replace function public.get_shop(p_slug text) returns jsonb
 language sql stable security definer
 set search_path = ''
@@ -2084,7 +2109,6 @@ as $$
         from public.offers o
         join public.skus k on k.id = o.sku_id and k.active
         join public.products p on p.id = k.product_id and p.status = 'active'
-        join public.categories c on c.id = p.category_id and c.active
         left join public.brands b on b.id = p.brand_id
         where o.seller_id = s.id and o.status = 'active'
         group by p.id, p.slug, p.title, b.name, p.rating_sum, p.rating_count
@@ -2097,7 +2121,8 @@ as $$
 $$;
 
 -- Replaces the version in the limits migration: the shop's router also asks
--- about a shop's page.
+-- about a shop's page. 20261121083700_console_catalogue.sql replaces this
+-- again and keeps the shop's page (it adds category aliases).
 create or replace function public.shop_path_exists(p_kind text, p_slug text)
 returns boolean
 language sql
@@ -2110,7 +2135,7 @@ as $$
       select 1 from public.products p
       where p.slug = p_slug and p.status = 'active' and private.product_page_open(p.id))
     when 'category' then exists (
-      select 1 from public.categories c where c.slug = p_slug and c.active)
+      select 1 from public.categories c where c.slug = p_slug and private.category_visible(c.id))
     when 'shop' then exists (
       select 1 from public.sellers s where s.slug = p_slug and s.status = 'active')
     else false
@@ -2124,7 +2149,9 @@ $$;
 -- page would show first among those that can: in stock, cheapest, oldest
 -- (the offer order above). The cart then says that the chosen shop's offer
 -- ran out and who else sells it, at what price, and offers to swap the line,
--- instead of telling the shopper the product is gone. Only for a product a
+-- instead of telling the shopper the product is gone. A product under a
+-- hidden category is still on sale (decision 40), so it has alternatives too.
+-- Only for a product a
 -- shopper can open; nothing about the offer the cart had beyond its variant.
 create or replace function public.cart_alternatives(p_offer_ids uuid[])
 returns table (offer_id uuid, product_slug text, title text, variant_name text,
@@ -2142,7 +2169,6 @@ as $$
   join public.offers mine on mine.id = req.offer_id
   join public.skus k on k.id = mine.sku_id and k.active
   join public.products p on p.id = k.product_id and p.status = 'active'
-  join public.categories c on c.id = p.category_id and c.active
   cross join lateral (
     select o.id, s.trade_name, o.price_minor, o.list_price_minor, o.available_quantity
     from public.offers o
@@ -2177,7 +2203,8 @@ revoke all on function
   private.logo_files_intact(public.shop_logos),
   private.logo_object_disposable(text, text, timestamptz),
   private.logo_json(public.shop_logos),
-  private.expire_logo_reservations(uuid)
+  private.expire_logo_reservations(uuid),
+  private.category_visible(uuid)
 from public, anon, authenticated;
 
 revoke all on function

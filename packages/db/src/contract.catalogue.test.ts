@@ -98,6 +98,7 @@ describe.skipIf(!db.enabled)("catalogue contract (against a seeded database)", (
     const api = staff();
     const created = await api.opsCreateCategory({ nameEs: "Contrato prueba" });
     expect(created.slug).toBe("contrato-prueba");
+    expect(created.visible).toBe(true);
     const renamed = await api.opsUpdateCategory({
       categoryId: created.id,
       slug: "contrato-prueba-nueva",

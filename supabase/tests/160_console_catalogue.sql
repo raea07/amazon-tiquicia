@@ -444,6 +444,101 @@ do $$ begin
            current_setting('t.hogar_brands'));
 end $$;
 reset role;
+-- Under a department staff hid, a sub-category that is itself active is out
+-- of sellers' choices too, as a hidden category is (083600's seller tools and
+-- the listing rules check the whole way up, not only the category's own flag):
+-- no new listing and no edit filed there, no finding or offering on what is
+-- filed there, no listing edit approved into it. Its products stay on sale:
+-- the shop's page lists them and the cart offers another shop's offer.
+-- A listing edit of TecnoCasa's blender into Cocina, as it would have been
+-- proposed before Hogar was hidden.
+insert into public.product_change_requests (product_id, seller_id, proposed, submitted_by)
+select p.id, p.created_by_seller_id,
+       private.listing_content(p.id, k.id) || jsonb_build_object('category_slug', 'cocina', 'category_name', 'Cocina'),
+       (select id from auth.users where email = 'vendedor@yuntera.example')
+from public.products p join public.skus k on k.product_id = p.id
+where p.slug = 'licuadora-volcan-600w'
+returning pg_temp.remember('hidden_edit', id::text);
+-- Cafetal's own offer on the cutting board paused, and another shop's on sale
+-- with units to sell (set after the insert, whose trigger counts its stock).
+select pg_temp.remember('board_offer', o.id::text)
+from public.offers o join public.skus k on k.id = o.sku_id join public.products p on p.id = k.product_id
+where p.slug = 'tabla-picar-teca' and o.seller_id = (select id from public.sellers where slug = 'cafetal-los-santos');
+update public.offers set status = 'paused' where id = current_setting('t.board_offer')::uuid;
+insert into public.offers (sku_id, seller_id, price_minor, fulfillment, handling_days, status, available_quantity)
+select k.id, (select id from public.sellers where slug = 'tecnocasa'), o.price_minor, 'seller', 2, 'active', 0
+from public.offers o join public.skus k on k.id = o.sku_id join public.products p on p.id = k.product_id
+where p.slug = 'tabla-picar-teca' and o.seller_id = (select id from public.sellers where slug = 'cafetal-los-santos')
+returning pg_temp.remember('board_alt', id::text);
+update public.offers set available_quantity = 4 where id = current_setting('t.board_alt')::uuid;
+do $$ begin
+  assert private.category_visible((select id from public.categories where slug = 'cocina-electrica'))
+     and not private.category_visible((select id from public.categories where slug = 'cocina'))
+     and (select active from public.categories where slug = 'cocina'),
+    'hidden: Cocina is active itself, hidden only through Hogar';
+end $$;
+select pg_temp.login('vendedor@yuntera.example');
+do $$
+declare
+  v_tecnocasa uuid := (select id from public.sellers where slug = 'tecnocasa');
+  v_blender uuid := (select id from public.products where slug = 'licuadora-volcan-600w');
+  v_board_sku uuid := (select k.id from public.skus k join public.products p on p.id = k.product_id
+                       where p.slug = 'tabla-picar-teca');
+begin
+  perform pg_temp.refused(format(
+    $q$select public.seller_create_listing(%L, 'Tabla de cortar de pino', 'cocina', 'Una tabla de pino para la cocina.',
+       array['De pino'], 500000, 'seller', 2::smallint, 800, 30, 20, 2, false)$q$, v_tecnocasa), 'category_not_found');
+  perform pg_temp.refused(format(
+    $q$select public.seller_update_listing(%L, 'Licuadora Volcán 600 W', 'cocina', null, null, 3200, 25, 20, 40)$q$,
+    v_blender), 'category_not_found');
+  assert not exists (select 1 from jsonb_array_elements(public.seller_catalog_search(v_tecnocasa, 'tabla de picar')) x
+                     where x ->> 'slug' = 'tabla-picar-teca'),
+    'hidden: a seller does not find a product filed under the hidden department';
+  perform pg_temp.refused(format($q$select public.seller_add_offer(%L, %L, 1500000, 'seller', 2::smallint)$q$,
+                                 v_tecnocasa, v_board_sku), 'variant_not_found');
+end
+$$;
+reset role;
+select pg_temp.login('central@yuntera.example', 'aal2');
+do $$
+begin
+  perform pg_temp.refused(format('select public.ops_review_listing_edit(%L, true)', current_setting('t.hidden_edit')),
+                          'category_not_found');
+  assert (public.ops_create_category('Tablas y bandejas', null, null,
+            (select id from public.categories where slug = 'cocina')) ->> 'visible')::boolean is false,
+    'hidden: a category created under a hidden one says it does not show';
+end
+$$;
+reset role;
+do $$ begin
+  assert (select status = 'pending' from public.product_change_requests where id = current_setting('t.hidden_edit')::uuid)
+     and (select c.slug from public.products p join public.categories c on c.id = p.category_id
+          where p.slug = 'licuadora-volcan-600w') = 'cocina-electrica',
+    'hidden: the refused approval changed nothing';
+end $$;
+-- Cocina hidden itself as well: what is filed there is still on sale.
+update public.categories set active = false where slug = 'cocina';
+select pg_temp.login_anon();
+do $$
+declare
+  v_alt record;
+begin
+  assert exists (select 1 from jsonb_array_elements(public.get_shop('tecnocasa') -> 'products') x
+                 where x ->> 'slug' = 'tabla-picar-teca'),
+    'hidden: the shop''s page lists a product filed under the hidden department';
+  assert public.shop_path_exists('shop', 'tecnocasa') and not public.shop_path_exists('shop', 'no-hay-tal-tienda'),
+    'shop pages: an active shop has one, an unknown one does not';
+  select * into v_alt from public.cart_alternatives(array[current_setting('t.board_offer')::uuid]);
+  assert v_alt.alternative_offer_id = current_setting('t.board_alt')::uuid and v_alt.product_slug = 'tabla-picar-teca',
+    format('hidden: the cart still offers another shop''s offer %s', row_to_json(v_alt));
+end
+$$;
+reset role;
+update public.categories set active = true where slug = 'cocina';
+delete from public.offers where id = current_setting('t.board_alt')::uuid;
+update public.offers set status = 'active' where id = current_setting('t.board_offer')::uuid;
+delete from public.product_change_requests where id = current_setting('t.hidden_edit')::uuid;
+delete from public.categories where slug = 'tablas-y-bandejas';
 select pg_temp.login('central@yuntera.example', 'aal2');
 select public.ops_set_category_active((select id from public.categories where slug = 'hogar'), true);
 select public.ops_set_category_active((select id from public.categories where slug = 'descanso'), true);
@@ -684,6 +779,18 @@ end $$;
 -- from what they counted before.
 select pg_temp.remember('review_had_reply', (
   select (seller_reply is not null)::text from public.reviews where id = current_setting('t.review')::uuid));
+-- The product's rating before, and the review's own stars, so the checks
+-- below hold on a database where others have reviewed the coffee too.
+select pg_temp.remember('molido_count', (select rating_count::text from public.products
+                                          where id = current_setting('t.molido')::uuid));
+select pg_temp.remember('molido_sum', (select rating_sum::text from public.products
+                                        where id = current_setting('t.molido')::uuid));
+select pg_temp.remember('review_stars', (select rating::text from public.reviews
+                                          where id = current_setting('t.review')::uuid));
+select pg_temp.remember('molido_stars_before', (
+  select count(*)::text from public.reviews r
+  where r.product_id = current_setting('t.molido')::uuid and r.status = 'published'
+    and r.rating = current_setting('t.review_stars')::int));
 select pg_temp.remember('review_open_reports', (
   select count(*)::text from public.content_reports
   where target_type = 'review' and target_id = current_setting('t.review')::uuid
@@ -761,12 +868,17 @@ select pg_temp.login_anon();
 do $$
 declare
   v jsonb := public.get_product('cafe-molido-tarrazu-340g');
+  v_count int := current_setting('t.molido_count')::int - 1;
+  v_sum int := current_setting('t.molido_sum')::int - current_setting('t.review_stars')::int;
 begin
-  assert (v ->> 'rating_count')::int = 1 and (v ->> 'rating_sum')::int = 5, format('reviews: page rating %s', v ->> 'rating_count');
+  assert (v ->> 'rating_count')::int = v_count and (v ->> 'rating_sum')::int = v_sum,
+    format('reviews: page rating %s/%s, expected %s/%s', v ->> 'rating_sum', v ->> 'rating_count', v_sum, v_count);
   assert not exists (select 1 from jsonb_array_elements(v -> 'reviews') r where r ->> 'id' = current_setting('t.review')),
     'reviews: not on the page';
-  assert v -> 'rating_histogram' ->> '4' = '0', 'reviews: not in the histogram';
-  assert (select rating_count from public.search_products('cafe molido') where slug = 'cafe-molido-tarrazu-340g') = 1,
+  assert (v -> 'rating_histogram' ->> current_setting('t.review_stars'))::int
+         = current_setting('t.molido_stars_before')::int - 1, 'reviews: not in the histogram';
+  assert (select (rating_count, rating_sum) = (v_count, v_sum) from public.search_products('cafe molido')
+          where slug = 'cafe-molido-tarrazu-340g'),
     'reviews: nor in search results';
 end
 $$;
@@ -829,10 +941,32 @@ declare
 begin
   select r into v_review from jsonb_array_elements(v -> 'reviews') r where r ->> 'id' = current_setting('t.review');
   assert v_review is not null and v_review ->> 'seller_reply' is null, format('reply hidden: review shown, reply not %s', v_review);
-  assert (v ->> 'rating_count')::int = 2 and (v ->> 'rating_sum')::int = 9, 'reply hidden: the rating is back and stays';
+  assert (v ->> 'rating_count')::int = current_setting('t.molido_count')::int
+     and (v ->> 'rating_sum')::int = current_setting('t.molido_sum')::int,
+    'reply hidden: the rating is back and stays';
+  -- Shown again, the page, search and the listing summary agree, and match
+  -- the published reviews.
+  assert (select (rating_count, rating_sum)
+                 = ((v ->> 'rating_count')::int, (v ->> 'rating_sum')::int)
+          from public.search_products('cafe molido') where slug = 'cafe-molido-tarrazu-340g'),
+    'shown again: search has the same rating as the page';
 end
 $$;
 reset role;
+do $$ begin
+  assert (select (p.rating_count, p.rating_sum)
+                 = ((select count(*)::int from public.reviews r where r.product_id = p.id and r.status = 'published'),
+                    (select coalesce(sum(r.rating), 0)::int from public.reviews r
+                     where r.product_id = p.id and r.status = 'published'))
+          from public.products p where p.id = current_setting('t.molido')::uuid),
+    'shown again: the summary counts the published reviews';
+  -- A change to the listing summary (083600's refresh_product_summary, run on
+  -- every offer change) leaves the rating alone.
+  perform private.refresh_product_summary(current_setting('t.molido')::uuid);
+  assert (select (rating_count, rating_sum) = (current_setting('t.molido_count')::int, current_setting('t.molido_sum')::int)
+          from public.products where id = current_setting('t.molido')::uuid),
+    'shown again: refreshing the summary keeps the rating';
+end $$;
 select pg_temp.login('comprador@yuntera.example');
 do $$ begin
   assert exists (select 1 from jsonb_array_elements(public.my_order_reviews('YT-100004')) x
@@ -1162,6 +1296,51 @@ select pg_temp.login('central@yuntera.example', 'aal2');
 select pg_temp.refused(format('select public.ops_restore_product(%L, %L)', current_setting('t.hamaca'),
   'Vuelve con la tienda suspendida.'), 'listing_shop_not_active');
 reset role;
+
+-- A taken-down listing whose shop then closes passes to the shop with the
+-- oldest live offer, still taken down: staff can put it back as it was
+-- reviewed (before, it stayed with the closed shop, could never be put back,
+-- and the other shop's offer could never sell again). Anything the new shop
+-- changes first must go through review.
+insert into public.offers (sku_id, seller_id, price_minor, fulfillment, handling_days)
+select k.id, (select id from public.sellers where slug = 'ferreteria-el-higueron'), o.price_minor, 'seller', 1
+from public.offers o join public.skus k on k.id = o.sku_id join public.products p on p.id = k.product_id
+where p.slug = 'botella-termica-sendero-750ml' and o.seller_id = (select id from public.sellers where slug = 'tienda-sendero')
+  and not exists (select 1 from public.offers x where x.sku_id = k.id
+                  and x.seller_id = (select id from public.sellers where slug = 'ferreteria-el-higueron'));
+select pg_temp.remember('botella', (select id::text from public.products where slug = 'botella-termica-sendero-750ml'));
+select pg_temp.login('central@yuntera.example', 'aal2');
+select public.ops_take_down_product(current_setting('t.botella')::uuid, 'Las fotos muestran la botella de otra marca.');
+select public.ops_set_seller_status((select id from public.sellers where slug = 'tienda-sendero'), 'closed',
+                                    'Cierre pedido por la tienda.');
+reset role;
+do $$ begin
+  assert (select created_by_seller_id = (select id from public.sellers where slug = 'ferreteria-el-higueron')
+                 and status = 'rejected' and taken_down_at is not null
+                 and taken_down_fingerprint = private.listing_fingerprint(id)
+          from public.products where id = current_setting('t.botella')::uuid),
+    'closed: a taken-down listing passes on, still taken down and unchanged';
+end $$;
+savepoint heir_edits;
+-- The new shop changes it first: no restore, review decides.
+select pg_temp.login('vendedor@yuntera.example');
+select public.seller_update_listing(p.id, 'Botella térmica de 750 ml, otra foto', c.slug, p.description,
+                                    p.bullet_points, k.weight_grams, k.length_cm, k.width_cm, k.height_cm, null, false)
+from public.products p join public.categories c on c.id = p.category_id join public.skus k on k.product_id = p.id
+where p.id = current_setting('t.botella')::uuid;
+reset role;
+select pg_temp.login('central@yuntera.example', 'aal2');
+select pg_temp.refused(format('select public.ops_restore_product(%L, %L)', current_setting('t.botella'),
+  'La tienda nueva mandó fotos propias.'), 'listing_changed_since_take_down');
+reset role;
+rollback to savepoint heir_edits;
+select pg_temp.login('central@yuntera.example', 'aal2');
+select public.ops_restore_product(current_setting('t.botella')::uuid, 'La tienda nueva mandó fotos propias.');
+reset role;
+do $$ begin
+  assert (select status = 'active' and taken_down_at is null from public.products
+          where id = current_setting('t.botella')::uuid), 'closed: put back, with the new shop';
+end $$;
 
 select 'ok' as console_catalogue;
 rollback;

@@ -10,8 +10,15 @@
  * the change (refresh()), the form that held the message is replaced, and an
  * ordinary ActionForm's "done" was never seen. `CatalogueForm` behaves like
  * ActionForm and also hands its success message to the page's
- * `CatalogueOutcome`, which shows it at the top of the screen only while the
- * form that sent it is no longer there to show it itself.
+ * `CatalogueOutcome`, which shows it at the bottom of the screen only while
+ * the form that sent it is no longer there to show it itself.
+ *
+ * It works without JavaScript, as ActionForm does: until the page has loaded
+ * its scripts (or when it never does) the form's action is the server action
+ * itself through useActionState, which the browser posts as an ordinary form
+ * and whose result the redrawn page shows under the form. Once the scripts
+ * are running, the same action is called through a wrapper that also tells
+ * the page-level notice; that is the enhancement.
  */
 
 import { type ActionState, FormMessage, SubmitButton } from "@yuntera/next-kit/client";
@@ -27,6 +34,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 
 type FormAction = (previous: ActionState, formData: FormData) => Promise<ActionState>;
@@ -111,14 +119,20 @@ export function CatalogueForm({
   const id = useId();
   const outcomes = useContext(OutcomeContext);
   const send = useCallback(
-    async (previous: ActionState, formData: FormData) => {
-      const next = await action(previous, formData);
+    async (previous: ActionState | null, formData: FormData) => {
+      const next = await action(previous ?? {}, formData);
       if (next.ok) outcomes?.announce(id, next.ok);
       return next;
     },
     [action, outcomes, id],
   );
-  const [state, formAction] = useActionState(send, {});
+  // The server action as it is: the form posts to it without JavaScript, and
+  // the page drawn after the post carries its result here.
+  const [posted, postAction] = useActionState(action, {});
+  // The same action once the page runs scripts, also telling the page's notice.
+  const [sent, sendAction] = useActionState(send, null);
+  const scripted = useScripted();
+  const state = sent ?? posted;
   useEffect(() => outcomes?.mount(id), [outcomes, id]);
 
   // Browsers clear a form when its action finishes; put back what was typed
@@ -139,7 +153,7 @@ export function CatalogueForm({
   }, [state]);
 
   return (
-    <form ref={form} action={formAction} className={className}>
+    <form ref={form} action={scripted ? sendAction : postAction} className={className}>
       {children}
       <FormMessage state={state} />
       <div>
@@ -148,5 +162,20 @@ export function CatalogueForm({
         </SubmitButton>
       </div>
     </form>
+  );
+}
+
+const subscribeNever = () => () => {};
+
+/**
+ * False while the server draws the page and while the browser hydrates it,
+ * true from then on. The form keeps the server action as its action until
+ * then, so what the server sent and what hydration finds are the same.
+ */
+function useScripted(): boolean {
+  return useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
   );
 }

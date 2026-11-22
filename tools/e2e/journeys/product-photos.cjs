@@ -796,7 +796,7 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
 
   // 10. Staff take down a photo that is already in the shop
   await staff.goto(`${OPS}/catalogo`, { waitUntil: "networkidle" });
-  await staff.click('main a:has-text("Retirar una foto que ya está en la tienda")');
+  await staff.click('nav[aria-label="Catálogo"] a:has-text("Retirar fotos")');
   await staff.waitForURL((u) => new URL(u).pathname === "/catalogo/fotos");
   await staff.getByLabel("Dirección del producto en la tienda").fill(WEB + SLUG);
   await staff.click('main button:has-text("Buscar el producto")');

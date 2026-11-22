@@ -87,7 +87,9 @@ export async function createCategory(
         slug: slugTyped ? text(formData, "slug") : null,
         parentId,
       });
-      return `Categoría creada en /c/${created.slug}. Ya se ve en la tienda; el menú la muestra cuando tenga productos.`;
+      return created.visible
+        ? `Categoría creada en /c/${created.slug}. Ya se ve en la tienda; el menú la muestra cuando tenga productos.`
+        : `Categoría creada en /c/${created.slug}. No se ve en la tienda mientras la categoría de arriba esté oculta.`;
     },
     values,
     // With the address left empty it is made from the name: say so, or the

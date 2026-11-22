@@ -95,7 +95,12 @@ export const opsCategory = z.object({
 });
 export type OpsCategory = z.infer<typeof opsCategory>;
 
-export const createdCategory = z.object({ id, slug: z.string() });
+export const createdCategory = z.object({
+  id,
+  slug: z.string(),
+  /** False when it was created under a category that is hidden. */
+  visible: z.boolean(),
+});
 export const updatedCategory = z.object({
   id,
   slug: z.string(),
