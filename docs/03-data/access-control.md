@@ -666,6 +666,16 @@ account with a factor, they are refused like everything else
 functions (`withdraw_return_request`, `ops_fee_floor_breaches`) are for
 signed-in people and staff and stay behind the second step.
 
+Payments (083400) and invoicing (083500) add none to that short list either:
+the shopper's payment and documents and finance's screens wait for the second
+step like everything else, and the ten payments and invoicing worker functions
+are called with a server key, which carries no user id, so the check returns
+at once for them and the grants decide (`supabase/tests/150_payments_invoicing_guard.sql`).
+The fiscal documents have one read policy as a second lock (finance; the
+issuing or receiving shop's members; the shopper only for documents made out
+to them), and their signed files and the checkout factura requests live in
+`private`, reachable through functions only.
+
 Tested in `supabase/tests/130_web_followups.sql`, the contract tests in
 `packages/db/src/contract.web-followups.test.ts`, the unit tests in
 `packages/next-kit` and the `web-followups` journey.

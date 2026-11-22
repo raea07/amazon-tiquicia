@@ -34,12 +34,16 @@ flowchart LR
     auth["Auth<br/>sessions, MFA"] --> db
     storage["Storage<br/>product photos"] --> db
     cron[pg_cron] --> db
-    fn["Edge Functions<br/>notify-worker, bird-webhook,<br/>auth-email"] -- "secret key,<br/>worker_* only" --> api
+    fn["Edge Functions<br/>notify-worker, bird-webhook,<br/>auth-email"] -- "secret key,<br/>worker_notify_* only" --> api
+    payfn["Edge Functions<br/>payments-worker,<br/>payments-webhook"] -- "own secret key,<br/>worker_payments_* only" --> api
+    invfn["Edge Functions<br/>invoice-worker,<br/>hacienda-callback"] -- "own secret key,<br/>worker_invoice_* only" --> api
   end
 
   db -. outbox events .-> fn
+  db -. outbox events .-> invfn
   fn --> bird[["Bird (e-mail, WhatsApp, SMS)<br/>and Expo push:<br/>not connected yet"]]
-  db -. outbox events .-> later[["Not built yet:<br/>payment gateway,<br/>electronic invoices"]]
+  payfn --> onvo[["ONVO (cards, SINPE Móvil):<br/>not connected yet"]]
+  invfn --> hacienda[["Hacienda's reception API:<br/>not connected yet"]]
 ```
 
 | App                                            | Who uses it                                       | State                                                                              | Notes                                                                                                                                                        |
@@ -274,12 +278,23 @@ These are not built. They are listed here so that no reader assumes otherwise.
   completed only on its confirmation
   ([decision 37](decisions.md#37-payments-through-a-gateway-worker-confirmed-only-by-the-gateway),
   [payments](../06-operations/payments.md)). It has run only against a local
-  fake of ONVO; `payments_mode` is `sandbox` everywhere.
-- **One consumer for the outbox, and it sends nothing real yet.** The
-  notification worker (`packages/notifications`, run as Edge Functions under
-  `supabase/functions`) plans and sends messages, but no provider account is
-  connected: locally it talks to the fakes in `tools/dev-notify`. No
-  electronic invoice is issued.
+  fake of ONVO; `payments_mode` is `sandbox` everywhere. A refund is one
+  mechanism across the register, the gateway refund, the recorded
+  confirmation and the credit note
+  ([returns and refunds](../04-algorithms/returns-and-refunds.md#one-refund-four-pieces)).
+- **Electronic invoices are built but never sent to Hacienda.** The outbox
+  has a second consumer, `invoice`: `payment.captured` and
+  `fiscal.refund_booked` become the platform's own documents (a tiquete or
+  factura for the delivery fee, a fee factura to each seller, credit notes),
+  signed and sent by a server-side worker (`packages/invoicing`, Edge
+  Functions `invoice-worker` and `hacienda-callback`,
+  [invoicing](../06-operations/invoicing.md)). It has run only against a local
+  fake of Hacienda; the issuer is not set up (`invoicing_issuer.ready` is
+  false) and money that was never real is not documented.
+- **Nothing is sent for real.** The notification worker
+  (`packages/notifications`) plans and sends messages, but no provider account
+  is connected: locally it talks to the fakes in `tools/dev-notify`. None of
+  the three workers is deployed.
 - **Uploads are product photos only.** Proof-of-delivery photos and photos
   from the phone apps are not built, and nothing deletes unused photo files on
   a schedule.

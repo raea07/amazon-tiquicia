@@ -186,7 +186,8 @@ person is responsible; in the Pilot that is the founder.
 What the system does today (`public.delete_my_account`, in
 `supabase/migrations/20261121082500_account_security.sql`, extended by
 `20261121082600_notifications.sql` for what notifications hold and by
-`20261121082700_product_photos.sql` for a closed shop's photos; tested table by table
+`20261121082700_product_photos.sql` for a closed shop's photos, redefined last
+by `20261121083500_invoicing.sql` for what payments and invoicing hold; tested table by table
 in `supabase/tests/095_account_security.sql` and in the browser journey
 `tools/e2e/journeys/account-deletion.cjs`).
 
@@ -198,9 +199,11 @@ address both app stores require. Someone who cannot sign in writes to the
 privacy contact.
 
 **When it waits.** Deletion is refused, with the reason and what to do, while
-the account has an order in progress, an open return, a refund still owed for a
-paid order that was cancelled (the refund goes back through the gateway, to the
-card or phone that paid, so the details are still needed), an open complaint,
+the account has an order in progress, an open return, a refund whose money has
+not gone back yet (a cancelled paid order, a return, a parcel that came back,
+or a transfer finance still has to make: it goes back to the card or phone that
+paid, or by transfer, so the details are still needed), money the gateway took
+for one of their orders that finance has not settled, an open complaint,
 is the only person in charge of a shop that is open or awaiting approval
 (Yuntera closes the shop first), belongs to a shop with stock, undelivered
 orders or money pending in either direction, or holds a staff, driver or
@@ -226,11 +229,32 @@ factor can be deleted only from a session that has passed it.
 | Second factors, sessions, sign-in links | Deleted: every session ends, and every access token issued for them stops working at once                                                                                                                                                                                                                                                                                                                 |
 | Sign-in record (`auth.users`)           | E-mail replaced by `<id>@cuenta-eliminada.invalid`, password and metadata erased, sign-in banned for 100 years                                                                                                                                                                                                                                                                                            |
 | Auth's own sign-in log, where kept      | Entries for the account deleted                                                                                                                                                                                                                                                                                                                                                                           |
+| Payment attempts                        | The payer's identification and phone (SINPE Móvil) erased on every attempt of their orders. They are normally erased as soon as the gateway has them; this covers an attempt that ended before that                                                                                                                                                                                                       |
+| A factura requested at checkout         | What the person typed (name, identification, e-mail) for an order never placed or never paid is deleted                                                                                                                                                                                                                                                                                                   |
 
 **What is kept, and why.** Orders, their lines, payments, shipments,
 electronic invoices and ledger entries, for the legal retention period (five
-years for electronic-invoicing records): Yuntera and the sellers must be able
-to show every sale to Hacienda. They keep pointing at the account's id, which
+years for electronic-invoicing records; `invoicing_policy.retention_years` is
+10 until the accountant answers): Yuntera and the sellers must be able
+to show every sale to Hacienda.
+
+**The one exception to "nothing identifies them".** A factura (or its credit
+note) that Yuntera issued in the person's name, because they asked for one at
+checkout, holds the receiver as issued: name, identification number and
+e-mail, in `public.electronic_invoices.receiver` and in the signed XML in
+`private.electronic_invoice_files`. A legal document cannot be edited after it
+is issued (RCE art. 4.1.i, 22; CNPT art. 109), so it is kept, unchanged, for
+the retention period. Access is closed: the person's own access ended with the
+account (no sign-in, every session ended, the per-request check refuses old
+tokens), the sellers never see the shopper's documents, and only finance can
+read them, for tax purposes. The deletion test searches every row of every
+table for the person and accepts exactly this: those two places, for documents
+of their own orders, and nothing else. A tiquete (no receiver) holds nothing of
+the person. Deleting the documents after the retention period is not built.
+
+The payments tables hold no name or e-mail: attempts and events keep
+references, statuses and amounts, and the gateway's ids of the money; who
+acted is a bare id. They keep pointing at the account's id, which
 no longer leads to a name, e-mail, phone or address. A register
 (`private.account_deletions`) records that a deletion happened, on which day
 and how many orders were kept, with no id. The record of who did what at work

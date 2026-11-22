@@ -158,11 +158,85 @@ delivered plus shipping. The tests check that equality after each sequence.
 | `ledger_transactions` (unique indexes) | —                                                       | A second capture, or a second full reversal, of an order      |
 | `return_requests` triggers             | —                                                       | Steps outside the diagram; direct writes; units over the line |
 
-A payment's status follows: `partially_refunded` after a part, `refunded`
-once everything collected has gone back. Every refund emits a
-`refund.requested` event with its amount, for the integration that moves the
-money (gateway refund or transfer), except a refund settled at the door, which
-emits `refund.settled_at_door`.
+A payment's status follows the money, not the booking: `partially_refunded`
+once a part has gone back, `refunded` once everything collected has. Every
+refund emits `refund.requested` with its amount when it is booked, except a
+refund settled at the door (`refund.settled_at_door`) and a cancellation whose
+money was never real (sandbox).
+
+## One refund, four pieces
+
+Four pieces of work touch money going back. They are one mechanism: a refund
+is registered once, sent at most once, confirmed once, and each effect below
+happens once, in this order, whatever the mode or the payment method.
+
+| Step | Piece (migration)                                     | What happens, once                                                                                                                                                      |
+| ---- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | The register, `private.refunds` (082900)              | The refund is booked: ledger entries from the seller to `refunds_payable` (or to `driver_cash` at the door), `fiscal.refund_booked`, then `refund.requested`            |
+| 2    | The way back, `private.gateway_refunds` (083400)      | Opened by the register's trigger with a channel: `gateway`, `transfer` or `simulated`; a cancellation's reversal is moved to `refunds_payable` (`refund_pending`) first |
+| 3    | Settlement (083400)                                   | When the money has gone: `refund_paid` (`refunds_payable` to `gateway_clearing` or `bank_operating`), the gateway refund `succeeded`, the payment's and order's status  |
+| 4    | Confirmation, `private.refund_confirmations` (083200) | `private.confirm_refund` records it and announces `refund.completed`, the shopper's "refund completed" message                                                          |
+| —    | Credit note (083500)                                  | Planned by the invoice worker from `fiscal.refund_booked`, once per document it reverses, after that order's capture documents                                          |
+
+**The channel** is decided by the payment, never by the mode at the time of
+the refund alone:
+
+- **`gateway`**: a card or SINPE Móvil payment the gateway took, refunded
+  while the mode is that payment's environment (`test` or `live`). The worker
+  sends it once; a send whose answer was lost is never repeated by itself
+  (docs/06-operations/payments.md). It settles on the gateway's signed
+  confirmation (`refund.succeeded`, which may arrive twice: the second is a
+  duplicate) or on the worker's own question.
+- **`transfer`**: cash on delivery, a transfer confirmed by hand, real money
+  taken in live and refunded after the mode changed, or a gateway refund that
+  failed. Finance pays it by bank transfer and records the bank's reference
+  (`ops_record_refund_transfer`); that settles it.
+- **`simulated`**: money that was never real (taken in sandbox, or in the
+  gateway's test environment and refunded in another mode). It settles in the
+  same transaction as its booking; its confirmation waits for the commit, so
+  "refund completed" always follows "refund requested".
+- **At the door** (cash on delivery, a parcel back before the cash was
+  collected): the driver collects less. There is no way back to open; the
+  refund is confirmed silently at commit (`at_door`), with no "refund
+  completed" for money never paid.
+
+**Confirmation and settlement are one step.** `complete_gateway_refund`
+settles the money and then calls `private.confirm_refund`; calling
+`private.confirm_refund` directly (a server-side handler that learns the money
+went out) settles the open gateway refund first. Either way the ledger entry,
+the payment's status, the confirmation row and the message happen once: the
+second call finds the work done and answers false. Nothing else announces
+`refund.completed`: a payment turning `refunded` no longer does
+(`emit_logistics_events`, 083200).
+
+**The credit note** follows the booking, not the money: the ledger takes the
+commission back from revenue when the refund is booked, and the document says
+the same. A cancellation credits every document of the order in full (code
+01); a return or a parcel back credits each seller's commission on those units
+(code 06); the delivery fee's document stands. Each credit note has a unique
+key per refund and document, so planning again makes nothing new; a credit
+note waits while its order's capture documents are not all made. Money that
+was never real gets no documents on a real project
+(`invoicing_policy.simulated_payments` false), so its refunds have nothing to
+credit.
+
+| Kind                                  | Channel   | Confirmed when                  | "Refund completed" | Credit note           |
+| ------------------------------------- | --------- | ------------------------------- | ------------------ | --------------------- |
+| Card or SINPE Móvil, sandbox          | simulated | at commit (`sandbox`)           | yes                | if documented locally |
+| Card or SINPE Móvil, test or live     | gateway   | the gateway confirms            | yes                | yes                   |
+| Live money, refunded in another mode  | transfer  | finance records the transfer    | yes                | yes                   |
+| Cash on delivery, after it was paid   | transfer  | finance records the transfer    | yes                | yes                   |
+| Transfer confirmed by hand            | transfer  | finance records the transfer    | yes                | yes                   |
+| Cash on delivery, parcel back at door | none      | at commit (`at_door`), silently | no                 | commission, code 06   |
+| Full cancellation (any of the above)  | as above  | as above                        | yes                | every document, 01    |
+
+`supabase/tests/145_refunds_end_to_end.sql` walks one refund of each kind
+through the four pieces and checks each effect happened once, in order, with
+the ledger balanced after each.
+
+A refund booked before 083400 that was never confirmed (booked in test or
+live mode, waiting for a gateway that did not exist) gets its way back when
+083400 is applied, by the same rule.
 
 ## Two calls at once
 
@@ -181,12 +255,15 @@ payout is refused when refunds since it was scheduled leave less than it.
   once its last parcel ends (migration 083200, decision 32); the shopper can
   return the delivered units, and each seller's hold still starts when that
   seller's own parcels ended (`seller_order_settled_at`), so no payout changed.
-- Nothing moves the money itself: refunds are booked and announced. The
-  gateway integration that sends them is not built. "Refund completed" is
-  announced only on a recorded confirmation (`private.confirm_refund`; at
-  commit in sandbox mode), which the gateway work must call in live mode
-  (decision 34). The shopper is told when a return is approved (with how the
-  product is collected) and when its goods are back.
+- The gateway refunds (083400) run only against a local fake of the
+  gateway; nothing has refunded real money. "Refund completed" is announced
+  only on a recorded confirmation (decision 34), as above. The shopper is told
+  when a return is approved (with how the product is collected) and when its
+  goods are back.
+- Money the gateway took that matches no order (paid twice, late, unknown) is
+  refunded from finance's review list; those refunds are not in the register,
+  so they get no "refund completed" message and no credit note (no document
+  was made for that money).
 - Staff cannot cancel once a parcel is packed. Stopping such an order means
   letting the parcel come back through the check-in.
 - A cash order whose first delivered parcel collects the whole amount, and

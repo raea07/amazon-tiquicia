@@ -18,7 +18,7 @@ its own entry, not something that happens by drift.
 | 9   | [A double-entry ledger](#9-a-double-entry-ledger)                                                                                                   | Built                                    |
 | 10  | [An append-only stock ledger, with reservation when the order is placed](#10-an-append-only-stock-ledger-with-reservation-when-the-order-is-placed) | Built                                    |
 | 11  | [Idempotency keys on order placement](#11-idempotency-keys-on-order-placement)                                                                      | Built                                    |
-| 12  | [Outbox events for work outside the transaction](#12-outbox-events-for-work-outside-the-transaction)                                                | Writer built; no consumer                |
+| 12  | [Outbox events for work outside the transaction](#12-outbox-events-for-work-outside-the-transaction)                                                | Built; two consumers, nothing sent       |
 | 13  | [Own-fleet delivery with a PIN as proof](#13-own-fleet-delivery-with-a-pin-as-proof)                                                                | Built in software; operation not started |
 | 14  | [The name lives in one file](#14-the-name-lives-in-one-file)                                                                                        | Built                                    |
 | 15  | [Fees regrounded on published gateway costs](#15-fees-regrounded-on-published-gateway-costs)                                                        | Built; amounts are assumptions           |
@@ -40,10 +40,11 @@ its own entry, not something that happens by drift.
 | 31  | [Offline driver actions keep when they happened, within a day](#31-offline-driver-actions-keep-when-they-happened-within-a-day)                     | Built; not on the preview yet            |
 | 32  | [Delivered and returned parcels end an order as delivered](#32-delivered-and-returned-parcels-end-an-order-as-delivered)                            | Built; not on the preview yet            |
 | 33  | [A fee change pauses offers below the price floor](#33-a-fee-change-pauses-offers-below-the-price-floor)                                            | Built; not on the preview yet            |
-| 34  | ["Refund completed" waits for a recorded confirmation](#34-refund-completed-waits-for-a-recorded-confirmation)                                      | Built; gateway not built                 |
+| 34  | ["Refund completed" waits for a recorded confirmation](#34-refund-completed-waits-for-a-recorded-confirmation)                                      | Built; with the gateway against a fake   |
 | 35  | [The web apps' own sign-in limit, per visitor and per account](#35-the-web-apps-own-sign-in-limit-per-visitor-and-per-account)                      | Built; not on the preview yet            |
 | 36  | [Session lifetimes per app](#36-session-lifetimes-per-app)                                                                                          | Built; not on the preview yet            |
 | 37  | [Payments through a gateway worker, confirmed only by the gateway](#37-payments-through-a-gateway-worker-confirmed-only-by-the-gateway)             | Built against a local fake; not deployed |
+| 38  | [The platform issues its own fiscal documents from the outbox](#38-the-platform-issues-its-own-fiscal-documents-from-the-outbox)                    | Built against a local fake; not deployed |
 
 ---
 
@@ -413,9 +414,10 @@ and mark them processed, retrying on failure.
 
 - The writer side is built and tested. The first consumer is the
   notification worker (decision 22): each event gets one job per consumer
-  (`private.outbox_jobs`), so other consumers (invoices, a search indexer) can
-  attach without touching it. It sends nothing for real until the owner sets
-  up the messaging provider.
+  (`private.outbox_jobs`), so other consumers can attach without touching it.
+  The second is the invoice worker (decision 38), for `payment.captured` and
+  `fiscal.refund_booked`. Neither sends anything for real until the owner
+  sets up its provider.
 - Consumers must be idempotent: an event can be delivered more than once.
 - This is the seam where a queue or a search indexer attaches later without
   touching the business functions.
@@ -1020,8 +1022,14 @@ handler when the gateway or the bank says the money went out.
 **Consequences.**
 
 - Staff-approved return refunds now get a "refund completed" message too.
-- Until the gateway work exists, live-mode refunds are never announced as
-  completed.
+- Since the gateway (decision 37, migration 083400) the confirmation and the
+  money are one step: completing a gateway refund (the gateway's
+  confirmation, or finance recording a transfer) settles it and then calls
+  `private.confirm_refund`, and calling `private.confirm_refund` first
+  settles the open gateway refund. A refund whose money was never real is
+  confirmed at commit whatever the mode; real money taken in live is not,
+  even in sandbox mode. The four pieces are described in
+  [returns and refunds](../04-algorithms/returns-and-refunds.md#one-refund-four-pieces).
 
 ## 35. The web apps' own sign-in limit, per visitor and per account
 
@@ -1225,3 +1233,36 @@ itself ready for that environment.
   accepts, attaches, refunds or closes it.
 - The expected gateway fee is a setting, not a constant, because the central
   bank's card fee cap may not allow the published price.
+
+## 38. The platform issues its own fiscal documents from the outbox
+
+**Context.** Yuntera charges shoppers the delivery fee and charges sellers
+commission and fees, so it must issue its own electronic documents to
+Hacienda (version 4.4); the sellers invoice the goods themselves. Documents
+must be numbered with no gaps, never issued twice, never edited once issued,
+and kept for the retention period.
+
+**Decision.** A second consumer of the outbox, `invoice`, turns
+`payment.captured` into a tiquete or factura for the delivery fee and a fee
+factura per seller, and `fiscal.refund_booked` (a trigger on the refund
+register, so every refund path is covered) into credit notes. Each document
+has a unique key per thing it documents and takes its number from a locked
+counter in the same transaction. A server-side worker with its own key signs
+it once (XAdES-EPES with WebCrypto), sends it once, asks before sending again
+after a lost answer, and records Hacienda's answer; the signed XML and the
+answer are stored immutably in the database. A credit note follows the
+booking of the refund, as the ledger does, and waits for its order's capture
+documents. Money that was never real (sandbox mode, or the gateway's test
+environment) is documented only where `invoicing_policy.simulated_payments`
+says so: locally, never on a real project.
+
+**Consequences.**
+
+- Nothing is numbered until the owner enters the company's registration and
+  sets `invoicing_issuer.ready`; jobs wait in order until then.
+- A job never gives up: a shop's incomplete fiscal data holds back only that
+  shop's factura, and finance sees it.
+- Issued documents keep the receiver's name and identification after an
+  account is deleted, with access closed (privacy.md).
+- Only proven against a local fake of Hacienda; signature acceptance needs
+  the sandbox credentials.

@@ -33,6 +33,14 @@ packages/
   notifications/ The notification worker as web-standard TypeScript: templates for
               e-mail, WhatsApp, SMS and push (and the account e-mails' shared
               words), provider adapters, webhook checks, the worker loop.
+  payments/   The payments worker and webhook receiver: a provider-neutral
+              interface, the ONVO adapter, signature checks, the worker loop.
+              Server-side only; no app imports it.
+  invoicing/  Hacienda version 4.4 documents: XML, the clave, amounts, exclusive
+              canonicalisation and XAdES-EPES signing with WebCrypto, the
+              reception client and the worker loop. Server-side only; the
+              shared web code imports only its readable-document helpers, never
+              the signer, and no native app imports it.
   expo-kit/   What the native apps share: the app configuration with development,
               preview and store variants, the Supabase client with the session in
               the phone's secure store, sign-in with the second step, roles, the
@@ -49,16 +57,23 @@ supabase/
   scripts/    local-db.sh (build and test on plain PostgreSQL), local-shim.sql
               (what Supabase provides, for a plain PostgreSQL: roles, the Auth
               tables, a storage schema), gen-geo-migration.py, auth-config.sh
-              (sign-in settings and e-mail templates for a hosted project) and
-              deploy-notifications.sh (the Edge Functions); neither has been run.
-  functions/  Edge Function entry points (notify-worker, bird-webhook, auth-email),
-              thin Deno wrappers around packages/notifications.
+              (sign-in settings and e-mail templates for a hosted project),
+              deploy-notifications.sh, deploy-payments.sh and deploy-invoicing.sh
+              (the Edge Functions); none of the deploy scripts has been run.
+  functions/  Edge Function entry points (notify-worker, bird-webhook, auth-email;
+              payments-worker, payments-webhook; invoice-worker,
+              hacienda-callback), thin Deno wrappers around packages/notifications,
+              packages/payments and packages/invoicing.
   templates/  Auth's Spanish e-mail templates. auth/ holds the sign-in settings.
 tools/
   dev-api/    Local stand-in for the Supabase API: function calls, Auth with a local
               mailbox, storage. Loopback only. Never deployed.
-  dev-notify/ Fake e-mail, WhatsApp, SMS and push providers, and a host that runs
-              the notification functions against them. Local only.
+  dev-notify/ Fake e-mail, WhatsApp, SMS and push providers, a fake of the
+              payment gateway (ONVO), and a host that runs the notification and
+              payments functions against them. Local only.
+  dev-hacienda/ A fake of Hacienda's identity provider and reception API, and a
+              host that runs the invoice functions against it with a throwaway
+              signing key. Local only.
   e2e/        Browser journeys for the four web apps (Playwright).
   native-e2e/ Browser journeys through the web export of the native apps, and the
               small static server that serves those exports.
@@ -118,25 +133,26 @@ These rules are conventions today; no lint rule enforces import boundaries.
 
 Run from the repository root. Requires Node 22 or later and pnpm 10.
 
-| Command                                | What it does                                                                       |
-| -------------------------------------- | ---------------------------------------------------------------------------------- |
-| `pnpm install`                         | Install every workspace's dependencies                                             |
-| `pnpm lint`                            | Biome: lint and format check for the whole repository                              |
-| `pnpm format`                          | Biome: apply fixes                                                                 |
-| `pnpm typecheck`                       | TypeScript in every package and app                                                |
-| `pnpm test`                            | Unit tests in every package (Vitest). No database needed                           |
-| `pnpm build`                           | Build every app                                                                    |
-| `pnpm ci`                              | `lint`, `typecheck`, `test`, `build`, in that order                                |
-| `pnpm db:local:up`                     | Start the machine's PostgreSQL 16 if it is not running                             |
-| `pnpm db:local:reset`                  | Drop and recreate the local database; apply the shim, every migration and the seed |
-| `pnpm db:local:test`                   | Run every SQL test suite against the local database                                |
-| `pnpm --filter @yuntera/dev-api start` | Start the local API stand-in on `127.0.0.1:54321`                                  |
-| `pnpm --filter @yuntera/web dev`       | Start the storefront on `localhost:3000`                                           |
-| `pnpm --filter @yuntera/brand tokens`  | Regenerate `tokens.css` from `tokens.ts`                                           |
-| `tools/dev/stack.sh up [lane]`         | Database, API, every web app, the notification worker and the fake providers       |
-| `tools/dev/stack.sh notify [lane]`     | Restart only the notification worker and the fake providers                        |
-| `tools/dev/stack.sh native [lane]`     | Export the native apps for the web and serve them on the lane's app ports + 10–13  |
-| `tools/dev/stack.sh native-e2e [lane]` | Run the native journeys against those exports                                      |
+| Command                                | What it does                                                                                              |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `pnpm install`                         | Install every workspace's dependencies                                                                    |
+| `pnpm lint`                            | Biome: lint and format check for the whole repository                                                     |
+| `pnpm format`                          | Biome: apply fixes                                                                                        |
+| `pnpm typecheck`                       | TypeScript in every package and app                                                                       |
+| `pnpm test`                            | Unit tests in every package (Vitest). No database needed                                                  |
+| `pnpm build`                           | Build every app                                                                                           |
+| `pnpm ci`                              | `lint`, `typecheck`, `test`, `build`, in that order                                                       |
+| `pnpm db:local:up`                     | Start the machine's PostgreSQL 16 if it is not running                                                    |
+| `pnpm db:local:reset`                  | Drop and recreate the local database; apply the shim, every migration and the seed                        |
+| `pnpm db:local:test`                   | Run every SQL test suite against the local database                                                       |
+| `pnpm --filter @yuntera/dev-api start` | Start the local API stand-in on `127.0.0.1:54321`                                                         |
+| `pnpm --filter @yuntera/web dev`       | Start the storefront on `localhost:3000`                                                                  |
+| `pnpm --filter @yuntera/brand tokens`  | Regenerate `tokens.css` from `tokens.ts`                                                                  |
+| `tools/dev/stack.sh up [lane]`         | Database, API, every web app, the three workers (notifications, payments, invoices) and their three fakes |
+| `tools/dev/stack.sh notify [lane]`     | Restart only the notification and payments workers, the fake providers and the fake gateway               |
+| `tools/dev/stack.sh invoicing [lane]`  | Restart only the invoice worker and the fake of Hacienda                                                  |
+| `tools/dev/stack.sh native [lane]`     | Export the native apps for the web and serve them on the lane's app ports + 10–13                         |
+| `tools/dev/stack.sh native-e2e [lane]` | Run the native journeys against those exports                                                             |
 
 Loose end: the root script `db:types` points at
 `supabase/scripts/gen-types.sh`, which does not exist. The typed client in
@@ -231,7 +247,7 @@ production.
 | Parity tests     | `packages/core/src/cr/compliance.test.ts`, `packages/db/src/errors.test.ts`                                                                                                                                                      | `pnpm test`                                     | The constants and rules written in SQL are the same ones written in TypeScript; every error code has a message                                                                                                                                                                                                                                                                                                                                                                                                  | That the SQL arithmetic is right (the next layer does)                                                                                                |
 | SQL suites       | `supabase/tests/010`–`120`                                                                                                                                                                                                       | `pnpm db:local:test`                            | Run as real API roles with real claims: who can reach what (`020_access`), pricing, idempotency, reservation, cancellation and expiry (`030_checkout`), fees to the céntimo and a balanced ledger (`040_money`), pick, pack, route, PIN, cash and failures (`050_fulfillment`), accents, synonyms, typos and ranking (`060_search`), each screen function for the right and wrong caller (`070_api`)                                                                                                            | Behaviour on the real Supabase platform                                                                                                               |
 | Contract tests   | `packages/db/src/contract.test.ts`                                                                                                                                                                                               | `DATABASE_URL=… pnpm --filter @yuntera/db test` | Real function responses match the client's schemas, per role                                                                                                                                                                                                                                                                                                                                                                                                                                                    | UI behaviour                                                                                                                                          |
-| Browser journeys | `tools/e2e` (Playwright), 15 scripts, from shopper, seller, staff, driver and warehouse to limits                                                                                                                                | `pnpm e2e`                                      | The apps, the API and the database work together in a real browser, each from a freshly seeded database: purchase with SINPE Móvil and delivery code; seller registration, listing, stock and packing; payment confirmation, review, dispatch, refund; delivery with a wrong then right code, picking with a wrong then right scan                                                                                                                                                                              | Anything on a real Supabase project; real payments; real phones                                                                                       |
+| Browser journeys | `tools/e2e` (Playwright), 19 scripts, from shopper, seller, staff, driver and warehouse to limits, payments and invoicing                                                                                                        | `pnpm e2e`                                      | The apps, the API and the database work together in a real browser, each from a freshly seeded database: purchase with SINPE Móvil and delivery code; seller registration, listing, stock and packing; payment confirmation, review, dispatch, refund; delivery with a wrong then right code, picking with a wrong then right scan                                                                                                                                                                              | Anything on a real Supabase project; real payments; real phones                                                                                       |
 | Native journeys  | `tools/native-e2e` (Playwright), five scripts: `shop`, `seller`, `driver` and `warehouse` (each app's flows at phone size), and `staff` (the right and wrong kinds of account for the three staff apps, and signing out offline) | `tools/dev/stack.sh native-e2e [lane]`          | The native apps' screens, navigation, Spanish text, role gates and API calls work against the local API through their web export, including a full purchase and a return, a driver's day with a stretch without signal, a suspension that hands the route back and a delivery code locked and released, picking by scan, refused receipts and a returned parcel, a price below the fees and a seller's second step; `packages/expo-kit` unit tests also check each app's resolved iOS and Android configuration | That the binaries start, and anything that needs a phone: the secure store, embedded fonts, permissions, location in the background, camera, gestures |
 
 Each SQL suite runs inside a transaction that is rolled back, so the suites do

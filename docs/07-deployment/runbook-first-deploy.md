@@ -693,6 +693,128 @@ Do this in order.
 - Without point 4, visitors and signed-in users may still be able to use
   `net` (not reachable through the Data API, which does not expose it).
 
+### Migrations 083400 and 083500
+
+Payments through a gateway (`083400`: attempts at ONVO, its signed
+notifications, money kept for finance, gateway refunds completed only on the
+gateway's confirmation, fees, the modes `sandbox`, `test` and `live`) and
+electronic invoices (`083500`: the platform's own documents for Hacienda,
+numbered without gaps, signed and sent by a worker). **Not applied to the
+hosted preview yet.** They go on top of `083200` and `083300`, never before:
+`083400` builds on the refund confirmations of `083200`, and `083500` on both.
+Applying them does not connect anything: the preview stays in `sandbox`, the
+two workers are not deployed, and nothing reaches ONVO or Hacienda until the
+owner has the provider's keys and the tax registration with its credentials
+(`docs/06-operations/payments.md` and `invoicing.md`, "set-up").
+
+What they change in a database that already has data, once:
+
+- `083400`: `payments` gains `environment` and `gateway_reference` (empty for
+  every existing payment); `ledger_transactions` accepts three new kinds; the
+  register's refunds get their way back from now on. A refund booked before
+  and never confirmed (booked in `test` or `live` mode after `083200`) gets
+  one now, by transfer for real money; in a project that stayed in `sandbox`,
+  every refund is already confirmed and nothing changes. Redefined:
+  `refund_units` (the payment's status now follows the money, not the
+  booking), `cancel_order_internal`, `confirm_refund`,
+  `refund_confirm_when_nothing_moves`, `ops_confirm_payment` (refuses a
+  gateway payment outside sandbox) and `account_deletion_blockers` (waits for
+  money still owed). Adds the `pg_cron` job `payments-sweep` (every minute),
+  which does nothing until the worker's Vault secret exists.
+- `083500`: `electronic_invoices` gains the columns of a real document; the
+  outbox gets a second consumer, `invoice`, for `payment.captured` and
+  `fiscal.refund_booked` from now on (orders paid before have no job and get
+  no document); `invoicing_issuer` starts with Hacienda's fictitious example
+  and `ready: false`, so nothing is numbered and the jobs wait in order;
+  `invoicing_policy.simulated_payments` is false, so the preview's simulated
+  orders never become documents even once the issuer is set up. Redefines
+  `delete_my_account` (erases payer details and unused factura requests; keeps
+  issued documents) and adds a trigger on `auth.users`
+  (`invoice_forget_receiver`). Adds the `pg_cron` job `invoice-sweep`
+  (every 30 seconds).
+
+Do this in order.
+
+1. **Check that `083200` and `083300` are applied** (`remote-db.sh status`
+   lists 31 files) and that `payments_mode` is `sandbox`:
+
+   ```sql
+   select value from public.app_settings where key = 'payments_mode';   -- "sandbox"
+   -- refunds that 083400 will give a way back (expected 0 on the preview)
+   select count(*) from private.refunds r
+   where not exists (select 1 from private.refund_confirmations c where c.refund_id = r.id);
+   ```
+
+   If the count is not 0, stop and look at those refunds first: each will
+   become a transfer for finance to make and record.
+2. **Check that the platform lets the migration owner create a trigger on
+   `auth.users`** (the existing `on_auth_user_created` says it does):
+
+   ```sql
+   select has_table_privilege(current_user, 'auth.users', 'TRIGGER');   -- true
+   ```
+
+3. **Apply both migrations** with `remote-db.sh push`; `remote-db.sh status`
+   must then list 33 files. The demo seed (`remote-db.sh seed`, preview
+   only) sets `invoicing_issuer.ready` and `invoicing_policy.simulated_payments`
+   to true for Hacienda's fictitious demo issuer: if the preview is seeded
+   again after this, set both back to false before any invoice worker is
+   deployed there.
+4. **Check what they left**:
+
+   ```sql
+   select value from public.app_settings where key = 'payments_mode';             -- still "sandbox"
+   select value ->> 'ready' from public.app_settings where key = 'invoicing_issuer';             -- false
+   select value ->> 'simulated_payments' from public.app_settings where key = 'invoicing_policy'; -- false
+   select jobname, schedule from cron.job where jobname in ('payments-sweep', 'invoice-sweep');
+   -- every refund has a confirmation or a way back
+   select count(*) from private.refunds r
+   where not exists (select 1 from private.refund_confirmations c where c.refund_id = r.id)
+     and not exists (select 1 from private.gateway_refunds g where g.refund_id = r.id);           -- 0
+   -- no API role can reach the new tables or the workers' functions
+   select has_function_privilege('authenticated', 'public.worker_payments_event(jsonb)', 'execute'),
+          has_function_privilege('authenticated', 'public.worker_invoice_plan(integer)', 'execute');  -- false, false
+   ```
+
+   Then watch `cron.job_run_details` for a few minutes: both sweeps must
+   succeed (without the Vault secrets `payments_worker_token` and
+   `invoice_worker_token` they wake nobody; that is expected).
+5. **Run the suites** with `remote-db.sh test`: all 25 files, including
+   `135_payments.sql`, `140_invoicing.sql`, `145_refunds_end_to_end.sql` and
+   `150_payments_invoicing_guard.sql`. The invoicing suite's concurrency test
+   (`packages/db/src/contract.invoicing.test.ts`) makes its own copy of the
+   database and is for the local stack only.
+6. **Redeploy the four web apps** (step 7), one at a time. The shop then shows
+   the payment step and the order's documents; in `sandbox` nothing changes
+   for a shopper (the simulation stays), and no document appears.
+7. **A smoke test in sandbox**: a purchase with the simulation, then its
+   cancellation. The order page shows the refund as completed, the shopper's
+   messages hold one "refund requested" (none for a sandbox cancellation)
+   and one "refund completed", and:
+
+   ```sql
+   select g.channel, g.status, c.reference from private.gateway_refunds g
+   join private.refund_confirmations c on c.refund_id = g.refund_id
+   order by g.requested_at desc limit 1;   -- simulated, succeeded, sandbox
+   ```
+
+**Not before the owner's set-up.** Do not deploy `payments-worker`,
+`payments-webhook`, `invoice-worker` or `hacienda-callback`, do not run
+`deploy-payments.sh` or `deploy-invoicing.sh`, do not set
+`invoicing_issuer.ready`, and do not change `payments_mode`, until ONVO's
+contract and keys (with a webhook secret per environment) and Hacienda's
+registration, sandbox credentials and signing key exist. Then follow the
+set-up and rehearsal in [payments](../06-operations/payments.md) and
+[invoicing](../06-operations/invoicing.md): the `test` mode and Hacienda's
+sandbox first, never live before the lawyer's and the accountant's answers.
+
+**What to check on the hosted project that the local runs could not.** That
+`pg_cron` runs both sweeps and `pg_net` is still closed to the API roles after
+the migrations (step 4 of the section above); that the trigger on
+`auth.users` exists and an account deletion through the apps still succeeds
+there; that the suites pass on the platform; and the duration of each
+migration (both took under a second locally on the demo data).
+
 ## 4. Confirm the database is what the migrations say
 
 Write these to a file and run it with `remote-db.sh sql <project-reference>

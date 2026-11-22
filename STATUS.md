@@ -1,17 +1,19 @@
 # Status
 
-Updated 22 November 2026, after two follow-up workstreams were merged: the
-database follow-ups (the scan check at picking, checked driver positions and
-action times, the district of each stop, withdrawing a return, the fee-floor
-re-check, new messages, the network extension's revoke; migration `083200`)
-and the web follow-ups (the apps' own sign-in limit, session lifetimes per
-app, narrower cache refreshes, the console's order search by POST, guards in
-the scripts, pinned CI actions and a tighter content-security policy;
-migration `083300`). **Migrations `083200` and `083300` are NOT on the hosted
-preview yet, and the web apps there are NOT redeployed with these changes**:
-the preview still runs the 29 migrations and the apps of the earlier round
-(the steps are in the
-[runbook](docs/07-deployment/runbook-first-deploy.md#migrations-083200-and-083300)).
+Updated 22 November 2026, after the payment gateway and electronic invoicing
+were merged on top of both follow-ups: payments through ONVO in two new modes
+(`test`, `live`) with cards on its hosted page, SINPE Móvil matched by the
+payer, refunds sent through it and completed only on its confirmation, and a
+finance section in the console (migration `083400`); and the platform's own
+electronic documents for Hacienda, signed and sent by a worker, shown on the
+shopper's order and in the seller's statements (migration `083500`). Both
+work only against local fakes. **Migrations `083200`, `083300`, `083400` and
+`083500` are NOT on the hosted preview yet, and the web apps there are NOT
+redeployed with these changes**: the preview still runs the 29 migrations and
+the apps of the earlier round, and **it still simulates payments** (the steps
+are in the runbook, sections
+[083200 and 083300](docs/07-deployment/runbook-first-deploy.md#migrations-083200-and-083300)
+and [083400 and 083500](docs/07-deployment/runbook-first-deploy.md#migrations-083400-and-083500)).
 This is the honest state of the project: what exists, how far it was checked,
 and what only the owner can do.
 
@@ -43,8 +45,10 @@ lacks the shop's team and the reviewed changes to its details, see "Not
 built"); none of those three has been built for a phone yet. The shopper
 app's first store build for Android exists and waits for your Google key to
 go to Play's internal testing; no build has run on a phone or simulator yet.
-Payments and invoices are still simulated or missing, and no message is sent
-for real (see "Not built").
+Payments and electronic invoices now exist as code, run against local fakes
+of the gateway and of Hacienda: nothing has charged a card, refunded money or
+sent a document to Hacienda, and no message is sent for real (see "Not
+built").
 
 ## What needs you
 
@@ -111,10 +115,32 @@ In the order that unblocks the most.
    when you want it on `main`. I did not open one because you had not asked.
    The CI workflow will run for the first time then; its steps were run by hand
    here but it has never run on GitHub.
-6. **Business set-up that only you can do:** the legal entity and its
-   registration with Hacienda, a payment gateway contract (cards and SINPE
-   Móvil), the electronic-invoicing provider, a bank account, and the support
-   mailboxes the screens mention (`ayuda@yuntera.cr` does not exist yet).
+6. **Business set-up that only you can do:** the legal entity, a bank
+   account, and the support mailboxes the screens mention (`ayuda@yuntera.cr`
+   does not exist yet).
+   1. **Payments:** a contract with ONVO, its onboarding and payout account,
+      the written questions to ONVO, a webhook endpoint and secret per
+      environment, the Supabase and Vault secrets, then
+      `supabase/scripts/deploy-payments.sh` (never run) and a rehearsal in
+      `test` mode before `live`. Every step:
+      [`docs/06-operations/payments.md`](docs/06-operations/payments.md).
+   2. **Electronic invoices:** registration with Hacienda as an electronic
+      issuer (TRIBU-CR) with the activity codes, the company's real data in
+      `invoicing_issuer`, the sandbox user and password, a signing key and its
+      PIN, the secrets, `supabase/scripts/deploy-invoicing.sh` (never run) and
+      certification in Hacienda's sandbox before production. Every step:
+      [`docs/06-operations/invoicing.md`](docs/06-operations/invoicing.md).
+   3. **For the lawyer:** whether the central bank's 1.95% cap on card
+      acquiring allows the gateway's published card price; whether collecting
+      shoppers' money and paying sellers needs SUGEF registration; how long
+      fiscal documents naming a deleted shopper must be kept.
+   4. **For the accountant** (the full list of 14 is in invoicing.md): who
+      issues the delivery fee's document; fee facturas per order or per
+      settlement; the CABYS codes and how fees netted from a payout are coded;
+      the credit-note codes; the platform report to Hacienda; ONVO's IVA
+      withholding and the IVA on its fee; whose SINPE Móvil number is
+      registered; what to do with a number left unused by a replaced document;
+      the retention period (10 years set until answered).
 7. **Set up messaging before any message can be sent.** Nothing reaches a
    real person until you do; every step is in
    [`docs/06-operations/notifications.md`](docs/06-operations/notifications.md),
@@ -447,11 +473,21 @@ These are missing, not hidden. The first group blocks a public launch.
 
 **Before launch**
 
-- Payment gateway integration (cards, SINPE Móvil confirmation by webhook).
-  Today finance confirms transfers by hand in the console and cards cannot be
-  charged.
-- Electronic invoices to Hacienda. The data model and the events exist; nothing
-  sends them.
+- **Payments and invoices exist as code against fakes, not for real use.**
+  The gateway integration (cards on ONVO's page, SINPE Móvil matched by the
+  payer, refunds through it) and the electronic documents (tiquete or factura
+  for the delivery fee, fee facturas to sellers, credit notes) run only
+  against `tools/dev-notify`'s fake ONVO and `tools/dev-hacienda`. Missing for
+  real use: the contract and keys with ONVO, the tax registration with its
+  signing key and sandbox credentials, the four Edge Functions deployed
+  (`payments-worker`, `payments-webhook`, `invoice-worker`,
+  `hacienda-callback`), and the lawyer's and accountant's answers ("What
+  needs you", item 6). Not proven without them: that ONVO's real API and
+  webhooks match the research note, that Hacienda accepts the signature, and
+  the native app's return from the gateway's page on a phone. Not built:
+  disputes beyond a review item, ONVO payouts matched to the bank, sellers'
+  own documents for the goods, fee facturas per settlement period, e-mailing
+  documents, a PDF, deleting documents after the retention period.
 - Sending messages for real. The pipeline, the worker, the templates and the
   screens are built, but nothing is sent until you set up the messaging
   provider ("What needs you"). The four WhatsApp templates are written and not
@@ -573,10 +609,26 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   stuck before the review (new ones cannot get stuck: cancelling after packing
   is refused).
 - No message is sent when a returned parcel is settled at the door (that
-  event has no consumer yet). In live payments mode "refund completed" waits
-  for `private.confirm_refund`, which the gateway work must call through a
-  server-side-only function; until that exists, live refunds are never
-  announced as completed.
+  event has no consumer yet).
+- **A refund is one mechanism**: booked once in the register, sent at most
+  once, settled once (ledger, the payment's status), confirmed and announced
+  once, credited once on the fiscal documents
+  ([returns and refunds](docs/04-algorithms/returns-and-refunds.md#one-refund-four-pieces)).
+  The payment shows "refunded" when the money has gone back, no longer when
+  the refund is booked. Cash on delivery, transfers confirmed by hand and
+  real money refunded after the mode changed are paid back by finance by
+  transfer and recorded with the bank's reference. A refund whose send got no
+  answer is never sent again by itself: after an hour it goes to finance.
+- Money taken in sandbox or in the gateway's test environment is never
+  documented on a real project (`invoicing_policy.simulated_payments` is
+  false; the local seed sets it true for the demo). Orders paid before
+  `083500` is applied get no documents.
+- A factura is offered at checkout only when the order has a delivery fee.
+  An account deletion keeps the documents issued in the person's name (the
+  law requires it); only finance can read them afterwards.
+- Money the gateway takes after an order was cancelled, paid twice or in an
+  environment the mode has left is kept for finance's review, never applied
+  or dropped by itself.
 - A shopper's stale tab that cancels an already-cancelled order gets the
   generic "too late to cancel" text; only the console has its own wording.
 - The limits stop one account, not one person with many free accounts, and
