@@ -37,6 +37,18 @@ pool.on("error", (error) => {
   console.warn(`database connection dropped (${error.message}); it will be reopened on demand`);
 });
 
+// The pool listens only to idle connections. One that is checked out (a
+// request in flight, such as the notification worker's polling) and closed by
+// the database between two queries emits its error on the connection itself,
+// and with no listener there the process exits. That query fails and the
+// request answers with an error; the pool drops the dead connection when it
+// is released.
+pool.on("connect", (client) => {
+  client.on("error", (error) => {
+    console.warn(`database connection dropped during a request (${error.message})`);
+  });
+});
+
 // ── Signing key ─────────────────────────────────────────────────────────────
 // Asymmetric (ES256) with a published JWKS, like Supabase's current signing
 // keys, so server-side token verification in the apps follows the same path it
@@ -78,6 +90,11 @@ const CORS = {
   "access-control-allow-headers":
     "authorization, apikey, content-type, x-client-info, prefer, x-supabase-api-version, content-profile, accept-profile, x-upsert, cache-control",
   "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  // Auth exposes its API version header to browsers (supabase/auth,
+  // internal/api/api.go: ExposedHeaders). Without it auth-js in a browser
+  // cannot read an error's code: in the native apps' web export a wrong
+  // second-step code read as an unknown failure.
+  "access-control-expose-headers": "x-supabase-api-version",
   "access-control-max-age": "600",
 };
 

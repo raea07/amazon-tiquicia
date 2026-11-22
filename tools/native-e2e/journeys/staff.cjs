@@ -1,11 +1,14 @@
-// Seller, driver and warehouse apps (skeletons), web export, at phone size.
+// Who may use the seller, driver and warehouse apps: web export, at phone size.
 //
-// For each app: a visitor sees the sign-in screen; an account without the
-// app's role (the demo shopper) is told plainly it has no access and can sign
-// out; an account with the role reaches the home screen, which reads its data
-// from the API, and signs out with no connection: the phone must still end up
-// signed out. Fails on any console error, uncaught exception or 5xx; the one
-// exception is the browser's "no connection" error while it is offline.
+// The full journeys (seller.cjs, driver.cjs, warehouse.cjs) take the right
+// account through each app. This one keeps what they do not: for each app, a
+// visitor sees the sign-in screen; the wrong kinds of account (the demo
+// shopper, and the staff account of another of these apps) are told plainly
+// that this app is not for them, with what to do, and can sign out; the right
+// kind reaches the home screen and signs out with no connection, and the
+// phone must still end up signed out. Fails on any console error, uncaught
+// exception or 5xx; the one exception is the browser's "no connection" error
+// while it is offline.
 
 const { chromium } = require("playwright");
 
@@ -13,23 +16,31 @@ const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const log = (...args) => console.log(...args);
 
+const SHOPPER = "comprador@yuntera.example";
+const SELLER = "vendedor@yuntera.example";
+const DRIVER = "repartidor@yuntera.example";
+const WAREHOUSE = "bodega@yuntera.example";
+
 const APPS = [
   {
     name: "seller",
     url: process.env.NATIVE_SELLER_URL || "http://127.0.0.1:3011",
-    member: "vendedor@yuntera.example",
+    member: SELLER,
+    others: [SHOPPER, DRIVER],
     home: "seller-overview",
   },
   {
     name: "driver",
     url: process.env.NATIVE_DRIVER_URL || "http://127.0.0.1:3012",
-    member: "repartidor@yuntera.example",
+    member: DRIVER,
+    others: [SHOPPER, WAREHOUSE],
     home: "driver-route",
   },
   {
     name: "warehouse",
     url: process.env.NATIVE_WAREHOUSE_URL || "http://127.0.0.1:3013",
-    member: "bodega@yuntera.example",
+    member: WAREHOUSE,
+    others: [SHOPPER, SELLER],
     home: "warehouse-board",
   },
 ];
@@ -62,7 +73,7 @@ function check(condition, message) {
     page.on("response", (r) => {
       if (r.status() >= 500) errors.push(`${app.name} HTTP ${r.status()} ${r.url()}`);
     });
-    const byId = (id) => page.getByTestId(id).first();
+    const byId = (id) => page.getByTestId(id).filter({ visible: true }).first();
     const signIn = async (email) => {
       await byId("sign-in-email").fill(email);
       await byId("sign-in-password").fill(PASSWORD);
@@ -74,19 +85,25 @@ function check(condition, message) {
     check(true, "a visitor sees the sign-in screen");
     await page.screenshot({ path: `${SHOTS}/native-${app.name}-01-sign-in.png` });
 
-    await signIn("comprador@yuntera.example");
-    await byId("no-access").waitFor();
-    const text = (await byId("no-access").innerText()).replace(/\s+/g, " ");
-    check(/no (tiene acceso|administra)/.test(text), "an account without the role is told so");
-    check(/pídale|registre/i.test(text), "and what to do next");
-    await page.screenshot({ path: `${SHOTS}/native-${app.name}-02-no-access.png` });
-    await page.getByText("Salir e ingresar con otra cuenta").first().click();
-    await byId("sign-in-email").waitFor();
+    for (const [index, other] of app.others.entries()) {
+      await signIn(other);
+      await byId("no-access").waitFor();
+      const text = (await byId("no-access").innerText()).replace(/\s+/g, " ");
+      check(
+        /no (tiene acceso|administra)/.test(text),
+        `${other.split("@")[0]}, the wrong kind of account, is told so`,
+      );
+      check(/pídale|registre/i.test(text), "and what to do next");
+      check(text.includes(other), "and which account it signed in with");
+      await page.screenshot({ path: `${SHOTS}/native-${app.name}-02-no-access-${index + 1}.png` });
+      await byId("no-access-sign-out").click();
+      await byId("sign-in-email").waitFor();
+    }
 
     await signIn(app.member);
     await byId(app.home).waitFor();
     log("   ", (await byId(app.home).innerText()).replace(/\s+/g, " ").slice(0, 140));
-    check(true, "an account with the role reaches the home screen and its data");
+    check(true, "the right kind of account reaches the home screen and its data");
     check(
       (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
       "no sideways scrolling at 390 px",
@@ -101,6 +118,7 @@ function check(condition, message) {
       Object.keys(localStorage).filter((key) => key.startsWith("sb-")),
     );
     check(stored.length === 0, "signed out with no connection: no session is left stored");
+    check(!(await page.getByTestId("sign-out-message").count()), "and no failure is reported");
     await context.setOffline(false);
     offline = false;
     await page.reload({ waitUntil: "networkidle" });

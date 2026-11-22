@@ -1,6 +1,6 @@
 import { apps } from "@yuntera/brand";
 import { afterEach, describe, expect, it } from "vitest";
-import { defineAppConfig, fontsPlugin, variantOf } from "./config";
+import { blockedFor, defineAppConfig, fontsPlugin, variantOf } from "./config";
 
 const original = process.env.APP_VARIANT;
 afterEach(() => {
@@ -97,6 +97,25 @@ describe("defineAppConfig", () => {
         );
       }
     }
+  });
+
+  it("lets an app declare POST_NOTIFICATIONS, and nothing else that is always blocked", () => {
+    const declared = blockedFor({ androidPermissions: ["android.permission.POST_NOTIFICATIONS"] });
+    expect(declared).not.toContain("android.permission.POST_NOTIFICATIONS");
+    expect(declared).toContain("android.permission.USE_BIOMETRIC");
+    expect(blockedFor({})).toContain("android.permission.POST_NOTIFICATIONS");
+    expect(() => blockedFor({ androidPermissions: ["android.permission.RECORD_AUDIO"] })).toThrow();
+    delete process.env.APP_VARIANT;
+    const driver = defineAppConfig("driver", {
+      slug: "yuntera-ruta",
+      androidPermissions: ["android.permission.POST_NOTIFICATIONS"],
+      androidBackup: false,
+    });
+    expect(driver.android?.permissions).toEqual(["android.permission.POST_NOTIFICATIONS"]);
+    expect(driver.android?.allowBackup).toBe(false);
+    const shop = defineAppConfig("shop", { slug: "yuntera" });
+    expect(shop.android?.permissions).toBeUndefined();
+    expect(shop.android?.allowBackup).toBeUndefined();
   });
 
   it("declares in every app and variant that it uses no non-exempt encryption", () => {

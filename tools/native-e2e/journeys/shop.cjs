@@ -3,8 +3,10 @@
 // A signed-out visitor browses and searches (with a typo), opens a product,
 // adds it to the cart, is sent to sign in at checkout, gets one clear message
 // for a wrong password, signs in as the demo shopper, pays by SINPE Móvil,
-// simulates the payment, sees the delivery code, finds the order in the list
-// and signs out. It starts with a product opened by link, which must have a
+// simulates the payment, sees the delivery code, finds the order in the list,
+// returns a product of an order already delivered (told that it is collected
+// first and refunded once it is back at the warehouse, and shown where the
+// return stands) and signs out. It starts with a product opened by link, which must have a
 // way back to the shop.
 //
 // Fails on any browser console error, uncaught exception or 5xx response. The
@@ -12,9 +14,11 @@
 // browser logs every refused request to the console, so that single request
 // is allowed by URL and status, at that step only.
 
-const { chromium } = require("playwright");
+const { chromium, request } = require("playwright");
 
 const BASE = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
+const API = process.env.API_URL || "http://127.0.0.1:54321";
+const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const SHOPPER = "comprador@yuntera.example";
@@ -23,6 +27,29 @@ const log = (...args) => console.log(...args);
 function check(condition, message) {
   if (!condition) throw new Error(message);
   log("  ok:", message);
+}
+
+/** The demo shopper's delivered order, read through the API as the app reads it. */
+async function deliveredOrder() {
+  const ctx = await request.newContext();
+  try {
+    const token = await ctx.post(`${API}/auth/v1/token?grant_type=password`, {
+      headers: { apikey: KEY },
+      data: { email: SHOPPER, password: PASSWORD },
+    });
+    const { access_token } = await token.json();
+    const rpc = async (fn, args = {}) =>
+      (
+        await ctx.post(`${API}/rest/v1/rpc/${fn}`, {
+          headers: { apikey: KEY, authorization: `Bearer ${access_token}` },
+          data: args,
+        })
+      ).json();
+    const order = (await rpc("my_orders")).find((o) => o.status === "delivered");
+    return order ? await rpc("get_order", { p_order_number: order.order_number }) : null;
+  } finally {
+    await ctx.dispose();
+  }
 }
 
 (async () => {
@@ -239,6 +266,37 @@ function check(condition, message) {
   await page.goBack();
   await page.waitForURL(/\/cuenta/);
   check(!(await tab("Carrito").innerText()).match(/\d/), "the cart badge is gone after ordering");
+
+  // 10b. A return on an order already delivered: approved at once, refunded
+  // only once the product is back at the warehouse.
+  const delivered = await deliveredOrder();
+  check(
+    Boolean(delivered?.items?.length),
+    `a delivered order to return from (${delivered?.order_number})`,
+  );
+  await page.goto(`${BASE}/pedidos/${delivered.order_number}`, { waitUntil: "networkidle" });
+  await page.getByText("Devolver o reclamar garantía").filter({ visible: true }).first().click();
+  await page.getByText("Solicitar devolución").filter({ visible: true }).first().click();
+  // The line is fully returned, so its form gives way to where the return
+  // stands, which says what happens next.
+  await visible("return-status").waitFor({ timeout: 15_000 });
+  const standing = (await visible("return-status").innerText()).replace(/\s+/g, " ");
+  log("   ", standing);
+  check(
+    /Devolución de 1 unidad/.test(standing) &&
+      /Aprobada\. Le contactaremos para recoger el producto/.test(standing) &&
+      /cuando llegue a nuestra bodega le reembolsamos/.test(standing),
+    "the withdrawal is approved, to be collected first and refunded once it is back",
+  );
+  check(
+    !/reembolsamos en un máximo de 8 días|Devolución en trámite/.test(
+      await page.locator("body").innerText(),
+    ),
+    "nothing promises a refund within 8 days any more",
+  );
+  check((await overflow()) <= 0, "the order with a return has no sideways scrolling");
+  await shot("10b-return");
+  await page.goto(`${BASE}/cuenta`, { waitUntil: "networkidle" });
 
   // 11. Sign out
   await visible("sign-out").click();

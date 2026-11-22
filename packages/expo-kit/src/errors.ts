@@ -11,6 +11,9 @@ import { ApiError, authErrorMessage, messageFor } from "@yuntera/db";
 
 export const GENERIC_ERROR = "Algo salió mal de nuestro lado. Inténtelo de nuevo en un momento.";
 export const SIGN_IN_FAILED = "El correo o la contraseña no coinciden.";
+/** signOut() resolved to false: the phone still holds the session (see auth/sign-out.ts). */
+export const SIGN_OUT_FAILED =
+  "No pudimos cerrar la sesión en este teléfono: sigue abierta. Inténtelo de nuevo; si vuelve a pasar, reinicie el teléfono e inténtelo otra vez.";
 export const SECOND_FACTOR_NOT_IN_APP =
   "Su cuenta tiene la verificación en dos pasos activada, y esta aplicación todavía no la pide. Ingrese desde el sitio web.";
 

@@ -20,9 +20,9 @@ apps/
   field/       Yuntera Ruta      drivers' routes and deliveries   (/ruta)
                Yuntera Bodega    warehouse picking and receiving  (/bodega)
   shop-native/       Yuntera         shopper app for iOS and Android (Expo)
-  seller-native/     Yuntera Vende   seller app (skeleton: sign-in and role-gated home)
-  driver-native/     Yuntera Ruta    drivers' app (skeleton)
-  warehouse-native/  Yuntera Bodega  warehouse app (skeleton)
+  seller-native/     Yuntera Vende   seller app: orders, listings, stock, payouts, shop registration
+  driver-native/     Yuntera Ruta    drivers' app: routes, deliveries, position sharing, work without signal
+  warehouse-native/  Yuntera Bodega  warehouse app: picking by scan, packing, receiving, stock lookup
 packages/
   brand/       name, app family, design tokens, logo — the only place the brand is defined
   core/        domain logic: money and IVA, fees, offer selection, search ranking,
@@ -30,11 +30,12 @@ packages/
   db/          typed client for the database's API, payload schemas, error messages
   ui/          shared React components
   next-kit/    what every web app shares: session, security headers, forms, shell
-  expo-kit/    what every native app shares: config, session in the phone's secure store, API, theme, components
+  expo-kit/    what every native app shares: config, session in the phone's secure store, sign-in
+               with the second step, API, theme, components, offline queue, barcode scanner
 supabase/      migrations, row-level security, seed data, database tests
 tools/
   dev-api/     local stand-in for the Supabase API, for development and tests
-  e2e/         browser journeys for the four apps
+  e2e/         browser journeys for the four web apps
   native-e2e/  browser journeys through the web export of the native apps
 docs/          strategy, product, architecture, data, algorithms, security,
                operations, deployment, brand
@@ -166,12 +167,12 @@ only, so a LAN address needs a tunnel or a port forward on your computer.
 Only the development variant allows plain HTTP; preview and store builds
 require HTTPS.
 
-| Variable                               | What it is                                                       |
-| -------------------------------------- | ---------------------------------------------------------------- |
-| `EXPO_PUBLIC_SUPABASE_URL`             | The API address (see above)                                      |
-| `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | The publishable key; public by design, checked by the database   |
-| `EXPO_PUBLIC_SHOP_URL`                 | Shop app only: the website that serves product pictures and help |
-| `APP_VARIANT`                          | `development` or `preview` for those builds; unset for the store |
+| Variable                               | What it is                                                           |
+| -------------------------------------- | -------------------------------------------------------------------- |
+| `EXPO_PUBLIC_SUPABASE_URL`             | The API address (see above)                                          |
+| `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | The publishable key; public by design, checked by the database       |
+| `EXPO_PUBLIC_SHOP_URL`                 | Shop and seller apps: the website that serves demo pictures and help |
+| `APP_VARIANT`                          | `development` or `preview` for those builds; unset for the store     |
 
 Everything with the `EXPO_PUBLIC_` prefix is written into the app and readable
 by anyone: never put a secret there.
@@ -186,6 +187,17 @@ tools/dev/stack.sh native 1
 ```bash
 tools/dev/stack.sh native-e2e 1
 ```
+
+That runs the five native journeys, each on a freshly seeded database: `shop`
+(including a return), `seller` (including a price below the fees and a
+seller's second step), `driver` (including a stretch without signal, a
+suspension that hands the route back to Central and a delivery code locked
+and released), `warehouse` (picking by scan, refused receipts and a returned
+parcel) and `staff` (the right and wrong kinds of account for the three staff
+apps). Name some to run only those,
+for example `tools/dev/stack.sh native-e2e 1 driver`. The seller, driver and
+warehouse apps also have unit tests for their own rules
+(`pnpm --filter @yuntera/driver-native test`), which `pnpm test` runs too.
 
 The web export proves the screens, navigation, forms and API calls. It does
 not exercise the native modules (secure store, location, camera), the fonts

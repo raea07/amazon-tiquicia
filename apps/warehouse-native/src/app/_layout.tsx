@@ -1,9 +1,11 @@
-import { AppProviders, useAccess } from "@yuntera/expo-kit/auth";
+import { AppProviders, useAccess, useSession } from "@yuntera/expo-kit/auth";
 import { colors } from "@yuntera/expo-kit/theme";
 import { LoadingState } from "@yuntera/expo-kit/ui";
 import { Stack } from "expo-router";
+import { useEffect } from "react";
 import { View } from "react-native";
 import { env } from "@/lib/env";
+import { forgetWarehouse } from "@/lib/warehouse";
 
 /** A screen that fails to draw shows a Spanish message with a retry. */
 export { ScreenErrorBoundary as ErrorBoundary } from "@yuntera/expo-kit/ui";
@@ -15,6 +17,12 @@ export { ScreenErrorBoundary as ErrorBoundary } from "@yuntera/expo-kit/ui";
  */
 function Navigator() {
   const access = useAccess("warehouse");
+  // Signed out (not merely still loading the session): nothing about the
+  // last worker stays on a shared phone.
+  const { status } = useSession();
+  useEffect(() => {
+    if (status === "signedOut") forgetWarehouse();
+  }, [status]);
   if (access === "checking") {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center" }}>
@@ -39,7 +47,7 @@ function Navigator() {
 
 export default function RootLayout() {
   return (
-    <AppProviders env={env}>
+    <AppProviders env={env} secondStep="in-app">
       <Navigator />
     </AppProviders>
   );

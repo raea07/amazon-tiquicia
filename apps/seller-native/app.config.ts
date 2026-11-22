@@ -4,40 +4,50 @@ import { defineAppConfig } from "@yuntera/expo-kit/config";
 import type { ExpoConfig } from "expo/config";
 
 /**
- * The seller app, "Yuntera Vende" (com.yuntera.vende). Photos of products
- * (camera or library) and barcode scanning; no location.
+ * The seller app, "Yuntera Vende" (com.yuntera.vende). What all four apps
+ * share is in packages/expo-kit/src/config.ts. `owner` is the company's Expo
+ * team account; `easProjectId` is filled in after `eas init` creates the
+ * project there.
  *
- * What all four apps share is in packages/expo-kit/src/config.ts. Permission
- * texts are in Spanish and say why, as both stores require. `easProjectId`
- * and `owner` are filled in after `eas init` creates the project.
+ * The screens built so far use no camera, photo library, microphone or
+ * location, so the app asks for none of them. expo-image-picker (product
+ * photos) and expo-camera (barcode scanning) are installed for work that is
+ * not built yet, and Expo applies their plugins even when they are not
+ * listed, adding English permission texts. They are listed here with every
+ * permission set to `false`, which removes those texts on iOS and blocks the
+ * permissions on Android. The Spanish texts this file had before ("Yuntera
+ * Vende usa sus fotos solo cuando usted elige una…", "…usa la cámara cuando
+ * usted la abre…") come back with the photo and scanning work.
  */
 export default (): ExpoConfig =>
   defineAppConfig("seller", {
     slug: "yuntera-vende",
+    // The Expo team account the project will live in, as for the shopper app.
+    // The project itself (and its id) is created by `eas init` under it.
+    owner: "raulea07s-team",
     easProjectId: undefined,
     plugins: [
       [
         "expo-image-picker",
-        {
-          photosPermission:
-            "Yuntera Vende usa sus fotos solo cuando usted elige una, para mostrar sus productos en la tienda.",
-          cameraPermission:
-            "Yuntera Vende usa la cámara cuando usted la abre, para fotografiar sus productos.",
-          microphonePermission: false,
-        },
+        { photosPermission: false, cameraPermission: false, microphonePermission: false },
       ],
       [
         "expo-camera",
         {
-          cameraPermission:
-            "Yuntera Vende usa la cámara cuando usted la abre, para fotografiar sus productos o leer un código de barras.",
+          cameraPermission: false,
           microphonePermission: false,
           recordAudioAndroid: false,
+          barcodeScannerEnabled: false,
         },
       ],
     ],
     blockedPermissions: [
+      "android.permission.CAMERA",
       "android.permission.ACCESS_FINE_LOCATION",
       "android.permission.ACCESS_COARSE_LOCATION",
+      // Added by Expo's Android template for old Android versions; the seller
+      // app reads and writes no shared files.
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
     ],
   });

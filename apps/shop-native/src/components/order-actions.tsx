@@ -13,6 +13,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
+import { WITHDRAWAL_APPROVED } from "@/lib/returns";
 import { QuantityStepper } from "./quantity";
 
 /** In sandbox mode: pretend the payment arrived, as the website's button does. */
@@ -209,7 +210,12 @@ export function ReturnForm({
   const [result, setResult] = useState<{ ok?: string; error?: string }>({});
   const request = useApiMutation(
     (api, input: Parameters<typeof api.requestReturn>[0]) => api.requestReturn(input),
-    { invalidates: [["order", orderNumber]] },
+    {
+      invalidates: [
+        ["order", orderNumber],
+        ["order-returns", orderNumber],
+      ],
+    },
   );
   const kinds: Array<Choice<ReturnKind>> = [
     ...(withdrawalOpen
@@ -258,7 +264,7 @@ export function ReturnForm({
             setResult({
               ok:
                 kind === "withdrawal"
-                  ? "Devolución aprobada. Le reembolsamos en un máximo de 8 días por el mismo medio de pago."
+                  ? WITHDRAWAL_APPROVED
                   : "Recibimos su solicitud. Le respondemos en un máximo de 2 días hábiles.",
             });
           } catch (error) {

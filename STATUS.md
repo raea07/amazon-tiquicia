@@ -1,12 +1,13 @@
 # Status
 
-Updated 22 November 2026, after the fixes from the internal security review
-(the lockdown of direct table access, the integrity of money and returns, and
-limits against abuse) were merged with account security, notifications,
-product photos and the native apps, applied to the hosted preview (all 29
-migrations are there now) and checked there, and the four web apps were
-redeployed. This is the honest state of the project: what exists, how far it
-was checked, and what only the owner can do.
+Updated 22 November 2026, after the complete seller, driver and warehouse
+apps were merged onto the fixes from the internal security review (the
+lockdown of direct table access, the integrity of money and returns, and
+limits against abuse), with account security, notifications, product photos
+and the shopper app already in. Those fixes are applied to the hosted preview
+(all 29 migrations are there now) and were checked there, and the four web
+apps were redeployed. This is the honest state of the project: what exists,
+how far it was checked, and what only the owner can do.
 
 ## In one paragraph
 
@@ -30,11 +31,14 @@ four web apps are deployed as a preview on Vercel at
 `.vercel.app`); every address is behind a Vercel login, and the projects are
 not connected to the Git repository. A shopper app for iOS and Android exists
 with every shopping flow of the website, and the seller, driver and warehouse
-apps exist as skeletons. The shopper app's first store build for Android
-exists and waits for your Google key to go to Play's internal testing; no
-build has run on a phone or simulator yet. Payments and
-invoices are still simulated or missing, and no message is sent for real (see
-"Not built").
+apps have the flows of their web counterparts (the drivers' app also shares
+the position during a route and works without signal; the sellers' app still
+lacks the shop's team and the reviewed changes to its details, see "Not
+built"); none of those three has been built for a phone yet. The shopper
+app's first store build for Android exists and waits for your Google key to
+go to Play's internal testing; no build has run on a phone or simulator yet.
+Payments and invoices are still simulated or missing, and no message is sent
+for real (see "Not built").
 
 ## What needs you
 
@@ -170,7 +174,7 @@ In the order that unblocks the most.
 | Routes and warehouse | `apps/field`                                                       | Driver: the day's route, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with scan check, packing, receiving, stock lookup, checking in a returned parcel. A suspended driver sees a plain message and no route. Password reset and account deletion as in the other apps                                                                                                                                                                                                                                                                                                                                                   |
 | Database             | `supabase/`                                                        | 29 migrations, 80 tables (62 public, 18 private), 167 functions in `public` (155 for signed-in users, 11 open to visitors, 11 server-side only), no table, view or sequence reachable by an app role, two storage buckets with their rules, row-level security on every table as a second lock, double-entry ledger, one register for every refund, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                     |
 | Domain logic         | `packages/core`                                                    | Money and IVA, fees, featured-offer choice, search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. The shopper app (`apps/shop-native`) has every shopper flow of the website laid out for a phone: browse, search, product, cart, sign-in, checkout, payment (simulated), delivery code, orders, cancellation, returns, reviews, addresses, account, help. The seller, driver and warehouse apps are skeletons: sign-in, a screen for an account without access, and a home screen gated by role that reads real data. `packages/expo-kit` is what all four share: configuration, the session encrypted on the phone, the typed API, theme and components                                                                                                                                 |
+| Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. Shopper app: every shopper flow of the website. Seller app (Yuntera Vende): the seller centre's flows from packing to payouts and shop registration, except the team and the requests to change the shop's details. Drivers' app (Yuntera Ruta): every driver flow, plus position sharing during a route and work without signal. Warehouse app (Yuntera Bodega): picking by camera or hand scanner, packing, receiving, checking in returned parcels, stock lookup. The three ask for the second factor. `packages/expo-kit` is what all four share. None of the three has been built for a phone yet; until then, their users work in the web apps, too                               |
 | Notifications        | `packages/notifications`, `supabase/functions`, `tools/dev-notify` | A planner in the database turns each event into one message per person and channel, exactly once; a worker sends them by e-mail, WhatsApp, SMS and push with retries and dead letters; signed delivery reports; quiet hours; suppressions; account e-mails in the same words as Auth's templates. Runs locally against fake providers only                                                                                                                                                                                                                                                                                                                                                           |
 | Shared code          | `packages/{brand,ui,db,next-kit}`                                  | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session, security headers, forms)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Documentation        | `docs/`                                                            | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -247,19 +251,19 @@ How the new parts work, in short:
 ## How it was checked
 
 On a development machine, after the last change, on the combination of
-everything above (lane 10 of `tools/dev/stack.sh`, each suite on a freshly
+everything above (lane 5 of `tools/dev/stack.sh`, each suite on a freshly
 seeded database):
 
 | Check                | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Unit tests           | 691 pass (core 260, notifications 196, native kit 127, shared web code 30, API client 25, brand 21, local API 16, shopper app 11, fake providers 5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Unit tests           | 939 pass (native kit 287, core 260, notifications 196, seller app 39, drivers' app 30, shared web code 30, API client 25, brand 21, local API 16, warehouse app 16, shopper app 14, fake providers 5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Database tests       | 17 files pass on PostgreSQL 16: access control per role, checkout, money, fulfilment, search, delivery promise, the API, the back office, people and payouts, the fixes, one order from three sellers paid out end to end, account security (second factor, per-request check, and deletion searched for in every row of every table after the person had messages, a refunded return, invitations and a wrong delivery code and, as a seller, a photo, an invitation and a contact change), notifications, product photos, and the three hardening suites: the lockdown guard with every finding of the review replayed, money and returns, and limits. Each finding of the review has a block named after it, and each passes on the merged database |
 | API contract tests   | 104 pass in 12 files: every screen's payload, called as each role, matches the types the apps use; 10 of them run two database sessions at once and check that the second waits on a lock (two returns of the last unit, cash on two routes, a parcel sent back while the other is at the door, a transfer confirmed while the shopper cancels, a retried checkout, a price change during checkout, the last unit, payout runs and payouts)                                                                                                                                                                                                                                                                                                            |
 | Browser journeys     | 15 pass in Chromium, each on a freshly seeded database, with no console errors or server errors: shopper, seller, staff, driver and warehouse, people, payouts, listing edits, the shop's 404 answers, password reset, staff's second factor, account deletion, notifications (against the fake providers), product photos, money and returns, and limits. None of them reaches a table directly; the local API refuses every table path                                                                                                                                                                                                                                                                                                               |
-| Native journeys      | 2 pass (48 checks) through the web export of the native apps, in Chromium at phone size: the shopper app from a product opened by link to signing out, its delivery code included, and the seller, driver and warehouse apps for a visitor, an account without access and the right account                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Native journeys      | 5 pass (269 checks) through the web export of the native apps, in Chromium at phone size, each on a freshly seeded database: shopper (31, a return on a delivered order included), seller (63, with a price below the fees and a seller's second step), driver (81, with a stretch without signal, a suspension that hands the unfinished stops to a new route, and a delivery code locked after five wrong tries and released by Central), warehouse (58, picking by scan, an over-count and a second count refused, a returned parcel checked in) and staff (36: the right and wrong kinds of account for the three staff apps, and signing out offline)                                                                                             |
 | Callers of the API   | Probed through the local API: a visitor, a shopper, staff without a factor, staff with a factor before the second step (refused everything but the second step's own calls), the notification worker's secret key (answered, about 9 ms a call on this loaded machine), and a token after sign-out (`session_ended`)                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Native configuration | For each of the four apps: Expo's configuration resolves, package versions match Expo SDK 58, and the resolved iOS and Android settings were checked in every variant, now including the removal of the biometric permissions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Lint and types       | No lint errors (101 warnings and 240 notes, of kinds already there) and no type errors in the 17 typecheck tasks, the four native apps included                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Native configuration | For each of the four apps in the store variant: Expo's configuration resolves (public and introspect: identifiers `com.yuntera.*`, no non-exempt encryption, the biometric permissions removed), `expo install --check` finds every package at Expo SDK 58's version, expo-doctor passes 20 of 20, and the iOS and Android bundles export, with no duplicate-React warning; the bundle scan finds no cipher in their 8 bundle files, nor in the web exports. Every purpose string is Spanish                                                                                                                                                                                                                                                           |
+| Lint and types       | No lint errors (130 warnings and 240 notes, of kinds already there) and no type errors in the 17 typecheck tasks, the four native apps included                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 Money and the documented example still hold: every ledger transaction sums to
 zero, a seller's available + pending + in transit equals the ledger balance,
@@ -407,31 +411,50 @@ These are missing, not hidden. The first group blocks a public launch.
 - Functions for the actions that existed only as direct writes (see "Things to
   know").
 
-**Native apps** (the shopper app is complete; the rest is missing)
+**Native apps** (all four have their screens; none of the seller, driver and
+warehouse apps has been built for a phone yet, so until then sellers, drivers
+and the warehouse use the web apps)
 
-- The screens of the seller, driver and warehouse apps beyond sign-in and a
-  home screen. Until then sellers, drivers and the warehouse use the web apps.
 - Push notifications. The database and the worker can send them, but no app
   registers its phone yet, and the package's permission and entitlement are
-  removed on purpose until that work starts.
-- Taking or uploading photos from the phone (the server side the seller app
-  would call exists).
-- Password reset, the second factor and account deletion in the apps. The
-  database function for deletion exists; both stores require it in the app
-  before the first submission. An account with a second factor is told to use
-  the website.
-- An offline queue for drivers, so a delivery confirmed without signal is sent
-  later.
+  removed on purpose until that work starts (the drivers' app may show only
+  the notice of its location service).
+- Taking or uploading photos from the phone: product photos in the seller app
+  (the server side exists) and delivery photos in the drivers' app. The seller
+  app's camera and photo texts come back with that work.
+- Password reset and account deletion inside the apps. The database function
+  for deletion exists; both stores require it in the app before the first
+  submission. The shopper app still sends an account with a second factor to
+  the website (the other three ask for the code).
 - Universal links (opening a yuntera.cr address in the app). No domain serves
   the files the phones check; the apps answer only addresses in their own
   schemes (`yuntera://`, `yuntera-ruta://` and so on), and those were not
   tested.
+- Seller app, compared with the seller centre: the team (inviting someone,
+  accepting or declining an invitation, changing a member's role, leaving a
+  shop) and the reviewed requests to change the shop's public name, fiscal
+  details or contact phone and e-mail. The app says to use the seller centre
+  for those. Also missing: the shop's notification settings, photos (above)
+  and "use my current location" for a pickup place (only a Plus Code; the app
+  has no location permission). Its terms and privacy links point at
+  www.yuntera.cr unless `EXPO_PUBLIC_SHOP_URL` is set.
+- Drivers' app: a stop's district is not shown (`driver_today` does not return
+  it); actions sent after a dead zone are stamped with the time they arrive,
+  not the time they happened; starting a route and delivering against the code
+  need signal; a driver suspended while the phone has no signal keeps the
+  saved route until a call gets through (at most a day). Notification
+  settings are not in the app.
+- Warehouse app: scanning the bin as well as the product, and a cycle-count
+  adjustment screen (neither is in the web app).
+- Shopper app: reporting a listing (the shop's `/reportar` page) and the
+  choice of channels for messages are on the website only (the commercial
+  consent is in the app).
 
 **Later**
 
 - English. The interface is Spanish only; error messages already exist in both.
-- Background location for drivers and camera barcode scanning (a hand scanner
-  works in the web app).
+- Background location for drivers and camera barcode scanning in the web app
+  (both exist in the native apps, unverified on a phone).
 - Sponsored listings, promotions and coupons, a map on the dispatch screen,
   bulk listing upload.
 
@@ -447,12 +470,14 @@ ones worth knowing about:
   the document says what would make this the wrong choice and when.
 - **A web app for drivers and the warehouse instead of native apps.** It works
   on any phone today and I could verify it; native builds I could not. The cost
-  is no background location and no offline mode. Native driver and warehouse
-  apps now exist as skeletons; the web app stays what they use until those
-  apps have screens and have run on a phone.
-- **Native apps share one kit and the web's API.** The shopper app and the
-  three skeletons use Expo, call the same database functions through the same
-  typed client, and keep the session encrypted on the phone.
+  is no background location and no offline mode. The native driver and
+  warehouse apps now have their screens, and the drivers' app shares the
+  position and works without signal; the web app stays what drivers and the
+  warehouse use until those apps have run on a phone.
+- **Native apps share one kit and the web's API.** All four use Expo, call the
+  same database functions through the same typed client, and keep the session
+  in the phone's secure store. The drivers' day kept for a dead zone is in the
+  app's ordinary storage, which the phone encrypts, and is removed within a day.
 - **Own drivers and a delivery code.** The customer's 4-digit code is checked
   on the server and is never shown to the driver or to staff.
 - **Fees are assumptions.** Commission by category, warehouse fee by size and
@@ -550,6 +575,21 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   preview.
 - Storage abuse is limited per listing (8 photos) and per shop (40 waiting,
   100 new a day), not by total size.
+- **Database follow-ups the native apps' reviews found, not fixed yet:**
+  - Picking is confirmed without the database checking the scanned code
+    (`wms_confirm_pick` takes the task, the quantity and the bin); only the
+    phone, or the web page, compares the code.
+  - The driver's delivery and failure reports (`driver_complete_stop`,
+    `driver_fail_stop`) accept any coordinates. A position report
+    (`driver_report_position`) outside Costa Rica is refused only by a check
+    on the table, so it answers with a raw database error instead of a code.
+  - The district of a stop is not returned to the drivers' app
+    (`driver_today`), so the app cannot show it.
+  - Actions a driver queues without signal are stamped with the time they
+    reach the database, not the time they happened.
+- The web field app still says "Llame a Central" for a locked delivery code;
+  the drivers' app now also says that Central's release gives the shopper a
+  new code, and what to do if it is not released.
 
 ## Running it
 

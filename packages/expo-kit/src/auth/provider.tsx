@@ -6,7 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { createQueryClient, wireAppLifecycle } from "../data/query-client";
 import { getSupabase, type PublicEnv } from "../supabase/client";
 import { useBrandFonts } from "../ui/fonts";
-import { SessionProvider, useSession } from "./session";
+import { type SecondStepMode, SessionProvider, useSession } from "./session";
 
 // Keep the splash screen up until the session has been read from storage, so
 // nobody sees a signed-out screen flash before their own.
@@ -27,15 +27,27 @@ function HideSplashWhenReady({ children }: { children: ReactNode }) {
  * the Supabase client with its session in the secure store, the signed-in person and
  * their roles, and the brand's fonts. Each app's root `_layout.tsx` wraps its
  * navigator in this, passing the public settings it was built with.
+ *
+ * `secondStep` says where an account with an authenticator app gives its
+ * code (session.tsx): "in-app" on this app's sign-in screen (the seller,
+ * driver and warehouse apps), "website" by default.
  */
-export function AppProviders({ env, children }: { env: PublicEnv; children: ReactNode }) {
+export function AppProviders({
+  env,
+  secondStep,
+  children,
+}: {
+  env: PublicEnv;
+  secondStep?: SecondStepMode;
+  children: ReactNode;
+}) {
   const [queryClient] = useState(createQueryClient);
   const supabase = getSupabase(env);
   useEffect(wireAppLifecycle, []);
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <SessionProvider supabase={supabase}>
+        <SessionProvider supabase={supabase} secondStep={secondStep}>
           <StatusBar style="dark" />
           <HideSplashWhenReady>{children}</HideSplashWhenReady>
         </SessionProvider>
