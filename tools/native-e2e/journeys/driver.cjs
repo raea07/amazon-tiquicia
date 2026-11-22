@@ -550,7 +550,11 @@ async function newRoute() {
   await shot("11-finished");
 
   const central = await as("central@yuntera.example");
-  const board = await central("ops_dispatch_board");
+  // The board of the day R-1003 is on. The seed dates its routes by the
+  // database's (UTC) date and the board defaults to Costa Rica's, which differ
+  // between 18:00 and midnight in Costa Rica.
+  const r1003 = (await driver("driver_today")).routes.find((r) => r.code === "R-1003");
+  const board = await central("ops_dispatch_board", { p_date: r1003.service_date });
   const settlements = await central("ops_settlements", { p_status: "open" });
   check(
     board.routes.some((r) => r.code === "R-1003" && r.status === "completed"),
