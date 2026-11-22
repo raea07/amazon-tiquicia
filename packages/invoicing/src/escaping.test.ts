@@ -19,7 +19,7 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { cleanText } from "./codes.ts";
-import { buildDocument, type FiscalDocument } from "./document.ts";
+import { buildDocument, type FiscalDocument, InvalidDocument } from "./document.ts";
 import { type Signer, signDocument } from "./signature.ts";
 import { throwawaySigner } from "./testing/certificate.ts";
 import { lineFromGross, lineFromNet, SAMPLE_ISSUER, sampleDocument } from "./testing/samples.ts";
@@ -179,6 +179,26 @@ describe("hostile text in every field stays text", () => {
         cleanText(fiscal.references[0]?.reason ?? "", 180),
       );
       expect(checkSignature(xml).signature).toBe(true);
+    }
+  });
+
+  it("refuses an e-mail with markup or quotes other than ' instead of writing it", () => {
+    // Hacienda's pattern for CorreoElectronico admits only the apostrophe of
+    // these characters; the writer refuses the rest before writing anything
+    // (and the checkout refuses them first: invoice_receiver_email_invalid).
+    for (const email of [
+      'ana"<b>@example.com',
+      "ana&amp;@example.com",
+      "<ana>@example.com",
+      "ana@example.com<!--",
+      "ana@exa]]>mple.com",
+    ]) {
+      const fiscal = doc("x");
+      const receiver = fiscal.receiver;
+      if (!receiver) throw new Error("the sample has a receiver");
+      const withEmail = { ...fiscal, receiver: { ...receiver, email } };
+      expect(() => buildDocument(withEmail), email).toThrow(InvalidDocument);
+      expect(() => buildDocument(withEmail), email).toThrow("receiver_email_invalid");
     }
   });
 
