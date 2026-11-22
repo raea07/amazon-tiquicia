@@ -25,6 +25,9 @@ export function weekdayList(days: readonly number[]): string {
   return ordered.map((weekday) => weekday.name).join(", ");
 }
 
+/** "1 pedido", "3 pedidos". */
+export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
 export const CLOSURE_REASON: Record<string, string> = {
   weather: "Lluvias o mal tiempo",
   road_closed: "Camino cerrado",

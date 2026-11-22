@@ -161,10 +161,10 @@ function ZoneRow({ zone }: { zone: OpsZone }) {
               <input type="hidden" name="revision" value={zone.revision} />
               <input type="hidden" name="active" value="no" />
               <p className="text-ink-muted">
-                Las {zone.saved_address_count} direcciones guardadas en esta zona dejan de poder
-                elegirse al pagar, y la tienda dice que por ahora no entrega ahí. Los{" "}
-                {zone.open_order_count} pedidos abiertos de la zona no cambian: se entregan como se
-                prometió. Puede volver a encenderla aquí mismo.
+                Direcciones guardadas en esta zona: {zone.saved_address_count}. Dejan de poder
+                elegirse al pagar, y la tienda dice que por ahora no entrega ahí. Pedidos abiertos
+                de la zona: {zone.open_order_count}. No cambian: se entregan como se prometió. Puede
+                volver a encenderla aquí mismo.
               </p>
             </CatalogueForm>
           </div>

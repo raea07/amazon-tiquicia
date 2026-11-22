@@ -55,7 +55,7 @@ async function Routes() {
         {stuck.length === 0 ? (
           <div className="mt-3">
             <EmptyState title="Ninguna ruta está detenida">
-              Las rutas abiertas de abajo siguen su curso.
+              Cuando una ruta no pueda terminar, aparece aquí.
             </EmptyState>
           </div>
         ) : (

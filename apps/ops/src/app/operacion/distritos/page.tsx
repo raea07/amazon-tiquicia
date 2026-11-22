@@ -8,6 +8,7 @@ import { Suspense } from "react";
 import { moveDistricts } from "@/app/operations-actions";
 import { CatalogueForm, CatalogueOutcome } from "@/components/catalogue-outcome";
 import { OperationsNav } from "@/components/operations-nav";
+import { plural } from "@/lib/operations-labels";
 import { requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Distritos" };
@@ -146,8 +147,12 @@ async function Districts({
                             <Badge tone="warning">No se entrega</Badge>
                           )}
                           <span className="text-ink-muted">
-                            {district.saved_address_count} direcciones · {district.open_order_count}{" "}
-                            pedidos abiertos
+                            {plural(district.saved_address_count, "dirección", "direcciones")} ·{" "}
+                            {plural(
+                              district.open_order_count,
+                              "pedido abierto",
+                              "pedidos abiertos",
+                            )}
                           </span>
                         </span>
                       </span>
@@ -227,15 +232,16 @@ function Preview({
               .
             </li>
             <li>
-              {preview.saved_address_count} direcciones guardadas:{" "}
+              Direcciones guardadas: {preview.saved_address_count}.{" "}
               {preview.target
                 ? preview.target.active
-                  ? "sus próximos pedidos usan el envío y la fecha de la nueva zona."
-                  : "la nueva zona está apagada, así que no se podrán elegir al pagar hasta encenderla."
-                : "siguen guardadas, pero no se pueden elegir al pagar mientras no se entregue ahí."}
+                  ? "Sus próximos pedidos usan el envío y la fecha de la nueva zona."
+                  : "La nueva zona está apagada, así que no se podrán elegir al pagar hasta encenderla."
+                : "Siguen guardadas, pero no se pueden elegir al pagar mientras no se entregue ahí."}
             </li>
             <li>
-              {preview.open_order_count} pedidos abiertos: no cambian; se entregan como se prometió.
+              Pedidos abiertos: {preview.open_order_count}. No cambian: se entregan como se
+              prometió.
             </li>
             {preview.zones_left_empty.map((zone) => (
               <li key={zone.id} className="font-semibold text-warning">

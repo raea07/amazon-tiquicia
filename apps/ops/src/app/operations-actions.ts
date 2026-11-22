@@ -169,7 +169,7 @@ export async function setZoneActive(
     const zone = await api.opsSetZoneActive(text(formData, "zoneId"), on, revision);
     return on
       ? `Zona «${zone.name}» encendida: sus direcciones ya pueden hacer pedidos.`
-      : `Zona «${zone.name}» apagada: sus direcciones ya no pueden hacer pedidos. Los ${zone.open_order_count} pedidos abiertos siguen su curso.`;
+      : `Zona «${zone.name}» apagada: sus direcciones ya no pueden hacer pedidos. Pedidos abiertos que siguen su curso: ${zone.open_order_count}.`;
   });
 }
 
@@ -197,10 +197,11 @@ export async function moveDistricts(
   const canton = text(formData, "canton");
   return operationsAction(`/operacion/distritos?canton=${canton}`, "districts", async (api) => {
     const impact = await api.opsMoveDistricts(codes, zoneId);
+    const one = impact.changing_count === 1;
     const moved = plural(impact.changing_count, "distrito", "distritos");
     return zoneId
-      ? `Listo: ${moved} pasan a «${impact.target?.name ?? zoneId}». Los pedidos nuevos usan su envío y su fecha.`
-      : `Listo: ${moved} quedan sin entrega. Sus direcciones guardadas siguen guardadas y no se pueden elegir al pagar.`;
+      ? `Listo: ${moved} ${one ? "pasa" : "pasan"} a «${impact.target?.name ?? zoneId}». Los pedidos nuevos usan su envío y su fecha.`
+      : `Listo: ${moved} ${one ? "queda" : "quedan"} sin entrega. Sus direcciones guardadas siguen guardadas y no se pueden elegir al pagar.`;
   });
 }
 
@@ -222,7 +223,7 @@ export async function addHoliday(_previous: ActionState, formData: FormData): Pr
         confirm,
       });
       return added.promised_orders > 0
-        ? `Feriado agregado. ${plural(added.promised_orders, "pedido prometido", "pedidos prometidos")} ese día mantienen su fecha; avíseles si no se podrá cumplir.`
+        ? `Feriado agregado. ${plural(added.promised_orders, "pedido prometido ese día mantiene", "pedidos prometidos ese día mantienen")} su fecha; avíseles si no se podrá cumplir.`
         : "Feriado agregado. La fecha de entrega que ve la tienda ya lo salta.";
     },
     values,
@@ -314,7 +315,7 @@ export async function endClosure(_previous: ActionState, formData: FormData): Pr
   return operationsAction("/operacion/cierres", "catalog", async (api) => {
     const closure = await api.opsEndZoneClosure(id.data, revision);
     return closure.state === "cancelled"
-      ? "Cierre cancelado antes de empezar: la zona recibe entregas esos días."
+      ? "Cierre terminado: no había cerrado ningún día ya pasado, así que la zona recibe entregas en todas esas fechas."
       : "Cierre terminado: la zona recibe entregas desde hoy. Para volver a cerrarla, cambie el último día.";
   });
 }
