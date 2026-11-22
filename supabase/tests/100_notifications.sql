@@ -1141,14 +1141,45 @@ begin;
 create extension if not exists dblink;
 
 select set_config('t.part2_skipped', '', true);
+select set_config('t.probe_pid', '0', true);
 do $$
 begin
   perform dblink_connect('probe', format('dbname=%s user=%s', current_database(), current_user));
+  -- Its session may still be listed for a moment after it closes.
+  perform set_config('t.probe_pid',
+    (select t.pid::text from dblink('probe', 'select pg_backend_pid()') as t (pid integer)), true);
   perform dblink_disconnect('probe');
 exception when others then
   perform set_config('t.part2_skipped',
     format('part 2 (two workers at once) not run: this database refuses a second connection to itself (%s)', sqlerrm),
     true);
+end
+$$;
+
+-- This part commits, and while it runs it sets aside the messages already
+-- waiting and puts every message and job back at the end. A worker (or
+-- anything else) connected to the database meanwhile could send a message
+-- that is then put back, or plan one that is then removed. So it runs only
+-- when no other session is connected to this database (a stack's API keeps
+-- its connections open while it is up), and otherwise is skipped and says
+-- why.
+do $$
+declare
+  v_others integer;
+begin
+  if current_setting('t.part2_skipped') <> '' then
+    return;
+  end if;
+  select count(*) into v_others from pg_stat_activity a
+  where a.datname = current_database() and a.pid <> pg_backend_pid() and a.backend_type = 'client backend'
+    and a.pid <> current_setting('t.probe_pid')::integer;
+  if v_others > 0 then
+    perform set_config('t.part2_skipped',
+      format('part 2 (two workers at once) not run: %s other session(s) are connected to this database, and a '
+             'running worker could send or lose a message while this part sets the queue aside (stop the stack first)',
+             v_others),
+      true);
+  end if;
 end
 $$;
 
@@ -1216,6 +1247,22 @@ begin
   perform dblink_connect('a', format('dbname=%s user=%s', current_database(), current_user));
   perform dblink_connect('b', format('dbname=%s user=%s', current_database(), current_user));
   perform dblink_connect('admin', format('dbname=%s user=%s', current_database(), current_user));
+  -- Once more, now that the suite's own sessions are open: anyone else who
+  -- connected since the check above is a reason to stop before committing.
+  if exists (select 1 from pg_stat_activity x
+             where x.datname = current_database() and x.backend_type = 'client backend'
+               and x.pid <> pg_backend_pid() and x.pid <> current_setting('t.probe_pid')::integer
+               and x.pid not in (select t.pid from dblink('a', 'select pg_backend_pid()') as t (pid integer)
+                                 union all select t.pid from dblink('b', 'select pg_backend_pid()') as t (pid integer)
+                                 union all select t.pid from dblink('admin', 'select pg_backend_pid()') as t (pid integer))) then
+    perform dblink_disconnect('a');
+    perform dblink_disconnect('b');
+    perform dblink_disconnect('admin');
+    perform set_config('t.part2_skipped',
+      'part 2 (two workers at once) not run: another session connected to this database while it started '
+      '(stop the stack first)', true);
+    return;
+  end if;
 
   -- What a run that stopped half-way left (its copies, its events), then the
   -- copies of how things stand, then the suite's own work.
