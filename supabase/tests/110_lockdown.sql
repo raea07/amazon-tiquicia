@@ -68,7 +68,8 @@ insert into worker_only (role, fn)
 select 'service_role', unnest(array[
   'worker_notify_apply_update', 'worker_notify_claim', 'worker_notify_defer', 'worker_notify_fail',
   'worker_notify_freeze', 'worker_notify_plan', 'worker_notify_sent', 'worker_notify_skip',
-  'worker_push_disable', 'worker_push_receipts_due'
+  'worker_payments_claim', 'worker_payments_event', 'worker_payments_hello',
+  'worker_payments_report', 'worker_push_disable', 'worker_push_receipts_due'
 ])
 union all
 select 'supabase_auth_admin', unnest(array['hook_mfa_verification_attempt'])

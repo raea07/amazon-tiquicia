@@ -470,8 +470,9 @@ runs with its owner's rights and answers yes or no:
 
 **Server-side functions.** No API role may execute these functions in
 `public`; only a platform role does. The notification worker calls the
-`worker_*` functions with the server-side key (`service_role`), and Auth
-calls the hook (`supabase_auth_admin`):
+`worker_notify_*` and `worker_push_*` functions, and the payments worker and
+webhook the `worker_payments_*` ones, each with its own server-side key
+(`service_role`), and Auth calls the hook (`supabase_auth_admin`):
 
 <!-- BEGIN server-side functions -->
 
@@ -484,6 +485,10 @@ calls the hook (`supabase_auth_admin`):
 - `worker_notify_plan`
 - `worker_notify_sent`
 - `worker_notify_skip`
+- `worker_payments_claim`
+- `worker_payments_event`
+- `worker_payments_hello`
+- `worker_payments_report`
 - `worker_push_disable`
 - `worker_push_receipts_due`
 
