@@ -38,6 +38,8 @@ select pg_temp.remember('cafetal_id', (select id::text from public.sellers where
 select pg_temp.remember('tecnocasa_id', (select id::text from public.sellers where slug = 'tecnocasa'));
 select pg_temp.remember('cafetal_offer', pg_temp.offer('cafe-molido-tarrazu-340g')::text);
 select pg_temp.remember('tecnocasa_offer', pg_temp.offer('cargador-usb-c-30w-nimbo')::text);
+-- The seed's shop and listing awaiting approval, also on a used database (_helpers.sql).
+select pg_temp.seed_awaiting_approval();
 select pg_temp.remember('pending_offer',
   (select o.id::text from public.offers o join public.sellers s on s.id = o.seller_id where s.slug = 'bazar-nuevo'));
 select pg_temp.remember('depot', (select id::text from public.warehouses where code = 'SJO1'));

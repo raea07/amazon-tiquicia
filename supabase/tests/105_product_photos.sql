@@ -236,7 +236,7 @@ reset role; select pg_temp.logout();
 insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret)
 select gen_random_uuid(), id, 'Prueba', 'totp', 'verified', now(), now(), 'JBSWY3DPEHPK3PXP'
 from auth.users where email = 'vendedor@yuntera.example';
-select pg_temp.login('vendedor@yuntera.example');
+select pg_temp.login('vendedor@yuntera.example', 'aal1');
 select pg_temp.denied(format($q$select pg_temp.put('product-photos-pending', %L)$q$, current_setting('t.prefix1') || '400.jpg'));
 reset role; select pg_temp.logout();
 delete from auth.mfa_factors f using auth.users u

@@ -111,6 +111,8 @@ select pg_temp.remember('uid_repartidor', (select id::text from auth.users where
 select pg_temp.remember('uid_sendero', (select id::text from auth.users where email = 'sendero@yuntera.example'));
 select pg_temp.remember('tecnocasa', (select id::text from public.sellers where slug = 'tecnocasa'));
 select pg_temp.remember('sendero', (select id::text from public.sellers where slug = 'tienda-sendero'));
+-- The seed's shop and listing awaiting approval, also on a used database (_helpers.sql).
+select pg_temp.seed_awaiting_approval();
 select pg_temp.remember('bazar', (select id::text from public.sellers where slug = 'bazar-nuevo'));
 select pg_temp.remember('depot', (select id::text from public.warehouses where code = 'SJO1'));
 select pg_temp.remember('product', (select id::text from public.products where slug = 'licuadora-volcan-600w'));
@@ -168,11 +170,84 @@ reset role; select pg_temp.logout();
 update public.drivers set status = 'active'
 where user_id in (select id from auth.users where email in ('repartidor@yuntera.example', 'repartidor2@yuntera.example'));
 
+-- The seed leaves a parcel packed (YT500013) and Carlos's route R-1003 in
+-- progress with a prepaid stop and one collecting ₡23 400 in cash. On a used
+-- database those have moved on: there the same baskets are ordered by a
+-- shopper of the suite's own, paid, picked, packed and sent out with Carlos
+-- now, through the same functions the seed uses, for this transaction only.
+select pg_temp.remember('packed_shipment', (select id::text from public.shipments
+  where tracking_code = 'YT500013' and status = 'packed'));
+do $$
+declare
+  v_user uuid := gen_random_uuid();
+  v_address uuid;
+  v_cod uuid;
+  v_card uuid;
+  v_packed uuid;
+  v_route uuid;
+  v_ship uuid;
+  t record;
+  v_claims text;
+begin
+  if current_setting('t.packed_shipment') <> '' and exists (
+       select 1 from public.route_stops s join public.routes r on r.id = s.route_id
+       where s.status = 'pending' and s.cod_amount_minor = 2340000 and r.status in ('draft', 'assigned', 'in_progress')) then
+    return;
+  end if;
+  insert into auth.users (id, email, raw_user_meta_data)
+  values (v_user, 'limites120@yuntera.example', '{"full_name": "María Prueba Límites"}');
+  insert into public.addresses (user_id, label, recipient_name, phone, postal_code, senas, lat, lng, is_default)
+  select v_user, 'Casa', 'María Prueba Límites', a.phone, a.postal_code, a.senas, a.lat, a.lng, true
+  from public.addresses a join auth.users u on u.id = a.user_id
+  where u.email = 'comprador@yuntera.example' and a.is_default and a.deleted_at is null
+  returning id into v_address;
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_user, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+  v_cod := (public.place_order(jsonb_build_array(jsonb_build_object(
+    'offer_id', pg_temp.offer('olla-arrocera-volcan-1-8l'), 'quantity', 1)), v_address, 'cash_on_delivery',
+    'test-120-cod') ->> 'order_id')::uuid;
+  v_card := (public.place_order(jsonb_build_array(
+    jsonb_build_object('offer_id', pg_temp.offer('abanico-pie-volcan-18'), 'quantity', 1),
+    jsonb_build_object('offer_id', pg_temp.offer('rompecabezas-volcanes-500'), 'quantity', 1)), v_address, 'card',
+    'test-120-card') ->> 'order_id')::uuid;
+  perform public.confirm_sandbox_payment(v_card);
+  v_packed := (public.place_order(jsonb_build_array(
+    jsonb_build_object('offer_id', pg_temp.offer('alimento-perro-adulto-tinamu-8kg'), 'quantity', 1),
+    jsonb_build_object('offer_id', pg_temp.offer('botella-termica-sendero-750ml'), 'quantity', 1)), v_address, 'card',
+    'test-120-packed') ->> 'order_id')::uuid;
+  perform public.confirm_sandbox_payment(v_packed);
+  -- Picked (each code scanned) and packed in the warehouse.
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', (select id from auth.users where email = 'central@yuntera.example'),
+    'role', 'authenticated', 'aal', 'aal2')::text, true);
+  for v_ship in select id from public.shipments where order_id in (v_cod, v_card, v_packed) order by created_at, id loop
+    perform public.wms_start_picking(v_ship);
+    for t in select pt.id, pt.quantity, k.code from public.pick_tasks pt
+             join public.skus k on k.id = pt.sku_id where pt.shipment_id = v_ship loop
+      perform public.wms_confirm_pick(t.id, t.quantity, null, t.code);
+    end loop;
+    perform public.wms_pack_shipment(v_ship, 900, 1::smallint);
+  end loop;
+  v_route := public.ops_create_route(
+    private.cr_local(now())::date, (select id from public.warehouses where code = 'SJO1'),
+    jsonb_build_array(
+      jsonb_build_object('shipment_id', (select id from public.shipments where order_id = v_cod), 'sequence', 1),
+      jsonb_build_object('shipment_id', (select id from public.shipments where order_id = v_card), 'sequence', 2)),
+    (select id from public.drivers where full_name = 'Carlos Méndez Porras'));
+  perform set_config('request.jwt.claims', json_build_object(
+    'sub', (select id from auth.users where email = 'repartidor@yuntera.example'),
+    'role', 'authenticated', 'aal', 'aal2')::text, true);
+  perform public.driver_start_route(v_route);
+  perform set_config('request.jwt.claims', '', true);
+  perform pg_temp.remember('packed_shipment', (select id::text from public.shipments where order_id = v_packed));
+end
+$$;
+
 select pg_temp.login('central@yuntera.example');
 select pg_temp.remember('assigned_route', public.ops_create_route(
   (now() at time zone 'America/Costa_Rica')::date, current_setting('t.depot')::uuid,
   jsonb_build_array(jsonb_build_object('shipment_id',
-    (select id from public.shipments where tracking_code = 'YT500013'), 'sequence', 1)),
+    current_setting('t.packed_shipment')::uuid, 'sequence', 1)),
   (select id from public.drivers where full_name = 'Carlos Méndez Porras'))::text);
 reset role; select pg_temp.logout();
 
@@ -1101,6 +1176,9 @@ $$;
 
 -- ═══ DTA-11, DTA-12: the shop's name, fiscal details and contact ═══════════
 
+-- The shop's phone as it stands (the seed's, or one a used database changed since).
+select pg_temp.remember('sendero_phone', (select contact_phone from public.seller_private
+  where seller_id = current_setting('t.sendero')::uuid));
 select pg_temp.login('sendero@yuntera.example');
 select pg_temp.denied(format('update public.sellers set trade_name = ''Yuntera Oficial'' where id = %L',
   current_setting('t.sendero')));
@@ -1133,7 +1211,8 @@ begin
     p_contact_email => 'Nuevo@Sendero.example', p_contact_phone => '+506 2289 0505')::text, true);
   -- Nothing changed yet.
   assert (select trade_name from public.sellers where id = v_seller) = 'Tienda Sendero', 'DTA-11: the name waits';
-  assert (select contact_phone from public.seller_private where seller_id = v_seller) = '+50622890404', 'so does the phone';
+  assert (select contact_phone from public.seller_private where seller_id = v_seller)
+         = current_setting('t.sendero_phone'), 'so does the phone';
   assert jsonb_array_length(public.seller_shop_changes(v_seller) -> 'requests') = 3, 'the seller sees three requests';
 end
 $$;
@@ -1622,7 +1701,7 @@ end
 $$;
 update public.drivers set status = 'active' where user_id = current_setting('t.uid_repartidor')::uuid;
 select set_config('request.jwt.claims',
-  json_build_object('sub', current_setting('t.uid_repartidor'), 'role', 'authenticated')::text, true);
+  json_build_object('sub', current_setting('t.uid_repartidor'), 'role', 'authenticated', 'aal', 'aal2')::text, true);
 do $$ begin
   assert public.driver_today() = private.driver_today_active(), 'an active driver gets the body''s answer unchanged';
 end $$;

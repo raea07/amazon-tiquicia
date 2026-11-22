@@ -18,8 +18,11 @@ language sql as $$
   select set_config('request.jwt.claims',
     case when p_email is null then '' else
       json_build_object('sub', (select id from auth.users where email = p_email),
-                        'role', 'authenticated')::text end, true);
+                        'role', 'authenticated', 'aal', 'aal2')::text end, true);
 $$;
+
+-- An open payout run of a used database is set aside (_helpers.sql).
+select pg_temp.set_aside_payout_runs();
 
 create function pg_temp.check_money(p_label text) returns void
 language plpgsql as $$
@@ -231,6 +234,8 @@ $$;
 -- ═══ Payout run and "mark paid" ════════════════════════════════════════════
 
 select pg_temp.remember('today', private.cr_local(now())::date::text);
+select pg_temp.remember('payout_tx_before',
+  (select count(*)::text from public.ledger_transactions where kind = 'payout'));
 select pg_temp.login('central@yuntera.example');
 do $$
 declare
@@ -269,7 +274,8 @@ declare
   b record;
 begin
   assert (select count(*) from public.ledger_transactions where kind = 'payout')
-         = current_setting('t.paid_count')::integer, 'one ledger transaction for each payout';
+         = current_setting('t.payout_tx_before')::integer + current_setting('t.paid_count')::integer,
+    'one ledger transaction for each payout';
   assert (select coalesce(sum(amount_minor), 0) from public.ledger_entries) = 0,
     'the whole ledger sums to zero';
   for f in select * from public.seller_order_fees where order_id = current_setting('t.order')::uuid loop

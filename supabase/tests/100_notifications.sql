@@ -102,7 +102,7 @@ $$;
 reset role;
 
 -- Even with execute rights (here the database owner), the function checks the caller itself.
-select set_config('request.jwt.claims', json_build_object('sub', current_setting('t.buyer'), 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', json_build_object('sub', current_setting('t.buyer'), 'role', 'authenticated', 'aal', 'aal2')::text, true);
 do $$
 begin
   perform public.worker_notify_plan(10);
@@ -136,9 +136,34 @@ begin
 end
 $$;
 
+-- The seed's events, all written in the seed's one transaction (the earliest
+-- moment in the outbox). On a used database a worker may have planned and
+-- sent them already, and people have caused events of their own since. For
+-- this transaction, which rolls back, the seed's events wait again with no
+-- message planned, so the checks below plan exactly what a fresh seed plans;
+-- what other events planned stays as it is.
+-- The demo accounts' message choices as the seed leaves them: none recorded
+-- (the defaults, commercial consent off), no phone registered for push,
+-- nothing suppressed. On a used database people chose otherwise (the notifications
+-- journey does); for this transaction they have not.
+delete from private.notification_preferences p using auth.users u
+where u.id = p.user_id and u.email like '%@yuntera.example';
+delete from private.push_tokens p using auth.users u where u.id = p.user_id and u.email like '%@yuntera.example';
+delete from private.notification_suppressions;
+-- The consent history is never erased: what this suite adds is what comes after.
+select pg_temp.remember('consent_log_last', (select coalesce(max(id), 0)::text from private.commercial_consent_log));
+create temporary table seed_events on commit drop as
+select e.id from private.outbox_events e
+where e.created_at = (select min(x.created_at) from private.outbox_events x);
+delete from private.notification_deliveries d using seed_events s where d.event_id = s.id;
+update private.outbox_jobs j set status = 'pending', attempts = 0, done_at = null, last_error = null
+from seed_events s where j.event_id = s.id and j.consumer = 'notify' and j.status <> 'pending';
+grant select on seed_events to authenticated, anon, service_role;
+
 do $$
 begin
-  assert (select count(*) from private.outbox_jobs where consumer = 'notify' and status = 'pending') > 50,
+  assert (select count(*) from private.outbox_jobs j join seed_events s on s.id = j.event_id
+          where j.consumer = 'notify' and j.status = 'pending') > 50,
     'the seed''s events wait to be planned';
   assert not exists (select 1 from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
                      where e.topic = 'invoice.requested'), 'events nobody consumes get no job';
@@ -172,8 +197,9 @@ begin
                  where template = 'seller_new_order' and audience = 'seller'), 'seller new order';
   assert exists (select 1 from private.notification_deliveries
                  where template = 'staff_payment_to_confirm' and recipient = 'team:finance'), 'finance mailbox';
-  assert not exists (select 1 from private.notification_deliveries where channel in ('whatsapp', 'sms', 'push')),
-    'nobody opted into WhatsApp or SMS or has a phone registered yet';
+  assert not exists (select 1 from private.notification_deliveries d join seed_events s on s.id = d.event_id
+                     where d.channel in ('whatsapp', 'sms', 'push')),
+    'nobody in the seed opted into WhatsApp or SMS or has a phone registered';
   assert not exists (select 1 from private.notification_deliveries d
                      where d.context ?| array['delivery_pin', 'ship_senas', 'ship_phone']), 'ids only in the queue';
 end
@@ -265,7 +291,7 @@ $$;
 select pg_temp.login('comprador@yuntera.example');
 select set_config('t.order', (public.place_order(
   jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.cafe'), 'quantity', 1)),
-  (select id from public.addresses where is_default), 'sinpe_movil', 'test-notify-0001') ->> 'order_id'), true);
+  (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null), 'sinpe_movil', 'test-notify-0001') ->> 'order_id'), true);
 reset role;
 -- The order's delivery code, kept in the private schema since 082900.
 select pg_temp.remember('order_code',
@@ -646,7 +672,8 @@ begin
   assert (select skip_reason from private.notification_deliveries where dedupe_key = 'mkt/3') = 'no_commercial_consent',
     'withdrawn';
   assert (select array_agg(action order by id) from private.commercial_consent_log
-          where user_id = current_setting('t.buyer')::uuid) = array['granted', 'withdrawn'], 'the history is kept';
+          where user_id = current_setting('t.buyer')::uuid and id > current_setting('t.consent_log_last')::bigint)
+         = array['granted', 'withdrawn'], 'the history is kept';
   assert not exists (select 1 from public.consents where user_id = current_setting('t.buyer')::uuid
                      and purpose = 'marketing' and revoked_at is null), 'consent revoked';
   assert not (select marketing_opt_in from public.profiles where id = current_setting('t.buyer')::uuid),
@@ -1095,7 +1122,13 @@ rollback;
 
 -- ═══ Part 2: two sessions at once ═════════════════════════════════════════
 -- Each session is a real connection (dblink) that commits, as two workers
--- would. What they create is removed at the end.
+-- would. The work they share is the suite's own (a batch of `order.placed`
+-- events for the demo shopper's orders, marked as the suite's), plus whatever
+-- a used database already had waiting. Before anything is committed, the
+-- notification jobs and messages as they stand are copied aside; at the end
+-- the suite's events are removed, every message and job is put back exactly
+-- as it was, and the copies are dropped: a used database keeps every row it
+-- had, and only those.
 --
 -- It needs the database to accept a connection to itself. A hosted Supabase
 -- project does not: dblink asks a non-superuser for a password, and the
@@ -1119,6 +1152,59 @@ exception when others then
 end
 $$;
 
+-- Puts everything back as it was (also when a check above failed, so a
+-- failing run leaves nothing behind either): the suite's events go (their
+-- jobs with them), messages that did not exist go, every message and job
+-- that existed gets back each of its columns, the choices come back, and the
+-- copies are dropped. Through a connection of its own.
+create function pg_temp.t100_restore() returns void
+language plpgsql as $f$
+begin
+  if not ('restore' = any (coalesce(dblink_get_connections(), '{}'))) then
+    perform dblink_connect('restore', format('dbname=%s user=%s', current_database(), current_user));
+  end if;
+  perform dblink_exec('restore', (
+    select format($q$
+      delete from private.outbox_events where payload ? 't100';
+      insert into private.notification_preferences select * from private.t100_preferences s
+      where not exists (select 1 from private.notification_preferences p where p.id = s.id);
+      insert into private.push_tokens select * from private.t100_push_tokens s
+      where not exists (select 1 from private.push_tokens p where p.id = s.id);
+      delete from private.notification_deliveries d
+      where not exists (select 1 from private.t100_deliveries s where s.id = d.id);
+      update private.notification_deliveries d set (%1$s) = (%2$s)
+      from private.t100_deliveries s where s.id = d.id and row(d.*) is distinct from row(s.*);
+      $q$,
+      (select string_agg(quote_ident(a.attname), ', ' order by a.attnum) from pg_attribute a
+       where a.attrelid = 'private.notification_deliveries'::regclass and a.attnum > 0 and not a.attisdropped
+         and a.attname <> 'id'),
+      (select string_agg('s.' || quote_ident(a.attname), ', ' order by a.attnum) from pg_attribute a
+       where a.attrelid = 'private.notification_deliveries'::regclass and a.attnum > 0 and not a.attisdropped
+         and a.attname <> 'id'))
+    || format($q$
+      update private.outbox_jobs j set (%1$s) = (%2$s)
+      from private.t100_jobs s where s.event_id = j.event_id and s.consumer = j.consumer
+        and row(j.*) is distinct from row(s.*);
+      $q$,
+      (select string_agg(quote_ident(a.attname), ', ' order by a.attnum) from pg_attribute a
+       where a.attrelid = 'private.outbox_jobs'::regclass and a.attnum > 0 and not a.attisdropped
+         and a.attname not in ('event_id', 'consumer')),
+      (select string_agg('s.' || quote_ident(a.attname), ', ' order by a.attnum) from pg_attribute a
+       where a.attrelid = 'private.outbox_jobs'::regclass and a.attnum > 0 and not a.attisdropped
+         and a.attname not in ('event_id', 'consumer')))));
+  assert (select n from dblink('restore', $q$
+            select (select count(*) from private.notification_deliveries d full join private.t100_deliveries s
+                    on s.id = d.id where s.id is null or d.id is null or row(d.*) is distinct from row(s.*))
+                 + (select count(*) from private.outbox_jobs j full join private.t100_jobs s
+                    on s.event_id = j.event_id and s.consumer = j.consumer
+                    where s.event_id is null or j.event_id is null or row(j.*) is distinct from row(s.*))
+          $q$) as t (n bigint)) = 0, 'every message and job is back as it was';
+  perform dblink_exec('restore', 'drop table private.t100_deliveries; drop table private.t100_jobs; '
+                              'drop table private.t100_preferences; drop table private.t100_push_tokens;');
+  perform dblink_disconnect('restore');
+end;
+$f$;
+
 do $$
 declare
   v_a integer;
@@ -1131,8 +1217,38 @@ begin
   perform dblink_connect('b', format('dbname=%s user=%s', current_database(), current_user));
   perform dblink_connect('admin', format('dbname=%s user=%s', current_database(), current_user));
 
+  -- What a run that stopped half-way left (its copies, its events), then the
+  -- copies of how things stand, then the suite's own work.
+  perform dblink_exec('admin', $q$
+    do $d$ begin
+      if to_regclass('private.t100_deliveries') is not null then
+        raise exception 'a previous run of 100_notifications left its copies: restore by hand before running again';
+      end if;
+    end $d$;
+    create table private.t100_deliveries as select * from private.notification_deliveries;
+    create table private.t100_jobs as select * from private.outbox_jobs;
+    -- Messages already waiting (a used database's) would hold the suite's
+    -- behind them, in their order: set aside until the copies put them back.
+    update private.notification_deliveries set status = 'skipped' where status in ('pending', 'sending');
+    -- And the demo accounts' message choices as the seed leaves them (none),
+    -- also put back at the end.
+    create table private.t100_preferences as select * from private.notification_preferences;
+    create table private.t100_push_tokens as select * from private.push_tokens;
+    delete from private.notification_preferences p using auth.users u
+    where u.id = p.user_id and u.email like '%@yuntera.example';
+    delete from private.push_tokens p using auth.users u
+    where u.id = p.user_id and u.email like '%@yuntera.example';
+    insert into private.outbox_events (topic, payload)
+    select 'order.placed', jsonb_build_object('order_id', o.id, 't100', true)
+    from public.orders o join auth.users u on u.id = o.user_id
+    where u.email in ('comprador@yuntera.example', 'comprador2@yuntera.example')
+    order by o.placed_at desc limit 24;
+  $q$);
+
   create temp table pending_jobs as
-  select event_id from private.outbox_jobs where consumer = 'notify' and status = 'pending';
+  select event_id, attempts from private.outbox_jobs where consumer = 'notify' and status = 'pending';
+  assert (select count(*) from pending_jobs p join private.outbox_events e on e.id = p.event_id
+          where e.payload ? 't100') >= 12, 'the suite''s own batch of events is waiting';
 
   -- Two planners at once: the second waits for nothing and plans nothing the first holds.
   perform dblink_exec('a', 'begin');
@@ -1150,8 +1266,10 @@ begin
   select n into v_b from dblink('b', 'select public.worker_notify_plan(1000)') as t (n integer);
   assert v_b = 0, 'and finds nothing afterwards';
   assert (select count(*) from dblink('admin',
-            $q$select j.attempts from private.outbox_jobs j where j.consumer = 'notify'$q$) as t (attempts smallint)
-          where attempts <> 1) = 0, 'each job planned once';
+            $q$select j.event_id, j.attempts from private.outbox_jobs j where j.consumer = 'notify'$q$)
+            as t (event_id bigint, attempts smallint)
+          join pending_jobs p on p.event_id = t.event_id
+          where t.attempts <> p.attempts + 1) = 0, 'each job planned once';
   assert (select n from dblink('admin', $q$select count(*) - count(distinct dedupe_key) from private.notification_deliveries$q$)
           as t (n bigint)) = 0, 'no duplicate message';
 
@@ -1166,27 +1284,35 @@ begin
   from dblink('b', $q$select public.worker_notify_claim('wb', 10, 120)$q$) as t (c jsonb), jsonb_array_elements(t.c) x;
   perform dblink_exec('a', 'commit');
 
-  assert (select count(*) from claims where worker = 'a') = 10, 'first worker claimed a batch';
+  -- A batch of ten, of which those that turn out to have no way to reach
+  -- anyone (a team without a mailbox, on a used database's choices) are
+  -- skipped instead of handed out; on a fresh seed all ten are handed out.
+  assert (select count(*) from claims where worker = 'a') = 10
+      or ((select count(*) from claims where worker = 'a') between 1 and 9
+          and (select n from dblink('admin', $q$select count(*) from private.t100_deliveries$q$) as t (n bigint)) > 0),
+    'first worker claimed a batch';
   assert (select count(*) from claims where worker = 'b') > 0, 'second worker claimed another batch while the first held its own';
   assert not exists (select id from claims where worker = 'a' intersect select id from claims where worker = 'b'),
     'no message given to both';
   assert (select count(*) from dblink('admin',
-            $q$select locked_by from private.notification_deliveries where status = 'sending'$q$) as t (locked_by text)
-          where locked_by not in ('wa', 'wb')) = 0, 'every lease belongs to one of them';
+            $q$select id, locked_by from private.notification_deliveries where status = 'sending'$q$)
+            as t (id uuid, locked_by text)
+          join claims c on c.id = t.id
+          where t.locked_by is distinct from 'w' || c.worker) = 0, 'every lease belongs to the worker that claimed it';
 
-  -- Put everything back as the seed left it.
-  perform dblink_exec('admin', $q$
-    delete from private.notification_deliveries;
-    update private.outbox_jobs set status = 'pending', attempts = 0, done_at = null, last_error = null
-    where consumer = 'notify';
-  $q$);
-  assert (select count(*) from pending_jobs)
-         = (select count(*) from private.outbox_jobs where consumer = 'notify' and status = 'pending'),
-    'restored';
+  perform pg_temp.t100_restore();
 
   perform dblink_disconnect('a');
   perform dblink_disconnect('b');
   perform dblink_disconnect('admin');
+exception when others or assert_failure then
+  -- Close the workers' sessions (their open transactions end with them), put
+  -- everything back, and fail with the original reason.
+  perform dblink_disconnect(c) from unnest(coalesce(dblink_get_connections(), '{}')) c;
+  if to_regclass('private.t100_deliveries') is not null then
+    perform pg_temp.t100_restore();
+  end if;
+  raise;
 end
 $$;
 
