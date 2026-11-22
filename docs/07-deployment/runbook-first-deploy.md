@@ -10,7 +10,10 @@ production, with the Supabase and Vercel dashboards open.
   `yuntera`, reference `lfulotisyeyooxecwnox`, US East, Postgres 17, free
   plan), first up to migration `082400`, then again for `082500` to
   `082700` (account security, notifications, product photos), and then for
-  `082800` to `083100` (the security hardening). Each step says
+  `082800` to `083100` (the security hardening). Migrations `083200` and
+  `083300` (the follow-ups) are **not** applied there yet and the apps there
+  are not redeployed with them: their steps are under
+  [Migrations 083200 and 083300](#migrations-083200-and-083300). Each step says
   what was actually run and what differed from the local build. Places that
   differed, or still may, are marked ⚠.
 - **It costs money or it does not, depending on step 1.** Decide before
@@ -515,6 +518,181 @@ first `push`; repeat points 1, 4, 6 and 8 as written; point 7 does not apply
 (finance approves real accounts in the console); and decide first about the
 `storage` defaults and the `net` grants of point 4.
 
+### Migrations 083200 and 083300
+
+The database follow-ups (`083200`: the scan check at picking, checked driver
+positions and action times, the district of each stop, withdrawing a return,
+the final state of an order with a parcel delivered and one returned, the
+fee-floor re-check, new messages, the network extension's revoke) and the web
+follow-ups (`083300`: the apps' own sign-in limit). **Not applied to the hosted
+preview yet, and the web apps there are not redeployed with these changes.**
+Both were applied locally, in order, on top of a database built to `083100`
+with that era's demo data and committed activity (returns, refunds, an order
+with one parcel delivered and one returned, messages): both went in without
+error; the four orders in that state became delivered with their windows
+never shorter; every one of the 13 refunds got a confirmation
+(`before_confirmations`) and no new "refund completed" message was announced;
+the three cantons and 13 districts spelt "De", "Del" or "Y" were corrected;
+`anon` and `authenticated` lost the use of `net`; the lockdown guard passed;
+a fee change on that data paused 5 offers and planned and prepared one message
+per shop.
+
+The new apps and the new database depend on each other: the new field app
+sends a scan code that the old `wms_confirm_pick` does not take, the new apps
+refuse to sign anyone in without `auth_limit_reserve`, and the old field app
+cannot pick any more once `083200` is in (`scan_required`). Keep the time
+between step 3 and step 6 short, and do it outside warehouse hours.
+
+Do this in order.
+
+1. **Generate `AUTH_GUARD_KEY`** on your own machine, without printing it,
+   into a file only you can read:
+
+   ```bash
+   (umask 077; openssl rand -hex 32 > ~/yuntera-auth-guard-key.txt)
+   ```
+
+   One value for all four apps. It must be 32 characters or more and not one
+   of the repository's example values, or the apps treat it as missing.
+2. **Set it on all four Vercel projects BEFORE redeploying**, as a sensitive
+   variable for Production (`yuntera-web`, `yuntera-vende`,
+   `yuntera-central`, `yuntera-campo`), from the file so it never appears on
+   screen or in the shell history:
+
+   ```bash
+   VERCEL_ORG_ID=<team id> VERCEL_PROJECT_ID=<project id> \
+     vercel env add AUTH_GUARD_KEY --environment production --sensitive --yes < ~/yuntera-auth-guard-key.txt
+   ```
+
+   Check in each project that it is listed (its value is hidden). While
+   there: `SHOP_REFRESH_KEY` must be 32 characters or more and not
+   `local-development-only` on the shop, the seller centre and the console,
+   or the catalogue refresh is switched off (the shop answers 404 and the
+   callers log it). Set nothing for the visitor's address on Vercel (the apps
+   read `x-vercel-forwarded-for`); `AUTH_CLIENT_IP_HEADER` and
+   `AUTH_CLIENT_IP_HOPS` are only for another host. **Never set
+   `YUNTERA_LOCAL_RUN`** on Vercel or any deployment: it relaxes the key
+   checks for the local stack and CI.
+3. **Apply both migrations** with `remote-db.sh push`. Before that, read-only,
+   to know what the one-off changes of `083200` will touch:
+
+   ```sql
+   -- orders that will become delivered (a parcel delivered, the rest returned)
+   select o.order_number from public.orders o
+   where o.status in ('shipped', 'partially_shipped')
+     and exists (select 1 from public.shipments s where s.order_id = o.id and s.status = 'delivered')
+     and not exists (select 1 from public.shipments s where s.order_id = o.id
+                     and s.status not in ('delivered', 'returned', 'cancelled'));
+   -- refunds that will be marked confirmed without a message
+   select count(*) from private.refunds;
+   ```
+
+   Then `remote-db.sh status` must list 31 files as applied. What `083200`
+   changes in the data, once: those orders become delivered, with
+   `delivered_at` the end of their last parcel and the withdrawal window and
+   warranty counted from then (never shorter than before); every refund
+   already booked gets a row in `private.refund_confirmations` marked
+   `before_confirmations` (so nothing is announced again); the joining words
+   in canton and district names go lower case ("Montes de Oca"). It also
+   drops the old signatures of `wms_confirm_pick`, `driver_arrive`,
+   `driver_fail_stop` and `driver_report_position`, and stops a payment
+   marked refunded from announcing "refund completed" (that now waits for
+   `private.confirm_refund`).
+4. **Check the network extension's grants**, right after `083200` and again
+   after any upgrade, disable or re-enable of `pg_net`:
+
+   ```sql
+   -- all four must be false
+   select has_schema_privilege('anon', 'net', 'usage'),
+          has_schema_privilege('authenticated', 'net', 'usage'),
+          has_function_privilege('authenticated', 'net.http_post(text, jsonb, jsonb, jsonb, integer)', 'execute')
+            and has_schema_privilege('authenticated', 'net', 'usage'),
+          has_table_privilege('authenticated', 'net._http_response', 'select');
+   -- no row for anon or authenticated
+   select p.proname, a.grantee::regrole, a.privilege_type
+   from pg_proc p, aclexplode(p.proacl) a
+   where p.pronamespace = 'net'::regnamespace and a.grantee in ('anon'::regrole, 'authenticated'::regrole);
+   -- if present, the platform may grant again when the extension is re-created
+   select 1 from pg_event_trigger where evtname = 'issue_pg_net_access';
+   ```
+
+   If a check fails, the platform's own role made the grant: run section 8
+   of `083200` again (it is idempotent); if that does not take, ask Supabase
+   support or record it as an accepted limit. Then confirm that the
+   `notify-sweep` job still succeeds (`cron.job_run_details`) and that
+   `select private.notify_kick();` runs without error. Details are in
+   [access control](../03-data/access-control.md).
+5. **Run the suites** with `remote-db.sh test`: all 20 files, including
+   `125_followups.sql` (its `net_grants` block runs the same checks as point 4
+   and fails while either role can still use `net`), `130_web_followups.sql`
+   (its Vault stand-in is skipped against a real Vault) and
+   `135_merge_followups.sql`.
+6. **Redeploy the four web apps**, one at a time, with `vercel deploy --prod`
+   as in step 7. After the redeploy: staff and field users are signed out
+   once (their sessions are older than the new 12-hour limit), and the
+   console ends a session after 30 idle minutes; shoppers stay signed in up to
+   90 days and sellers up to 30 days from their sign-in. A session that ends
+   sends the person to sign in and back to the page they were on.
+7. **Store the digest of the key in the project's Vault**, so that only the
+   apps can call the sign-in limit. Compute it without printing the key (the
+   digest itself is not the key, and cannot be turned back into it or into
+   the apps' proof):
+
+   ```bash
+   (umask 077; AUTH_GUARD_KEY="$(cat ~/yuntera-auth-guard-key.txt)" node -e '
+     const c = require("node:crypto");
+     const proof = c.createHmac("sha256", process.env.AUTH_GUARD_KEY.trim()).update("auth-limit-caller").digest("hex");
+     const digest = c.createHash("sha256").update(proof).digest("hex");
+     process.stdout.write(`select vault.create_secret(${"\x27"}${digest}${"\x27"}, ${"\x27"}auth_limit_caller_digest${"\x27"});\n`);
+   ' > ~/yuntera-auth-digest.sql)
+   supabase/scripts/remote-db.sh sql <project-reference> ~/yuntera-auth-digest.sql
+   rm ~/yuntera-auth-digest.sql
+   ```
+
+   (The same value is `printf %s "$(printf %s auth-limit-caller | openssl dgst
+   -sha256 -hmac "$KEY" -r | cut -d' ' -f1)" | sha256sum`, but that puts the
+   key on a command line.) Then sign in to each app once with a demo account:
+   it must work. If sign-in now fails everywhere with the generic message, the
+   digest does not match the key the apps hold: fix the digest with
+   `select vault.update_secret((select id from vault.secrets where name = 'auth_limit_caller_digest'), '<digest>');`.
+   **When the key changes**, change it on the four projects and update the
+   digest together; the console's activity cookies and the "known browser"
+   marks are signed with it, so console sessions end and every browser counts
+   as new once.
+8. **Optional, together or not at all: the human check.** Create a Cloudflare
+   Turnstile widget for the apps' domains; set its public site key as
+   `NEXT_PUBLIC_AUTH_CAPTCHA_SITE_KEY` on all four projects and redeploy
+   (it is read at build time); and switch on CAPTCHA protection with the
+   Turnstile secret in Supabase Auth (Bot and Abuse Protection). Turning on
+   only one side breaks sign-in: Auth then refuses every sign-in without a
+   token, or the forms send one Auth does not check. Not tried on a real
+   deployment.
+9. **Production only (Pro plan):** switch on Auth's session time-box
+   (12 hours) and inactivity timeout, so a refresh token copied out of a
+   browser also ends; keep e-mail confirmation on. From now on run the
+   preview's `auth-config.sh apply` with `YUNTERA_PREVIEW_CONFIRM=<ref>`.
+
+**What breaks if a step is skipped.**
+
+- Without `AUTH_GUARD_KEY` on a project (or with a short or example value),
+  that app signs nobody in, signs nobody up and sends no reset e-mail: it
+  answers with a generic message and logs the reason without the value. Token
+  refreshes still go ahead (and are logged), so people already signed in stay
+  signed in. Different values on different projects only split the counts
+  per app, but break the Vault check of point 7 for all but one.
+- Without `083300` applied, the new apps fail closed in the same way (the
+  function they ask does not exist).
+- Without `083200` applied, the new field app cannot confirm a pick (the
+  database refuses the extra argument) and the drivers' new times and the
+  return withdrawal fail; with `083200` applied and the old apps still
+  deployed, picking in the old field app is refused (`scan_required`).
+- Without the digest in Vault (point 7), everything works, but anyone holding
+  the public key can add rows to the sign-in limit's table; they count against
+  nobody and are removed within two hours. With a digest that does not match
+  the apps' key, every sign-in fails closed.
+- Without point 4, visitors and signed-in users may still be able to use
+  `net` (not reachable through the Data API, which does not expose it).
+
 ## 4. Confirm the database is what the migrations say
 
 Write these to a file and run it with `remote-db.sh sql <project-reference>
@@ -819,7 +997,10 @@ What has to be set on each project, in the dashboard or through the API:
    `yuntera-vende` and `yuntera-central` the same `SHOP_REFRESH_KEY`, one
    random value of 48 or more characters stored as a sensitive variable, which
    lets the seller centre and the console ask the shop to drop its cached
-   catalogue ([what they are](environments.md#settings-per-app)). Only
+   catalogue ([what they are](environments.md#settings-per-app)); and, from
+   the follow-ups on, `AUTH_GUARD_KEY` on all four, the same random value of
+   32 or more characters stored as a sensitive variable (see
+   [Migrations 083200 and 083300](#migrations-083200-and-083300)). Only
    Production has them today: a Vercel preview deployment would not reach the
    database.
 

@@ -240,9 +240,20 @@ and all of them pass on the merged database.
   rate limit. Sign-in, sign-up, account e-mails and codes have the apps' own
   limit per visitor and per account (decision 35), not Auth's alone, which
   counts the apps' server.
-- The hardening is verified locally only; it is not applied to the hosted
-  preview yet.
-- A new fee schedule does not re-check offers against the price floor.
+- The hardening (082800 to 083100) is applied to the hosted preview and was
+  smoke-tested there. The follow-ups (083200 and 083300: the scan check at
+  picking, checked driver positions and times, the fee-floor re-check, the
+  network extension's revoke, the sign-in limit and session lifetimes) are
+  verified locally only; they are not applied to the hosted preview, and the
+  web apps there are not redeployed with them.
+- The sign-in limit accepts calls from anyone holding the public key until the
+  hosted project stores the digest of `AUTH_GUARD_KEY` in Vault
+  (`auth_limit_caller_digest`); rotating that key means changing it in the
+  four web apps and the digest together, and ends the console's activity
+  cookies and the "known browser" marks.
+- Whether the platform grants the network extension (`pg_net`) to the API
+  roles again after an upgrade is unknown; the checks are in
+  [access control](../03-data/access-control.md).
 
 ## Mapping to OWASP ASVS Level 2
 
@@ -353,9 +364,9 @@ evidence are in [access control](../03-data/access-control.md),
   (decision 36); Auth's own time-box is not switched on (a Pro-plan setting).
 - The human check (Turnstile) is wired into the sign-in forms but off until
   its keys are set in the apps and in Auth.
-- The hardening of 21 November 2026 (migrations `082800` to `083100`) is
-  verified on a local PostgreSQL only and is not applied to the hosted
-  preview yet.
+- The hardening of 21 November 2026 (migrations `082800` to `083100`) is on
+  the hosted preview; the follow-ups (`083200`, `083300`) are verified on a
+  local PostgreSQL only and are not applied there yet.
 - Phone numbers for WhatsApp and SMS are not verified by a code.
 - Continuous integration, dependency scanning and secret scanning are not set
   up.

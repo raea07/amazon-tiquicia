@@ -645,6 +645,15 @@ caller)` counts one attempt before the call to Auth, or answers how many
   `x-real-ip`) on Vercel, and elsewhere only from the header the operator names
   in `AUTH_CLIENT_IP_HEADER`. Without one, only the per-account limits apply.
 
+The apps ask the limit as a visitor (the publishable key and no session),
+from the sign-in forms and from the proxy, so the Data API's per-request
+check (`check_request`) lets both functions through before anyone is signed
+in and before any second step; called with a password-only session of an
+account with a factor, they are refused like everything else
+(`supabase/tests/135_merge_followups.sql`). The database follow-ups' own new
+functions (`withdraw_return_request`, `ops_fee_floor_breaches`) are for
+signed-in people and staff and stay behind the second step.
+
 Tested in `supabase/tests/130_web_followups.sql`, the contract tests in
 `packages/db/src/contract.web-followups.test.ts`, the unit tests in
 `packages/next-kit` and the `web-followups` journey.
@@ -685,6 +694,12 @@ Only confirmation on closes it.
   webhooks will be the next; each should get its own key and narrowly scoped
   functions, as the worker has.
 - **Multi-factor enforcement is off** until `require_staff_mfa` is set to true.
+- **Migrations 083200 and 083300 are not on the hosted project yet.** The
+  network extension's revoke, the Vault digest that makes the sign-in limit
+  accept only the apps, and the limit behind Vercel's headers are checked
+  locally only (with stand-ins for Vault and for `net`); the steps and checks
+  for the hosted project are in the
+  [runbook](../07-deployment/runbook-first-deploy.md#migrations-083200-and-083300).
 - **The lockdown, and migrations 082800 to 083100 as a whole, are verified on
   local PostgreSQL only**, with a shim that copies Supabase's roles and
   permissive defaults. Run `020_access.sql` and
