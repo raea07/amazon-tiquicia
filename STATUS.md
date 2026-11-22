@@ -1,13 +1,19 @@
 # Status
 
-Updated 22 November 2026, after the complete seller, driver and warehouse
-apps were merged onto the fixes from the internal security review (the
-lockdown of direct table access, the integrity of money and returns, and
-limits against abuse), with account security, notifications, product photos
-and the shopper app already in. Those fixes are applied to the hosted preview
-(all 29 migrations are there now) and were checked there, and the four web
-apps were redeployed. This is the honest state of the project: what exists,
-how far it was checked, and what only the owner can do.
+Updated 22 November 2026, after two follow-up workstreams were merged: the
+database follow-ups (the scan check at picking, checked driver positions and
+action times, the district of each stop, withdrawing a return, the fee-floor
+re-check, new messages, the network extension's revoke; migration `083200`)
+and the web follow-ups (the apps' own sign-in limit, session lifetimes per
+app, narrower cache refreshes, the console's order search by POST, guards in
+the scripts, pinned CI actions and a tighter content-security policy;
+migration `083300`). **Migrations `083200` and `083300` are NOT on the hosted
+preview yet, and the web apps there are NOT redeployed with these changes**:
+the preview still runs the 29 migrations and the apps of the earlier round
+(the steps are in the
+[runbook](docs/07-deployment/runbook-first-deploy.md#migrations-083200-and-083300)).
+This is the honest state of the project: what exists, how far it was checked,
+and what only the owner can do.
 
 ## In one paragraph
 
@@ -83,22 +89,33 @@ In the order that unblocks the most.
       `storage` instead of failing on the platform's setting.
    2. The `pg_net` extension lets visitors and signed-in users call its web
       request functions and read its responses. The API does not expose its
-      schema, so nobody can reach them over the internet.
+      schema, so nobody can reach them over the internet. Migration `083200`
+      revokes this; whether the revoke holds on the hosted project, and after
+      an upgrade of the extension, must be checked there with the queries in
+      the runbook once it is applied.
 
    Migrations `082800` to `083100` are applied to the preview (that item is
    done), and the four web apps are redeployed with them. The four demo
    shops' payout accounts were loaded before approvals existed; I stamped
    exactly those four as approved, as the seed does, so payout runs on the
    preview include them again.
-4. **Open a pull request for this branch** (`claude/vigilant-edison-lh64v2`)
+4. **Take migrations `083200` and `083300` to the preview and redeploy the
+   four web apps**, in the order the
+   [runbook](docs/07-deployment/runbook-first-deploy.md#migrations-083200-and-083300)
+   gives: generate `AUTH_GUARD_KEY` and set it on all four Vercel projects
+   **before** redeploying (the new apps sign nobody in without it), apply both
+   migrations, check the network extension's grants, run the suites,
+   redeploy, then store the key's digest in the project's Vault. Staff and
+   field users are signed out once by the new session limits.
+5. **Open a pull request for this branch** (`claude/vigilant-edison-lh64v2`)
    when you want it on `main`. I did not open one because you had not asked.
    The CI workflow will run for the first time then; its steps were run by hand
    here but it has never run on GitHub.
-5. **Business set-up that only you can do:** the legal entity and its
+6. **Business set-up that only you can do:** the legal entity and its
    registration with Hacienda, a payment gateway contract (cards and SINPE
    Móvil), the electronic-invoicing provider, a bank account, and the support
    mailboxes the screens mention (`ayuda@yuntera.cr` does not exist yet).
-6. **Set up messaging before any message can be sent.** Nothing reaches a
+7. **Set up messaging before any message can be sent.** Nothing reaches a
    real person until you do; every step is in
    [`docs/06-operations/notifications.md`](docs/06-operations/notifications.md),
    "Before anything is sent for real". In short:
@@ -117,22 +134,22 @@ In the order that unblocks the most.
       run), Auth's custom SMTP and the Send Email Hook, and the team mailboxes.
    5. The real legal name, legal id and postal address for e-mail footers
       (`NOTIFY_LEGAL_*`).
-7. **Decide on e-mail for the preview.** Supabase refuses our Spanish e-mail
+8. **Decide on e-mail for the preview.** Supabase refuses our Spanish e-mail
    templates on a free project that uses its built-in sender, so the preview
    still has Supabase's default English ones, whose link the apps' confirmation
    page does not read. The built-in sender also mails only members of your
    Supabase organisation, and never a `.example` address. Custom SMTP (or the
-   messaging provider in item 6) fixes all three; then run
+   messaging provider in item 7) fixes all three; then run
    `supabase/scripts/auth-config.sh apply lfulotisyeyooxecwnox preview` again
    and send yourself one real password reset. Until then, keep e-mail
    confirmation off there.
-8. **Open Authentication → Users in the Supabase dashboard once** and check it
+9. **Open Authentication → Users in the Supabase dashboard once** and check it
    loads. Accounts deleted through the apps stay there, anonymised; Auth read
    such a row without error, but its user listing needs the secret key, which
    nothing here uses, so the listing itself was not opened.
-9. **Know what the preview costs.** The Vercel projects are on your Pro plan,
-   which bills by use. The Supabase project is in the free organisation.
-10. **Before the native apps go to a store:**
+10. **Know what the preview costs.** The Vercel projects are on your Pro plan,
+    which bills by use. The Supabase project is in the free organisation.
+11. **Before the native apps go to a store:**
     1. The four store identifiers are settled (you chose them on 21 November
        2026, and they can never change after the first upload):
        `com.yuntera.shop`, `com.yuntera.vende`, `com.yuntera.ruta` and
@@ -166,19 +183,19 @@ In the order that unblocks the most.
 
 ## What is built
 
-| Part                 | Where                                                              | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| -------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shop                 | `apps/web`                                                         | Home, search with typo tolerance, categories, product pages with competing offers and a delivery date, cart, checkout with SINPE Móvil, card or cash on delivery, orders with tracking and delivery code, returns with where each stands, reviews, account, help, a page to report a listing. An unknown product or category address answers "not found" (404). Product photos in a gallery and in every list. Password reset, e-mail confirmation, notification settings (channels, WhatsApp number, commercial consent), account deletion, and a public page on how to delete an account                                                                                                           |
-| Seller centre        | `apps/seller`                                                      | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, a request to change the payout account, and the team (invitations that the invited person accepts) and requests to change the shop's name, fiscal details or contact. A photo manager on each listing (resized in the browser, reviewed before they show), the shop's notification settings, an optional second factor                                                                                                                   |
-| Internal console     | `apps/ops`                                                         | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail, shop-change requests, routes released by a driver who stopped being active, recording a return's goods back, checking in a returned parcel and releasing a locked delivery code. Photo review and take-down, the messages each order produced and the stuck ones with a resend button, staff's second factor (enrolment, the second step at sign-in, an administrator's reset of a colleague's) |
-| Routes and warehouse | `apps/field`                                                       | Driver: the day's route, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with scan check, packing, receiving, stock lookup, checking in a returned parcel. A suspended driver sees a plain message and no route. Password reset and account deletion as in the other apps                                                                                                                                                                                                                                                                                                                                                   |
-| Database             | `supabase/`                                                        | 29 migrations, 80 tables (62 public, 18 private), 167 functions in `public` (155 for signed-in users, 11 open to visitors, 11 server-side only), no table, view or sequence reachable by an app role, two storage buckets with their rules, row-level security on every table as a second lock, double-entry ledger, one register for every refund, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                     |
-| Domain logic         | `packages/core`                                                    | Money and IVA, fees, featured-offer choice, search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. Shopper app: every shopper flow of the website. Seller app (Yuntera Vende): the seller centre's flows from packing to payouts and shop registration, except the team and the requests to change the shop's details. Drivers' app (Yuntera Ruta): every driver flow, plus position sharing during a route and work without signal. Warehouse app (Yuntera Bodega): picking by camera or hand scanner, packing, receiving, checking in returned parcels, stock lookup. The three ask for the second factor. `packages/expo-kit` is what all four share. None of the three has been built for a phone yet; until then, their users work in the web apps, too                               |
-| Notifications        | `packages/notifications`, `supabase/functions`, `tools/dev-notify` | A planner in the database turns each event into one message per person and channel, exactly once; a worker sends them by e-mail, WhatsApp, SMS and push with retries and dead letters; signed delivery reports; quiet hours; suppressions; account e-mails in the same words as Auth's templates. Runs locally against fake providers only                                                                                                                                                                                                                                                                                                                                                           |
-| Shared code          | `packages/{brand,ui,db,next-kit}`                                  | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session, security headers, forms)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Documentation        | `docs/`                                                            | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Brand                | `docs/brand/`, `packages/brand/`                                   | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Part                 | Where                                                              | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shop                 | `apps/web`                                                         | Home, search with typo tolerance, categories, product pages with competing offers and a delivery date, cart, checkout with SINPE Móvil, card or cash on delivery, orders with tracking and delivery code, returns with where each stands (a request still waiting for staff can be withdrawn), reviews, account, help, a page to report a listing. An unknown product or category address answers "not found" (404). Product photos in a gallery and in every list. Password reset, e-mail confirmation, notification settings (channels, WhatsApp number, commercial consent), account deletion, and a public page on how to delete an account                                                                                                                                                                                                                                                                                   |
+| Seller centre        | `apps/seller`                                                      | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, a request to change the payout account, and the team (invitations that the invited person accepts) and requests to change the shop's name, fiscal details or contact. A photo manager on each listing (resized in the browser, reviewed before they show), the shop's notification settings, an optional second factor                                                                                                                                                                                                                                                                                                                                                |
+| Internal console     | `apps/ops`                                                         | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail, shop-change requests, routes released by a driver who stopped being active, recording a return's goods back, checking in a returned parcel and releasing a locked delivery code. Photo review and take-down, the messages each order produced and the stuck ones with a resend button, staff's second factor (enrolment, the second step at sign-in, an administrator's reset of a colleague's). Offers a fee change paused (`/tarifas`), and on dispatch a door position outside the country or a closing received late. Order search by name without the name in the address; navigation that folds into a menu on a phone |
+| Routes and warehouse | `apps/field`                                                       | Driver: the day's route with each stop's district, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with the scanned code checked by the database, packing, receiving, stock lookup, checking in a returned parcel. A suspended driver sees a plain message and no route. Password reset and account deletion as in the other apps                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Database             | `supabase/`                                                        | 31 migrations, 83 tables (62 public, 21 private), 171 functions in `public` (159 for signed-in users, 13 open to visitors, 11 server-side only), no table, view or sequence reachable by an app role, two storage buckets with their rules, row-level security on every table as a second lock, double-entry ledger, one register for every refund, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Domain logic         | `packages/core`                                                    | Money and IVA, fees, featured-offer choice, search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. Shopper app: every shopper flow of the website. Seller app (Yuntera Vende): the seller centre's flows from packing to payouts and shop registration, except the team and the requests to change the shop's details. Drivers' app (Yuntera Ruta): every driver flow, plus position sharing during a route and work without signal; each stop shows its district, and actions queued without signal keep the time they happened. Warehouse app (Yuntera Bodega): picking by camera or hand scanner, packing, receiving, checking in returned parcels, stock lookup. The three ask for the second factor. `packages/expo-kit` is what all four share. None of the three has been built for a phone yet; until then, their users work in the web apps, too                                                                                                                                                               |
+| Notifications        | `packages/notifications`, `supabase/functions`, `tools/dev-notify` | A planner in the database turns each event into one message per person and channel, exactly once; a worker sends them by e-mail, WhatsApp, SMS and push with retries and dead letters; signed delivery reports; quiet hours; suppressions; account e-mails in the same words as Auth's templates. Runs locally against fake providers only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Shared code          | `packages/{brand,ui,db,next-kit}`                                  | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session and its lifetime, the sign-in limit, security headers, forms, cache tags)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Documentation        | `docs/`                                                            | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Brand                | `docs/brand/`, `packages/brand/`                                   | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 How the new parts work, in short:
 
@@ -211,6 +228,32 @@ How the new parts work, in short:
 - **Access that ends at once.** A driver who is suspended or offboarded loses
   their routes at once (unstarted ones go back to dispatch; one under way is
   split so the cash stays with who collected it).
+- **Signing in has its own limit** in the web apps, counted in the database
+  per visitor address and per account: wrong passwords, sign-ups, reset and
+  confirmation e-mails, e-mailed codes, the current password asked again, and
+  refused token refreshes. Only keyed hashes are stored, for two hours, with
+  a key only the apps hold (`AUTH_GUARD_KEY`). Nothing looks the account up,
+  so the answer says nothing about whether an e-mail has an account; one
+  stranger cannot lock the owner out, and the owner's usual browser is never
+  held by the account's limits. Sign-up with an existing address shows the
+  same screen as a new one (with e-mail confirmation on). Turnstile is wired
+  into the forms and off until its keys are set.
+- **Sessions end per app:** 90 days in the shop, 30 in the seller centre,
+  12 hours in the console and the field app, and after 30 idle minutes in the
+  console. The person is sent to sign in and brought back to the page.
+- **The shop's cache** drops only the product and offer pages an action
+  changed; take-downs, shop suspensions and listing rejections refresh it.
+- **The warehouse and the drivers, checked in the database:** picking
+  compares the scanned code with the product's own codes (any usual spelling
+  of a barcode); a driver's position is checked, and one outside Costa Rica
+  is refused live and flagged at a door; actions queued without signal keep
+  the time they happened, corrected for a phone clock that is off.
+- **Returns and fees.** A second request for a unit already in a return has
+  its own message; a shopper can withdraw a request still waiting for staff;
+  an order with a parcel delivered and the rest returned ends delivered. A fee
+  change (a new schedule, the active one's amounts, a category's commission,
+  payment or warehouse fees) pauses offers left below the price floor, lists
+  them for staff and tells each shop once.
 
 - **Paying sellers.** What a shop is owed comes from the ledger and is split
   three ways: _pending_ (on orders not delivered, or delivered fewer than 10
@@ -239,7 +282,12 @@ How the new parts work, in short:
   ledger and refund register the law requires, detached from them. It waits while an order, return, refund or complaint is open, or while
   the person alone runs an open shop.
 - **Messages.** Order and shop events become messages by e-mail, WhatsApp, SMS
-  and push, per person's choices. Order messages always go by e-mail; WhatsApp
+  and push, per person's choices. Since the follow-ups also: a return
+  approved and its goods received, a delivery code locked (to the shopper and
+  support) and released, an invitation to a shop (to the invited account only,
+  at most once per shop in 14 days), a shop change or payout account decided,
+  a payout paid, and offers paused by a fee change. A message that cannot be
+  prepared becomes a dead letter instead of stopping the others. Order messages always go by e-mail; WhatsApp
   and SMS need a mobile number; a number that sent STOP is switched back on
   only from that phone. Commercial messages need a separate consent, which
   starts unticked.
@@ -251,19 +299,19 @@ How the new parts work, in short:
 ## How it was checked
 
 On a development machine, after the last change, on the combination of
-everything above (lane 5 of `tools/dev/stack.sh`, each suite on a freshly
-seeded database):
+everything above with both follow-ups merged (lanes 1 and 2 of
+`tools/dev/stack.sh`, each suite on a freshly seeded database):
 
-| Check                | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Unit tests           | 939 pass (native kit 287, core 260, notifications 196, seller app 39, drivers' app 30, shared web code 30, API client 25, brand 21, local API 16, warehouse app 16, shopper app 14, fake providers 5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Database tests       | 17 files pass on PostgreSQL 16: access control per role, checkout, money, fulfilment, search, delivery promise, the API, the back office, people and payouts, the fixes, one order from three sellers paid out end to end, account security (second factor, per-request check, and deletion searched for in every row of every table after the person had messages, a refunded return, invitations and a wrong delivery code and, as a seller, a photo, an invitation and a contact change), notifications, product photos, and the three hardening suites: the lockdown guard with every finding of the review replayed, money and returns, and limits. Each finding of the review has a block named after it, and each passes on the merged database |
-| API contract tests   | 104 pass in 12 files: every screen's payload, called as each role, matches the types the apps use; 10 of them run two database sessions at once and check that the second waits on a lock (two returns of the last unit, cash on two routes, a parcel sent back while the other is at the door, a transfer confirmed while the shopper cancels, a retried checkout, a price change during checkout, the last unit, payout runs and payouts)                                                                                                                                                                                                                                                                                                            |
-| Browser journeys     | 15 pass in Chromium, each on a freshly seeded database, with no console errors or server errors: shopper, seller, staff, driver and warehouse, people, payouts, listing edits, the shop's 404 answers, password reset, staff's second factor, account deletion, notifications (against the fake providers), product photos, money and returns, and limits. None of them reaches a table directly; the local API refuses every table path                                                                                                                                                                                                                                                                                                               |
-| Native journeys      | 5 pass (269 checks) through the web export of the native apps, in Chromium at phone size, each on a freshly seeded database: shopper (31, a return on a delivered order included), seller (63, with a price below the fees and a seller's second step), driver (81, with a stretch without signal, a suspension that hands the unfinished stops to a new route, and a delivery code locked after five wrong tries and released by Central), warehouse (58, picking by scan, an over-count and a second count refused, a returned parcel checked in) and staff (36: the right and wrong kinds of account for the three staff apps, and signing out offline)                                                                                             |
-| Callers of the API   | Probed through the local API: a visitor, a shopper, staff without a factor, staff with a factor before the second step (refused everything but the second step's own calls), the notification worker's secret key (answered, about 9 ms a call on this loaded machine), and a token after sign-out (`session_ended`)                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Native configuration | For each of the four apps in the store variant: Expo's configuration resolves (public and introspect: identifiers `com.yuntera.*`, no non-exempt encryption, the biometric permissions removed), `expo install --check` finds every package at Expo SDK 58's version, expo-doctor passes 20 of 20, and the iOS and Android bundles export, with no duplicate-React warning; the bundle scan finds no cipher in their 8 bundle files, nor in the web exports. Every purpose string is Spanish                                                                                                                                                                                                                                                           |
-| Lint and types       | No lint errors (130 warnings and 240 notes, of kinds already there) and no type errors in the 17 typecheck tasks, the four native apps included                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Check                | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit tests           | 1061 pass (native kit 287, core 266, notifications 252, shared web code 88, seller app 39, drivers' app 31, API client 25, brand 21, local API 16, warehouse app 16, shopper app 15, fake providers 5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Database tests       | 20 files pass on PostgreSQL 16: access control per role, checkout, money, fulfilment, search, delivery promise, the API, the back office, people and payouts, the fixes, one order from three sellers paid out end to end, account security (second factor, per-request check, and deletion searched for in every row of every table after the person had messages, a refunded return, invitations, a wrong delivery code, a withdrawn return claim, the messages about a locked and released code and about invitations, and a sign-in counted by the limit; and, as a seller, a photo, an invitation and a contact change), notifications, product photos, the three hardening suites (the lockdown guard with every finding of the review replayed, money and returns, limits), the database follow-ups, the web follow-ups, and the two together at the per-request check |
+| API contract tests   | 114 pass in 14 files: every screen's payload, called as each role, matches the types the apps use; the race tests run two database sessions at once and check that the second waits on a lock (two returns of the last unit, cash on two routes, a parcel sent back while the other is at the door, a transfer confirmed while the shopper cancels, a retried checkout, a price change during checkout, the last unit, payout runs and payouts)                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Browser journeys     | 17 pass in Chromium, each on a freshly seeded database, with no console errors or server errors: shopper, seller, staff, driver and warehouse, people, payouts, listing edits, the shop's 404 answers, password reset, staff's second factor, account deletion, notifications (against the fake providers), product photos, money and returns, limits, the database follow-ups and the web follow-ups. In the full run the web follow-ups journey failed on its fixed count of 15 console sections (the database follow-ups added a 16th); the count now comes from the console's list, and that journey then passed alone twice after one run in which its idle-session step timed out once (not reproduced). None of them reaches a table directly; the local API refuses every table path                                                                                  |
+| Native journeys      | 5 pass (279 checks) through the web export of the native apps, in Chromium at phone size, each on a freshly seeded database: shopper (33, a return on a delivered order and its withdrawal included), seller (63, with a price below the fees and a seller's second step), driver (88, with a stretch without signal, the stop's district, queued actions that keep their time, a suspension that hands the unfinished stops to a new route, and a delivery code locked after five wrong tries and released by Central), warehouse (59, picking by scan checked by the database, an over-count and a second count refused, a returned parcel checked in) and staff (36: the right and wrong kinds of account for the three staff apps, and signing out offline)                                                                                                               |
+| Callers of the API   | Probed through the local API: a visitor, a shopper, staff without a factor, staff with a factor before the second step (refused everything but the second step's own calls), the notification worker's secret key (answered, about 9 ms a call on this loaded machine), and a token after sign-out (`session_ended`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Native configuration | For each of the four apps in the store variant: Expo's configuration resolves (public and introspect: identifiers `com.yuntera.*`, no non-exempt encryption, the biometric permissions removed), `expo install --check` finds every package at Expo SDK 58's version, expo-doctor passes 20 of 20, and the iOS and Android bundles export, with no duplicate-React warning; the bundle scan finds no cipher in their 8 bundle files, nor in the web exports. Every purpose string is Spanish                                                                                                                                                                                                                                                                                                                                                                                  |
+| Lint and types       | No lint errors (135 warnings and 254 notes, of kinds already there) and no type errors in the 17 typecheck tasks, the four native apps included                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 Money and the documented example still hold: every ledger transaction sums to
 zero, a seller's available + pending + in transit equals the ledger balance,
@@ -272,9 +320,17 @@ the fee example (₡20,000, hogar, card, shipped by the seller) still pays out
 block of the money suite no refund is outside the register, none exceeds what
 was collected, and no line has more units refunded or in returns than bought.
 
-The four new migrations were also applied, in order, on top of a database
-built to `082700` with the old demo data and some activity, the way the hosted
-preview is: all four went in; every order got its delivery code, a wrong code
+Migrations `083200` and `083300` were also applied, in order, on top of a
+database built to `083100` with that era's demo data and committed activity
+(the money-and-returns suite and part of the notifications suite of that
+time), the way the hosted preview is: both went in; the four orders with a
+parcel delivered and the rest returned became delivered, with windows never
+shorter; all 13 refunds got a confirmation and no "refund completed" was
+announced again; three cantons and 13 districts lost their capital "De";
+visitors and signed-in users lost the use of `net`; the lockdown guard
+passed; a fee change on that data paused 5 offers and prepared one message
+per shop. Earlier, the four migrations before them were applied the same way
+on top of a database built to `082700`: all four went in; every order got its delivery code, a wrong code
 on an order still on its way was carried over, a duplicate withdrawal was
 closed, every cash stop names its order, no table is readable by an app role
 and no write policy is left. On that database the payout suites fail with
@@ -327,7 +383,7 @@ notifications migration are never sent (the test now accounts for that);
 storage refuses direct deletes and its unique index is partial (the photo test
 now does what the storage service does); a deleted public photo stays served
 by the CDN for a few minutes; Supabase refuses our e-mail templates without
-SMTP and refuses to send to `.example` addresses ("What needs you", item 7).
+SMTP and refuses to send to `.example` addresses ("What needs you", item 8).
 
 The test data from this round is gone: the throwaway accounts were removed,
 and the test listing (a coffee maker of TecnoCasa) was archived. What stays:
@@ -402,8 +458,8 @@ These are missing, not hidden. The first group blocks a public launch.
   submitted. Phone numbers for WhatsApp and SMS are not verified by a code.
   Not built: commercial messages (no template and no one-step unsubscribe
   page), the daily staff summary of stuck messages, a clean-up of old message
-  rows, a refund-completed message for staff-approved return refunds, and the
-  team mailboxes (staff messages are skipped until you add them).
+  rows, and the team mailboxes (staff messages are skipped until you add
+  them).
 - A scheduled clean-up of unused photo files. Files nothing needs are deleted
   only when a seller or catalogue staff act.
 - A bank connection for payouts. Transfers are made by hand and recorded in
@@ -438,10 +494,8 @@ and the warehouse use the web apps)
   and "use my current location" for a pickup place (only a Plus Code; the app
   has no location permission). Its terms and privacy links point at
   www.yuntera.cr unless `EXPO_PUBLIC_SHOP_URL` is set.
-- Drivers' app: a stop's district is not shown (`driver_today` does not return
-  it); actions sent after a dead zone are stamped with the time they arrive,
-  not the time they happened; starting a route and delivering against the code
-  need signal; a driver suspended while the phone has no signal keeps the
+- Drivers' app: starting a route and delivering against the code need
+  signal; a driver suspended while the phone has no signal keeps the
   saved route until a call gets through (at most a day). Notification
   settings are not in the app.
 - Warehouse app: scanning the bin as well as the product, and a cycle-count
@@ -515,31 +569,20 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   demo accounts were loaded before approvals existed; on 21 November 2026 the
   four the seed treats as approved were stamped approved there by one guarded
   statement, so the preview matches a fresh seed again.
-- A shopper who asks again to return a unit already returned (only possible
-  from a page left open from before) is refused, but is shown the cart's
-  message about maximum quantities instead of one that says the unit is
-  already in a return.
-- Activating a new fee schedule does not re-check offers against the price
-  floor (a sale must not pay less than its fees); the floor is enforced when a
-  price, package, category or status changes.
-- An order with one parcel delivered and another returned stays "shipped" as
-  a whole. Its withdrawal window is the one set at purchase, and, read from
-  the code, not tried, it keeps counting as an open order, so the shopper
-  cannot delete their account (nor can the last person in charge of its
-  shop) until staff close it, which no function does yet.
 - There is no function to remove a stop from, or close, a route that got
   stuck before the review (new ones cannot get stuck: cancelling after packing
   is refused).
-- Nothing alerts staff when a delivery code locks after five wrong tries, and
-  no message is sent when a return's goods are recorded back or a returned
-  parcel is settled at the door: those events have no consumer yet. In live
-  payments mode a refund that covers the whole payment marks it refunded when
-  it is booked, so the "refund completed" message would go before the money
-  moves; this needs the gateway work.
+- No message is sent when a returned parcel is settled at the door (that
+  event has no consumer yet). In live payments mode "refund completed" waits
+  for `private.confirm_refund`, which the gateway work must call through a
+  server-side-only function; until that exists, live refunds are never
+  announced as completed.
 - A shopper's stale tab that cancels an already-cancelled order gets the
   generic "too late to cancel" text; only the console has its own wording.
 - The limits stop one account, not one person with many free accounts, and
-  there is no limit per minute or on request size at the edge.
+  apart from sign-in there is no limit per minute at the edge (search,
+  checkout). There is no request-size limit of our own on the hosted Data API;
+  it is an accepted limit, with its reasons, in the security programme.
 - That an invitation sent before the person registered can be accepted once
   they confirm their e-mail was checked only with the local Auth stand-in,
   which confirms addresses at sign-up.
@@ -551,9 +594,6 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   preview, but while the shop sits behind the Vercel login the request cannot
   reach it and is logged as an error; changes still appear within about a
   minute. It works once the shop is public.
-- After a shopper chooses a delivery zone on a product page, the old date and
-  shipping price stay on screen for a few seconds before the new ones replace
-  them, with nothing showing that an update is on its way.
 - Wrong second-factor codes are limited to five in 15 minutes per account only
   for codes sent through the apps. Codes sent to Auth directly meet only its
   per-address limit until Auth's verification hook is enabled (Team plan).
@@ -575,21 +615,47 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   preview.
 - Storage abuse is limited per listing (8 photos) and per shop (40 waiting,
   100 new a day), not by total size.
-- **Database follow-ups the native apps' reviews found, not fixed yet:**
-  - Picking is confirmed without the database checking the scanned code
-    (`wms_confirm_pick` takes the task, the quantity and the bin); only the
-    phone, or the web page, compares the code.
-  - The driver's delivery and failure reports (`driver_complete_stop`,
-    `driver_fail_stop`) accept any coordinates. A position report
-    (`driver_report_position`) outside Costa Rica is refused only by a check
-    on the table, so it answers with a raw database error instead of a code.
-  - The district of a stop is not returned to the drivers' app
-    (`driver_today`), so the app cannot show it.
-  - Actions a driver queues without signal are stamped with the time they
-    reach the database, not the time they happened.
-- The web field app still says "Llame a Central" for a locked delivery code;
-  the drivers' app now also says that Central's release gives the shopper a
-  new code, and what to do if it is not released.
+- **Left open by the follow-ups' reviews:**
+  - Sign-in: a guesser with many addresses gets up to 50 wrong passwords and
+    30 wrong codes per account in 15 minutes (one address gets 5); that is
+    the price of a stranger being unable to lock the owner out. Vercel's
+    firewall and Turnstile are the next layers, and neither is set up.
+  - While another visitor at the same address has used up the refresh limit
+    (120 refused refreshes in 10 minutes), a person whose access token has
+    expired is treated as signed out for those requests; nothing is deleted,
+    and the token is renewed after the wait.
+  - Until the hosted project stores the key's digest in Vault, anyone with
+    the public key can add rows to the sign-in limit's table (they count
+    against nobody and go within two hours). Not tried against a real Vault.
+  - With e-mail confirmation off, as on the preview, a new address is signed
+    in at once at sign-up, so a stranger can still tell it from an existing
+    one there.
+  - Turnstile, Vercel's address headers and Auth's own session time-box were
+    not tried on a real deployment; the pinned CI workflow has not run on
+    GitHub. The native apps' sessions are not covered by the new lifetimes.
+  - A seller's pause, stock change or price change does not refresh the
+    shop's cache; the shop catches up within its cache lifetime (about a
+    minute). Offers paused by a fee change catch up the same way.
+  - Auth's own refusal by its human check is shown with the generic message.
+  - The `pg_net` revoke is not verified on the hosted project, nor whether the
+    platform grants it again on an upgrade (runbook, "Migrations 083200 and
+    083300", point 4).
+  - The phone-clock correction of queued driver actions is tested in the
+    database and the web export only, not on a phone; if the phone's clock
+    jumps while an action waits, the time can still be off.
+  - The dispatch screen's out-of-area flag and late-sync note are covered by
+    the database and contract tests only, not by a browser journey.
+  - District names still lack their accents in the source data ("San
+    Francisco de Dos Rios"); only the capitals of "de", "del" and "y" were
+    fixed.
+  - A shop that invites the same account again within 14 days sends no
+    second e-mail (the invitation still shows in the seller centre). A message
+    for an invitation is planned when the worker next runs, so one that was
+    declined or withdrawn within that minute is still announced.
+  - The seller centre has no screen for offers paused by a fee change beyond
+    their paused status and the message; staff see them on `/tarifas`.
+  - Between applying `083200` on the preview and redeploying the field app,
+    the old field app cannot confirm a pick (`scan_required`).
 
 ## Running it
 
