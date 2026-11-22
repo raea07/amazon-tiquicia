@@ -430,10 +430,24 @@ const overflow = (page) =>
 
   // ── 5. Every console section is reachable ───────────────────────────────
   log("5. console navigation");
-  // An administrator sees all fifteen sections (apps/ops/src/lib/staff.ts).
-  const sections = 15;
+  // An administrator sees every section the console lists
+  // (apps/ops/src/lib/staff.ts), counted from that list so a new one is
+  // checked as well.
+  const sections = (
+    require("node:fs")
+      .readFileSync(
+        require("node:path").join(__dirname, "../../../apps/ops/src/lib/staff.ts"),
+        "utf8",
+      )
+      .match(/\{ href: "\//g) ?? []
+  ).length;
+  log(`   sections in the console: ${sections}`);
+  check(sections >= 16, "the console's section list is read");
   const nav = staff.page.locator('nav[aria-label="Secciones"]');
-  check((await nav.locator("a:visible").count()) === sections, "1280 px: all 15 sections show");
+  check(
+    (await nav.locator("a:visible").count()) === sections,
+    `1280 px: all ${sections} sections show`,
+  );
   const fits = await nav.evaluate((el) => {
     const right = [...el.querySelectorAll("a")]
       .filter((a) => a.checkVisibility())
@@ -489,7 +503,7 @@ const overflow = (page) =>
   const phoneLinks = small.locator('nav[aria-label="Secciones"] a:visible');
   check(
     (await phoneLinks.count()) === sections,
-    "390 px: opened from the keyboard, it lists all 15",
+    `390 px: opened from the keyboard, it lists all ${sections}`,
   );
   check((await overflow(small)) <= 0, "390 px: no sideways scrolling");
   await small.screenshot({ path: `${SHOTS}/wf07-console-nav-390.png`, fullPage: true });
