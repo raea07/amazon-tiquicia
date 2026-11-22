@@ -192,7 +192,7 @@ async function Cart() {
         ) : null}
         {quote.issue === "zone_not_served" ? (
           <Alert tone="warning" className="mt-3">
-            Todavía no entregamos en la zona elegida.{" "}
+            Por ahora no entregamos en la zona elegida.{" "}
             <Link href="/zona?siguiente=/carrito" className="underline">
               Cambiar de zona
             </Link>

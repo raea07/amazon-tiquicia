@@ -20,6 +20,11 @@ export const CATEGORIES_TAG = "categories";
  * still gets the prepared page, the one after the new menu), never thrown away.
  */
 export const CATEGORY_MENU_TAG = "category-menu";
+/**
+ * The districts and whether the shop delivers to each (the address form, the
+ * zone picker). Dropped when staff change a zone or a district.
+ */
+export const DISTRICTS_TAG = "districts";
 /** At most this many tags are dropped by one action; a cart has at most 20 lines. */
 const MAX_TAGS = 40;
 

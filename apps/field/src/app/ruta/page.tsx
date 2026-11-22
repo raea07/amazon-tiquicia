@@ -146,6 +146,12 @@ async function Day({ searchParams }: Pick<PageProps<"/ruta">, "searchParams">) {
                       </p>
                     ) : null}
                     <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{stop.senas}</p>
+                    {stop.status === "skipped" ? (
+                      <p className="mt-1 text-sm font-medium">
+                        Central quitó esta parada de la ruta. Si lleva el paquete, devuélvalo a la
+                        bodega.
+                      </p>
+                    ) : null}
                     <p className="mt-2 flex flex-wrap gap-2 text-xs">
                       <span className="rounded-full bg-surface-muted px-2 py-0.5">
                         {stop.package_count} {stop.package_count === 1 ? "bulto" : "bultos"} ·{" "}
