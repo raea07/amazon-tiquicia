@@ -173,6 +173,20 @@ $$;
 
 -- A barcode on the thermal bottle, as its creator would have printed it.
 update public.skus set gtin = '7441234567890' where id = pg_temp.sku('botella-termica-sendero-750ml');
+-- On a database people use, Ferretería may have offered on the bottle before
+-- and withdrawn (the seller-listings journey does, after an order on it):
+-- adding it again then puts that offer back. Its stock there starts at none
+-- beyond what open orders hold.
+select pg_temp.remember('botella_prior', coalesce((
+  select o.id::text from public.offers o
+  where o.sku_id = pg_temp.sku('botella-termica-sendero-750ml')
+    and o.seller_id = current_setting('t.ferreteria')::uuid), ''));
+select pg_temp.remember('botella_prior_additions', (
+  select count(*)::text from private.offer_additions a
+  where a.offer_id::text = current_setting('t.botella_prior')));
+update public.offers set status = 'archived' where id::text = current_setting('t.botella_prior');
+update public.stock_levels set on_hand = reserved
+where sku_id = pg_temp.sku('botella-termica-sendero-750ml') and seller_id = current_setting('t.ferreteria')::uuid;
 
 do $$
 declare
@@ -188,7 +202,8 @@ begin
   assert jsonb_array_length(v_found) >= 1 and v_found -> 0 ->> 'slug' = 'botella-termica-sendero-750ml',
     format('found by name: %s', v_found);
   v_variant := v_found -> 0 -> 'variants' -> 0;
-  assert v_variant ->> 'my_offer_id' is null and (v_variant ->> 'offer_count')::integer = 1
+  assert v_variant ->> 'my_offer_id' is not distinct from nullif(current_setting('t.botella_prior'), '')
+     and (v_variant ->> 'offer_count')::integer = 1
      and (v_found -> 0 ->> 'own_listing')::boolean = false
      and v_found -> 0 ->> 'shop_name' = 'Tienda Sendero', format('the variant as offered: %s', v_variant);
   assert exists (select 1 from jsonb_array_elements(
@@ -210,7 +225,8 @@ begin
   -- Adding the offer: no review, on sale at once.
   v_added := public.seller_add_offer(current_setting('t.ferreteria')::uuid, v_sku, 950000, 'seller', 1::smallint);
   v_offer := (v_added ->> 'offer_id')::uuid;
-  assert v_added ->> 'outcome' = 'added' and v_added ->> 'slug' = 'botella-termica-sendero-750ml', v_added::text;
+  assert v_added ->> 'outcome' = case when current_setting('t.botella_prior') = '' then 'added' else 'resumed' end
+     and v_added ->> 'slug' = 'botella-termica-sendero-750ml', v_added::text;
   perform pg_temp.remember('botella_offer', v_offer::text);
   perform pg_temp.refused(format('select public.seller_add_offer(%L, %L, 950000, ''seller'', 1::smallint)',
                                  current_setting('t.ferreteria'), v_sku), 'offer_exists');
@@ -233,11 +249,15 @@ declare
 begin
   -- What it left behind.
   assert (select seller_id = current_setting('t.ferreteria')::uuid and status = 'active'
-                 and available_quantity = 5 and fulfillment = 'seller'
+                 and available_quantity = 5 - coalesce((select sum(l.reserved) from public.stock_levels l
+                                                       where l.sku_id = v_sku
+                                                         and l.seller_id = current_setting('t.ferreteria')::uuid), 0)
+                 and fulfillment = 'seller'
           from public.offers where id = v_offer), 'the offer is the shop''s, on sale, with its stock';
   assert (select created_by_seller_id from public.products where slug = 'botella-termica-sendero-750ml')
          = current_setting('t.sendero')::uuid, 'the product stays with the shop that created it';
-  assert (select count(*) from private.offer_additions where offer_id = v_offer) = 1, 'counted for the daily cap';
+  assert (select count(*) from private.offer_additions where offer_id = v_offer)
+         = current_setting('t.botella_prior_additions')::int + 1, 'counted for the daily cap';
   assert exists (select 1 from private.outbox_events where topic = 'offer.added'
                  and payload ->> 'offer_id' = v_offer::text), 'and announced';
   assert (select count(*) from public.products p join public.skus k on k.product_id = p.id
@@ -280,7 +300,11 @@ begin
   reset role;
   -- Sold out at the offering shop.
   perform pg_temp.act('vendedor@yuntera.example');
-  perform public.seller_set_stock(current_setting('t.higueron_wh')::uuid, pg_temp.sku('botella-termica-sendero-750ml'), 0);
+  -- (Down to what open orders already hold, which on a used database may be some.)
+  perform public.seller_set_stock(current_setting('t.higueron_wh')::uuid, pg_temp.sku('botella-termica-sendero-750ml'),
+    (select coalesce(sum(l.reserved), 0)::integer from public.stock_levels l
+     where l.warehouse_id = current_setting('t.higueron_wh')::uuid
+       and l.sku_id = pg_temp.sku('botella-termica-sendero-750ml')));
   v_price := (select price_minor from public.offers where id = v_sendero);
   perform pg_temp.login_anon();
   select * into v_alt from public.cart_alternatives(array[gen_random_uuid(), v_offer]);
@@ -947,12 +971,13 @@ begin
   -- The paused shop is told, by e-mail, which offer and the lowest price.
   assert exists (select 1 from private.notification_deliveries d
                  where d.template = 'seller_offers_paused_edit' and d.channel = 'email'
+                   and d.created_at >= now() -- planned in this suite's transaction
                    and d.recipient_seller_id = current_setting('t.ferreteria')::uuid
                    and (d.context ->> 'paused_count')::integer = 1
                    and (d.context #>> '{paused_offers,0,min_price_minor}')::bigint = v_new),
     'the shop whose offer was paused is told';
   assert not exists (select 1 from private.notification_deliveries d
-                     where d.template = 'seller_offers_paused_edit'
+                     where d.template = 'seller_offers_paused_edit' and d.created_at >= now()
                        and d.recipient_seller_id = current_setting('t.sendero')::uuid),
     'the shop that sent the edit is not';
 

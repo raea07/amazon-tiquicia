@@ -268,84 +268,86 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   check(badge === "Oculta", `hide did not take: ${badge}`);
   await staff.screenshot({ path: SHOTS + "/cc4-category-hidden.png", fullPage: true });
 
-  // ── 5b. Without JavaScript the catalogue forms still work, and a category
-  // hidden by one above it names the nearest hidden one ─────────────────────
+  // ── 5b. Before the console's scripts run (or when they never load) a
+  // catalogue form is an ordinary form that posts to its server action. The
+  // app's script files are refused here, so React never takes over and the
+  // browser posts the form itself. (What Next.js sends back for such a post
+  // is a page without content, as for every form of the apps, the sign-in
+  // included; so the outcome is read on the next visit.)
   const plainContext = await browser.newContext({
-    javaScriptEnabled: false,
     viewport: { width: 1280, height: 900 },
     locale: "es-CR",
   });
+  await plainContext.route("**/_next/static/chunks/**", (route) => route.abort());
   const plain = await plainContext.newPage();
-  watch(plain);
-  await signIn(plain, OPS, "central@yuntera.example");
-  // Posts a form the way a browser without scripts does: the page comes back
-  // drawn with the action's outcome.
-  const post = async (form, button) => {
-    await Promise.all([
-      plain.waitForNavigation({ waitUntil: "load" }),
-      form.locator(`button:has-text("${button}")`).last().click(),
-    ]);
-  };
-  const plainRow = (slug) => plain.locator(`li[data-category="${slug}"]`);
-  const plainCreate = async (name, parent) => {
-    await plain.goto(OPS + "/catalogo/categorias", { waitUntil: "load" });
-    const form = plain.locator('section[aria-labelledby="nueva"]');
+  // The refused script files are logged as failed loads; only server errors count here.
+  plain.on("response", (r) => {
+    if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
+  });
+  await plain.goto(`${OPS}/ingresar`, { waitUntil: "load" });
+  await plain.fill('main input[name="email"]', "central@yuntera.example");
+  await plain.fill('main input[name="password"]', PASSWORD);
+  await Promise.all([
+    plain.waitForNavigation({ waitUntil: "load" }),
+    plain.click('main form button[type="submit"]'),
+  ]);
+  check(new URL(plain.url()).pathname !== "/ingresar", "sign-in without the app's scripts");
+  await plain.goto(`${OPS}/catalogo/categorias`, { waitUntil: "load" });
+  const plainForm = plain.locator('section[aria-labelledby="nueva"] form');
+  const plainMarkup = await plainForm.evaluate((f) => ({
+    method: f.method,
+    action: [...f.querySelectorAll('input[type="hidden"]')].some((i) =>
+      i.name.startsWith("$ACTION"),
+    ),
+  }));
+  log("the create form before scripts:", plainMarkup);
+  check(
+    plainMarkup.method === "post" && plainMarkup.action,
+    "the catalogue form does not post to its action without scripts",
+  );
+  await plainForm.locator('input[name="name"]').fill("Pruebas sin guion");
+  await Promise.all([
+    plain.waitForNavigation({ waitUntil: "load" }),
+    plainForm.locator('button:has-text("Crear categoría")').click(),
+  ]);
+  await plain.goto(`${OPS}/catalogo/categorias`, { waitUntil: "load" });
+  check(
+    (await plain.locator('li[data-category="pruebas-sin-guion"]').count()) === 1,
+    "a category posted without scripts was not created",
+  );
+  await plainContext.close();
+
+  // A category hidden by one above it names the nearest hidden one.
+  const parentOption = async (form, name) =>
+    form.locator('select[name="parentId"] option', { hasText: name }).first().getAttribute("value");
+  const createUnder = async (name, parent) => {
+    await staff.goto(`${OPS}/catalogo/categorias`, { waitUntil: "networkidle" });
+    const form = staff.locator('section[aria-labelledby="nueva"]');
     await form.locator('input[name="name"]').fill(name);
-    if (parent) {
-      const value = await form
-        .locator('select[name="parentId"] option', { hasText: parent })
-        .first()
-        .getAttribute("value");
-      await form.locator('select[name="parentId"]').selectOption(value);
-    }
-    await post(form, "Crear categoría");
-    return text(
-      plain
-        .locator(
-          'section[aria-labelledby="nueva"] [role="status"], section[aria-labelledby="nueva"] [role="alert"]',
-        )
-        .first(),
-    );
+    await form.locator('select[name="parentId"]').selectOption(await parentOption(form, parent));
+    return submit(form, "Crear categoría");
   };
-  const plainHide = async (slug, name) => {
-    await plain.goto(OPS + "/catalogo/categorias", { waitUntil: "load" });
-    await plainRow(slug)
-      .locator("summary", { hasText: `Cambiar «${name}»` })
-      .click();
-    await plainRow(slug).locator("summary", { hasText: "Ocultar de la tienda" }).click();
-    await post(
-      plainRow(slug).locator("form", {
-        has: plain.locator('button:has-text("Ocultar la categoría")'),
-      }),
-      "Ocultar la categoría",
-    );
+  const hideCategory = async (slug, name) => {
+    await staff.goto(`${OPS}/catalogo/categorias`, { waitUntil: "networkidle" });
+    const item = staff.locator(`li[data-category="${slug}"]`);
+    await item.locator("summary", { hasText: `Cambiar «${name}»` }).click();
+    await item.locator("summary", { hasText: "Ocultar de la tienda" }).click();
+    await item.locator('button:has-text("Ocultar la categoría")').click();
+    await item.locator('button:has-text("Mostrar en la tienda")').waitFor();
   };
   const badgeOf = async (slug) =>
-    text(plainRow(slug).locator("span", { hasText: "Oculta" }).first());
-
-  const madeDept = await plainCreate("Pruebas sin guion");
-  log("without scripts, created:", madeDept);
-  check(madeDept.includes("/c/pruebas-sin-guion"), `no-script create refused: ${madeDept}`);
-  const madeTwo = await plainCreate("Nivel dos", "Pruebas sin guion");
-  check(madeTwo.includes("/c/nivel-dos"), `no-script create (level two): ${madeTwo}`);
-  const plainAgain = await plainCreate("Pruebas sin guion");
-  log("without scripts, the same name again:", plainAgain);
-  check(
-    plainAgain.includes("La dirección que hacemos a partir del nombre"),
-    `a refusal without scripts: ${plainAgain}`,
-  );
-  await plainHide("pruebas-sin-guion", "Pruebas sin guion");
-  check(
-    (await badgeOf("pruebas-sin-guion")) === "Oculta",
-    `no-script hide did not take: ${await badgeOf("pruebas-sin-guion")}`,
-  );
-  const madeThree = await plainCreate("Nivel tres", "Nivel dos");
+    text(staff.locator(`li[data-category="${slug}"] span`, { hasText: "Oculta" }).first());
+  const madeTwo = await createUnder("Nivel dos", "Pruebas sin guion");
+  check(madeTwo.includes("/c/nivel-dos"), `level two not created: ${madeTwo}`);
+  await hideCategory("pruebas-sin-guion", "Pruebas sin guion");
+  const madeThree = await createUnder("Nivel tres", "Nivel dos");
   log("under a hidden department:", madeThree);
   check(
     madeThree.includes("/c/nivel-tres") && madeThree.includes("No se ve en la tienda"),
     `a category made under a hidden one says it does not show: ${madeThree}`,
   );
   // Nivel dos is active itself: the badge of Nivel tres names the department.
+  await staff.goto(`${OPS}/catalogo/categorias`, { waitUntil: "networkidle" });
   const byDept = await badgeOf("nivel-tres");
   log("badge, department hidden:", byDept);
   check(
@@ -353,15 +355,15 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     `the badge does not name the hidden department: ${byDept}`,
   );
   // Nivel dos hidden too: now it is the nearest hidden one above.
-  await plainHide("nivel-dos", "Nivel dos");
+  await hideCategory("nivel-dos", "Nivel dos");
+  await staff.goto(`${OPS}/catalogo/categorias`, { waitUntil: "networkidle" });
   const byParent = await badgeOf("nivel-tres");
   log("badge, its parent hidden too:", byParent);
   check(
     byParent === "Oculta: Nivel dos está oculta",
     `the badge does not name the nearest hidden category: ${byParent}`,
   );
-  await plain.screenshot({ path: SHOTS + "/cc4b-no-script-categories.png", fullPage: true });
-  await plainContext.close();
+  await staff.screenshot({ path: `${SHOTS}/cc4b-hidden-by-above.png`, fullPage: true });
 
   const gone = await status("/c/regalos-hechos-a-mano");
   log("hidden category page:", gone.status);

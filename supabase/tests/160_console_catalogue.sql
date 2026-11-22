@@ -451,7 +451,9 @@ reset role;
 -- filed there, no listing edit approved into it. Its products stay on sale:
 -- the shop's page lists them and the cart offers another shop's offer.
 -- A listing edit of TecnoCasa's blender into Cocina, as it would have been
--- proposed before Hogar was hidden.
+-- proposed before Hogar was hidden (one already waiting gives way to it).
+update public.product_change_requests set status = 'withdrawn'
+where status = 'pending' and product_id = (select id from public.products where slug = 'licuadora-volcan-600w');
 insert into public.product_change_requests (product_id, seller_id, proposed, submitted_by)
 select p.id, p.created_by_seller_id,
        private.listing_content(p.id, k.id) || jsonb_build_object('category_slug', 'cocina', 'category_name', 'Cocina'),
@@ -576,11 +578,19 @@ end $$;
 
 -- ═══ 3. Brands ═════════════════════════════════════════════════════════════
 
+-- The brand merged below is one of this suite's own, with the bulb as its only
+-- product, so the merge means the same on a database where staff already
+-- merged or renamed the demo brands (the console journey merges Luma).
+insert into public.brands (name, slug) values ('Lucero Prueba', 'lucero-prueba');
+update public.products set brand_id = (select id from public.brands where slug = 'lucero-prueba')
+where slug = 'bombillo-led-9w-4u';
+select private.refresh_product_search(id) from public.products where slug = 'bombillo-led-9w-4u';
+
 select pg_temp.login('central@yuntera.example', 'aal2');
 do $$
 declare
   v jsonb;
-  v_luma uuid := (select id from public.brands where slug = 'luma');
+  v_lucero uuid := (select id from public.brands where slug = 'lucero-prueba');
   v_volcan uuid := (select id from public.brands where slug = 'volcan');
 begin
   v := public.ops_create_brand('Ceiba Juguetes');
@@ -598,16 +608,16 @@ begin
                                  (select id from public.brands where slug = 'roble')), 'brand_unchanged');
 
   -- A merge: products move, the old name and address still find them.
-  perform pg_temp.refused(format('select public.ops_merge_brands(%L, %L)', v_luma, v_luma), 'brand_merge_same');
-  v := public.ops_merge_brands(v_luma, v_volcan);
+  perform pg_temp.refused(format('select public.ops_merge_brands(%L, %L)', v_lucero, v_lucero), 'brand_merge_same');
+  v := public.ops_merge_brands(v_lucero, v_volcan);
   assert (v ->> 'moved')::int = 1, format('brands: merged %s', v);
   assert (select brand_id from public.products where slug = 'bombillo-led-9w-4u') = v_volcan, 'brands: product moved';
-  assert (select merged_into_id = v_volcan and not active from public.brands where id = v_luma), 'brands: old one points on';
-  perform pg_temp.refused(format('select public.ops_merge_brands(%L, %L)', v_luma, v_volcan), 'brand_merged');
-  perform pg_temp.refused(format('select public.ops_merge_brands(%L, %L)', v_volcan, v_luma), 'brand_merged');
-  perform pg_temp.refused(format($q$select public.ops_update_brand(%L, 'Luma 2')$q$, v_luma), 'brand_merged');
-  perform pg_temp.refused($q$select public.ops_create_brand('Luma')$q$, 'brand_name_taken');
-  v := (select x from jsonb_array_elements(public.ops_catalog_brands()) x where x ->> 'slug' = 'luma');
+  assert (select merged_into_id = v_volcan and not active from public.brands where id = v_lucero), 'brands: old one points on';
+  perform pg_temp.refused(format('select public.ops_merge_brands(%L, %L)', v_lucero, v_volcan), 'brand_merged');
+  perform pg_temp.refused(format('select public.ops_merge_brands(%L, %L)', v_volcan, v_lucero), 'brand_merged');
+  perform pg_temp.refused(format($q$select public.ops_update_brand(%L, 'Lucero 2')$q$, v_lucero), 'brand_merged');
+  perform pg_temp.refused($q$select public.ops_create_brand('Lucero Prueba')$q$, 'brand_name_taken');
+  v := (select x from jsonb_array_elements(public.ops_catalog_brands()) x where x ->> 'slug' = 'lucero-prueba');
   assert v -> 'merged_into' ->> 'slug' = 'volcan' and (v ->> 'product_count')::int = 0,
     format('brands: staff see the merge %s', v);
 
@@ -660,6 +670,8 @@ end
 $$;
 reset role;
 
+select pg_temp.remember('roble_listed', (
+  select (min_price_minor is not null)::text from public.products where slug = 'taladro-inalambrico-roble-20v'));
 select pg_temp.remember('volcan_active', (
   select count(*)::text from public.products p join public.brands b on b.id = p.brand_id
   where b.slug = 'volcan' and p.status = 'active'));
@@ -668,22 +680,23 @@ select pg_temp.remember('volcan_listed', (
   where b.slug = 'volcan' and p.status = 'active' and p.min_price_minor is not null));
 select pg_temp.login_anon();
 do $$ begin
-  assert exists (select 1 from public.search_products('luma') where slug = 'bombillo-led-9w-4u'),
+  assert exists (select 1 from public.search_products('lucero') where slug = 'bombillo-led-9w-4u'),
     'brands: the merged brand''s name still finds its product';
-  assert exists (select 1 from public.search_products('roble') where slug = 'taladro-inalambrico-roble-20v'),
+  assert exists (select 1 from public.search_products('roble') where slug = 'taladro-inalambrico-roble-20v')
+      or current_setting('t.roble_listed') = 'false', -- (its only offer paused on a used database)
     'brands: so does a renamed brand''s old name';
-  assert exists (select 1 from public.search_products(p_brand_slug => 'luma') where slug = 'bombillo-led-9w-4u')
-     and exists (select 1 from public.search_products(p_brand_slug => 'luma') where slug = 'licuadora-volcan-600w'),
+  assert exists (select 1 from public.search_products(p_brand_slug => 'lucero-prueba') where slug = 'bombillo-led-9w-4u')
+     and exists (select 1 from public.search_products(p_brand_slug => 'lucero-prueba') where slug = 'licuadora-volcan-600w'),
     'brands: the old brand''s filter address shows the brand it went into';
   assert (select count(*) from public.search_products(p_brand_slug => 'volcan'))
        = current_setting('t.volcan_active')::bigint, 'brands: the filter finds exactly the brand';
-  assert not exists (select 1 from public.list_brands() where slug in ('luma', 'tinamu')),
+  assert not exists (select 1 from public.list_brands() where slug in ('lucero-prueba', 'tinamu')),
     'brands: merged and hidden brands are not offered as a filter';
   assert exists (select 1 from public.list_brands()
                  where slug = 'volcan' and product_count = current_setting('t.volcan_listed')::bigint
                    and product_count > 0),
     'brands: the filter counts the products';
-  assert (select former_slugs @> '{luma}' from public.list_brands() where slug = 'volcan'),
+  assert (select former_slugs @> '{lucero-prueba}' from public.list_brands() where slug = 'volcan'),
     'brands: the filter knows the merged brand''s address means the one that stayed';
   assert (select array_agg(slug order by slug) from public.list_brands('cafe')) = '{cafetal-los-santos}',
     'brands: in a category, only its brands';
@@ -701,9 +714,11 @@ end $$;
 
 -- ═══ 4. Search synonyms ════════════════════════════════════════════════════
 
+-- A term of the suite's own (the console journey adds "pichinga" for real).
+
 select pg_temp.login_anon();
 do $$ begin
-  assert not exists (select 1 from public.search_products('pichinga')), 'synonyms: nothing before';
+  assert not exists (select 1 from public.search_products('garrafita')), 'synonyms: nothing before';
 end $$;
 reset role;
 
@@ -713,9 +728,9 @@ declare
   v jsonb;
 begin
   -- Stored the way search reads it.
-  v := public.ops_add_search_synonym('  PICHINGÁ ', array[' Botella   Térmica ']);
-  assert v = '{"term": "pichinga", "expansions": ["botella termica"]}', format('synonyms: normalised %s', v);
-  perform pg_temp.refused($q$select public.ops_add_search_synonym('Pichinga', array['termo'])$q$, 'synonym_exists');
+  v := public.ops_add_search_synonym('  GARRAFITÁ ', array[' Botella   Térmica ']);
+  assert v = '{"term": "garrafita", "expansions": ["botella termica"]}', format('synonyms: normalised %s', v);
+  perform pg_temp.refused($q$select public.ops_add_search_synonym('Garrafita', array['termo'])$q$, 'synonym_exists');
   perform pg_temp.refused($q$select public.ops_add_search_synonym('', array['termo'])$q$, 'synonym_invalid');
   perform pg_temp.refused($q$select public.ops_add_search_synonym('a', array['termo'])$q$, 'synonym_invalid');
   perform pg_temp.refused($q$select public.ops_add_search_synonym(repeat('palabra', 10), array['termo'])$q$,
@@ -733,10 +748,10 @@ begin
                           'synonym_too_common');
   perform pg_temp.refused($q$select public.ops_add_search_synonym('termo; drop', array['x1'])$q$, 'synonym_invalid');
 
-  v := public.ops_search_preview('Pichinga');
-  assert v ->> 'query' = 'pichinga' and (v ->> 'total')::int >= 1
+  v := public.ops_search_preview('Garrafita');
+  assert v ->> 'query' = 'garrafita' and (v ->> 'total')::int >= 1
      and v -> 'results' @> '[{"slug": "botella-termica-sendero-750ml"}]'
-     and v -> 'synonyms' = '[{"term": "pichinga", "expansions": ["botella termica"]}]',
+     and v -> 'synonyms' = '[{"term": "garrafita", "expansions": ["botella termica"]}]',
     format('synonyms: the preview shows what it finds and why %s', v);
   perform pg_temp.refused($q$select public.ops_search_preview('   ')$q$, 'synonym_invalid');
   assert jsonb_array_length(public.ops_search_synonyms()) = (select count(*) from public.search_synonyms),
@@ -747,9 +762,9 @@ reset role;
 
 select pg_temp.login_anon();
 do $$ begin
-  assert exists (select 1 from public.search_products('pichinga') where slug = 'botella-termica-sendero-750ml'),
+  assert exists (select 1 from public.search_products('garrafita') where slug = 'botella-termica-sendero-750ml'),
     'synonyms: a visitor''s search finds the product once the synonym exists';
-  assert exists (select 1 from public.search_products('una pichinga grande') where slug = 'botella-termica-sendero-750ml'),
+  assert exists (select 1 from public.search_products('una garrafita grande') where slug = 'botella-termica-sendero-750ml'),
     'synonyms: also as one word of a longer query';
 end $$;
 reset role;
@@ -758,12 +773,12 @@ reset role;
 update public.products set description = coalesce(description, '') || ' universal' where status = 'active';
 select pg_temp.login('central@yuntera.example', 'aal2');
 select pg_temp.refused($q$select public.ops_add_search_synonym('termito', array['universal'])$q$, 'synonym_too_common');
-select public.ops_remove_search_synonym('PICHINGA');
-select pg_temp.refused($q$select public.ops_remove_search_synonym('pichinga')$q$, 'synonym_not_found');
+select public.ops_remove_search_synonym('GARRAFITA');
+select pg_temp.refused($q$select public.ops_remove_search_synonym('garrafita')$q$, 'synonym_not_found');
 reset role;
 select pg_temp.login_anon();
 do $$ begin
-  assert not exists (select 1 from public.search_products('pichinga')), 'synonyms: removed, nothing again';
+  assert not exists (select 1 from public.search_products('garrafita')), 'synonyms: removed, nothing again';
 end $$;
 reset role;
 do $$ begin
@@ -1025,7 +1040,7 @@ begin
     (select category_id from public.products where id = v_lic), 'Nada cambia en esta corrección.'),
     'correction_unchanged');
   perform pg_temp.refused(format('select public.ops_correct_product(%L, null, %L, false, %L)', v_lic,
-    (select id from public.brands where slug = 'luma'), 'Una marca que ya no existe.'), 'brand_not_found');
+    (select id from public.brands where slug = 'lucero-prueba'), 'Una marca que ya no existe.'), 'brand_not_found');
   perform public.ops_set_category_active(v_cocina, false);
   perform pg_temp.refused(format('select public.ops_correct_product(%L, %L, null, false, %L)', v_lic, v_cocina,
     'A una categoría oculta no.'), 'category_not_found');
@@ -1308,6 +1323,13 @@ from public.offers o join public.skus k on k.id = o.sku_id join public.products 
 where p.slug = 'botella-termica-sendero-750ml' and o.seller_id = (select id from public.sellers where slug = 'tienda-sendero')
   and not exists (select 1 from public.offers x where x.sku_id = k.id
                   and x.seller_id = (select id from public.sellers where slug = 'ferreteria-el-higueron'));
+-- (Ferretería may have offered on it before and withdrawn: on sale again here.)
+update public.offers o set status = 'active',
+       price_minor = (select x.price_minor from public.offers x where x.sku_id = o.sku_id
+                      and x.seller_id = (select id from public.sellers where slug = 'tienda-sendero'))
+from public.skus k join public.products p on p.id = k.product_id
+where o.sku_id = k.id and p.slug = 'botella-termica-sendero-750ml'
+  and o.seller_id = (select id from public.sellers where slug = 'ferreteria-el-higueron') and o.status <> 'active';
 select pg_temp.remember('botella', (select id::text from public.products where slug = 'botella-termica-sendero-750ml'));
 select pg_temp.login('central@yuntera.example', 'aal2');
 select public.ops_take_down_product(current_setting('t.botella')::uuid, 'Las fotos muestran la botella de otra marca.');
