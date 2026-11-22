@@ -12,7 +12,10 @@
 //   issuer set up, real and simulated payments: the tiquete is issued and
 //     shown; the console no longer warns about the set-up and still says the
 //     simulated ones got no document;
-//   simulated money documented (local work and a rehearsal): the console says so.
+//   simulated money documented (local work and a rehearsal): the console says
+//     so, and with the issuer not set up counts the simulated payment that
+//     waits as a rehearsal, not as real money;
+//   a simulated payment cancelled after it was paid is still one payment.
 //
 // The states are set the way the owner would (the settings) and the cash is
 // collected the way the driver's door step books it, through psql. Needs
@@ -192,6 +195,30 @@ const mode = (value) =>
   );
   await finance.screenshot({ path: `${SHOTS}/is02-ops-simulation.png`, fullPage: true });
 
+  // Cancelled after it was paid: its refund's job ends too, and the console
+  // still counts one payment, not two jobs.
+  const simulatedNumber = simulated.split("/").pop();
+  await shopper.goto(`${WEB}${simulated}`, { waitUntil: "load" });
+  await shopper.waitForSelector('h1:visible:has-text("Pedido")');
+  await shopper.click('button:visible:has-text("Cancelar pedido")');
+  await shopper
+    .locator('button:visible:has-text("Cancelar pedido")')
+    .waitFor({ state: "detached", timeout: 20000 });
+  await until(
+    "the refund's invoice job to end without a document",
+    async () =>
+      sql(`select exists (select 1 from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
+              join public.orders o on o.id::text = e.payload ->> 'order_id'
+              where j.consumer = 'invoice' and e.topic = 'fiscal.refund_booked'
+                and o.order_number = '${simulatedNumber}' and j.status = 'done'
+                and j.last_error = 'simulated_money')`) === "t",
+  );
+  page = await states();
+  check(
+    page.includes("1 pago simulado se cerró sin comprobante."),
+    "console: a simulated payment refunded afterwards is still one payment",
+  );
+
   const free = await order("laptop-14-nimbo-libro", "sinpe_movil", false);
   await shopper.click('button:visible:has-text("Simular pago")');
   await shopper.waitForSelector("text=Su código de entrega", { timeout: 15000 });
@@ -328,6 +355,30 @@ const mode = (value) =>
   );
   check(!page.includes("Los pagos simulados no reciben comprobante"), "and not the opposite");
   await finance.screenshot({ path: `${SHOTS}/is08-ops-rehearsal.png`, fullPage: true });
+
+  // A rehearsal payment while the issuer is not set up: it waits and will be
+  // documented, and it is not called real money.
+  setting("invoicing_issuer", "ready", "false");
+  await order("libreta-tapa-dura-a5", "sinpe_movil", false);
+  await shopper.click('button:visible:has-text("Simular pago")');
+  await shopper.waitForSelector("text=Su código de entrega", { timeout: 15000 });
+  page = await until("the console to count the rehearsal payment waiting", async () => {
+    const p = await states();
+    return p.includes(
+      "1 pago simulado de ensayo espera y recibirá comprobante en orden cuando quede configurada.",
+    )
+      ? p
+      : null;
+  });
+  check(
+    page.includes(
+      "1 pago simulado de ensayo espera y recibirá comprobante en orden cuando quede configurada.",
+    ),
+    "console, rehearsal with the issuer not set up: the simulated payment waits as a rehearsal",
+  );
+  check(!page.includes("con dinero real espera"), "and is not called real money");
+  await finance.screenshot({ path: `${SHOTS}/is09-ops-rehearsal-waiting.png`, fullPage: true });
+  setting("invoicing_issuer", "ready", "true");
 
   check(errors.length === 0, `no browser errors or 5xx (${errors.join(" | ")})`);
   await browser.close();

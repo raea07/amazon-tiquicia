@@ -25,6 +25,8 @@ describe.skipIf(!db.enabled)("invoicing fixes contract", () => {
     const state = await db.as("central@yuntera.example", "aal2").opsInvoicingState();
     expect(["sandbox", "test", "live"]).toContain(state.payments_mode);
     expect(state.waiting_real).toBeGreaterThanOrEqual(0);
+    expect(state.waiting_rehearsal).toBeGreaterThanOrEqual(0);
+    expect(state.waiting_refunds).toBeGreaterThanOrEqual(0);
     expect(state.waiting_simulated).toBeGreaterThanOrEqual(0);
     expect(state.closed_simulated).toBeGreaterThanOrEqual(0);
   });

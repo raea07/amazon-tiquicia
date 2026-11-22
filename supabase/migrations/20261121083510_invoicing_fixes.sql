@@ -23,7 +23,9 @@
 --      after the mode changes (it used to become a transfer finance had to
 --      pay, for cash and hand-confirmed transfers taken in sandbox), and real
 --      money stays real. Payments captured before this migration are decided
---      now, with the current mode (on the preview: sandbox).
+--      now, with the mode in force when each was captured, read from the
+--      audit trail of app_settings (private.payments_mode_at), so the result
+--      does not depend on the mode of the day the migration is applied.
 --
 --   2. JOBS THAT WAIT FOR SIMULATED MONEY END. An invoice job (payment
 --      captured, refund booked) of an order whose money is not documented and
@@ -113,12 +115,35 @@ as $$
                   private.payment_money_simulated(p.provider, p.environment, p.method, private.payments_mode()));
 $$;
 
--- Payments captured before this migration, decided with the current mode
--- (the preview has only ever been in sandbox). Their updated_at stays as it
--- was: nothing about the payment changed.
+-- The payments mode at a moment of the past, from the audit trail of
+-- app_settings (every change of the setting is written there, by
+-- ops_set_payments_mode and by a direct update alike): the value of the last
+-- change at or before that moment; before the first change, the value that
+-- change replaced (`sandbox` before the setting existed); with no change
+-- recorded at all, the current mode.
+create or replace function private.payments_mode_at(p_at timestamptz) returns text
+language sql stable security definer
+set search_path = ''
+as $$
+  select coalesce(
+    (select a.new_row -> 'value' #>> '{}' from private.audit_log a
+     where a.table_name = 'app_settings' and a.row_key = 'payments_mode' and a.new_row is not null
+       and a.at <= p_at
+     order by a.at desc, a.id desc limit 1),
+    (select coalesce(a.old_row -> 'value' #>> '{}', 'sandbox') from private.audit_log a
+     where a.table_name = 'app_settings' and a.row_key = 'payments_mode' and a.at > p_at
+     order by a.at, a.id limit 1),
+    private.payments_mode());
+$$;
+
+-- Payments captured before this migration, decided with the mode in force
+-- when each was captured (not the mode of the day this runs: cash taken in
+-- sandbox stays simulated even if the mode is test or live by then). Their
+-- updated_at stays as it was: nothing about the payment changed.
 alter table public.payments disable trigger payments_updated_at;
 update public.payments
-set simulated = private.payment_money_simulated(provider, environment, method, private.payments_mode())
+set simulated = private.payment_money_simulated(
+      provider, environment, method, private.payments_mode_at(coalesce(captured_at, updated_at, created_at)))
 where status in ('captured', 'partially_refunded', 'refunded') and simulated is null;
 alter table public.payments enable trigger payments_updated_at;
 
@@ -483,29 +508,63 @@ select private.invoice_close_simulated();
 
 -- For the console's invoices page: whether payments are simulated here,
 -- whether simulated money is documented, whether the issuer is set up, and
--- how many invoice jobs wait with real money, wait to end without a
--- document, or ended so. Finance only.
+-- what waits, counted the way the page says it: payments are orders (one
+-- payment.captured job each; a simulated order that was paid and then
+-- refunded is one payment, not two jobs), and refunds that wait for a credit
+-- note are counted on their own.
+--   waiting_real        orders with real money whose capture waits for its documents;
+--   waiting_rehearsal   orders with simulated money whose capture waits and WILL be
+--                       documented (the policy documents simulated money, or the order
+--                       already has documents from when it did);
+--   waiting_refunds     refunds whose credit note waits;
+--   waiting_simulated   orders whose jobs wait only to end without a document;
+--   closed_simulated    orders whose jobs ended without a document.
+-- Finance only.
 create or replace function public.ops_invoicing_state() returns jsonb
 language plpgsql stable security definer
 set search_path = ''
 as $$
+declare
+  v_real bigint;
+  v_rehearsal bigint;
+  v_refunds bigint;
+  v_closing bigint;
+  v_closed bigint;
 begin
   if not private.has_staff_role('finance') then
     perform private.fail('forbidden');
   end if;
+  with jobs as (
+    select e.topic, (e.payload ->> 'order_id')::uuid as order_id,
+           private.invoice_job_simulated(j.event_id) as ends
+    from private.outbox_jobs j
+    join private.outbox_events e on e.id = j.event_id
+    where j.consumer = 'invoice' and j.status = 'pending'
+  )
+  select
+    count(distinct order_id) filter (where topic = 'payment.captured' and not ends and not exists (
+      select 1 from public.payments p where p.order_id = jobs.order_id
+        and p.status in ('captured', 'partially_refunded', 'refunded') and private.payment_simulated(p))),
+    count(distinct order_id) filter (where topic = 'payment.captured' and not ends and exists (
+      select 1 from public.payments p where p.order_id = jobs.order_id
+        and p.status in ('captured', 'partially_refunded', 'refunded') and private.payment_simulated(p))),
+    count(*) filter (where topic = 'fiscal.refund_booked' and not ends),
+    count(distinct order_id) filter (where ends)
+  into v_real, v_rehearsal, v_refunds, v_closing
+  from jobs;
+  select count(distinct e.payload ->> 'order_id') into v_closed
+  from private.outbox_jobs j
+  join private.outbox_events e on e.id = j.event_id
+  where j.consumer = 'invoice' and j.status = 'done' and j.last_error = 'simulated_money';
   return jsonb_build_object(
     'payments_mode', private.payments_mode(),
     'simulated_documented', coalesce((private.invoice_policy() ->> 'simulated_payments')::boolean, false),
     'issuer_ready', coalesce((private.setting('invoicing_issuer') ->> 'ready')::boolean, false),
-    'waiting_real', (select count(*) from private.outbox_jobs j
-                     where j.consumer = 'invoice' and j.status = 'pending'
-                       and not private.invoice_job_simulated(j.event_id)),
-    'waiting_simulated', (select count(*) from private.outbox_jobs j
-                          where j.consumer = 'invoice' and j.status = 'pending'
-                            and private.invoice_job_simulated(j.event_id)),
-    'closed_simulated', (select count(*) from private.outbox_jobs j
-                         where j.consumer = 'invoice' and j.status = 'done'
-                           and j.last_error = 'simulated_money'));
+    'waiting_real', v_real,
+    'waiting_rehearsal', v_rehearsal,
+    'waiting_refunds', v_refunds,
+    'waiting_simulated', v_closing,
+    'closed_simulated', v_closed);
 end;
 $$;
 
@@ -557,6 +616,7 @@ $$;
 
 revoke execute on function
   private.payment_money_simulated(text, text, public.payment_method, text),
+  private.payments_mode_at(timestamptz),
   private.payments_decide_simulated(),
   private.payment_simulated(public.payments),
   private.invoice_job_simulated(bigint),

@@ -18,7 +18,11 @@
 --   6. an order documented while the policy documented simulated money keeps
 --      its jobs, so its credit note still follows;
 --   7. the sweep ends simulated jobs without a worker;
---   8. the two read functions, for the right caller and the wrong ones.
+--   8. the two read functions, for the right caller and the wrong ones;
+--   9. the console counts payments, not jobs: a simulated order refunded
+--      after it was paid is one payment, a rehearsal's simulated payment is
+--      not real money, a refund waiting for its credit note is a refund;
+--  10. the backfill reads the mode in force when each payment was captured.
 --
 -- Everything is asserted on the suite's own orders, or on differences from
 -- a count taken before, so it holds on a used database. All rolled back.
@@ -491,6 +495,116 @@ begin
     'the closing is internal';
   assert not has_function_privilege('authenticated', 'private.payment_simulated(public.payments)', 'execute'),
     'so is the rule';
+end
+$$;
+
+-- ═══ 9. The console counts payments, not jobs ══════════════════════════════
+
+-- A simulated order paid and then cancelled: two jobs end, one payment.
+update public.app_settings set value = jsonb_set(value, '{ready}', 'true') where key = 'invoicing_issuer';
+update public.app_settings set value = jsonb_set(value, '{simulated_payments}', 'false') where key = 'invoicing_policy';
+select pg_temp.plan();
+select pg_temp.remember('state_c0', public.ops_invoicing_state()::text)
+from (select pg_temp.act('central@yuntera.example')) x;
+select pg_temp.logout();
+select pg_temp.remember('c_sinpe', pg_temp.place('fix152-b@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'sinpe_movil', 'fix152-c-sinpe-01')::text);
+select pg_temp.pay(current_setting('t.c_sinpe')::uuid);
+select pg_temp.plan();
+select pg_temp.cancel('fix152-b@yuntera.example', current_setting('t.c_sinpe')::uuid);
+select pg_temp.plan();
+do $$
+declare
+  b jsonb := current_setting('t.state_c0')::jsonb;
+  v jsonb;
+begin
+  assert (pg_temp.job(current_setting('t.c_sinpe')::uuid, 'fiscal.refund_booked')).last_error = 'simulated_money',
+    'the refund''s job ended too';
+  perform pg_temp.act('central@yuntera.example');
+  v := public.ops_invoicing_state();
+  perform pg_temp.logout();
+  assert (v ->> 'closed_simulated')::int = (b ->> 'closed_simulated')::int + 1,
+    format('paid and refunded, still one payment closed: %s then %s', b, v);
+end
+$$;
+
+-- A rehearsal (simulated money documented) with the issuer not set up: the
+-- simulated payment waits as a rehearsal, not as real money, and its
+-- refund's credit note waits on its own line.
+update public.app_settings set value = jsonb_set(value, '{simulated_payments}', 'true') where key = 'invoicing_policy';
+update public.app_settings set value = jsonb_set(value, '{ready}', 'false') where key = 'invoicing_issuer';
+select pg_temp.remember('state_r0', public.ops_invoicing_state()::text)
+from (select pg_temp.act('central@yuntera.example')) x;
+select pg_temp.logout();
+select pg_temp.remember('r_sinpe', pg_temp.place('fix152-b@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'sinpe_movil', 'fix152-r-sinpe-01')::text);
+select pg_temp.pay(current_setting('t.r_sinpe')::uuid);
+select pg_temp.plan();
+do $$
+declare
+  b jsonb := current_setting('t.state_r0')::jsonb;
+  v jsonb;
+begin
+  perform pg_temp.act('central@yuntera.example');
+  v := public.ops_invoicing_state();
+  perform pg_temp.logout();
+  assert (v ->> 'waiting_rehearsal')::int = (b ->> 'waiting_rehearsal')::int + 1,
+    format('the simulated payment waits as a rehearsal: %s then %s', b, v);
+  assert (v ->> 'waiting_real')::int = (b ->> 'waiting_real')::int,
+    format('and is not counted as real money: %s then %s', b, v);
+  assert (v ->> 'waiting_simulated')::int = (b ->> 'waiting_simulated')::int, 'nor as one to end';
+end
+$$;
+select pg_temp.cancel('fix152-b@yuntera.example', current_setting('t.r_sinpe')::uuid);
+do $$
+declare
+  b jsonb := current_setting('t.state_r0')::jsonb;
+  v jsonb;
+begin
+  perform pg_temp.act('central@yuntera.example');
+  v := public.ops_invoicing_state();
+  perform pg_temp.logout();
+  assert (v ->> 'waiting_refunds')::int = (b ->> 'waiting_refunds')::int + 1,
+    format('its refund waits for its credit note: %s then %s', b, v);
+  assert (v ->> 'waiting_rehearsal')::int = (b ->> 'waiting_rehearsal')::int + 1,
+    format('and is not another payment: %s then %s', b, v);
+end
+$$;
+update public.app_settings set value = jsonb_set(value, '{simulated_payments}', 'false') where key = 'invoicing_policy';
+update public.app_settings set value = jsonb_set(value, '{ready}', 'true') where key = 'invoicing_issuer';
+
+-- ═══ 10. The backfill: the mode in force at capture, not at migration ═════
+-- Payments captured before 083510 were decided with private.payments_mode_at
+-- (their captured_at), read from the audit trail of app_settings. A change of
+-- the mode recorded in the (rolled back) future stands for "the mode was
+-- switched after this cash was taken and before the migration ran".
+do $$
+declare
+  v_now text := private.payments_mode();
+  v_next text := case when private.payments_mode() = 'live' then 'test' else 'live' end;
+begin
+  assert private.payments_mode_at(now() + interval '1 hour') = v_now, 'no change ahead: the current mode';
+  insert into private.audit_log (action, table_name, row_key, old_row, new_row, at)
+  values ('UPDATE', 'app_settings', 'payments_mode',
+          jsonb_build_object('key', 'payments_mode', 'value', to_jsonb(v_now)),
+          jsonb_build_object('key', 'payments_mode', 'value', to_jsonb(v_next)),
+          now() + interval '2 hours'),
+         ('UPDATE', 'app_settings', 'payments_mode',
+          jsonb_build_object('key', 'payments_mode', 'value', to_jsonb(v_next)),
+          jsonb_build_object('key', 'payments_mode', 'value', '"sandbox"'::jsonb),
+          now() + interval '4 hours');
+  assert private.payments_mode_at(now() + interval '1 hour') = v_now, 'before the change: the mode it replaced';
+  assert private.payments_mode_at(now() + interval '3 hours') = v_next, 'after it: the new mode';
+  assert private.payments_mode_at(now() + interval '5 hours') = 'sandbox', 'after the next: that one';
+  assert private.payments_mode_at('1900-01-01') = 'sandbox', 'before the setting existed: sandbox';
+  -- The backfill's rule for cash taken in sandbox (no environment), with
+  -- the mode switched to test or live before the migration: still simulated.
+  assert private.payment_money_simulated('cash', null, 'cash_on_delivery',
+           private.payments_mode_at(now() + interval '5 hours')),
+    'sandbox cash captured while the mode was sandbox stays simulated';
+  assert not private.payment_money_simulated('cash', null, 'cash_on_delivery',
+           private.payments_mode_at(now() + interval '3 hours')),
+    'cash collected while the mode was live is real';
 end
 $$;
 

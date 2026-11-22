@@ -67,6 +67,41 @@ export default function InvoicesPage({ searchParams }: PageProps<"/comprobantes"
 }
 
 const payments = (n: number) => (n === 1 ? "1 pago" : `${n} pagos`);
+const refunds = (n: number) => (n === 1 ? "1 reembolso" : `${n} reembolsos`);
+const waits = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
+/**
+ * What waits while the issuer is not set up, one sentence per kind: real
+ * payments, rehearsal payments (simulated money this project documents) and
+ * refunds whose credit note waits. Simulated money that is not documented is
+ * never said to wait for a document.
+ */
+function waitingSentences(state: OpsInvoicingState): string {
+  const sentences: string[] = [];
+  if (state.waiting_real > 0) {
+    sentences.push(
+      `${payments(state.waiting_real)} con dinero real ${waits(state.waiting_real, "espera y se emitirá", "esperan y se emitirán")} en orden cuando quede configurada.`,
+    );
+  }
+  if (state.waiting_rehearsal > 0) {
+    sentences.push(
+      `${payments(state.waiting_rehearsal)} ${waits(state.waiting_rehearsal, "simulado de ensayo espera y recibirá", "simulados de ensayo esperan y recibirán")} comprobante en orden cuando quede configurada.`,
+    );
+  }
+  if (state.waiting_refunds > 0) {
+    sentences.push(
+      `${refunds(state.waiting_refunds)} ${waits(state.waiting_refunds, "espera su nota de crédito, que se emitirá", "esperan su nota de crédito, que se emitirá")} en orden cuando quede configurada.`,
+    );
+  }
+  if (sentences.length === 0) {
+    sentences.push(
+      state.simulated_documented
+        ? "Ningún pago espera comprobante."
+        : "Ningún pago con dinero real espera comprobante.",
+    );
+  }
+  return sentences.join(" ");
+}
 
 /**
  * Whether documents are issued here, and what happens to the payments that
@@ -82,10 +117,7 @@ function InvoicingState({ state }: { state: OpsInvoicingState }) {
       {!state.issuer_ready ? (
         <Alert tone="warning" title="La facturación electrónica no está configurada">
           Faltan los datos de inscripción de la empresa en Hacienda. Mientras tanto no se emite
-          ningún comprobante.{" "}
-          {state.waiting_real > 0
-            ? `${payments(state.waiting_real)} con dinero real ${state.waiting_real === 1 ? "espera y se emitirá" : "esperan y se emitirán"} en orden cuando quede configurada.`
-            : "Ningún pago con dinero real espera comprobante."}
+          ningún comprobante. {waitingSentences(state)}
         </Alert>
       ) : null}
       {simulatedEnds && (state.payments_mode === "sandbox" || closed + closing > 0) ? (

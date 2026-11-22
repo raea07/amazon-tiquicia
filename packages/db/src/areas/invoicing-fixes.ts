@@ -18,11 +18,15 @@ export const opsInvoicingState = z.object({
   /** Whether simulated money gets documents here (local work, a rehearsal); false on a real project. */
   simulated_documented: z.boolean(),
   issuer_ready: z.boolean(),
-  /** Invoice jobs with real money (or already documented) that wait to be planned. */
+  /** Orders paid with real money whose documents wait to be issued. */
   waiting_real: z.number().int(),
-  /** Jobs whose money was never real, that the next planning or sweep ends without a document. */
+  /** Orders paid with simulated money whose documents wait and will be issued (a rehearsal). */
+  waiting_rehearsal: z.number().int(),
+  /** Refunds whose credit note waits to be issued. */
+  waiting_refunds: z.number().int(),
+  /** Orders whose money was never real, that the next planning or sweep ends without a document. */
   waiting_simulated: z.number().int(),
-  /** Jobs ended without a document because their money was never real. */
+  /** Orders that ended without a document because their money was never real. */
   closed_simulated: z.number().int(),
 });
 export type OpsInvoicingState = z.infer<typeof opsInvoicingState>;
