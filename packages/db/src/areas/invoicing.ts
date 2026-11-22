@@ -72,6 +72,13 @@ const party = {
 };
 
 /** A whole document, for its readable page. */
+/**
+ * Why a document was rejected: refused when sent ("reception"), answered
+ * rechazado ("validation"), or held by the worker's checks and replaced before
+ * it was ever sent ("local").
+ */
+const rejectionSource = z.enum(["reception", "validation", "local"]).nullable();
+
 export const invoiceDetail = invoiceRow.extend({
   situation: z.string(),
   issuer: z.object({
@@ -110,7 +117,7 @@ export const invoiceDetail = invoiceRow.extend({
     }),
   ),
   hacienda_message: z.string().nullable(),
-  rejection_source: z.enum(["reception", "validation"]).nullable(),
+  rejection_source: rejectionSource,
   submitted_at: timestamp.nullable(),
   made_available_at: timestamp.nullable(),
   replaces: z.object({ id, consecutivo: z.string(), clave: z.string() }).nullable(),
@@ -139,7 +146,7 @@ export const opsInvoices = z.object({
   rejected: z.array(
     invoiceRow.extend({
       hacienda_message: z.string().nullable(),
-      rejection_source: z.enum(["reception", "validation"]).nullable(),
+      rejection_source: rejectionSource,
     }),
   ),
   unsent: z.array(
@@ -148,9 +155,24 @@ export const opsInvoices = z.object({
       last_error_code: z.string().nullable(),
       held_reason: z.string().nullable(),
       next_attempt_at: timestamp.nullable(),
+      /** Held before it was ever signed: finance may replace it with a new number. */
+      replaceable: z.boolean(),
     }),
   ),
   failed_events: z.number().int(),
+  /** Paid orders (or refunds) whose documents could not all be made yet, and why. */
+  failed_jobs: z.array(
+    z.object({
+      event_id: z.number().int(),
+      topic: z.string(),
+      order_number: z.string().nullable(),
+      /** The database's code: shown to staff as a sentence, never as the code. */
+      reason: z.string(),
+      seller_name: z.string().nullable(),
+      attempts: z.number().int(),
+      since: timestamp,
+    }),
+  ),
   waiting_events: z.number().int(),
   issuer_ready: z.boolean(),
   worker: z
@@ -253,6 +275,10 @@ export const invoicingErrors = {
     "es-CR": "Los datos fiscales de la tienda no alcanzan para emitirle una factura.",
     en: "The shop's fiscal details are not enough to issue it an invoice.",
   },
+  invoice_tax_rate_unmapped: {
+    "es-CR": "La tarifa de IVA de las comisiones no tiene un código de Hacienda configurado.",
+    en: "The IVA rate of the fees has no Hacienda rate code configured.",
+  },
   invoice_clave_invalid: {
     "es-CR": "No se pudo formar la clave del comprobante.",
     en: "The document's clave could not be built.",
@@ -303,7 +329,10 @@ export const invoicingApi = ({ call }: Caller) => ({
   opsInvoices: (status: InvoiceStatus | null = null, limit = 50) =>
     call("ops_invoices", { p_status: status, p_limit: limit }, opsInvoices),
 
-  /** A new document, with a new number, for one Hacienda rejected. */
+  /**
+   * A new document, with a new number, for one Hacienda rejected, or for one
+   * the worker's checks held before it was ever sent.
+   */
   opsReplaceInvoice: (invoiceId: string, asTicket = false) =>
     call("ops_invoice_replace", { p_id: invoiceId, p_as_ticket: asTicket }, invoiceRow),
 

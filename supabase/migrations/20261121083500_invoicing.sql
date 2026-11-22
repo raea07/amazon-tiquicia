@@ -148,7 +148,10 @@ alter table public.electronic_invoices
   add column last_polled_at timestamptz,
   add column answered_at timestamptz,
   add column rejected_at timestamptz,
-  add column rejection_source text check (rejection_source in ('reception', 'validation')),
+  -- 'reception': refused when sent (400); 'validation': Hacienda's answer
+  -- was rechazado; 'local': held by the worker's checks and replaced before
+  -- it was ever sent.
+  add column rejection_source text check (rejection_source in ('reception', 'validation', 'local')),
   -- Stopped for staff: the document did not pass the worker's checks.
   add column held_reason text,
   add column voided_at timestamptz;
@@ -294,6 +297,50 @@ as $$
   select case p_code
     when '02' then '1.00' when '03' then '2.00' when '04' then '4.00'
     when '08' then '13.00' when '09' then '0.50' else '0.00' end;
+$$;
+
+-- The tarifa code for an IVA rate in basis points (the inverse of
+-- invoice_rate_bps, for the rates the platform charges). A rate with no code
+-- is refused rather than written as another rate.
+create or replace function private.invoice_tax_code(p_bps integer) returns text
+language plpgsql immutable
+set search_path = ''
+as $$
+declare
+  v_code text := case p_bps when 1300 then '08' when 400 then '04' when 200 then '03' when 100 then '02'
+                            when 50 then '09' when 0 then '01' end;
+begin
+  if v_code is null then
+    perform private.fail('invoice_tax_rate_unmapped');
+  end if;
+  return v_code;
+end;
+$$;
+
+-- What a person typed, as packages/invoicing cleanText() writes it: NFC,
+-- the characters XML cannot carry removed, every run of whitespace one
+-- space, trimmed, at most p_max characters. Checked and stored this way, so
+-- the worker's own check can never refuse what was accepted here.
+create or replace function private.invoice_clean_text(p_value text, p_max integer) returns text
+language sql immutable
+set search_path = ''
+as $$
+  select btrim(left(btrim(regexp_replace(
+           regexp_replace(normalize(coalesce(p_value, ''), nfc),
+                          '[\u0001-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]', '', 'g'),
+           '[\s\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+', ' ', 'g')), p_max));
+$$;
+
+-- The structure the annex gives for CorreoElectronico
+-- (\w+([-+.']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*), at most 160 characters;
+-- the same pattern as packages/invoicing EMAIL and the checkout's form.
+create or replace function private.invoice_email_valid(p_email text) returns boolean
+language sql immutable
+set search_path = ''
+as $$
+  select coalesce(char_length(p_email) <= 160
+    and p_email ~ '^[A-Za-z0-9_]+([-+.''][A-Za-z0-9_]+)*@[A-Za-z0-9_]+([-.][A-Za-z0-9_]+)*\.[A-Za-z0-9_]+([-.][A-Za-z0-9_]+)*$',
+    false);
 $$;
 
 -- The net inside an IVA-inclusive amount of céntimos: gross ÷ (1 + rate), to
@@ -523,14 +570,16 @@ declare
   p public.seller_private;
 begin
   select * into p from public.seller_private where seller_id = p_seller_id;
-  if not found or char_length(trim(p.legal_name)) < 3 or p.id_number !~ '^[A-Za-z0-9]{9,12}$' then
+  if not found or char_length(private.invoice_clean_text(p.legal_name, 100)) < 3
+     or p.id_number !~ '^[A-Za-z0-9]{9,12}$' or private.invoice_id_code(p.id_type) is null then
     perform private.fail('invoice_receiver_incomplete');
   end if;
   return jsonb_build_object(
-    'name', left(trim(p.legal_name), 100),
+    'name', private.invoice_clean_text(p.legal_name, 100),
     'id_type', private.invoice_id_code(p.id_type),
     'id_number', p.id_number,
-    'email', p.contact_email,
+    -- Optional in a factura: left out rather than written in a shape Hacienda refuses.
+    'email', case when private.invoice_email_valid(trim(p.contact_email)) then trim(p.contact_email) end,
     'activity_code', case when p.economic_activity_code ~ '^[0-9]{6}$' then p.economic_activity_code end);
 end;
 $$;
@@ -640,8 +689,13 @@ as $$
 $$;
 
 -- A paid order: the delivery fee's document to the shopper, and one factura
--- per seller for the platform's fees.
-create or replace function private.invoice_plan_capture(p_event_id bigint, p_order_id uuid) returns void
+-- per seller for the platform's fees. Each document is made in its own
+-- subtransaction, so one shop's incomplete fiscal data holds back only that
+-- shop's factura: the others, and the shopper's document, are issued. Returns
+-- the first failure ('<code> seller <id>'), or null when everything is
+-- issued; the planner then tries again later, and the documents already made
+-- are found by their dedupe keys and not made twice.
+create or replace function private.invoice_plan_capture(p_event_id bigint, p_order_id uuid) returns text
 language plpgsql security definer
 set search_path = ''
 as $$
@@ -652,65 +706,88 @@ declare
   v_receiver private.invoice_checkout_receivers;
   v_lines jsonb;
   v_n integer;
+  v_code text;
+  v_failure text;
   f record;
 begin
   select * into o from public.orders where id = p_order_id;
   if not found or not exists (select 1 from public.ledger_transactions t
                               where t.order_id = p_order_id and t.kind = 'order_capture') then
-    return;
+    return null;
   end if;
 
   if o.shipping_minor > 0 and coalesce(v_policy ->> 'delivery_fee_issuer', 'platform') = 'platform' then
-    select * into v_receiver from private.invoice_checkout_receivers r
-    where r.user_id = o.user_id and r.idempotency_key = o.idempotency_key;
-    perform private.invoice_create(
-      'delivery',
-      case when v_receiver.user_id is null then '04' else '01' end,
-      o.id, 'shopper', null,
-      case when v_receiver.user_id is null then null else jsonb_build_object(
-        'name', v_receiver.name, 'id_type', private.invoice_id_code(v_receiver.id_type),
-        'id_number', v_receiver.id_number, 'email', v_receiver.email, 'activity_code', null) end,
-      jsonb_build_array(private.invoice_line(
-        1, coalesce(v_cabys ->> 'delivery', '6803000000000'), 'Os',
-        'Entrega a domicilio, pedido ' || o.order_number,
-        private.invoice_net_of_gross(o.shipping_minor, 1300), '08')),
-      '01', private.invoice_payment_code(o.payment_method), null, '[]',
-      'delivery:' || o.id, p_event_id, o.shipping_minor);
-    -- Used: what the shopper typed now lives only in the document.
+    begin
+      select * into v_receiver from private.invoice_checkout_receivers r
+      where r.user_id = o.user_id and r.idempotency_key = o.idempotency_key;
+      perform private.invoice_create(
+        'delivery',
+        case when v_receiver.user_id is null then '04' else '01' end,
+        o.id, 'shopper', null,
+        case when v_receiver.user_id is null then null else jsonb_build_object(
+          'name', v_receiver.name, 'id_type', private.invoice_id_code(v_receiver.id_type),
+          'id_number', v_receiver.id_number, 'email', v_receiver.email, 'activity_code', null) end,
+        jsonb_build_array(private.invoice_line(
+          1, coalesce(v_cabys ->> 'delivery', '6803000000000'), 'Os',
+          'Entrega a domicilio, pedido ' || o.order_number,
+          private.invoice_net_of_gross(o.shipping_minor, 1300), private.invoice_tax_code(1300))),
+        '01', private.invoice_payment_code(o.payment_method), null, '[]',
+        'delivery:' || o.id, p_event_id, o.shipping_minor);
+    exception when others then
+      if sqlerrm = 'invoice_issuer_not_ready' then
+        raise;
+      end if;
+      v_failure := coalesce(v_failure, sqlerrm || ' delivery');
+    end;
+  end if;
+  if v_failure is null then
+    -- Used, or nothing of Yuntera's to invoice (free delivery, or the delivery
+    -- fee invoiced by someone else): what the shopper typed is not kept.
     delete from private.invoice_checkout_receivers r
     where r.user_id = o.user_id and r.idempotency_key = o.idempotency_key;
   end if;
 
   for f in
-    select * from public.seller_order_fees where order_id = p_order_id and fees_net_minor > 0
-    order by seller_id
+    select x.*, s.fee_tax_bps from public.seller_order_fees x
+    join public.fee_schedules s on s.version = x.schedule_version
+    where x.order_id = p_order_id and x.fees_net_minor > 0
+    order by x.seller_id
   loop
-    v_lines := '[]';
-    v_n := 0;
-    if f.referral_fee_minor > 0 then
-      v_n := v_n + 1;
-      v_lines := v_lines || private.invoice_line(v_n, coalesce(v_cabys ->> 'commission', '6254400000000'),
-        'Cm', 'Comisión por venta, pedido ' || o.order_number, f.referral_fee_minor::numeric / 100, '08');
-    end if;
-    if f.fulfillment_fee_minor > 0 then
-      v_n := v_n + 1;
-      v_lines := v_lines || private.invoice_line(v_n, coalesce(v_cabys ->> 'fulfillment', '6729000000000'),
-        'Os', 'Servicio de bodega y preparación, pedido ' || o.order_number,
-        f.fulfillment_fee_minor::numeric / 100, '08');
-    end if;
-    if f.payment_fee_minor > 0 then
-      v_n := v_n + 1;
-      v_lines := v_lines || private.invoice_line(v_n, coalesce(v_cabys ->> 'payment', '7119002009900'),
-        'Os', 'Gestión del cobro al comprador, pedido ' || o.order_number,
-        f.payment_fee_minor::numeric / 100, '08');
-    end if;
-    perform private.invoice_create(
-      'fees', '01', o.id, 'seller', f.seller_id, private.invoice_seller_receiver(f.seller_id), v_lines,
-      coalesce(v_policy ->> 'fee_sale_condition', '01'), coalesce(v_policy ->> 'fee_payment_code', '99'),
-      case when coalesce(v_policy ->> 'fee_payment_code', '99') = '99'
-           then coalesce(v_policy ->> 'fee_payment_other', 'Compensación contra la liquidación de ventas') end,
-      '[]', 'fees:' || o.id || ':' || f.seller_id, p_event_id, f.fees_net_minor + f.fees_tax_minor);
+    begin
+      v_code := private.invoice_tax_code(f.fee_tax_bps);
+      v_lines := '[]';
+      v_n := 0;
+      if f.referral_fee_minor > 0 then
+        v_n := v_n + 1;
+        v_lines := v_lines || private.invoice_line(v_n, coalesce(v_cabys ->> 'commission', '6254400000000'),
+          'Cm', 'Comisión por venta, pedido ' || o.order_number, f.referral_fee_minor::numeric / 100, v_code);
+      end if;
+      if f.fulfillment_fee_minor > 0 then
+        v_n := v_n + 1;
+        v_lines := v_lines || private.invoice_line(v_n, coalesce(v_cabys ->> 'fulfillment', '6729000000000'),
+          'Os', 'Servicio de bodega y preparación, pedido ' || o.order_number,
+          f.fulfillment_fee_minor::numeric / 100, v_code);
+      end if;
+      if f.payment_fee_minor > 0 then
+        v_n := v_n + 1;
+        v_lines := v_lines || private.invoice_line(v_n, coalesce(v_cabys ->> 'payment', '7119002009900'),
+          'Os', 'Gestión del cobro al comprador, pedido ' || o.order_number,
+          f.payment_fee_minor::numeric / 100, v_code);
+      end if;
+      perform private.invoice_create(
+        'fees', '01', o.id, 'seller', f.seller_id, private.invoice_seller_receiver(f.seller_id), v_lines,
+        coalesce(v_policy ->> 'fee_sale_condition', '01'), coalesce(v_policy ->> 'fee_payment_code', '99'),
+        case when coalesce(v_policy ->> 'fee_payment_code', '99') = '99'
+             then coalesce(v_policy ->> 'fee_payment_other', 'Compensación contra la liquidación de ventas') end,
+        '[]', 'fees:' || o.id || ':' || f.seller_id, p_event_id, f.fees_net_minor + f.fees_tax_minor);
+    exception when others then
+      if sqlerrm = 'invoice_issuer_not_ready' then
+        raise;
+      end if;
+      v_failure := coalesce(v_failure, sqlerrm || ' seller ' || f.seller_id);
+    end;
   end loop;
+  return v_failure;
 end;
 $$;
 
@@ -740,6 +817,15 @@ begin
   select * into r from private.refunds where id = p_refund_id;
   if not found then
     return;
+  end if;
+  -- A credit note reverses documents: while an earlier event of the same
+  -- order (its capture) has not made all of its documents, this one waits,
+  -- whatever order the planner meets the jobs in.
+  if exists (select 1 from private.outbox_jobs x
+             join private.outbox_events e on e.id = x.event_id
+             where x.consumer = 'invoice' and x.status <> 'done' and x.event_id < p_event_id
+               and e.payload ->> 'order_id' = r.order_id::text) then
+    perform private.fail('invoice_waiting');
   end if;
   select * into o from public.orders where id = r.order_id;
 
@@ -796,7 +882,7 @@ begin
       jsonb_build_array(private.invoice_line(
         1, coalesce(v_policy -> 'cabys' ->> 'commission', '6254400000000'), 'Cm',
         'Devolución de la comisión por productos devueltos, pedido ' || o.order_number,
-        c.commission::numeric / 100, '08')),
+        c.commission::numeric / 100, private.invoice_tax_code(v_tax_bps))),
       d.sale_condition, d.payments -> 0 ->> 'code', d.payments -> 0 ->> 'other',
       jsonb_build_array(private.invoice_reference(d, coalesce(v_policy ->> 'credit_code_return', '06'),
         'Comisión devuelta por productos devueltos del pedido ' || o.order_number)),
@@ -810,6 +896,10 @@ $$;
 -- its documents and numbers commit together or not at all. Two planners at
 -- once skip each other's jobs, and wait for each other only on a counter row.
 -- Until the issuer is set up, nothing is numbered and the jobs wait.
+-- An invoice job never gives up: a paid order must have its documents, so a
+-- job that fails (a shop's incomplete fiscal data) is tried again on every
+-- run, after the jobs that have not failed, until the cause is fixed; finance
+-- sees it in ops_invoices (failed_jobs) with the order and the shop.
 create or replace function private.invoice_plan(p_limit integer default 100) returns integer
 language plpgsql security definer
 set search_path = ''
@@ -818,24 +908,32 @@ declare
   j record;
   e private.outbox_events;
   v_count integer := 0;
+  v_failure text;
 begin
   for j in
     select x.event_id from private.outbox_jobs x
     where x.consumer = 'invoice' and x.status = 'pending'
-    order by x.event_id
+    order by x.attempts, x.event_id
     limit greatest(1, least(p_limit, 1000))
     for update of x skip locked
   loop
     select * into e from private.outbox_events where id = j.event_id;
+    v_failure := null;
     begin
       if e.topic = 'payment.captured' then
-        perform private.invoice_plan_capture(e.id, (e.payload ->> 'order_id')::uuid);
+        v_failure := private.invoice_plan_capture(e.id, (e.payload ->> 'order_id')::uuid);
       elsif e.topic = 'fiscal.refund_booked' then
         perform private.invoice_plan_refund(e.id, (e.payload ->> 'refund_id')::uuid);
       end if;
-      update private.outbox_jobs set status = 'done', done_at = now(), attempts = attempts + 1
-      where event_id = j.event_id and consumer = 'invoice';
-      v_count := v_count + 1;
+      if v_failure is null then
+        update private.outbox_jobs set status = 'done', done_at = now(), attempts = least(attempts + 1, 32000)
+        where event_id = j.event_id and consumer = 'invoice';
+        v_count := v_count + 1;
+      else
+        -- Some of its documents were made (and stay); the rest wait for the cause to be fixed.
+        update private.outbox_jobs set attempts = least(attempts + 1, 32000), last_error = left(v_failure, 500)
+        where event_id = j.event_id and consumer = 'invoice';
+      end if;
     exception
       when others then
         if sqlerrm = 'invoice_issuer_not_ready' then
@@ -846,8 +944,7 @@ begin
           null;
         else
           update private.outbox_jobs
-          set attempts = attempts + 1, last_error = left(sqlerrm, 500),
-              status = case when attempts + 1 >= 5 then 'dead' else 'pending' end
+          set attempts = least(attempts + 1, 32000), last_error = left(sqlerrm, 500)
           where event_id = j.event_id and consumer = 'invoice';
         end if;
     end;
@@ -1087,12 +1184,20 @@ begin
           submitted_at = coalesce(submitted_at, now()), next_attempt_at = null,
           last_error_code = null, last_error = null
       where id = p_id;
-      -- A credit note that annuls its document, once accepted, leaves that document void.
+      -- A credit note that annuls its document, once accepted, leaves that
+      -- document void: at once when the document is accepted already, or when
+      -- the document's own acceptance comes after the credit note's.
       if v_state = 'aceptado' and d.kind = 'credit' and d.original_invoice_id is not null
          and d.refs -> 0 ->> 'code' in ('01', '13') then
         update public.electronic_invoices
         set status = 'voided', voided_at = now()
         where id = d.original_invoice_id and status = 'accepted';
+      end if;
+      if v_state = 'aceptado' and exists (
+           select 1 from public.electronic_invoices n
+           where n.original_invoice_id = p_id and n.kind = 'credit' and n.status = 'accepted'
+             and n.refs -> 0 ->> 'code' in ('01', '13')) then
+        update public.electronic_invoices set status = 'voided', voided_at = now() where id = p_id;
       end if;
     else
       update public.electronic_invoices
@@ -1348,7 +1453,8 @@ as $$
 declare
   v_user uuid := (select auth.uid());
   v_number text := upper(regexp_replace(coalesce(p_id_number, ''), '[\s.\-]', '', 'g'));
-  v_name text := regexp_replace(trim(coalesce(p_name, '')), '\s+', ' ', 'g');
+  v_raw_name text := coalesce(p_name, '');
+  v_name text := private.invoice_clean_text(v_raw_name, 1000);
   v_email text := nullif(trim(coalesce(p_email, '')), '');
 begin
   if v_user is null then
@@ -1373,10 +1479,12 @@ begin
   if p_id_type is null or not private.invoice_id_valid(p_id_type, v_number) then
     perform private.fail('invoice_receiver_id_invalid');
   end if;
-  if char_length(v_name) not between 3 and 100 then
+  -- Checked as the XML will carry it (packages/invoicing cleanText and EMAIL),
+  -- so a document numbered from it can always be written and sent.
+  if char_length(v_raw_name) > 1000 or char_length(v_name) not between 3 and 100 then
     perform private.fail('invoice_receiver_name_invalid');
   end if;
-  if v_email is not null and (char_length(v_email) > 160 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
+  if v_email is not null and not private.invoice_email_valid(v_email) then
     perform private.fail('invoice_receiver_email_invalid');
   end if;
 
@@ -1432,13 +1540,31 @@ begin
     'unsent', coalesce((
       select jsonb_agg(private.invoice_row(e) || jsonb_build_object(
                'attempts', e.attempts, 'last_error_code', e.last_error_code,
-               'held_reason', e.held_reason, 'next_attempt_at', e.next_attempt_at)
+               'held_reason', e.held_reason, 'next_attempt_at', e.next_attempt_at,
+               'replaceable', e.held_reason is not null and e.signed_sha256 is null
+                              and e.replaced_by_id is null)
              order by e.issued_at)
       from (select * from public.electronic_invoices x
             where x.status = 'pending' and (x.held_reason is not null or x.issued_at < now() - interval '15 minutes')
             order by x.issued_at limit 100) e), '[]'),
     'failed_events', (select count(*) from private.outbox_jobs j
                       where j.consumer = 'invoice' and (j.status = 'dead' or (j.status = 'pending' and j.attempts > 0))),
+    -- Which paid orders are missing documents, and why: the code and the
+    -- shop that failed (private.invoice_plan_capture's '<code> seller <id>').
+    'failed_jobs', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'event_id', f.event_id, 'topic', f.topic, 'order_number', f.order_number,
+               'reason', f.reason, 'seller_name', f.seller_name, 'attempts', f.attempts,
+               'since', f.created_at) order by f.event_id)
+      from (select j.event_id, e.topic, j.attempts, j.created_at,
+                   (select o.order_number from public.orders o
+                    where o.id::text = e.payload ->> 'order_id') as order_number,
+                   split_part(j.last_error, ' ', 1) as reason,
+                   (select s.trade_name from public.sellers s
+                    where s.id::text = substring(j.last_error from ' seller ([0-9a-f-]{36})')) as seller_name
+            from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
+            where j.consumer = 'invoice' and (j.status = 'dead' or (j.status = 'pending' and j.attempts > 0))
+            order by j.event_id limit 100) f), '[]'),
     'waiting_events', (select count(*) from private.outbox_jobs j
                        where j.consumer = 'invoice' and j.status = 'pending'),
     'issuer_ready', coalesce((private.setting('invoicing_issuer') ->> 'ready')::boolean, false),
@@ -1483,6 +1609,8 @@ $$;
 -- was the cause), referencing the rejected one (TipoDocIR 10, Codigo 16)
 -- when Hacienda had received it. A factura to a shopper whose identification
 -- Hacienda did not accept can be reissued as a tiquete without receiver.
+-- A document held by the worker's checks before it was ever signed is
+-- replaced the same way, without a reference (Hacienda never had it).
 create or replace function public.ops_invoice_replace(p_id uuid, p_as_ticket boolean default false)
 returns jsonb
 language plpgsql security definer
@@ -1502,11 +1630,22 @@ begin
   if not found then
     perform private.fail('invoice_not_found');
   end if;
-  if d.status <> 'rejected' then
-    perform private.fail('invoice_not_rejected');
-  end if;
   if d.replaced_by_id is not null then
     perform private.fail('invoice_already_replaced');
+  end if;
+  -- A document the worker's checks held, never signed and so never sent, is
+  -- replaced like one Hacienda refused at reception: it is set aside, with
+  -- its number, and never sent (the audit log says why the number was not).
+  if d.status = 'pending' and d.held_reason is not null and d.signed_sha256 is null then
+    update public.electronic_invoices
+    set status = 'rejected', rejection_source = 'local', rejected_at = now(), next_attempt_at = null,
+        locked_by = null, locked_until = null
+    where id = d.id;
+    d.status := 'rejected';
+    d.rejection_source := 'local';
+  end if;
+  if d.status <> 'rejected' then
+    perform private.fail('invoice_not_rejected');
   end if;
 
   v_type := d.document_type;
@@ -1569,10 +1708,14 @@ begin
                                               and d.next_attempt_at <= now()) then
     perform private.fail('invoice_not_retryable');
   end if;
+  -- A worker that holds the document now keeps it: clearing its lease would
+  -- let a second worker send the same clave while the first is still sending.
   update public.electronic_invoices
-  set held_reason = null, next_attempt_at = now(), locked_by = null, locked_until = null
+  set held_reason = null, next_attempt_at = now()
   where id = p_id;
-  delete from private.invoice_transmission_pause;
+  -- The pause is lifted only by retrying a document that caused it (the
+  -- configuration was fixed); any other retry waits for the pause to end.
+  delete from private.invoice_transmission_pause p where p.reason = d.last_error_code;
 
   insert into private.audit_log (actor_id, action, table_name, row_key, old_row, new_row)
   values ((select auth.uid()), 'invoice_retried', 'electronic_invoices', d.id::text,
@@ -1586,6 +1729,7 @@ $$;
 
 revoke execute on function
   private.invoice_amount(numeric), private.invoice_rate_bps(text), private.invoice_rate_text(text),
+  private.invoice_tax_code(integer), private.invoice_clean_text(text, integer), private.invoice_email_valid(text),
   private.invoice_net_of_gross(bigint, integer), private.invoice_line(integer, text, text, text, numeric, text),
   private.invoice_summary(jsonb), private.invoice_consecutivo(integer, integer, text, bigint),
   private.invoice_clave(timestamptz, text, text, text, text), private.invoice_security_code(),
@@ -1685,8 +1829,19 @@ begin
                 where status in ('pending', 'sent') and held_reason is null and next_attempt_at <= now()) then
     perform private.invoice_kick();
   end if;
-  -- A factura asked for at checkout whose order was never paid is not kept.
-  delete from private.invoice_checkout_receivers where created_at < now() - interval '2 days';
+  -- A factura asked for at checkout is kept while its order may still be
+  -- paid (cash on delivery is paid at the door, days later). It is forgotten
+  -- when no order was placed with it within two days, or when the order was
+  -- cancelled without a payment. Once paid, planning uses it and deletes it.
+  delete from private.invoice_checkout_receivers r
+  where (r.created_at < now() - interval '2 days'
+         and not exists (select 1 from public.orders o
+                         where o.user_id = r.user_id and o.idempotency_key = r.idempotency_key))
+     or exists (select 1 from public.orders o
+                where o.user_id = r.user_id and o.idempotency_key = r.idempotency_key
+                  and o.status in ('cancelled', 'refunded')
+                  and not exists (select 1 from public.payments p where p.order_id = o.id
+                                  and p.status in ('captured', 'partially_refunded', 'refunded')));
 end;
 $$;
 

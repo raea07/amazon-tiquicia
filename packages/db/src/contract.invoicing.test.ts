@@ -7,8 +7,9 @@
  * Planning and the worker's steps commit, so this file builds its own copy
  * of the database next to the one in DATABASE_URL (same migrations, same
  * seed, built by supabase/scripts/local-db.sh) and drops it at the end. Its
- * name is the shared database's name plus `_invoicing`, or
- * INVOICING_DB_NAME when set. The worker is played with the service role's
+ * name is the shared database's name plus `_invoicing` (for lane 9,
+ * yuntera_lane9_invoicing), or INVOICING_DB_NAME when set; a name that is
+ * not `*_invoicing`, or that is a lane's own database, is refused. The worker is played with the service role's
  * claims, as the Data API gives them to the worker's secret key.
  */
 
@@ -22,8 +23,19 @@ import { type Api, createApi } from "./api";
 import { ApiError } from "./errors";
 
 const shared = process.env.DATABASE_URL;
-const copyName =
-  process.env.INVOICING_DB_NAME ?? `${shared ? new URL(shared).pathname.slice(1) : ""}_invoicing`;
+const sharedName = shared ? new URL(shared).pathname.slice(1) : "";
+const copyName = process.env.INVOICING_DB_NAME ?? `${sharedName}_invoicing`;
+// The copy is dropped with force at the end: never let its name be a lane's
+// own database (yuntera_local, yuntera_lane<N>) or the shared one.
+if (
+  shared &&
+  (copyName === sharedName ||
+    /^yuntera_(local|lane\d+)$/.test(copyName) ||
+    !/^[a-z0-9_]+_invoicing$/.test(copyName))
+)
+  throw new Error(
+    `Refusing to build and drop "${copyName}": the copy's name must end in _invoicing and not be a lane's database.`,
+  );
 const withDatabase = (name: string) => {
   const target = new URL(shared ?? "postgres://localhost/postgres");
   target.pathname = `/${name}`;
@@ -366,6 +378,58 @@ describe.skipIf(!shared)("invoicing contract and concurrency", () => {
     const retried = await staff.opsRetryInvoice(replacement.id);
     expect(retried.status).toBe("pending");
     expect(await codeOf(staff.opsRetryInvoice(replacement.id))).toBe("invoice_not_retryable");
+  });
+
+  it("shows finance a paid order a shop's fiscal data holds back, and replaces a held document", async () => {
+    const staff = as("central@yuntera.example");
+    const sendero = await lookup<string>(
+      "select id as r from public.sellers where slug = 'tienda-sendero'",
+    );
+    const legalName = await lookup<string>(
+      "select legal_name as r from public.seller_private where seller_id = $1",
+      [sendero],
+    );
+    await pool.query("update public.seller_private set legal_name = 'ab' where seller_id = $1", [
+      sendero,
+    ]);
+    let held = { order_id: "", order_number: "" };
+    try {
+      held = await paidOrder(buyer, "libreta-tapa-dura-a5", `contract-held-${RUN}`);
+      await worker("worker_invoice_plan", { p_limit: 100 });
+      const screen = await staff.opsInvoices(null, 20);
+      expect(
+        screen.failed_jobs.find((job) => job.order_number === held.order_number),
+      ).toMatchObject({
+        reason: "invoice_receiver_incomplete",
+        seller_name: "Tienda Sendero",
+        topic: "payment.captured",
+      });
+      // The shopper's document was not held back with the shop's.
+      expect((await as(buyer).myOrderInvoices(held.order_number)).length).toBe(1);
+    } finally {
+      await pool.query("update public.seller_private set legal_name = $2 where seller_id = $1", [
+        sendero,
+        legalName,
+      ]);
+    }
+    await worker("worker_invoice_plan", { p_limit: 100 });
+    const after = await staff.opsInvoices(null, 50);
+    expect(after.failed_jobs.find((job) => job.order_number === held.order_number)).toBeUndefined();
+
+    const fee = (await staff.sellerFeeInvoices(sendero, 50)).find(
+      (row) => row.order_number === held.order_number,
+    );
+    await pool.query(
+      "update public.electronic_invoices set held_reason = 'receiver_name_invalid' where id = $1",
+      [fee?.id],
+    );
+    const listed = (await staff.opsInvoices(null, 50)).unsent.find((row) => row.id === fee?.id);
+    expect(listed?.replaceable).toBe(true);
+    const replacement = await staff.opsReplaceInvoice(fee?.id ?? "");
+    expect(replacement.replaces_id).toBe(fee?.id);
+    expect(replacement.references_clave).toBeNull();
+    const old = await staff.invoiceDetail(fee?.id ?? "");
+    expect(old).toMatchObject({ status: "rejected", rejection_source: "local" });
   });
 
   describe("two planners at once", () => {

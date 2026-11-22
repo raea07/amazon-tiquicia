@@ -842,4 +842,320 @@ $$;
 reset role;
 revoke select on public.electronic_invoices from authenticated;
 
+-- ═══ 8. Orders of events, bad data, and what a shopper types ═════════════════
+-- Each case below failed before the fixes that came with it (reviewed in lane 10).
+
+-- Everything issued so far is put aside: only the documents made here are claimed.
+update public.electronic_invoices set next_attempt_at = now() + interval '1 day' where status in ('pending', 'sent');
+
+-- What a shopper types is cleaned and checked as the XML writer will write it.
+select pg_temp.login('comprador@yuntera.example');
+do $$
+begin
+  assert pg_temp.code_of(format('select public.set_checkout_invoice_receiver(%L, %L, %L, %L, null)',
+           'fx-ctrl-0001', 'fisica', '109870654', E'\u0001\u0001\u0001')) = 'invoice_receiver_name_invalid',
+    'control characters do not count as a name';
+  assert pg_temp.code_of(format('select public.set_checkout_invoice_receiver(%L, %L, %L, %L, %L)',
+           'fx-ctrl-0001', 'fisica', '109870654', 'Ana Mora', 'x<y@example.com')) = 'invoice_receiver_email_invalid',
+    'an e-mail with markup is refused';
+  assert pg_temp.code_of(format('select public.set_checkout_invoice_receiver(%L, %L, %L, %L, %L)',
+           'fx-ctrl-0001', 'fisica', '109870654', 'Ana Mora', E'ana\u0001@example.com')) = 'invoice_receiver_email_invalid',
+    'and one with a control character';
+  perform public.set_checkout_invoice_receiver('fx-ctrl-0001', 'fisica', '109870654',
+                                               E' Ana\u0001  Mora Solís ', 'ana.mora@example.com');
+end
+$$;
+reset role;
+do $$
+begin
+  assert (select name from private.invoice_checkout_receivers where idempotency_key = 'fx-ctrl-0001') = 'Ana Mora Solís',
+    'stored as the XML will carry it';
+  -- The same vectors as packages/invoicing/src/codes.test.ts.
+  assert private.invoice_clean_text(E' Ana\u0001  Mora\u00a0Solís ', 100) = 'Ana Mora Solís'
+     and private.invoice_clean_text(E'\u0001\u0001\u0001', 100) = ''
+     and private.invoice_clean_text('Ñandú & <b>"Hermanos"</b> S.A.', 100) = 'Ñandú & <b>"Hermanos"</b> S.A.'
+     and private.invoice_clean_text(E'línea uno\nlínea\tdos\r\n', 100) = 'línea uno línea dos'
+     and private.invoice_clean_text(E'Jose\u0301 Pe\u0301rez', 100) = 'José Pérez'
+     and private.invoice_clean_text(E'\uFEFFEmpresa\u2028S.A.\uFFFF', 100) = 'Empresa S.A.',
+    'text cleaned as the XML writer cleans it';
+  assert private.invoice_email_valid('ana.mora+factura@example.co.cr') and private.invoice_email_valid('o''neil@example.com')
+         and private.invoice_email_valid('facturacion@yuntera.example')
+         and not private.invoice_email_valid('x<y@example.com') and not private.invoice_email_valid(E'ana\u0001@example.com')
+         and not private.invoice_email_valid('a@b') and not private.invoice_email_valid('a b@example.com')
+         and not private.invoice_email_valid('ana@example..com'), 'the e-mail structure the annex documents';
+  assert private.invoice_tax_code(1300) = '08' and private.invoice_tax_code(400) = '04'
+         and private.invoice_tax_code(0) = '01', 'IVA rates map to their tarifa codes';
+  assert pg_temp.code_of('select private.invoice_tax_code(1234)') = 'invoice_tax_rate_unmapped',
+    'and a rate with no code is refused, not written as 13 %';
+end
+$$;
+delete from private.invoice_checkout_receivers where idempotency_key = 'fx-ctrl-0001';
+
+-- A shop with incomplete fiscal data: its fee factura waits, the shopper's
+-- document does not, and the job never gives up.
+select pg_temp.remember('sendero', (select seller_id::text from public.offers
+                                    where id = pg_temp.offer('botella-termica-sendero-750ml')));
+select pg_temp.remember('sendero_name', (select legal_name from public.seller_private
+                                         where seller_id = current_setting('t.sendero')::uuid));
+select pg_temp.remember('botella', pg_temp.offer('botella-termica-sendero-750ml')::text);
+select pg_temp.remember('salveque', pg_temp.offer('salveque-urbano-sendero-25l')::text);
+update public.seller_private set legal_name = E'a\u0001b' where seller_id = current_setting('t.sendero')::uuid;
+select pg_temp.login('comprador@yuntera.example');
+do $$
+begin
+  perform pg_temp.remember('race_order', (public.place_order(
+    jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.botella')::uuid, 'quantity', 1)),
+    (select a.id from public.my_addresses() a where a.is_default), 'sinpe_movil', 'fx-race-00001') ->> 'order_id'));
+  perform public.confirm_sandbox_payment(current_setting('t.race_order')::uuid);
+end
+$$;
+reset role;
+select pg_temp.login_worker();
+select public.worker_invoice_plan(100) from generate_series(1, 7);
+reset role;
+do $$
+declare
+  j private.outbox_jobs;
+begin
+  select x.* into j from private.outbox_jobs x join private.outbox_events e on e.id = x.event_id
+  where x.consumer = 'invoice' and e.topic = 'payment.captured' and e.payload ->> 'order_id' = current_setting('t.race_order');
+  assert j.status = 'pending' and j.attempts >= 7, format('the job keeps trying (%s, %s)', j.status, j.attempts);
+  assert j.last_error like 'invoice_receiver_incomplete%' || current_setting('t.sendero'), 'and says which shop';
+  assert exists (select 1 from public.electronic_invoices where order_id = current_setting('t.race_order')::uuid
+                 and kind = 'delivery'), 'the shopper''s document went out regardless';
+  assert not exists (select 1 from public.electronic_invoices where order_id = current_setting('t.race_order')::uuid
+                     and kind = 'fees'), 'the shop''s waits';
+end
+$$;
+select pg_temp.remember('race_number', (select order_number from public.orders
+                                         where id = current_setting('t.race_order')::uuid));
+select pg_temp.login('central@yuntera.example');
+do $$
+declare
+  v jsonb := public.ops_invoices(null, 10);
+begin
+  assert exists (select 1 from jsonb_array_elements(v -> 'failed_jobs') x
+                 where x ->> 'reason' = 'invoice_receiver_incomplete' and x ->> 'seller_name' = 'Tienda Sendero'
+                   and x ->> 'order_number' = current_setting('t.race_number')),
+    'finance sees which order and which shop';
+end
+$$;
+reset role;
+
+-- The order is cancelled and refunded while its capture job is still failing.
+select pg_temp.login('comprador@yuntera.example');
+select public.cancel_order(current_setting('t.race_order')::uuid, 'prueba');
+reset role;
+select pg_temp.login_worker();
+select public.worker_invoice_plan(100) from generate_series(1, 3);
+reset role;
+do $$
+begin
+  assert exists (select 1 from private.outbox_jobs x join private.outbox_events e on e.id = x.event_id
+                 where x.consumer = 'invoice' and e.topic = 'fiscal.refund_booked' and x.status = 'pending'
+                   and x.attempts = 0 and e.payload ->> 'order_id' = current_setting('t.race_order')),
+    'the refund waits for the capture''s documents, uncounted';
+  assert not exists (select 1 from public.electronic_invoices where order_id = current_setting('t.race_order')::uuid
+                     and kind = 'credit'), 'no credit note yet';
+end
+$$;
+update public.seller_private set legal_name = current_setting('t.sendero_name')
+where seller_id = current_setting('t.sendero')::uuid;
+-- The next run makes the fee factura; the refund, met first (it has not
+-- failed), still waits in that run and is planned in the one after.
+select pg_temp.login_worker();
+select public.worker_invoice_plan(100) from generate_series(1, 2);
+reset role;
+do $$
+declare
+  c record;
+  v_n integer := 0;
+begin
+  assert not exists (select 1 from private.outbox_jobs x join private.outbox_events e on e.id = x.event_id
+                     where x.consumer = 'invoice' and x.status <> 'done'
+                       and e.payload ->> 'order_id' = current_setting('t.race_order')), 'both jobs are done';
+  for c in select o.id, o.kind from public.electronic_invoices o
+           where o.order_id = current_setting('t.race_order')::uuid and o.kind in ('delivery', 'fees') loop
+    v_n := v_n + 1;
+    assert exists (select 1 from public.electronic_invoices n where n.original_invoice_id = c.id and n.kind = 'credit'
+                   and n.refs -> 0 ->> 'code' = '01'), format('the %s document is credited in full', c.kind);
+  end loop;
+  assert v_n = 2, 'the delivery document and the shop''s fee factura';
+end
+$$;
+
+-- A credit note accepted before its original: the original is voided when its own acceptance comes.
+select pg_temp.remember('late_original', (select id::text from public.electronic_invoices
+  where order_id = current_setting('t.race_order')::uuid and kind = 'delivery'));
+select pg_temp.remember('late_credit', (select id::text from public.electronic_invoices
+  where original_invoice_id = current_setting('t.late_original')::uuid));
+update public.electronic_invoices set next_attempt_at = now() + interval '1 day' where status in ('pending', 'sent');
+update public.electronic_invoices set next_attempt_at = now()
+where id in (current_setting('t.late_original')::uuid, current_setting('t.late_credit')::uuid);
+select pg_temp.login_worker();
+do $$
+declare
+  v_original uuid := current_setting('t.late_original')::uuid;
+  v_credit uuid := current_setting('t.late_credit')::uuid;
+begin
+  assert jsonb_array_length(public.worker_invoice_claim('worker-a', 10, 60)) = 2, 'both claimed';
+  perform public.worker_invoice_record(v_original, 'worker-a', '{"event": "received", "http_status": 201}');
+  perform public.worker_invoice_record(v_credit, 'worker-a', '{"event": "received", "http_status": 201}');
+  update public.electronic_invoices set next_attempt_at = now() + interval '1 day' where id = v_original;
+  update public.electronic_invoices set next_attempt_at = now() where id = v_credit;
+  perform public.worker_invoice_claim('worker-a', 10, 60);
+  assert public.worker_invoice_record(v_credit, 'worker-a', '{"event": "answer", "state": "aceptado"}') = 'accepted',
+    'the credit note is accepted first';
+  assert (select status from public.electronic_invoices where id = v_original) = 'sent', 'its original is still waiting';
+  update public.electronic_invoices set next_attempt_at = now() where id = v_original;
+  perform public.worker_invoice_claim('worker-a', 10, 60);
+  assert public.worker_invoice_record(v_original, 'worker-a', '{"event": "answer", "state": "aceptado"}') = 'voided',
+    'accepted, and void at once: an accepted credit note annuls it';
+end
+$$;
+reset role;
+
+-- A retry by finance leaves a live lease alone, and does not lift a pause it did not cause.
+select pg_temp.remember('leased', (select e.id::text from public.electronic_invoices e
+  where e.kind = 'fees' and e.status = 'pending' and e.held_reason is null and e.attempts = 0
+    and not exists (select 1 from public.electronic_invoices n where n.original_invoice_id = e.id)
+  order by e.sequence_number limit 1));
+update public.electronic_invoices set next_attempt_at = now() where id = current_setting('t.leased')::uuid;
+select pg_temp.login_worker();
+do $$
+begin
+  perform public.worker_invoice_claim('worker-a', 10, 60);
+  perform public.worker_invoice_record(current_setting('t.leased')::uuid, 'worker-a',
+    '{"event": "retry", "http_status": 503, "code": "http_503", "message": "down"}');
+  update public.electronic_invoices set next_attempt_at = now() where id = current_setting('t.leased')::uuid;
+  perform public.worker_invoice_claim('worker-a', 10, 60);
+end
+$$;
+reset role;
+insert into private.invoice_transmission_pause (paused_until, reason) values (now() + interval '10 minutes', 'http_403');
+select pg_temp.login('central@yuntera.example');
+select public.ops_invoice_retry(current_setting('t.leased')::uuid);
+reset role;
+do $$
+begin
+  assert (select locked_by = 'worker-a' and locked_until > now() from public.electronic_invoices
+          where id = current_setting('t.leased')::uuid), 'the worker that holds it keeps it';
+  assert exists (select 1 from private.invoice_transmission_pause), 'the pause stands: this document did not cause it';
+  delete from private.invoice_transmission_pause;
+end
+$$;
+
+-- A document the worker's checks held: finance replaces it with a new number;
+-- it never reached Hacienda, so the replacement does not reference it.
+select pg_temp.login_worker();
+do $$
+begin
+  update public.electronic_invoices set locked_until = now() - interval '1 second'
+  where id = current_setting('t.leased')::uuid;
+  update public.electronic_invoices set next_attempt_at = now() where id = current_setting('t.leased')::uuid;
+  perform public.worker_invoice_claim('worker-b', 10, 60);
+  assert public.worker_invoice_record(current_setting('t.leased')::uuid, 'worker-b',
+           '{"event": "invalid", "code": "receiver_name_invalid"}') = 'pending', 'held';
+end
+$$;
+reset role;
+select pg_temp.allow_inspection();
+select pg_temp.login('central@yuntera.example');
+do $$
+declare
+  old public.electronic_invoices := (select e from public.electronic_invoices e where e.id = current_setting('t.leased')::uuid);
+  n public.electronic_invoices;
+  v_new uuid;
+begin
+  assert exists (select 1 from jsonb_array_elements(public.ops_invoices(null, 10) -> 'unsent') x
+                 where x ->> 'id' = old.id::text and (x ->> 'replaceable')::boolean), 'listed as replaceable';
+  v_new := (public.ops_invoice_replace(old.id, false) ->> 'id')::uuid;
+  select * into n from public.electronic_invoices where id = v_new;
+  assert n.consecutivo <> old.consecutivo and n.replaces_id = old.id, 'a new number';
+  assert not (n.refs @> '[{"type": "10"}]'), 'that does not reference a document Hacienda never had';
+  assert (select status = 'rejected' and rejection_source = 'local' and replaced_by_id = n.id
+          from public.electronic_invoices where id = old.id), 'the held one is set aside, never to be sent';
+end
+$$;
+reset role;
+select pg_temp.stop_inspection();
+
+-- A factura asked for on a cash-on-delivery order outlives the two-day sweep
+-- while the order is open; an abandoned request does not.
+select pg_temp.login('comprador@yuntera.example');
+do $$
+begin
+  perform public.set_checkout_invoice_receiver('fx-cod-000001', 'fisica', '109870654', 'Ana Mora Solís', null);
+  perform pg_temp.remember('cod_order', (public.place_order(
+    jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.libreta')::uuid, 'quantity', 1)),
+    (select a.id from public.my_addresses() a where a.is_default), 'cash_on_delivery', 'fx-cod-000001') ->> 'order_id'));
+  perform public.set_checkout_invoice_receiver('fx-abandoned1', 'fisica', '109870654', 'Ana Mora Solís', null);
+end
+$$;
+reset role;
+update private.invoice_checkout_receivers set created_at = now() - interval '3 days'
+where idempotency_key in ('fx-cod-000001', 'fx-abandoned1');
+select private.invoice_sweep();
+do $$
+begin
+  assert exists (select 1 from private.invoice_checkout_receivers where idempotency_key = 'fx-cod-000001'),
+    'kept while its order waits for the cash';
+  assert not exists (select 1 from private.invoice_checkout_receivers where idempotency_key = 'fx-abandoned1'),
+    'a request with no order is forgotten after two days';
+end
+$$;
+select private.capture_payment(current_setting('t.cod_order')::uuid, 'cod:prueba', true);
+select pg_temp.login_worker();
+select public.worker_invoice_plan(100);
+reset role;
+do $$
+begin
+  assert (select document_type from public.electronic_invoices
+          where dedupe_key = 'delivery:' || current_setting('t.cod_order')) = '01',
+    'paid three days later, still the factura she asked for';
+end
+$$;
+
+-- Free delivery: nothing of Yuntera's to invoice, and what was typed is not kept.
+select pg_temp.login('comprador@yuntera.example');
+do $$
+begin
+  perform public.set_checkout_invoice_receiver('fx-free-00001', 'fisica', '109870654', 'Ana Mora Solís', null);
+  perform pg_temp.remember('free_order', (public.place_order(
+    jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.salveque')::uuid, 'quantity', 3)),
+    (select a.id from public.my_addresses() a where a.is_default), 'sinpe_movil', 'fx-free-00001') ->> 'order_id'));
+  perform public.confirm_sandbox_payment(current_setting('t.free_order')::uuid);
+end
+$$;
+reset role;
+select pg_temp.login_worker();
+select public.worker_invoice_plan(100);
+reset role;
+do $$
+begin
+  assert (select shipping_minor from public.orders where id = current_setting('t.free_order')::uuid) = 0,
+    'the test order has free delivery';
+  assert not exists (select 1 from public.electronic_invoices where order_id = current_setting('t.free_order')::uuid
+                     and kind = 'delivery'), 'no delivery document';
+  assert not exists (select 1 from private.invoice_checkout_receivers where idempotency_key = 'fx-free-00001'),
+    'and the name and number typed are gone';
+end
+$$;
+
+-- After all of it, still no gap and no repeat in any counter.
+do $$
+declare
+  c record;
+begin
+  for c in
+    select e.document_type, count(*) as n, min(e.sequence_number) as lo, max(e.sequence_number) as hi,
+           max(f.last_number) as counter
+    from public.electronic_invoices e join private.fiscal_counters f on f.document_type = e.document_type
+    group by e.document_type
+  loop
+    assert c.lo = 1 and c.hi = c.n and c.counter = c.n, format('type %s: 1..%s without gaps', c.document_type, c.n);
+  end loop;
+end
+$$;
+
 rollback;
