@@ -6,6 +6,7 @@
 #   tools/dev/stack.sh up [lane]              database + API + build + start the apps,
 #                                             plus the notification worker against the local fake providers
 #   tools/dev/stack.sh notify [lane]          (re)start only the notification worker and the fake providers
+#   tools/dev/stack.sh invoicing [lane]       (re)start only the invoice worker and the fake of Hacienda
 #   tools/dev/stack.sh api [lane]             database + API only (enough for most tests)
 #   tools/dev/stack.sh env [lane]             print the lane's settings as `export` lines
 #   tools/dev/stack.sh e2e [lane] [journey…]  run browser journeys against the lane
@@ -20,7 +21,9 @@
 # yuntera_lane<N>, API on :546<N-10>0 and apps on :4<N-10>00–:4<N-10>03.
 # The notification functions listen on the API port + 1, the fake providers on
 # the API port + 2 (lane 0 :54322–:54323, lane 5 :54451–:54452, lane 12
-# :54621–:54622); API ports are ten apart, so no lane reaches another's.
+# :54621–:54622), the fake of Hacienda on the API port + 3 and the invoicing
+# functions on the API port + 4 (lane 0 :54324–:54325, lane 5 :54453–:54454);
+# API ports are ten apart, so no lane reaches another's.
 #
 # The apps read the API address when they are BUILT, so each lane builds its own
 # copy; `up` writes apps/*/.env.local for the lane before building.
@@ -51,6 +54,7 @@ ADMIN_URL="${PG_ADMIN_URL:-postgres://postgres:postgres@127.0.0.1:5432/postgres}
 DB_URL="${ADMIN_URL%/*}/${DB_NAME}"
 API_URL="http://127.0.0.1:${API_PORT}"
 FUNCTIONS_PORT=$((API_PORT + 1)); FAKE_PORT=$((API_PORT + 2))
+HACIENDA_PORT=$((API_PORT + 3)); INVOICE_FUNCTIONS_PORT=$((API_PORT + 4))
 API_KEY="sb_publishable_local_development_only"
 # Lets the seller centre, the console and the journeys ask the shop to drop its cached
 # catalogue (apps/web/src/app/api/catalogo/refrescar). A local value, not a secret.
@@ -103,6 +107,10 @@ export DEV_FUNCTIONS_PORT=$FUNCTIONS_PORT
 export DEV_FAKE_PROVIDERS_PORT=$FAKE_PORT
 export FUNCTIONS_URL=http://127.0.0.1:$FUNCTIONS_PORT
 export FAKE_PROVIDERS_URL=http://127.0.0.1:$FAKE_PORT
+export DEV_HACIENDA_PORT=$HACIENDA_PORT
+export DEV_INVOICE_FUNCTIONS_PORT=$INVOICE_FUNCTIONS_PORT
+export HACIENDA_FAKE_URL=http://127.0.0.1:$HACIENDA_PORT
+export INVOICE_FUNCTIONS_URL=http://127.0.0.1:$INVOICE_FUNCTIONS_PORT
 ENV
 }
 
@@ -159,6 +167,21 @@ start_notify() {
   echo "lane $LANE: notifications $FUNCTIONS_URL, fake providers $FAKE_PROVIDERS_URL"
 }
 
+# The electronic-invoice worker (served as the Edge Functions would be, with a
+# throwaway signing key) and the fake of Hacienda it sends to. Nothing here can
+# reach Hacienda.
+start_invoicing() {
+  eval "$(print_env)"
+  for name in hacienda invoicing; do
+    [ -e "$STATE/$name.pid" ] && { kill -- "-$(cat "$STATE/$name.pid")" 2>/dev/null || true; rm -f "$STATE/$name.pid"; }
+  done
+  start hacienda "$ROOT/tools/dev-hacienda" pnpm exec tsx src/fake-hacienda.ts
+  start invoicing "$ROOT/tools/dev-hacienda" pnpm exec tsx src/functions-host.ts
+  wait_for "$HACIENDA_FAKE_URL/_fake/documents" 40
+  wait_for "$INVOICE_FUNCTIONS_URL/health" 40
+  echo "lane $LANE: invoicing $INVOICE_FUNCTIONS_URL, fake Hacienda $HACIENDA_FAKE_URL"
+}
+
 case "$COMMAND" in
   env)
     print_env
@@ -196,11 +219,17 @@ case "$COMMAND" in
       echo "lane $LANE: $app on http://127.0.0.1:$(app_port "$app")"
     done
     start_notify
+    start_invoicing
     ;;
 
   notify)
     mkdir -p "$STATE"
     start_notify
+    ;;
+
+  invoicing)
+    mkdir -p "$STATE"
+    start_invoicing
     ;;
 
   e2e)
