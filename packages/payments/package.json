@@ -1,0 +1,20 @@
+{
+  "name": "@yuntera/payments",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "The payments worker and webhook: a provider-neutral gateway interface, the ONVO adapter, signature checks and the task loop. Web-standard TypeScript that runs under Node (tests, local stack) and as Supabase Edge Functions.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "5.9.3",
+    "vitest": "5.1.1"
+  }
+}

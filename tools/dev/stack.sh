@@ -4,8 +4,9 @@
 # one machine) can each have their own without colliding.
 #
 #   tools/dev/stack.sh up [lane]              database + API + build + start the apps,
-#                                             plus the notification worker against the local fake providers
-#   tools/dev/stack.sh notify [lane]          (re)start only the notification worker and the fake providers
+#                                             plus the notification and payments workers against the
+#                                             local fake providers and the fake payment gateway
+#   tools/dev/stack.sh notify [lane]          (re)start only the workers (the functions host) and the fakes
 #   tools/dev/stack.sh api [lane]             database + API only (enough for most tests)
 #   tools/dev/stack.sh env [lane]             print the lane's settings as `export` lines
 #   tools/dev/stack.sh e2e [lane] [journey…]  run browser journeys against the lane
@@ -18,9 +19,10 @@
 # :54321, apps on :3000–:3003. Lane N (1–9) uses database yuntera_lane<N>, API
 # on :544<N>0 and apps on :3<N>00–:3<N>03. Lanes 10–19 use database
 # yuntera_lane<N>, API on :546<N-10>0 and apps on :4<N-10>00–:4<N-10>03.
-# The notification functions listen on the API port + 1, the fake providers on
-# the API port + 2 (lane 0 :54322–:54323, lane 5 :54451–:54452, lane 12
-# :54621–:54622); API ports are ten apart, so no lane reaches another's.
+# The functions (notifications and payments) listen on the API port + 1, the
+# fake providers on the API port + 2 and the fake payment gateway on the API
+# port + 3 (lane 0 :54322–:54324, lane 5 :54451–:54453, lane 12
+# :54621–:54623); API ports are ten apart, so no lane reaches another's.
 #
 # The apps read the API address when they are BUILT, so each lane builds its own
 # copy; `up` writes apps/*/.env.local for the lane before building.
@@ -50,7 +52,7 @@ fi
 ADMIN_URL="${PG_ADMIN_URL:-postgres://postgres:postgres@127.0.0.1:5432/postgres}"
 DB_URL="${ADMIN_URL%/*}/${DB_NAME}"
 API_URL="http://127.0.0.1:${API_PORT}"
-FUNCTIONS_PORT=$((API_PORT + 1)); FAKE_PORT=$((API_PORT + 2))
+FUNCTIONS_PORT=$((API_PORT + 1)); FAKE_PORT=$((API_PORT + 2)); FAKE_PAY_PORT=$((API_PORT + 3))
 API_KEY="sb_publishable_local_development_only"
 # Lets the seller centre, the console and the journeys ask the shop to drop its cached
 # catalogue (apps/web/src/app/api/catalogo/refrescar). A local value, not a secret.
@@ -107,6 +109,8 @@ export DEV_FUNCTIONS_PORT=$FUNCTIONS_PORT
 export DEV_FAKE_PROVIDERS_PORT=$FAKE_PORT
 export FUNCTIONS_URL=http://127.0.0.1:$FUNCTIONS_PORT
 export FAKE_PROVIDERS_URL=http://127.0.0.1:$FAKE_PORT
+export DEV_FAKE_PAY_PORT=$FAKE_PAY_PORT
+export FAKE_PAY_URL=http://127.0.0.1:$FAKE_PAY_PORT
 ENV
 }
 
@@ -149,18 +153,21 @@ start_api() {
   echo "lane $LANE: database $DB_NAME, API $API_URL"
 }
 
-# The notification worker (served as the Edge Functions would be) and the fake
-# providers it sends to. Nothing here can reach a real provider.
+# The notification and payments workers (served as the Edge Functions would
+# be), the fake providers they send to and the fake payment gateway. Nothing
+# here can reach a real provider.
 start_notify() {
   eval "$(print_env)"
-  for name in fake functions; do
+  for name in fake fakepay functions; do
     [ -e "$STATE/$name.pid" ] && { kill -- "-$(cat "$STATE/$name.pid")" 2>/dev/null || true; rm -f "$STATE/$name.pid"; }
   done
   start fake "$ROOT/tools/dev-notify" pnpm exec tsx src/fake-providers.ts
+  start fakepay "$ROOT/tools/dev-notify" pnpm exec tsx src/fake-pay.ts
   start functions "$ROOT/tools/dev-notify" pnpm exec tsx src/functions-host.ts
   wait_for "$FAKE_PROVIDERS_URL/_fake/messages" 40
+  wait_for "$FAKE_PAY_URL/_fake/health" 40
   wait_for "$FUNCTIONS_URL/health" 40
-  echo "lane $LANE: notifications $FUNCTIONS_URL, fake providers $FAKE_PROVIDERS_URL"
+  echo "lane $LANE: functions $FUNCTIONS_URL, fake providers $FAKE_PROVIDERS_URL, fake gateway $FAKE_PAY_URL"
 }
 
 case "$COMMAND" in

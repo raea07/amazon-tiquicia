@@ -190,6 +190,11 @@ export default function CheckoutScreen() {
           Los pagos son simulados: no se cobra dinero real ni se entrega ningún producto.
         </Alert>
       ) : null}
+      {q.payments_mode === "test" ? (
+        <Alert tone="info" title="Pagos de prueba">
+          El cobro pasa por el entorno de pruebas del procesador de pagos: no se cobra dinero real.
+        </Alert>
+      ) : null}
 
       <Stack gap={3}>
         <Text variant="heading">1. ¿Dónde lo entregamos?</Text>

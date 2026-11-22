@@ -249,7 +249,7 @@ export const quote = z.object({
   zone: z.object({ id: z.string(), name: z.string(), active: z.boolean() }).nullable().optional(),
   promise: promise.nullable().optional(),
   cod_available: z.boolean().optional(),
-  payments_mode: z.enum(["sandbox", "live"]).optional(),
+  payments_mode: z.enum(["sandbox", "test", "live"]).optional(),
 });
 export type Quote = z.infer<typeof quote>;
 
@@ -789,7 +789,7 @@ export const opsOverview = z.object({
   open_returns: z.number().int(),
   open_reports: z.number().int(),
   open_settlements: z.number().int(),
-  payments_mode: z.enum(["sandbox", "live"]),
+  payments_mode: z.enum(["sandbox", "test", "live"]),
 });
 export type OpsOverview = z.infer<typeof opsOverview>;
 

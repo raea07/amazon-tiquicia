@@ -49,6 +49,12 @@ async function Overview() {
           que se active el cobro.
         </Alert>
       ) : null}
+      {o.payments_mode === "test" ? (
+        <Alert tone="info" title="Pagos por el entorno de pruebas del procesador">
+          Los cobros y reembolsos pasan por el procesador con tarjetas y números de prueba. No se
+          mueve dinero real.
+        </Alert>
+      ) : null}
 
       <section aria-labelledby="plazo">
         <h2 id="plazo" className="text-xl font-bold">

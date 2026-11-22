@@ -267,16 +267,14 @@ roadmap's ["do not build yet"](../01-product/roadmap.md#do-not-build-yet) table.
 
 These are not built. They are listed here so that no reader assumes otherwise.
 
-- **No payment gateway.** `payments_mode` is `sandbox`; `confirm_sandbox_payment`
-  simulates a payment and refuses to run in `live` mode. Outside sandbox, the
-  only way to mark a transfer as received is by hand: finance staff call
-  `ops_confirm_payment` with the bank's reference. A real gateway needs a
-  server-side webhook handler that calls `private.capture_payment`.
-- **Refunds are booked, not paid.** Cancellations, returns and parcels that
-  come back post to the ledger and to one refund register
-  ([decision 26](decisions.md#26-one-register-for-every-refund)), which
-  refuses to refund the same thing twice or more than was paid; nothing sends
-  money back to a shopper.
+- **The payment gateway is built but never connected.** In `test` and `live`
+  modes cards and SINPE Móvil go through ONVO by a server-side worker and a
+  signed webhook (`packages/payments`, Edge Functions `payments-worker` and
+  `payments-webhook`), and refunds from the register are sent through it and
+  completed only on its confirmation
+  ([decision 37](decisions.md#37-payments-through-a-gateway-worker-confirmed-only-by-the-gateway),
+  [payments](../06-operations/payments.md)). It has run only against a local
+  fake of ONVO; `payments_mode` is `sandbox` everywhere.
 - **One consumer for the outbox, and it sends nothing real yet.** The
   notification worker (`packages/notifications`, run as Edge Functions under
   `supabase/functions`) plans and sends messages, but no provider account is

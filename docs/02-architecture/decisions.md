@@ -43,6 +43,7 @@ its own entry, not something that happens by drift.
 | 34  | ["Refund completed" waits for a recorded confirmation](#34-refund-completed-waits-for-a-recorded-confirmation)                                      | Built; gateway not built                 |
 | 35  | [The web apps' own sign-in limit, per visitor and per account](#35-the-web-apps-own-sign-in-limit-per-visitor-and-per-account)                      | Built; not on the preview yet            |
 | 36  | [Session lifetimes per app](#36-session-lifetimes-per-app)                                                                                          | Built; not on the preview yet            |
+| 37  | [Payments through a gateway worker, confirmed only by the gateway](#37-payments-through-a-gateway-worker-confirmed-only-by-the-gateway) | Built against a local fake; not deployed |
 
 ---
 
@@ -1188,3 +1189,39 @@ session cookies also carry the app's lifetime as their `Max-Age`.
   search, `PER_PERSON_COOKIES` in guard.ts) is removed when a session begins,
   when the person signs out and when the proxy ends a session, so the next
   person at a shared desk does not see it.
+
+## 37. Payments through a gateway worker, confirmed only by the gateway
+
+**Context.** Cards could not be charged and finance confirmed SINPE Móvil
+transfers by hand. The research note chose ONVO Pay, which has no idempotency
+key for payments or refunds, delivers webhooks at least once in no order,
+and matches SINPE Móvil transfers by the payer's identification and amount.
+
+**Decision.** The database keeps one attempt per try at the gateway, every
+event once by its id, money that does not match for finance
+(`private.payment_reviews`) and one gateway refund per refund in the register.
+Only a server-side worker talks to the gateway, in the notification worker's
+pattern (decision 22): its own secret key reaching four `worker_payments_*`
+functions, woken by `pg_net` and `pg_cron`. The amount always comes from the
+order. An order is paid when the gateway's signed notification, or the
+worker's own question, says so, applied with the order's lock; the return from
+the gateway's page is only a hint. A refund is completed, booked out and
+announced only when the gateway confirms it; a send whose answer was lost is
+never sent again by itself: the worker checks the gateway for a while, then
+finance decides. Each event applies only in the gateway environment that is
+the current mode; money taken in the environment the mode has left is kept
+for finance, never applied by itself or dropped. Modes:
+`sandbox` (simulation), `test` (the gateway's test environment), `live`;
+changed only by an administrator, with a reason, once the worker reported
+itself ready for that environment.
+
+**Consequences.**
+
+- No card data reaches Yuntera: cards are typed on ONVO's hosted page, in the
+  native app too (the phone's browser).
+- Paying takes one more step on the order page (start the payment), so a
+  decline can be retried with a new attempt without placing a new order.
+- Money that arrives unmatched is never applied automatically; finance
+  accepts, attaches, refunds or closes it.
+- The expected gateway fee is a setting, not a constant, because the central
+  bank's card fee cap may not allow the published price.

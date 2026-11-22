@@ -1,5 +1,5 @@
 import { ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
-import { ApiError, type MyOrderReturn, type OrderDetail } from "@yuntera/db";
+import { ApiError, type MyOrderReturn, type OrderDetail, type OrderPayment } from "@yuntera/db";
 import { ProductImage } from "@yuntera/next-kit/product-image";
 import {
   Alert,
@@ -22,6 +22,7 @@ import {
   ReviewForm,
   SimulatePaymentForm,
 } from "@/components/order-actions";
+import { MoneyInReview, PaymentPanel, RefundList } from "@/components/payment-panel";
 import { ReturnStatusList } from "@/components/return-status";
 import { requireViewer } from "@/lib/session";
 import { sessionApi } from "@/lib/supabase";
@@ -60,6 +61,18 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
   }
   // Where each return stands, so the page can say what happens next.
   const returns: MyOrderReturn[] = await api.myOrderReturns(numero);
+  // How its payment stands at the gateway, and its refunds on their way.
+  const payment: OrderPayment = await api.orderPayment(numero);
+  const throughGateway = [
+    "start",
+    "preparing",
+    "pay",
+    "transfer",
+    "confirming",
+    "failed",
+    "error",
+    "review",
+  ].includes(payment.stage);
 
   await connection();
   const today = toCostaRicaTime(new Date()).date;
@@ -70,6 +83,16 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
 
   return (
     <>
+      {query.pago === "retorno" && payment.stage === "paid" ? (
+        <Alert tone="success" className="mb-6" title="¡Pago recibido!">
+          Ya estamos preparando su pedido. Le avisamos por correo en cada paso.
+        </Alert>
+      ) : null}
+      {query.pago === "cancelado" && payment.stage !== "paid" ? (
+        <Alert tone="info" className="mb-6" title="No se hizo ningún cobro">
+          Volvió sin pagar. Puede pagar cuando quiera mientras guardamos sus productos.
+        </Alert>
+      ) : null}
       {query.nuevo === "1" ? (
         <Alert tone="success" className="mb-6" title="¡Recibimos su pedido!">
           {awaitingPayment
@@ -89,7 +112,15 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div className="flex flex-col gap-6">
-          {awaitingPayment ? <PaymentInstructions order={order} /> : null}
+          {awaitingPayment && throughGateway ? <PaymentPanel payment={payment} /> : null}
+          {awaitingPayment && !throughGateway ? (
+            <PaymentInstructions order={order} payment={payment} />
+          ) : null}
+          {/* Money that arrived and waits for finance, or goes back: said whatever the order's status. */}
+          {payment.money_in_review && !(awaitingPayment && payment.stage === "review") ? (
+            <MoneyInReview payment={payment} />
+          ) : null}
+          <RefundList payment={payment} />
 
           {order.delivery_pin ? (
             <section className="rounded-lg border-2 border-brand bg-brand-soft p-5">
@@ -281,6 +312,10 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
               {order.payment?.status === "captured" ? " · recibido" : ""}
               {order.payment?.status === "refunded" ? " · reembolsado" : ""}
               {order.payment?.status === "partially_refunded" ? " · reembolsado en parte" : ""}
+              {order.payment?.status === "captured" &&
+              payment.refunds.some((refund) => refund.status !== "succeeded")
+                ? " · reembolso en camino"
+                : ""}
             </p>
           </div>
 
@@ -332,8 +367,21 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
   );
 }
 
-function PaymentInstructions({ order }: { order: OrderDetail }) {
-  const sandbox = order.payment?.provider === "sandbox";
+function PaymentInstructions({ order, payment }: { order: OrderDetail; payment: OrderPayment }) {
+  // The simulation only while the site is in sandbox mode, whatever mode the order was placed in.
+  const sandbox = payment.stage === "simulated";
+  if (order.payment_method === "card" && !sandbox) {
+    // A card order no gateway can take any more (placed before the payments set-up changed).
+    return (
+      <section className="rounded-lg border border-maiz-300 bg-maiz-50 p-5">
+        <h2 className="text-lg font-bold">Este pedido ya no se puede pagar en línea</h2>
+        <p className="mt-2 text-sm">
+          No se le ha cobrado nada. Haga el pedido de nuevo para pagarlo con tarjeta; este se
+          cancela solo cuando se acabe el tiempo de reserva.
+        </p>
+      </section>
+    );
+  }
   return (
     <section className="rounded-lg border border-maiz-300 bg-maiz-50 p-5">
       <h2 className="text-lg font-bold">Falta el pago de {formatPrice(order.total_minor)}</h2>

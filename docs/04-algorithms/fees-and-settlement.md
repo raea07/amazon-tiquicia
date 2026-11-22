@@ -300,6 +300,23 @@ creates payouts yet**. Paying sellers in the pilot is a manual bank transfer
 that must be recorded by a ledger transaction debiting the seller's payable
 account and crediting the account the money left from.
 
+## What the gateway really charges
+
+The payment fee above is what sellers are charged, from the schedule. What the
+gateway itself charges for each payment is recorded separately, from what the
+gateway reports (or from its statement, entered by finance), and booked as an
+expense: `gateway_fee` transactions, `gateway_fee_expense` against
+`gateway_clearing`. It is compared with an expected fee that is a **setting**
+(`gateway_expected_fees`, changed by an administrator with a reason), not a
+constant, because the central bank caps card acquiring at 1.95% and how that
+applies to the gateway's published 3.9% + US$0.35 is a question for the
+owner's lawyer. A refund paid out through the gateway is booked when the
+gateway confirms it (`refund_paid`: `refunds_payable` to `gateway_clearing`, or
+to `bank_operating` for a transfer); a cancelled order's reversal is first
+moved to `refunds_payable` (`refund_pending`) so that what is owed to shoppers
+is always the refunds not yet completed. See
+[payments](../06-operations/payments.md).
+
 ## What it deliberately does not do
 
 - **No fee depends on something the seller cannot see.** No dynamic pricing,

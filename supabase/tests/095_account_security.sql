@@ -667,6 +667,9 @@ update public.app_settings set value = '"live"' where key = 'payments_mode';
 select pg_temp.remember('cancelled', (
   select id::text from public.orders
   where user_id = current_setting('t.gone')::uuid and status = 'confirmed' limit 1));
+-- Real money (the seed's was simulated, and a simulated payment's refund
+-- completes at once): a payment confirmed by hand, refunded by transfer.
+update public.payments set provider = 'manual' where order_id = current_setting('t.cancelled')::uuid;
 select pg_temp.login('comprador2@yuntera.example');
 select public.cancel_order(current_setting('t.cancelled')::uuid);
 do $$

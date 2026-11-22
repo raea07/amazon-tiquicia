@@ -3,15 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Local only: a fake of Bird's and Expo's APIs that records what it is sent, and a host that serves the notification Edge Functions from Node. Never deployed; nothing here talks to a real provider.",
+  "description": "Local only: fakes of Bird's, Expo's and ONVO Pay's APIs that record what they are sent, and a host that serves the notification and payments Edge Functions from Node. Never deployed; nothing here talks to a real provider.",
   "scripts": {
     "fake": "tsx src/fake-providers.ts",
+    "fake-pay": "tsx src/fake-pay.ts",
     "functions": "tsx src/functions-host.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@yuntera/notifications": "workspace:*"
+    "@yuntera/notifications": "workspace:*",
+    "@yuntera/payments": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22",

@@ -1,5 +1,5 @@
 import { ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
-import { ApiError, type OrderDetail } from "@yuntera/db";
+import { ApiError, type OrderDetail, type OrderPayment } from "@yuntera/db";
 import { useSession } from "@yuntera/expo-kit/auth";
 import { useApiQuery } from "@yuntera/expo-kit/data";
 import { oneParam, signInPath } from "@yuntera/expo-kit/paths";
@@ -23,6 +23,13 @@ import {
 import { Link, Stack as Nav, Redirect, useLocalSearchParams } from "expo-router";
 import { StyleSheet, View } from "react-native";
 import { OrderStatusBadge, ShipmentStatusBadge } from "@/components/badges";
+import {
+  GATEWAY_STAGES,
+  GatewayPayment,
+  MoneyInReview,
+  RefundList,
+  WAITING_STAGES,
+} from "@/components/gateway-payment";
 import {
   CancelOrder,
   Expandable,
@@ -51,9 +58,24 @@ function describeEvent(event: OrderDetail["timeline"][number]): string {
   return event.to_status ?? "Actualización";
 }
 
-function PaymentInstructions({ order }: { order: OrderDetail }) {
-  const sandbox = order.payment?.provider === "sandbox";
+function PaymentInstructions({ order, payment }: { order: OrderDetail; payment: OrderPayment }) {
+  // The simulation only while the site is in sandbox mode, whatever mode the order was placed in.
+  const sandbox = payment.stage === "simulated";
   const warn = colors.palette.maiz[900];
+  if (order.payment_method === "card" && !sandbox) {
+    // A card order no gateway can take any more (placed before the payments set-up changed).
+    return (
+      <View style={styles.payment} testID="payment-instructions">
+        <Text variant="heading" style={{ color: warn }}>
+          Este pedido ya no se puede pagar en línea
+        </Text>
+        <Text variant="small" style={{ color: warn }}>
+          No se le ha cobrado nada. Haga el pedido de nuevo para pagarlo con tarjeta; este se
+          cancela solo cuando se acabe el tiempo de reserva.
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.payment} testID="payment-instructions">
       <Text variant="heading" style={{ color: warn }}>
@@ -115,6 +137,15 @@ export default function OrderScreen() {
     personal: true,
     enabled: order.isSuccess,
   });
+  // How its payment stands at the gateway; asked again while it changes on its own.
+  const payment = useApiQuery(["order-payment", number], (api) => api.orderPayment(number), {
+    personal: true,
+    enabled: order.isSuccess,
+    refetchInterval: (query) => {
+      const stage = query.state.data?.stage;
+      return stage && WAITING_STAGES.includes(stage) ? 3000 : false;
+    },
+  });
 
   if (status === "signedOut") return <Redirect href={signInPath(`/pedidos/${number}`)} />;
   if (order.isPending) return <LoadingState label="Cargando su pedido…" />;
@@ -161,7 +192,15 @@ export default function OrderScreen() {
         </Text>
       </Stack>
 
-      {awaitingPayment ? <PaymentInstructions order={o} /> : null}
+      {awaitingPayment && payment.data && GATEWAY_STAGES.includes(payment.data.stage) ? (
+        <GatewayPayment payment={payment.data} />
+      ) : awaitingPayment && payment.data ? (
+        <PaymentInstructions order={o} payment={payment.data} />
+      ) : null}
+      {payment.data?.money_in_review && !(awaitingPayment && payment.data.stage === "review") ? (
+        <MoneyInReview payment={payment.data} />
+      ) : null}
+      {payment.data ? <RefundList payment={payment.data} /> : null}
 
       {o.delivery_pin ? (
         <View style={styles.pin} testID="delivery-code">
