@@ -13,6 +13,8 @@ const base: MyOrderReturn = {
   created_at: "2026-11-20T10:00:00Z",
   received_at: null,
   resolved_at: null,
+  withdrawn_at: null,
+  can_withdraw: false,
 };
 
 describe("where a return stands", () => {
@@ -31,6 +33,17 @@ describe("where a return stands", () => {
     expect(returnNextStep({ ...base, status: "rejected", resolution_note: "Llegó usado." })).toBe(
       "Cerrada: Llegó usado.",
     );
+  });
+
+  it("says a request the shopper withdrew is theirs, not a refusal", () => {
+    expect(
+      returnNextStep({
+        ...base,
+        status: "rejected",
+        resolution_note: "Usted retiró esta solicitud.",
+        withdrawn_at: "2026-11-21T10:00:00Z",
+      }),
+    ).toBe("Retirada: usted retiró esta solicitud.");
   });
 
   it("names the kind and the units", () => {

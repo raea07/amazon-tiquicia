@@ -28,12 +28,17 @@ export function returnNextStep(item: MyOrderReturn): string {
         ? `Reembolsada: le devolvimos ${format(money(item.refund_minor))} por el mismo medio de pago.`
         : "Reembolsada por el mismo medio de pago.";
     case "rejected":
+      if (item.withdrawn_at) return "Retirada: usted retiró esta solicitud.";
       return item.resolution_note ? `Cerrada: ${item.resolution_note}` : "Cerrada.";
   }
 }
 
 export const returnTitle = (item: MyOrderReturn) =>
   `${RETURN_KIND[item.kind]} de ${item.quantity} ${item.quantity === 1 ? "unidad" : "unidades"}`;
+
+/** What the shopper is told once a request opened by mistake is withdrawn. */
+export const RETURN_WITHDRAWN =
+  "Retiramos su solicitud. Si lo necesita, puede pedir la devolución de nuevo.";
 
 /** What the shopper is told when a withdrawal is accepted: refunded once the goods are back. */
 export const WITHDRAWAL_APPROVED =

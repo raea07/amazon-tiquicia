@@ -139,6 +139,12 @@ async function Day({ searchParams }: Pick<PageProps<"/ruta">, "searchParams">) {
                       </p>
                       <Badge tone={status?.tone ?? "neutral"}>{status?.label ?? stop.status}</Badge>
                     </div>
+                    {stop.district ? (
+                      <p className="mt-1 text-sm font-medium">
+                        {stop.district}
+                        {stop.canton ? `, ${stop.canton}` : ""}
+                      </p>
+                    ) : null}
                     <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{stop.senas}</p>
                     <p className="mt-2 flex flex-wrap gap-2 text-xs">
                       <span className="rounded-full bg-surface-muted px-2 py-0.5">

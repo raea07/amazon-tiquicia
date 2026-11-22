@@ -13,7 +13,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
-import { WITHDRAWAL_APPROVED } from "@/lib/returns";
+import { RETURN_WITHDRAWN, WITHDRAWAL_APPROVED } from "@/lib/returns";
 import { QuantityStepper } from "./quantity";
 
 /** In sandbox mode: pretend the payment arrived, as the website's button does. */
@@ -273,6 +273,52 @@ export function ReturnForm({
         }}
       >
         Solicitar devolución
+      </Button>
+    </Stack>
+  );
+}
+
+/**
+ * Withdraws a return request the shopper opened by mistake, while it still
+ * waits for staff's decision (the database checks both).
+ */
+export function WithdrawReturn({
+  returnId,
+  orderNumber,
+}: {
+  returnId: string;
+  orderNumber: string;
+}) {
+  const [result, setResult] = useState<{ ok?: string; error?: string }>({});
+  const withdraw = useApiMutation((api, id: string) => api.withdrawReturnRequest(id), {
+    invalidates: [
+      ["order", orderNumber],
+      ["order-returns", orderNumber],
+    ],
+  });
+  if (result.ok) return <FormMessage ok={result.ok} />;
+  return (
+    <Stack gap={2}>
+      <Text variant="small" tint="muted">
+        Mientras no la revisemos, puede retirarla y, si después lo necesita, pedir la devolución de
+        nuevo.
+      </Text>
+      <FormMessage error={result.error} />
+      <Button
+        variant="secondary"
+        loading={withdraw.isPending}
+        loadingLabel="Retirando…"
+        testID={`withdraw-return-${returnId}`}
+        onPress={async () => {
+          try {
+            await withdraw.mutateAsync(returnId);
+            setResult({ ok: RETURN_WITHDRAWN });
+          } catch (error) {
+            setResult({ error: messageOf(error) });
+          }
+        }}
+      >
+        Retirar la solicitud
       </Button>
     </Stack>
   );

@@ -55,8 +55,9 @@ function TaskBadge({ task, current }: { task: Task; current: boolean }) {
 /**
  * The line to pick now, large: where to go, how many, what. The worker scans
  * the product (camera, typing or a hand scanner) and says how many were
- * taken. The code is checked against the line before anything is sent, so the
- * wrong product cannot be confirmed by accident; a line can be confirmed with
+ * taken. The code is checked against the line before anything is sent, and the
+ * database checks it again, so the wrong product cannot be confirmed by
+ * accident (nor by a phone that skipped the check); a line can be confirmed with
  * fewer units (even 0) without a scan, which marks it short, as on the web.
  */
 function CurrentLine({
@@ -87,8 +88,10 @@ function CurrentLine({
     guard.reset(String(task.quantity));
   }, [guard, task.quantity]);
   const confirm = useApiMutation(
-    (client, input: { taskId: string; quantity: number; locationId: string | null }) =>
-      client.wmsConfirmPick(input.taskId, input.quantity, input.locationId),
+    (
+      client,
+      input: { taskId: string; quantity: number; locationId: string | null; code: string | null },
+    ) => client.wmsConfirmPick(input.taskId, input.quantity, input.locationId, input.code),
     { invalidates: [keys.shipment(shipment.shipment_id), ["wms-board"]] },
   );
   const remaining = task.quantity - task.picked_quantity;
@@ -122,10 +125,13 @@ function CurrentLine({
       if (match.kind === "none") return { tone: "danger", message: WRONG_PRODUCT };
     }
     try {
+      // What was scanned goes with the pick: the database compares it with the
+      // product's own codes too, and refuses another product's.
       await confirm.mutateAsync({
         taskId: line.task_id,
         quantity: picked.quantity,
         locationId: line.location_id,
+        code: code || null,
       });
     } catch (error) {
       return { tone: "danger", message: messageOf(error) };

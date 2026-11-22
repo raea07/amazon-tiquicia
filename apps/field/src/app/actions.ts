@@ -7,6 +7,7 @@
  */
 
 import { parseColones } from "@yuntera/core";
+import { ApiError } from "@yuntera/db";
 import {
   type ActionState,
   attempt,
@@ -109,7 +110,8 @@ export async function completeStop(
             ? "Queda 1 intento"
             : `Quedan ${result.attempts_left ?? 0} intentos`
         }. Pídale al cliente que lo lea de su pedido.`,
-        pin_locked: "Demasiados intentos. No entregue el paquete y llame a Central.",
+        pin_locked:
+          "Demasiados intentos. No entregue el paquete y llame a Central: si lo desbloquean, el cliente verá un código nuevo en su pedido; si no, márquelo como no entregado.",
         cod_amount_mismatch: `Debe cobrar exactamente ${formatPrice(result.expected_minor ?? 0)}. Sin el monto completo no se entrega.`,
         recipient_required: "Escriba el nombre de quien recibe.",
       }[result.error];
@@ -203,20 +205,19 @@ export async function confirmPick(
     const task = shipment.tasks.find((candidate) => candidate.task_id === parsed.data.taskId);
     if (!task)
       return { error: "Esa línea ya no está en este paquete. Actualice la pantalla.", values };
-    const code = (values.code ?? "").trim().toUpperCase();
-    if (
-      parsed.data.quantity > 0 &&
-      code !== task.sku_code.toUpperCase() &&
-      code !== (task.gtin ?? "")
-    ) {
-      return {
-        error: "Ese código no es el de este producto. Revise que tomó el correcto.",
-        values: { ...values, code: "" },
-      };
-    }
-    await client.wmsConfirmPick(parsed.data.taskId, parsed.data.quantity, task.location_id);
+    // What was scanned or typed goes as it came: the database compares it with
+    // the product's own codes (any usual spelling of the barcode) and refuses
+    // another product's, so the screen is never what decides.
+    await client.wmsConfirmPick(
+      parsed.data.taskId,
+      parsed.data.quantity,
+      task.location_id,
+      (values.code ?? "").slice(0, 200) || null,
+    );
   } catch (error) {
-    return { error: messageOf(error), values };
+    // A wrong product empties the field for the next scan.
+    const wrong = error instanceof ApiError && error.code === "scanned_wrong_item";
+    return { error: messageOf(error), values: wrong ? { ...values, code: "" } : values };
   }
   refresh();
   return { ok: "Línea confirmada." };

@@ -23,6 +23,8 @@ export interface PositionPayload {
   lat: number;
   lng: number;
   accuracy: number | null;
+  /** When the phone read it, in milliseconds since 1970 (the queue's time if absent). */
+  at?: number;
 }
 
 /** The calls the queue makes. */
@@ -33,12 +35,22 @@ export type DriverCalls = Pick<
 
 /**
  * How long an entry may wait. A position is worth sending only while it is
- * recent: the server stamps it with the time it arrives, so an old one would
- * show Central a place the driver left long ago. An arrival or a failure
- * still matters for the rest of the day.
+ * recent: an old one shows Central a place the driver left long ago (the
+ * server keeps the newest it has, by when it was read). An arrival or a
+ * failure still matters for the rest of the day; the database takes the
+ * time it happened for up to a day (action_time_too_old after that).
  */
 export const POSITION_MAX_AGE_MS = 5 * 60 * 1000;
-export const STOP_ACTION_MAX_AGE_MS = 36 * 60 * 60 * 1000;
+export const STOP_ACTION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * When the action happened: the moment it was queued (the driver pressed the
+ * button then, with or without signal), or for a position the moment the
+ * phone read it. The database checks the bounds and keeps the time it
+ * received it as well.
+ */
+export const happenedAt = (entry: QueueEntry) =>
+  new Date((entry.payload as Partial<PositionPayload>).at ?? entry.createdAt);
 export const ageLimit = (entry: QueueEntry) =>
   entry.kind === "position" ? POSITION_MAX_AGE_MS : STOP_ACTION_MAX_AGE_MS;
 
@@ -111,7 +123,7 @@ export function sendWith(api: DriverCalls, deps: SendDeps) {
       if (entry.kind === "arrive") {
         const { stopId } = entry.payload as ArrivePayload;
         try {
-          await timed(api.driverArrive(stopId));
+          await timed(api.driverArrive(stopId, happenedAt(entry)));
           return { result: "done" };
         } catch (error) {
           if (!isRefusal(error)) return { result: "offline" };
@@ -127,7 +139,7 @@ export function sendWith(api: DriverCalls, deps: SendDeps) {
       if (entry.kind === "fail") {
         const payload = entry.payload as FailPayload;
         try {
-          await timed(api.driverFailStop(payload));
+          await timed(api.driverFailStop({ ...payload, occurredAt: happenedAt(entry) }));
           return { result: "done" };
         } catch (error) {
           if (!isRefusal(error)) return { result: "offline" };
@@ -158,7 +170,7 @@ export function sendWith(api: DriverCalls, deps: SendDeps) {
       if (entry.kind === "position") {
         const { lat, lng, accuracy } = entry.payload as PositionPayload;
         try {
-          await timed(api.driverReportPosition(lat, lng, accuracy ?? undefined));
+          await timed(api.driverReportPosition(lat, lng, accuracy ?? undefined, happenedAt(entry)));
         } catch (error) {
           if (!isRefusal(error)) return { result: "offline" };
           // Not on a route any more, or no longer an active driver: nothing

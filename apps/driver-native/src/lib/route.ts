@@ -7,7 +7,12 @@
  */
 
 import { format, money, parseColones } from "@yuntera/core";
-import type { DriverDay, DriverRoute, DriverStop } from "@yuntera/db";
+// The day as driver_today gives it since 083200: each stop with its district.
+import type {
+  PlacedDriverDay as DriverDay,
+  PlacedDriverRoute as DriverRoute,
+  PlacedDriverStop as DriverStop,
+} from "@yuntera/db";
 import type { Tone } from "@yuntera/expo-kit/theme";
 
 /** ₡12 500: the kit's formatPrice, the same core function, without the kit's screen components. */
@@ -101,6 +106,14 @@ export function keptOnPhone(day: DriverDay): DriverDay {
         stops: route.stops.map((stop) => (isOpen(stop) ? stop : { ...stop, phone: "" })),
       })),
   };
+}
+
+/**
+ * Where a stop is, as a driver reads a Costa Rican address: "district,
+ * cantón". Empty for a day saved before the database said it.
+ */
+export function placeOf(stop: Pick<DriverStop, "district" | "canton">): string {
+  return [stop.district, stop.canton].filter((part): part is string => Boolean(part)).join(", ");
 }
 
 /** The next stop to go to: the first open one, skipping those left for later. */

@@ -8,7 +8,7 @@
  */
 
 import { onlineManager, useQueryClient } from "@tanstack/react-query";
-import { ApiError, type DriverDay } from "@yuntera/db";
+import { ApiError, type PlacedDriverDay as DriverDay } from "@yuntera/db";
 import { messageOf } from "@yuntera/expo-kit/api";
 import { type Access, useAccess, useSession } from "@yuntera/expo-kit/auth";
 import { useApiQuery } from "@yuntera/expo-kit/data";
