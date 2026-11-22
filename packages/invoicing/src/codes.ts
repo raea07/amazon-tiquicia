@@ -141,3 +141,45 @@ export const SIGNATURE_POLICY = {
     "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/Resoluci%C3%B3n_General_sobre_disposiciones_t%C3%A9cnicas_comprobantes_electr%C3%B3nicos_para_efectos_tributarios.pdf",
   digestValue: "DWxin1xWOeI8OuWQXazh4VjLWAaCLAA954em7DMh0h8=",
 } as const;
+
+// ── What a person types ─────────────────────────────────────────────────────
+// The same rules as the database (private.invoice_clean_text,
+// private.invoice_email_valid) and the checkout's form, so nothing accepted at
+// input is refused when the document is written.
+
+/**
+ * Whether XML 1.0 can carry a code point at all: not the control characters
+ * other than tab, newline and carriage return, not a lone surrogate, not
+ * U+FFFE or U+FFFF.
+ */
+const xmlCanCarry = (code: number) =>
+  code === 0x9 ||
+  code === 0xa ||
+  code === 0xd ||
+  (code >= 0x20 && code <= 0xd7ff) ||
+  (code >= 0xe000 && code <= 0xfffd) ||
+  (code >= 0x10000 && code <= 0x10ffff);
+
+const onlyXml = (value: string) =>
+  Array.from(value)
+    .filter((char) => xmlCanCarry(char.codePointAt(0) ?? 0))
+    .join("");
+
+/**
+ * What a person typed, made safe for a one-line field of at most `max`
+ * characters: characters XML cannot carry are removed, every run of
+ * whitespace (newlines included) becomes one space, and the text is trimmed
+ * and cut to `max` characters (counted as the schema counts them, by code
+ * point). Markup characters are kept; the writer escapes them.
+ */
+export function cleanText(value: string, max: number): string {
+  const one = onlyXml(value.normalize("NFC")).replace(/\s+/g, " ").trim();
+  return Array.from(one).slice(0, max).join("").trim();
+}
+
+/**
+ * CorreoElectronico as the annex documents its structure:
+ * \w+([-+.']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)* (ASCII word characters), at most 160.
+ */
+export const HACIENDA_EMAIL =
+  /^[A-Za-z0-9_]+([-+.'][A-Za-z0-9_]+)*@[A-Za-z0-9_]+([-.][A-Za-z0-9_]+)*\.[A-Za-z0-9_]+([-.][A-Za-z0-9_]+)*$/;

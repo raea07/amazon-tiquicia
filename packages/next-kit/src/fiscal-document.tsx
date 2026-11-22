@@ -10,6 +10,10 @@ import {
   UNIT,
 } from "@yuntera/invoicing/codes";
 import { Badge, formatDateTime, type Tone } from "@yuntera/ui";
+
+// The rules for what a shopper types for a factura (the database applies the same).
+export { cleanText, HACIENDA_EMAIL } from "@yuntera/invoicing/codes";
+
 import type { Route } from "next";
 import Link from "next/link";
 
@@ -89,7 +93,11 @@ export function FiscalDocumentView({
     doc.status === "pending" || doc.status === "sent"
       ? "Este comprobante ya es válido para usted. Hacienda lo revisa y responde en un plazo de hasta tres horas; su respuesta aparecerá aquí."
       : doc.status === "rejected"
-        ? "Hacienda rechazó este comprobante, así que no tiene validez. Emitimos uno nuevo que lo reemplaza."
+        ? doc.replaced_by
+          ? doc.rejection_source === "local"
+            ? "Este comprobante no llegó a enviarse a Hacienda y no tiene validez. Lo reemplaza el que se indica abajo."
+            : "Hacienda rechazó este comprobante, así que no tiene validez. Emitimos uno nuevo que lo reemplaza."
+          : "Hacienda rechazó este comprobante, así que no tiene validez. Estamos corrigiéndolo: el comprobante nuevo aparecerá en esta misma sección del pedido."
         : doc.status === "voided"
           ? "Este comprobante quedó anulado por una nota de crédito."
           : null;

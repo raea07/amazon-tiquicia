@@ -52,35 +52,9 @@ export const escapeAttribute = (value: string) =>
     .replace(/\n/g, "&#xA;")
     .replace(/\r/g, "&#xD;");
 
-/**
- * Whether XML 1.0 can carry a code point at all: not the control characters
- * other than tab, newline and carriage return, not a lone surrogate, not
- * U+FFFE or U+FFFF.
- */
-const xmlCanCarry = (code: number) =>
-  code === 0x9 ||
-  code === 0xa ||
-  code === 0xd ||
-  (code >= 0x20 && code <= 0xd7ff) ||
-  (code >= 0xe000 && code <= 0xfffd) ||
-  (code >= 0x10000 && code <= 0x10ffff);
-
-const onlyXml = (value: string) =>
-  Array.from(value)
-    .filter((char) => xmlCanCarry(char.codePointAt(0) ?? 0))
-    .join("");
-
-/**
- * What a person typed, made safe for a one-line field of at most `max`
- * characters: characters XML cannot carry are removed, every run of
- * whitespace (newlines included) becomes one space, and the text is trimmed
- * and cut to `max` characters (counted as the schema counts them, by code
- * point). Markup characters are kept; the writer escapes them.
- */
-export function cleanText(value: string, max: number): string {
-  const one = onlyXml(value.normalize("NFC")).replace(/\s+/g, " ").trim();
-  return Array.from(one).slice(0, max).join("").trim();
-}
+// What a person typed, made safe for a one-line field: in codes.ts, which has
+// no imports, so the web apps' forms apply the very same rule.
+export { cleanText } from "./codes.ts";
 
 /** Writes the element and everything below it. */
 export function serialize(node: XmlNode): string {

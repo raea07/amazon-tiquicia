@@ -12,7 +12,7 @@
  */
 
 import { formatAmount, lineTotal, parseAmount, parseQuantity, taxOn } from "./amounts.ts";
-import { DOCUMENT, type DocumentType, IVA_RATE } from "./codes.ts";
+import { DOCUMENT, type DocumentType, HACIENDA_EMAIL, IVA_RATE } from "./codes.ts";
 import { fechaEmision, parseClave } from "./key.ts";
 import { cleanText, el, leaf, type XmlElement } from "./xml.ts";
 
@@ -179,8 +179,8 @@ export function summarize(lines: Line[]): Summary {
   };
 }
 
-/** The shape the database accepts for e-mails; Hacienda's own pattern (ANX p. 22) is stricter. */
-const EMAIL = /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/;
+/** Hacienda's documented e-mail structure, the same rule the database applies at input. */
+const EMAIL = HACIENDA_EMAIL;
 
 /** JSON with object keys sorted: the database returns its objects in its own key order. */
 function stable(value: unknown): string {
