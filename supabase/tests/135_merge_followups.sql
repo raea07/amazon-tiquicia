@@ -11,6 +11,9 @@
 
 begin;
 \ir _helpers.sql
+-- The limit's caller check is 130_web_followups' subject; here no digest is
+-- configured for this transaction, whatever the project's Vault holds.
+select pg_temp.set_caller_digest(null);
 
 select pg_temp.remember('shopper', (select id::text from auth.users where email = 'comprador@yuntera.example'));
 

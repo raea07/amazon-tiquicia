@@ -100,6 +100,25 @@ $$;
 
 -- ═══ 2. Planning: not before the issuer is set up, then exactly once ════════
 
+-- A database seeded before this migration (the hosted preview) has payments
+-- captured before invoicing existed: they have no invoice job and, by design,
+-- never get a document (runbook, "Migrations 083400 and 083500"); nor did its
+-- seed set the demo issuer and policy. For this transaction only, which rolls
+-- back, give it what a database seeded after the migration has: the jobs the
+-- route makes for each captured payment, and the seed's settings for
+-- Hacienda's fictitious demo issuer.
+do $$
+begin
+  if exists (select 1 from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
+             where j.consumer = 'invoice' and e.topic = 'payment.captured') then
+    return;
+  end if;
+  insert into private.outbox_jobs (event_id, consumer)
+  select e.id, 'invoice' from private.outbox_events e where e.topic = 'payment.captured';
+  perform pg_temp.seed_invoicing_settings();
+end
+$$;
+
 select pg_temp.remember('capture_jobs', (
   select count(*)::text from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
   where j.consumer = 'invoice' and e.topic = 'payment.captured'));

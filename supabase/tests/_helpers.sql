@@ -90,3 +90,43 @@ begin
   return (v_result ->> 'order_id')::uuid;
 end;
 $$;
+
+-- The sign-in limit accepts only the apps once a digest of their proof is in
+-- Vault (20261121083300_web_followups.sql). A hosted project that has stored
+-- one (runbook, "Migrations 083200 and 083300") would refuse the suites, which
+-- do not hold the apps' key. This sets the digest the limit sees for this
+-- transaction only, which every suite rolls back: null means none configured
+-- (an empty value, as the check reads it). Where the database has no real
+-- Vault (local runs, CI), it does nothing: 130_web_followups brings a
+-- stand-in of its own there.
+create function pg_temp.set_caller_digest(p_digest text) returns void
+language plpgsql as $$
+declare
+  v_id uuid;
+begin
+  if to_regprocedure('vault.update_secret(uuid, text, text, text, uuid)') is null then
+    return;
+  end if;
+  execute $q$select id from vault.secrets where name = 'auth_limit_caller_digest'$q$ into v_id;
+  if v_id is not null then
+    execute 'select vault.update_secret($1, $2)' using v_id, coalesce(p_digest, '');
+  elsif p_digest is not null then
+    execute 'select vault.create_secret($1, $2)' using p_digest, 'auth_limit_caller_digest';
+  end if;
+end;
+$$;
+
+-- The seed's settings for Hacienda's fictitious demo issuer (seed.sql): the
+-- issuer ready and simulated money documented, so the local fake of Hacienda
+-- has something to receive. A database seeded before 083500 (the hosted
+-- preview) never got them and keeps `ready` and `simulated_payments` false;
+-- this gives the suites the seed's settings for their own transaction only,
+-- which rolls back. Where the seed ran after the migration it changes nothing.
+create function pg_temp.seed_invoicing_settings() returns void
+language sql as $$
+  update public.app_settings set value = jsonb_set(value, '{ready}', 'true')
+  where key = 'invoicing_issuer' and value ->> 'id_number' = '3101123456';
+  update public.app_settings set value = jsonb_set(value, '{simulated_payments}', 'true')
+  where key = 'invoicing_policy'
+    and (select value ->> 'id_number' from public.app_settings where key = 'invoicing_issuer') = '3101123456';
+$$;

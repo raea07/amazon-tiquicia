@@ -9,6 +9,9 @@
 
 begin;
 \ir _helpers.sql
+-- Until the caller check's own section below, no digest is configured for
+-- this transaction, whatever the project's Vault holds (see _helpers.sql).
+select pg_temp.set_caller_digest(null);
 
 -- Runs a statement that must be refused with the given code.
 create function pg_temp.refused(p_sql text, p_code text) returns void
@@ -326,12 +329,13 @@ $$;
 -- With a digest in Vault, a caller without the apps' value is refused and
 -- adds nothing (review of 22 November: rows added with the public key alone).
 -- A local database has no Vault: a stand-in with the same shape, for this
--- transaction only. A hosted project has the real one, which this file does
--- not touch; there the check is left to the deployment runbook.
+-- transaction only. A hosted project has the real one: the suite's own digest
+-- goes there for this transaction only, which rolls back and leaves the
+-- project's digest as it was.
 do $$
 begin
   if exists (select 1 from pg_namespace where nspname = 'vault') then
-    raise notice 'Vault exists here: the caller check is not exercised against it';
+    perform pg_temp.set_caller_digest(encode(extensions.digest('the-apps-proof', 'sha256'), 'hex'));
     perform set_config('t.vault', 'real', true);
   else
     create schema vault;
@@ -349,9 +353,6 @@ declare
   v_a text := pg_temp.h('203.0.113.230');
   v_b text := pg_temp.h('203.0.113.231');
 begin
-  if current_setting('t.vault') <> 'stand-in' then
-    return;
-  end if;
   perform pg_temp.login_anon();
   perform pg_temp.refused(format('select public.auth_limit_reserve(%L, %L)',
     'sign_in', v_a), 'auth_limit_caller');
@@ -363,7 +364,11 @@ begin
   assert (select count(*) from private.auth_attempts) = v_before + 1,
     'WEB-2 caller: a refused caller adds no row';
   -- Without a digest configured, any caller is accepted (local runs, CI).
-  delete from vault.decrypted_secrets;
+  if current_setting('t.vault') = 'stand-in' then
+    delete from vault.decrypted_secrets;
+  else
+    perform pg_temp.set_caller_digest(null);
+  end if;
   perform pg_temp.login_anon();
   v := public.auth_limit_reserve('sign_in', v_b);
   reset role;

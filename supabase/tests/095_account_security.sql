@@ -782,6 +782,9 @@ select public.ops_decide_return(current_setting('t.gone_return')::uuid, true, 'F
 select public.ops_receive_return(current_setting('t.gone_return')::uuid, false, 'Llegó golpeado.');
 select public.ops_complete_return(current_setting('t.gone_return')::uuid, 'Reembolso enviado.');
 reset role;
+-- Invitations the person already had (a used preview keeps answered ones).
+select pg_temp.remember('gone_invitations_before', (select count(*)::text from public.seller_invitations i
+  where i.invitee_id = current_setting('t.gone')::uuid));
 select pg_temp.login('vendedor@yuntera.example');
 select set_config('t.gone_invitation', public.seller_invite_member(
   current_setting('t.gone_shop_a')::uuid, 'comprador2@yuntera.example', 'staff')::text, true);
@@ -802,7 +805,8 @@ begin
                  where f.reason = 'return' and r.id = current_setting('t.gone_return')::uuid),
     'the refund is in the register';
   assert (select count(*) from public.seller_invitations i
-          where i.invitee_id = current_setting('t.gone')::uuid) = 2, 'two invitations to the person';
+          where i.invitee_id = current_setting('t.gone')::uuid)
+         = current_setting('t.gone_invitations_before')::integer + 2, 'two invitations to the person';
   assert exists (select 1 from private.delivery_codes c join public.orders o on o.id = c.order_id
                  where o.user_id = current_setting('t.gone')::uuid), 'their orders have delivery codes';
 end
@@ -835,6 +839,9 @@ select t.topic, jsonb_build_object('order_id', o.id)
 from (select o.id from public.orders o where o.user_id = current_setting('t.gone')::uuid
       order by o.placed_at limit 1) o
 cross join (values ('delivery_code.locked'), ('delivery_code.released')) t (topic);
+-- A sign-in attempt on record (as a database without the apps' digest takes
+-- one; see _helpers.sql).
+select pg_temp.set_caller_digest(null);
 select pg_temp.login_anon();
 select public.auth_limit_reserve('sign_in', repeat('a', 64), repeat('b', 64));
 reset role;
@@ -877,7 +884,9 @@ $$;
 -- (so nothing erased it on the way); a factura request typed at checkout for
 -- an order never placed; and an order with a delivery fee, its factura in
 -- their name (name and e-mail) issued when it was paid, then cancelled, with
--- the credit note that carries the same receiver.
+-- the credit note that carries the same receiver. The seed's invoicing
+-- settings, also on a database seeded before 083500 (see _helpers.sql).
+select pg_temp.seed_invoicing_settings();
 insert into private.payment_attempts
   (payment_id, order_id, provider, environment, method, amount_minor, status, expires_at,
    payer_kind, payer_number, payer_phone, finished_at)
@@ -946,7 +955,9 @@ begin
   assert jsonb_array_length(public.account_deletion_check() -> 'blockers') = 0,
     format('nothing pending: %s', public.account_deletion_check() -> 'blockers');
   r := public.delete_my_account();
-  assert (r ->> 'orders_kept')::int = 6 and (r ->> 'reviews_kept')::int = 6, format('result: %s', r);
+  -- Every order and review the person had (6 and 6 on a fresh seed).
+  assert (r ->> 'orders_kept')::int = split_part(current_setting('t.orders_before'), ':', 1)::int
+     and (r ->> 'reviews_kept')::int = current_setting('t.reviews_before')::int, format('result: %s', r);
   -- The token in hand still identifies the old id for up to an hour; a second
   -- deletion with it finds nothing to delete.
   begin

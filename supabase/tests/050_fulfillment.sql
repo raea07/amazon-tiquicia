@@ -261,9 +261,11 @@ select pg_temp.remember('stop_ok',
 select pg_temp.remember('stop_fail',
   (select id::text from public.route_stops
    where route_id = current_setting('t.route')::uuid and shipment_id = current_setting('t.to_pick_shipment')::uuid));
+-- Still open: pending, or `arrived` where a driver has already reached the
+-- door (on a used preview, the smoke test's wrong code left it so).
 select pg_temp.remember('cod_stop',
   (select rs.id::text from public.route_stops rs join public.shipments s on s.id = rs.shipment_id
-   where s.order_id = current_setting('t.cod_order')::uuid and rs.status = 'pending'));
+   where s.order_id = current_setting('t.cod_order')::uuid and rs.status in ('pending', 'arrived')));
 
 select pg_temp.login('repartidor@yuntera.example');
 do $$

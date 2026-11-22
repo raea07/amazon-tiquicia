@@ -392,6 +392,7 @@ declare
   v_bad text;
   v_owed bigint;
   v_open bigint;
+  v_before bigint;
 begin
   set constraints all immediate;
   set constraints all deferred;
@@ -415,7 +416,20 @@ begin
   where e.account_id = private.ledger_account('refunds_payable');
   select coalesce(sum(g.amount_minor), 0) into v_open from private.gateway_refunds g
   where g.refund_id is not null and g.status <> 'succeeded';
-  assert v_owed = v_open, format('%s: owed to shoppers %s, refunds not completed %s', p_label, v_owed, v_open);
+  -- Refunds booked before 083200 (confirmed `before_confirmations`, on a
+  -- database that had them, such as the hosted preview) were never given a
+  -- way back, and nothing recorded their money leaving: their amount stays in
+  -- what is owed to shoppers until finance clears it (runbook, "Migrations
+  -- 083400 and 083500"). None exists on a database seeded after the
+  -- migrations, and no later refund can be confirmed that way.
+  select coalesce(-sum(e.amount_minor), 0) into v_before from private.refunds r
+  join private.refund_confirmations c on c.refund_id = r.id and c.reference = 'before_confirmations'
+  join public.ledger_entries e on e.transaction_id = r.ledger_transaction_id
+   and e.account_id = private.ledger_account('refunds_payable')
+  where not exists (select 1 from private.gateway_refunds g where g.refund_id = r.id);
+  assert v_owed = v_open + v_before,
+    format('%s: owed to shoppers %s, refunds not completed %s, booked before 083200 %s',
+           p_label, v_owed, v_open, v_before);
 
   select string_agg(b.seller_id::text, ', ') into v_bad
   from private.seller_balances(private.cr_local(now())::date, private.payout_hold_days()) b

@@ -27,6 +27,9 @@ select pg_temp.allow_inspection();
 
 grant execute on function pg_temp.remember(text, text) to authenticated;
 
+-- The seed's invoicing settings, also on a database seeded before 083500.
+select pg_temp.seed_invoicing_settings();
+
 select pg_temp.shopper('devol1@yuntera.example', 'Prueba Devoluciones Uno');
 select pg_temp.shopper('devol2@yuntera.example', 'Prueba Devoluciones Dos');
 
