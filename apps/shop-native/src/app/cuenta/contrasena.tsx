@@ -3,11 +3,12 @@ import { useSession } from "@yuntera/expo-kit/auth";
 import { signInPath } from "@yuntera/expo-kit/paths";
 import { Card, Screen, Text } from "@yuntera/expo-kit/ui";
 import { Redirect } from "expo-router";
+import { needsSignIn } from "@/lib/guard";
 
 /** Changing the password while signed in, as on the website's Mi cuenta. */
 export default function ChangePassword() {
   const { status } = useSession();
-  if (status === "signedOut") return <Redirect href={signInPath("/cuenta/contrasena")} />;
+  if (needsSignIn(status)) return <Redirect href={signInPath("/cuenta/contrasena")} />;
   return (
     <Screen>
       <Card>

@@ -27,9 +27,11 @@ import { shopKey, useShop, useShops } from "@/lib/shops";
 import {
   canRevoke,
   checkInvite,
+  INVITATION_REVOKED,
   type InvitableRole,
   invitationSent,
   LEAVE_UNTICKED,
+  MEMBER_REMOVED,
   memberActions,
   ROLE_LABEL,
 } from "@/lib/team";
@@ -53,7 +55,16 @@ const ROLE_CHOICES = (admins: boolean) => [
     : []),
 ];
 
-function MemberRow({ team, member }: { team: SellerTeam; member: Member }) {
+function MemberRow({
+  team,
+  member,
+  onDone,
+}: {
+  team: SellerTeam;
+  member: Member;
+  /** Shown by the list: this row disappears once the person is removed. */
+  onDone: (message: string) => void;
+}) {
   const shop = useShop();
   const { reloadRoles, api, viewer } = useSession();
   const { setTeamNotice } = useShops();
@@ -79,7 +90,7 @@ function MemberRow({ team, member }: { team: SellerTeam; member: Member }) {
     try {
       await remove.mutateAsync(undefined);
       if (!leaving) {
-        setResult({ ok: "La persona ya no es parte del equipo." });
+        onDone(MEMBER_REMOVED);
         await client.invalidateQueries({ queryKey: ["user", viewer?.id, ...shopKey(shop.id)] });
         return;
       }
@@ -175,7 +186,16 @@ function MemberRow({ team, member }: { team: SellerTeam; member: Member }) {
   );
 }
 
-function InvitationRow({ team, invitation }: { team: SellerTeam; invitation: Invitation }) {
+function InvitationRow({
+  team,
+  invitation,
+  onDone,
+}: {
+  team: SellerTeam;
+  invitation: Invitation;
+  /** Shown by the list: this row disappears once the invitation is withdrawn. */
+  onDone: (message: string) => void;
+}) {
   const shop = useShop();
   const [error, setError] = useState<string | null>(null);
   const revoke = useApiMutation((api) => api.sellerRevokeInvitation(invitation.id), {
@@ -197,6 +217,7 @@ function InvitationRow({ team, invitation }: { team: SellerTeam; invitation: Inv
             setError(null);
             try {
               await revoke.mutateAsync(undefined);
+              onDone(INVITATION_REVOKED);
             } catch (cause) {
               setError(messageOf(cause));
             }
@@ -275,6 +296,7 @@ function InviteForm({ isOwner }: { isOwner: boolean }) {
  */
 export default function TeamScreen() {
   const shop = useShop();
+  const [notice, setNotice] = useState<string | null>(null);
   const team = useApiQuery(shopKey(shop.id, "team"), (api) => api.sellerTeam(shop.id), {
     personal: true,
   });
@@ -287,12 +309,13 @@ export default function TeamScreen() {
       <Text tint="muted">
         Quién trabaja en su tienda. Nadie entra al equipo sin aceptar la invitación.
       </Text>
+      <FormMessage ok={notice} testID="team-notice" />
       <Card testID="team-members">
         <Text variant="heading">Personas en el equipo</Text>
         {data.members.map((member, index) => (
           <View key={member.user_id}>
             {index > 0 ? <Divider /> : null}
-            <MemberRow team={data} member={member} />
+            <MemberRow team={data} member={member} onDone={setNotice} />
           </View>
         ))}
       </Card>
@@ -309,7 +332,7 @@ export default function TeamScreen() {
               data.invitations.map((invitation, index) => (
                 <View key={invitation.id}>
                   {index > 0 ? <Divider /> : null}
-                  <InvitationRow team={data} invitation={invitation} />
+                  <InvitationRow team={data} invitation={invitation} onDone={setNotice} />
                 </View>
               ))
             )}

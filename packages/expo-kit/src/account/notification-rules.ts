@@ -10,7 +10,8 @@
  */
 
 import { parsePhone } from "@yuntera/core";
-import { COMMERCIAL_CONSENT_VERSION } from "@yuntera/db";
+import { ApiError, COMMERCIAL_CONSENT_VERSION } from "@yuntera/db";
+import { messageOf } from "../errors";
 
 export type Audience = "shopper" | "shop";
 
@@ -84,3 +85,49 @@ export const SAVED: Record<Audience, string> = {
   shopper: "Guardamos sus preferencias. Se aplican desde el próximo aviso.",
   shop: "Guardamos las preferencias de su tienda.",
 };
+
+/**
+ * Another device or the website saved since this screen loaded, so the
+ * database refused the save (notify_settings_changed). The website's message
+ * says to reload the page; an app has no page, so the screen loads the
+ * current settings itself and says so.
+ */
+export const CHANGED_ELSEWHERE: Record<Audience, string> = {
+  shopper:
+    "Sus preferencias cambiaron en otro teléfono o en el sitio web mientras tenía abierta esta pantalla. Ahora ve las que están guardadas: revíselas y, si quiere cambiarlas, vuelva a guardar.",
+  shop: "Las preferencias de su tienda cambiaron en otro teléfono o en el sitio web mientras tenía abierta esta pantalla. Ahora ve las que están guardadas: revíselas y, si quiere cambiarlas, vuelva a guardar.",
+};
+
+/** The current settings could not be loaded after such a refusal either. */
+export const CHANGED_ELSEWHERE_RELOAD_FAILED =
+  "Estas preferencias cambiaron en otro teléfono o en el sitio web mientras tenía abierta esta pantalla, y no pudimos cargar las actuales. Salga de esta pantalla y vuelva a abrirla.";
+
+export type SaveOutcome<S> =
+  | { kind: "saved"; settings: S; message: string }
+  | { kind: "refreshed"; settings: S; message: string }
+  | { kind: "error"; message: string };
+
+/**
+ * Saves, and when the database refuses because the settings changed
+ * elsewhere, loads the current ones so the screen can show them instead of
+ * the stale ones it was opened with.
+ */
+export async function saveChoices<S>(
+  audience: Audience,
+  input: ChoicesInput,
+  save: (input: ChoicesInput) => Promise<S>,
+  reload: () => Promise<S>,
+): Promise<SaveOutcome<S>> {
+  try {
+    return { kind: "saved", settings: await save(input), message: SAVED[audience] };
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.code !== "notify_settings_changed") {
+      return { kind: "error", message: messageOf(error) };
+    }
+  }
+  try {
+    return { kind: "refreshed", settings: await reload(), message: CHANGED_ELSEWHERE[audience] };
+  } catch {
+    return { kind: "error", message: CHANGED_ELSEWHERE_RELOAD_FAILED };
+  }
+}

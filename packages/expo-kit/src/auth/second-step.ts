@@ -102,3 +102,29 @@ export function refusedMessage(
       } antes de una pausa de 15 minutos.`;
   return `${authErrorMessage(error)}${tail}`;
 }
+
+/**
+ * What the database lets a session halfway through the second step call
+ * (public.check_request in 20261121082500_account_security.sql): the
+ * second step's own calls. Everything else is refused with
+ * second_factor_required, even the catalogue a visitor may read.
+ */
+export const SECOND_STEP_CALLS: ReadonlySet<string> = new Set([
+  "my_security",
+  "my_roles",
+  "mfa_attempt_status",
+  "mfa_reserve_attempt",
+  "mfa_attempt_succeeded",
+]);
+
+/**
+ * Whether a call is sent as a visitor (with the app's public key instead of
+ * the person's token). Halfway through the second step the token would be
+ * refused for anything but the second step itself, so the shop's home,
+ * search and categories are read as a visitor reads them, and the screens
+ * for signed-in people send the person to the code first. Personal calls
+ * never go this way: the kit's personal queries wait for the second step,
+ * and as a visitor they would be refused anyway.
+ */
+export const callsAsVisitor = (status: string, fn: string): boolean =>
+  status === "secondStep" && !SECOND_STEP_CALLS.has(fn);

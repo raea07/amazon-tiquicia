@@ -26,6 +26,7 @@ import { passwordCheckFor } from "../supabase/probe";
 import { POLICY_VERSION } from "./policy";
 import {
   CODE_REQUIRED,
+  callsAsVisitor,
   lockedMessage,
   needsSecondStep,
   normaliseCode,
@@ -117,9 +118,24 @@ export function SessionProvider({
   children: ReactNode;
 }) {
   const queryClient = useQueryClient();
-  const api = useMemo(() => createApi({ rpc: (fn, args) => supabase.rpc(fn, args) }), [supabase]);
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<SessionStatus>("loading");
+  // Read by the transport at call time, so a call made just after the
+  // second step is passed already carries the person's token.
+  const statusNow = useRef<SessionStatus>(status);
+  statusNow.current = status;
+  const api = useMemo(
+    () =>
+      createApi({
+        rpc: (fn, args) => {
+          const call = supabase.rpc(fn, args);
+          return callsAsVisitor(statusNow.current, fn)
+            ? call.setHeader("Authorization", `Bearer ${env.supabaseKey}`)
+            : call;
+        },
+      }),
+    [supabase, env.supabaseKey],
+  );
   const [roles, setRoles] = useState<Roles | null>(null);
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [rolesLoading, setRolesLoading] = useState(false);

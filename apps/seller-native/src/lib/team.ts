@@ -64,6 +64,13 @@ export const invitationSent = (email: string) =>
 
 export const LEAVE_UNTICKED = "Marque la casilla para confirmar que quiere salir del equipo.";
 
+/**
+ * The confirmations of a removal and of a withdrawn invitation. The row they
+ * are about disappears with the answer, so the list shows them, not the row.
+ */
+export const MEMBER_REMOVED = "La persona ya no es parte del equipo.";
+export const INVITATION_REVOKED = "Invitación retirada.";
+
 // ── Requests to change the shop's details ───────────────────────────────────
 
 export const CHANGE_SENT =

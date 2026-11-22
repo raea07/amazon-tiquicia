@@ -13,8 +13,10 @@ import {
   checkFiscal,
   checkInvite,
   checkShopName,
+  INVITATION_REVOKED,
   invitationSent,
   LEAVE_UNTICKED,
+  MEMBER_REMOVED,
   memberActions,
   ROLE_LABEL,
 } from "./team";
@@ -120,7 +122,24 @@ describe("inviting", () => {
     // The seller centre's template literal, with its placeholder left in.
     has(actions, invitationSent(["$", "{email}"].join("")));
     has(actions, LEAVE_UNTICKED);
+    has(actions, `"${MEMBER_REMOVED}"`);
+    has(actions, `"${INVITATION_REVOKED}"`);
     has(actions, "Escriba el correo con que la persona ingresa a Yuntera.");
+  });
+});
+
+describe("the team screen", () => {
+  const screen = readFileSync(join(__dirname, "../app/(app)/equipo.tsx"), "utf8").replace(
+    /\s+/g,
+    " ",
+  );
+  it("keeps the confirmation of a removal or a withdrawal on the list, not on the row that goes", () => {
+    // The rows hand the words up; the list holds and shows them.
+    has(screen, "onDone(MEMBER_REMOVED)");
+    has(screen, "onDone(INVITATION_REVOKED)");
+    has(screen, 'testID="team-notice"');
+    assert.ok(!screen.includes("setResult({ ok: MEMBER_REMOVED"), "the row must not hold it");
+    assert.ok(!screen.includes('"La persona ya no es parte del equipo."'));
   });
 });
 

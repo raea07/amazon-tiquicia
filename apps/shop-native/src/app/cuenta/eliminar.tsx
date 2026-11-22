@@ -4,6 +4,7 @@ import { signInPath } from "@yuntera/expo-kit/paths";
 import { Screen } from "@yuntera/expo-kit/ui";
 import { Redirect, router } from "expo-router";
 import { useCart } from "@/lib/cart-context";
+import { needsSignIn } from "@/lib/guard";
 
 /**
  * Eliminar su cuenta (the website's /cuenta/eliminar). Besides the session,
@@ -13,7 +14,7 @@ import { useCart } from "@/lib/cart-context";
 export default function DeleteAccount() {
   const { status } = useSession();
   const cart = useCart();
-  if (status === "signedOut") {
+  if (needsSignIn(status)) {
     return accountDeletedNotice.current() ? (
       <Redirect href="/" />
     ) : (
