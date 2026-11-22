@@ -49,6 +49,15 @@ export const expiredMessage = (entry: QueueEntry) =>
     : "Esta acción quedó sin enviar más de un día y ya no se enviará. Avise a Central qué pasó en esa parada.";
 
 /**
+ * A queued action for a stop that is no longer on any of the driver's routes.
+ * When a driver stops being active the database hands their unfinished stops
+ * to a new route for dispatch, so an arrival or a failure saved before that
+ * reaches nobody: Central has to hear what happened there.
+ */
+export const MOVED_STOP_MESSAGE =
+  "Esta parada ya no está en sus rutas: Central la pasó a otra ruta, así que esto no se registró. Avise a Central qué pasó en ella.";
+
+/**
  * A request with no answer after this long counts as "no signal". On a phone
  * in a dead zone a request can hang for a minute before the system gives up;
  * the driver should not wait that long at a door.
@@ -110,7 +119,8 @@ export function sendWith(api: DriverCalls, deps: SendDeps) {
           // Refused: if the stop is no longer pending, the arrival is moot
           // (it was recorded already, or the stop was closed since).
           const stop = await stopOnServer(api, stopId);
-          if (stop && stop.status !== "pending") return { result: "done" };
+          if (!stop) return { result: "rejected", message: MOVED_STOP_MESSAGE };
+          if (stop.status !== "pending") return { result: "done" };
           return { result: "rejected", message: messageOf(error) };
         }
       }
@@ -123,7 +133,8 @@ export function sendWith(api: DriverCalls, deps: SendDeps) {
           if (!isRefusal(error)) return { result: "offline" };
           onRefused(error);
           const stop = await stopOnServer(api, payload.stopId);
-          if (stop?.status === "failed") {
+          if (!stop) return { result: "rejected", message: MOVED_STOP_MESSAGE };
+          if (stop.status === "failed") {
             // The same failure sent twice (its first answer was lost): done.
             if (stop.failure_reason === payload.reason) return { result: "done" };
             // Someone (another screen, Central) recorded it first, with another reason.
@@ -134,7 +145,7 @@ export function sendWith(api: DriverCalls, deps: SendDeps) {
               )}». No se cambió.`,
             };
           }
-          if (stop?.status === "delivered") {
+          if (stop.status === "delivered") {
             return {
               result: "rejected",
               message:

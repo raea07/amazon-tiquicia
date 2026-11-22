@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ApiError, type DriverDay } from "@yuntera/db";
 import { createOfflineQueue, type QueueEntry } from "@yuntera/expo-kit/offline";
-import { ageLimit, type DriverCalls, expiredMessage, POSITION_MAX_AGE_MS, sendWith } from "./send";
+import {
+  ageLimit,
+  type DriverCalls,
+  expiredMessage,
+  MOVED_STOP_MESSAGE,
+  POSITION_MAX_AGE_MS,
+  sendWith,
+} from "./send";
 
 const refused = (code: string) => new ApiError(code as ApiError["code"], { status: 400 });
 
@@ -115,6 +122,38 @@ describe("sending a queued failed delivery", () => {
       outcome.result === "rejected" ? outcome.message : "",
       /ya figuraba como entregada/,
     );
+  });
+});
+
+describe("a stop Central moved to another route", () => {
+  // A driver suspended and active again: their unfinished stops went to a new
+  // route for dispatch, so what was queued for them is refused and reported.
+  const moved: DriverCalls = {
+    driverToday: async () => ({ driver: {}, routes: [] }) as unknown as DriverDay,
+    driverArrive: async () => {
+      throw refused("stop_not_found");
+    },
+    driverFailStop: async () => {
+      throw refused("stop_not_found");
+    },
+    driverReportPosition: async () => undefined,
+  };
+
+  it("reports a queued arrival as not recorded, and says to tell Central", async () => {
+    const { send } = sender(moved);
+    assert.deepEqual(await send(entry("arrive", { stopId: "s1" })), {
+      result: "rejected",
+      message: MOVED_STOP_MESSAGE,
+    });
+  });
+
+  it("reports a queued failure the same way", async () => {
+    const { send } = sender(moved);
+    assert.deepEqual(await send(failure("nobody_home")), {
+      result: "rejected",
+      message: MOVED_STOP_MESSAGE,
+    });
+    assert.match(MOVED_STOP_MESSAGE, /Avise a Central/);
   });
 });
 

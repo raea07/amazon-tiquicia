@@ -9,7 +9,7 @@ export {
 } from "./forms";
 export { POLICY_VERSION } from "./policy";
 export { AppProviders } from "./provider";
-export { type Audience, canUse, NO_ACCESS } from "./roles";
+export { type Audience, canUse, NO_ACCESS, noAccessText } from "./roles";
 export { needsSecondStep } from "./second-step";
 export {
   type SecondStepMode,

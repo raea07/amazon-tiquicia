@@ -1,6 +1,6 @@
 import type { Roles } from "@yuntera/db";
 import { describe, expect, it } from "vitest";
-import { canUse, NO_ACCESS } from "./roles";
+import { canUse, NO_ACCESS, noAccessText } from "./roles";
 
 const base: Roles = {
   user_id: "11111111-1111-4111-8111-111111111111",
@@ -68,5 +68,20 @@ describe("canUse", () => {
       expect(body).toMatch(/pídale|registre/i);
       expect(body).not.toMatch(/\b(tú|vos|tu cuenta)\b/i);
     }
+  });
+
+  it("tells a suspended or deactivated driver what happened to the routes and what to bring back", () => {
+    const driver = (status: NonNullable<Roles["driver"]>["status"]) => ({
+      ...base,
+      driver: { id: "33333333-3333-4333-8333-333333333333", status, full_name: "Luis" },
+    });
+    const suspended = noAccessText("driver", driver("suspended"));
+    expect(suspended.title).toBe("Su cuenta de repartidor está suspendida");
+    expect(suspended.body).toMatch(/volvieron a Central/);
+    expect(suspended.body).toMatch(/llévelos a la bodega/);
+    expect(noAccessText("driver", driver("offboarded")).title).toMatch(/desactivada/);
+    expect(noAccessText("driver", driver("pending"))).toEqual(NO_ACCESS.driver);
+    expect(noAccessText("driver", null)).toEqual(NO_ACCESS.driver);
+    expect(noAccessText("warehouse", driver("suspended"))).toEqual(NO_ACCESS.warehouse);
   });
 });

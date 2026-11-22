@@ -17,10 +17,16 @@
 // expired still opens on the saved route, not on the sign-in screen. The API
 // comes back: the session renews itself, the queue drains once, in order, and
 // nothing is sent twice. Central suspends the driver mid-route: with the app
-// still open, it shows the no-access screen, stops sharing the position and
-// removes the saved route; reactivated, the driver is back. The driver
-// finishes the route; sharing stops. Fails on any console error, uncaught exception or 5xx, except the
-// browser's "could not connect" errors while the API is stopped.
+// still open, it says the account is suspended and the routes went back to
+// Central, stops sharing the position and removes the saved route; the
+// database has moved the stops still to do to a new route for dispatch.
+// Reactivated, the driver gets that route from Central and starts it. Five
+// wrong codes at a door lock the order (the attempts are the order's): the
+// app takes no more codes and says to call Central; Central releases it, the
+// shopper's order shows a new code, and that code delivers. The driver
+// finishes the route; sharing stops. Fails on any console error, uncaught
+// exception or 5xx, except the browser's "could not connect" errors while the
+// API is stopped.
 //
 // What this cannot prove (it is a browser, not a phone): the Android
 // foreground service and its notification, the iOS background mode, the real
@@ -64,13 +70,13 @@ async function as(email) {
   return rpc;
 }
 
-/** The delivery code, as the shopper sees it on their order. */
-async function pinFor(email, tracking) {
+/** The order holding a parcel, as its shopper sees it (the delivery code included). */
+async function orderFor(email, tracking) {
   const shopper = await as(email);
   try {
     for (const order of await shopper("my_orders")) {
       const detail = await shopper("get_order", { p_order_number: order.order_number });
-      if (detail.shipments?.some((s) => s.tracking_code === tracking)) return detail.delivery_pin;
+      if (detail.shipments?.some((s) => s.tracking_code === tracking)) return detail;
     }
     return null;
   } finally {
@@ -78,11 +84,16 @@ async function pinFor(email, tracking) {
   }
 }
 
-/** The code for a parcel whose shopper is one of the demo shoppers. */
-async function pinForAnyone(tracking) {
+/** The delivery code, as the shopper sees it on their order. */
+async function pinFor(email, tracking) {
+  return (await orderFor(email, tracking))?.delivery_pin ?? null;
+}
+
+/** The order of a parcel whose shopper is one of the demo shoppers. */
+async function orderForAnyone(tracking) {
   for (const email of ["comprador@", "comprador2@", "comprador3@"]) {
-    const pin = await pinFor(`${email}yuntera.example`, tracking);
-    if (pin) return pin;
+    const order = await orderFor(`${email}yuntera.example`, tracking);
+    if (order) return order;
   }
   return null;
 }
@@ -477,7 +488,9 @@ async function newRoute() {
   // ── 6b. Central suspends the driver in the middle of the route ──
   // Keep-awake holds the app on screen, so this is noticed while it stays open:
   // the refused position report (or the next reading of the day) leads to the
-  // no-access screen, sharing stops and the saved route is removed.
+  // no-access screen, sharing stops and the saved route is removed. The
+  // database takes the route back at once: the stops still to do move to a
+  // new route for dispatch.
   const central0 = await as("central@yuntera.example");
   const carlosId = (await central0("ops_drivers")).find((d) => d.full_name.startsWith("Carlos")).id;
   suspended = true;
@@ -487,8 +500,13 @@ async function newRoute() {
   await byId("no-access").waitFor({ timeout: 75_000 });
   const suspendedText = (await page.locator("body").innerText()).replace(/\s+/g, " ");
   check(
-    /no tiene acceso a Yuntera Ruta/.test(suspendedText),
-    "a driver suspended mid-route sees the no-access screen, without leaving the app",
+    /Su cuenta de repartidor está suspendida/.test(suspendedText),
+    "a driver suspended mid-route is told the account is suspended, without leaving the app",
+  );
+  check(
+    /Las rutas que tenía pendientes volvieron a Central/.test(suspendedText) &&
+      /llévelos a la bodega/.test(suspendedText),
+    "and that the routes went back to Central, and to bring parcels and cash to the warehouse",
   );
   check(
     !suspendedText.includes(`Ruta ${B}`) && !/María Fernández|Andrés/.test(suspendedText),
@@ -504,37 +522,111 @@ async function newRoute() {
   await page.waitForTimeout(2_000);
   check(!calls.driver_report_position, "and the position is no longer shared");
   await shot("10b-suspended");
-  // Central lifts the suspension; the driver checks again and is back on the route.
+  const released = (await central0("ops_released_routes")).find(
+    (r) => r.from_route_code === B && r.reason === "driver_suspended",
+  );
+  check(
+    released?.status === "draft" && released.stops === 2 && released.driver_name === null,
+    `the two stops still to do went back to dispatch on a new route (${released?.code})`,
+  );
+  const C = released.code;
+  // Central lifts the suspension and gives the driver that route again.
   await central0("ops_set_driver_status", { p_driver_id: carlosId, p_status: "active" });
+  await central0("ops_assign_route", { p_route_id: released.route_id, p_driver_id: carlosId });
   await central0.dispose();
   await page.getByRole("button", { name: "Ya me dieron acceso: revisar de nuevo" }).click();
-  await byId(`stop-${B}-1`).waitFor({ timeout: 30_000 });
+  await byId(`start-route-${C}`).waitFor({ timeout: 30_000 });
   suspended = false;
-  check(true, "once active again, the route is back");
-
-  // ── 7. Finish the route ──
-  await byId(`stop-${B}-1`).click();
-  await byId("stop-arrived").waitFor();
-  const pin2 = await pinForAnyone(tracking2);
+  const back = (await page.locator("body").innerText()).replace(/\s+/g, " ");
   check(
-    /^\d{4}$/.test(pin2 ?? ""),
-    "the code of the stop left for later is read from its shopper's order",
+    back.includes(`Ruta ${C}`) && (await byId(`route-done-${B}`).count()) === 1,
+    "once active again, the driver has the new route and the old one reads as finished",
   );
+  await byId(`start-route-${C}`).click();
+  for (let i = 0; i < 60; i++) {
+    if (await byId("location-continue").count()) await byId("location-continue").click();
+    if (await byId(`stop-${C}-1`).count()) break;
+    await page.waitForTimeout(500);
+  }
+  await byId(`stop-${C}-1`).waitFor();
+  check(true, "and starts it");
+
+  // ── 7. A locked code, released by Central; then finish the route ──
+  await byId(`stop-${C}-1`).click();
+  await byId("stop-arrive").click();
+  await byId("stop-arrived").waitFor();
+  check(
+    (await page.locator("body").innerText()).includes(tracking2),
+    "the stop left for later is the first of the new route",
+  );
+  const order2 = await orderForAnyone(tracking2);
+  check(/^\d{4}$/.test(order2?.delivery_pin ?? ""), "its code is read from the shopper's order");
+  const wrong = order2.delivery_pin === "0000" ? "1111" : "0000";
+  await byId("deliver-name").fill("Quien recibe");
+  for (const left of [4, 3, 2, 1]) {
+    await byId("deliver-pin").fill(wrong);
+    await byId("deliver-submit").click();
+    await page
+      .getByTestId("deliver-message")
+      .filter({
+        visible: true,
+        hasText: left === 1 ? "Queda 1 intento" : `Quedan ${left} intentos`,
+      })
+      .first()
+      .waitFor();
+  }
+  check(true, "four wrong codes are refused, each with the attempts left on the order");
+  check(
+    /Le queda 1 intento de código para este pedido/.test(await textOf("attempts-notice")),
+    "the last attempt is announced above the field",
+  );
+  for (const fn of Object.keys(calls)) calls[fn] = 0;
+  await byId("deliver-pin").fill(wrong);
+  await byId("deliver-submit").click();
+  await byId("deliver-locked").waitFor();
+  const locked = await textOf("deliver-locked");
+  log("   ", locked);
+  check(
+    /bloqueado/.test(locked) &&
+      /No entregue el paquete/.test(locked) &&
+      /Llame a Central/.test(locked) &&
+      /código nuevo/.test(locked),
+    "the fifth locks the order: not to hand it over, to call Central, and that a new code follows",
+  );
+  check(
+    !(await page.getByTestId("deliver-pin").filter({ visible: true }).count()) &&
+      calls.driver_complete_stop === 1,
+    "a locked order takes no more codes",
+  );
+  await shot("10c-locked");
+  const staff = await as("central@yuntera.example");
+  const state = await staff("ops_delivery_code", { p_order_id: order2.id });
+  check(state.locked && state.attempts_left === 0, "Central sees the order's code locked");
+  await staff("ops_release_delivery_code", {
+    p_order_id: order2.id,
+    p_note: "Llamamos al cliente; el paquete sigue con el repartidor.",
+  });
+  await staff.dispose();
+  const pin2 = (await orderForAnyone(tracking2))?.delivery_pin;
+  check(/^\d{4}$/.test(pin2 ?? ""), "after the release the shopper's order shows a new code");
+  await byId("deliver-recheck").click();
+  await byId("deliver-pin").waitFor({ timeout: 30_000 });
+  check(true, "once Central released it, the driver can type a code again");
   await byId("deliver-name").fill("Quien recibe");
   await byId("deliver-pin").fill(pin2);
   await byId("deliver-submit").click();
   await byId("flash").waitFor();
-  check(/Entrega registrada/.test(await textOf("flash")), "the stop left for later is delivered");
-  await byId(`stop-${B}-3`).click();
+  check(/Entrega registrada/.test(await textOf("flash")), "the new code delivers");
+  await byId(`stop-${C}-2`).click();
   await byId("stop-arrive").click();
   await byId("stop-arrived").waitFor();
   await byId("fail-open").click();
   await byId("fail-reason-refused").click();
   await byId("fail-submit").click();
-  await byId(`route-done-${B}`).waitFor();
+  await byId(`route-done-${C}`).waitFor();
   check(/Terminó la ruta/.test(await textOf("flash")), "the route is finished");
   check(
-    /Ruta terminada\. Regrese a .+\./.test(await textOf(`route-done-${B}`)),
+    /Ruta terminada\. Regrese a .+\./.test(await textOf(`route-done-${C}`)),
     "and says where to go back to",
   );
   check(
@@ -576,7 +668,7 @@ async function newRoute() {
   });
   check(
     keptDay !== null && JSON.parse(keptDay).value.routes.length === 0,
-    "with both routes finished, the copy saved on the phone keeps no route",
+    "with every route finished, the copy saved on the phone keeps no route",
   );
   check(!/María Fernández|Andrés|\+506/.test(keptDay ?? ""), "and no customer's name or phone");
   await byId("sign-out").click();

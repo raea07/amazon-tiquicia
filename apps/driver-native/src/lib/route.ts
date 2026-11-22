@@ -219,7 +219,15 @@ export function checkDelivery(input: {
   return null;
 }
 
-/** What the web says for each door-side refusal of `driver_complete_stop`. */
+/**
+ * A locked code: after five wrong codes on an ORDER (counted across its
+ * parcels, stops and routes) the database refuses every code, the right one
+ * included, until Central releases it, which gives the shopper a new code.
+ */
+export const LOCKED_CODE_MESSAGE =
+  "El código de este pedido quedó bloqueado por demasiados intentos. No entregue el paquete. Llame a Central: si lo desbloquean, el cliente verá un código nuevo en su pedido; si no, márquelo como no entregado.";
+
+/** What the driver is told for each door-side refusal of `driver_complete_stop`. */
 export function refusalMessage(result: {
   error: "wrong_pin" | "pin_locked" | "cod_amount_mismatch" | "recipient_required";
   attempts_left?: number;
@@ -235,7 +243,7 @@ export function refusalMessage(result: {
           : `Quedan ${result.attempts_left ?? 0} intentos`
       }. Pídale al cliente que lo lea de su pedido.`;
     case "pin_locked":
-      return "Demasiados intentos. No entregue el paquete y llame a Central.";
+      return LOCKED_CODE_MESSAGE;
     case "cod_amount_mismatch":
       return `Debe cobrar exactamente ${formatPrice(result.expected_minor ?? 0)}. Sin el monto completo no se entrega.`;
     case "recipient_required":
@@ -243,12 +251,16 @@ export function refusalMessage(result: {
   }
 }
 
-/** The attempts notice the web shows above the code field. */
+/**
+ * The notice above the code field. The attempts are the order's, so wrong
+ * codes typed at another parcel of the same order count too.
+ */
 export function attemptsNotice(left: number): string | null {
   if (left > 2) return null;
-  return left === 0
-    ? "Código bloqueado por demasiados intentos. Llame a Central."
-    : `Le quedan ${left} intento(s) de código.`;
+  if (left === 0) return LOCKED_CODE_MESSAGE;
+  return left === 1
+    ? "Le queda 1 intento de código para este pedido."
+    : `Le quedan ${left} intentos de código para este pedido.`;
 }
 
 /** The phone's maps app, for directions to a point. */

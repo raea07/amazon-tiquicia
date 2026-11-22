@@ -31,6 +31,7 @@ import {
   type FailureReason,
   findStop,
   googleMapsUrl,
+  LOCKED_CODE_MESSAGE,
   parcels,
   type ShownStop,
   wazeUrl,
@@ -118,7 +119,7 @@ function Directions({ stop }: { stop: ShownStop }) {
  * or to leave the stop for later.
  */
 function DeliverForm({ stop }: { stop: ShownStop }) {
-  const { deliver, leaveForLater } = useDriver();
+  const { deliver, leaveForLater, retry, refreshing } = useDriver();
   const cashDue = stop.cod_amount_minor;
   const [handed, setHanded] = useState("");
   // A large amount of change is confirmed for the amount typed; typing again asks again.
@@ -160,6 +161,36 @@ function DeliverForm({ stop }: { stop: ShownStop }) {
       setError(outcome.message);
     }
   };
+
+  // A locked order takes no code at all until Central releases it, which
+  // gives the shopper a new one; the day is read again to see whether it was.
+  if (stop.pin_attempts_left === 0) {
+    return (
+      <View style={styles.deliver} testID="deliver">
+        <Text variant="heading">Entregar</Text>
+        <Alert tone="danger" title="Código bloqueado" testID="deliver-locked">
+          <Stack gap={2}>
+            <Text variant="small" style={{ color: tone.danger.fg }}>
+              {LOCKED_CODE_MESSAGE}
+            </Text>
+            <Button
+              variant="secondary"
+              block
+              loading={refreshing}
+              loadingLabel="Revisando…"
+              onPress={() => {
+                setError(null);
+                retry();
+              }}
+              testID="deliver-recheck"
+            >
+              Central ya lo desbloqueó: revisar de nuevo
+            </Button>
+          </Stack>
+        </Alert>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.deliver} testID="deliver">
@@ -272,7 +303,6 @@ function DeliverForm({ stop }: { stop: ShownStop }) {
           block
           loading={busy}
           loadingLabel="Verificando el código…"
-          disabled={stop.pin_attempts_left === 0}
           onPress={() => void submit()}
           testID="deliver-submit"
         >

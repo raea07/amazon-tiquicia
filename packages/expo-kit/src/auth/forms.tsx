@@ -8,7 +8,7 @@ import { Checkbox, TextField } from "../ui/fields";
 import { Card, Screen, Stack } from "../ui/layout";
 import { Logo } from "../ui/logo";
 import { Text } from "../ui/text";
-import { NO_ACCESS } from "./roles";
+import { noAccessText } from "./roles";
 import { useSession } from "./session";
 
 /**
@@ -297,7 +297,7 @@ export function NoAccessScreen({ app }: { app: Exclude<AppId, "shop" | "ops"> })
   const text =
     !roles && rolesError
       ? { title: "No pudimos revisar su acceso", body: `${rolesError} Su cuenta no cambió.` }
-      : NO_ACCESS[app];
+      : noAccessText(app, roles);
   return (
     <Screen edges={["top", "bottom", "left", "right"]}>
       <View style={{ flex: 1, justifyContent: "center", gap: 20 }} testID="no-access">

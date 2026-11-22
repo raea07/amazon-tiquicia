@@ -27,7 +27,7 @@ export function canUse(audience: Audience, roles: Roles | null): boolean {
 export const NO_ACCESS: Record<Exclude<Audience, "shopper">, { title: string; body: string }> = {
   seller: {
     title: "Esta cuenta no administra ninguna tienda",
-    body: "Yuntera Vende es para quienes venden en Yuntera. Si su tienda ya existe, pídale a quien la registró que lo agregue. Si todavía no vende con nosotros, registre su tienda desde el sitio de vendedores y vuelva a ingresar aquí.",
+    body: "Yuntera Vende es para quienes venden en Yuntera. Si su tienda ya existe, pídale a quien la administra que lo invite con este correo, acepte la invitación en el sitio de vendedores y vuelva a ingresar aquí. Si todavía no vende con nosotros, registre su tienda desde el sitio de vendedores.",
   },
   driver: {
     title: "Esta cuenta no tiene acceso a Yuntera Ruta",
@@ -38,3 +38,26 @@ export const NO_ACCESS: Record<Exclude<Audience, "shopper">, { title: string; bo
     body: "La aplicación es para el personal de bodega. Si ya trabaja con nosotros, pídale a su encargado que lo asigne a una bodega y vuelva a ingresar.",
   },
 };
+
+/**
+ * What the drivers' app says to a driver Central suspended or deactivated,
+ * the way the web's no-access page says it (`apps/field/src/app/sin-acceso`).
+ * Their unfinished routes went back to dispatch the moment it happened.
+ */
+const DRIVER_LEFT = {
+  body: "No tiene acceso a rutas ni a los datos de las entregas. Las rutas que tenía pendientes volvieron a Central. Si tiene paquetes o dinero de entregas, llévelos a la bodega. Para saber más, hable con Central.",
+  suspended: "Su cuenta de repartidor está suspendida",
+  offboarded: "Su cuenta de repartidor está desactivada",
+};
+
+/** The no-access screen's words for this account: a suspended driver is told so plainly. */
+export function noAccessText(
+  app: Exclude<Audience, "shopper">,
+  roles: Roles | null,
+): { title: string; body: string } {
+  const status = roles?.driver?.status;
+  if (app === "driver" && (status === "suspended" || status === "offboarded")) {
+    return { title: DRIVER_LEFT[status], body: DRIVER_LEFT.body };
+  }
+  return NO_ACCESS[app];
+}

@@ -120,9 +120,23 @@ describe("a wrong code", () => {
 
   it("after the last attempt says the same as the lock, never 'Quedan 0 intentos'", () => {
     const message = refusalMessage({ error: "wrong_pin", attempts_left: 0 });
-    assert.equal(message, "Demasiados intentos. No entregue el paquete y llame a Central.");
     assert.equal(message, refusalMessage({ error: "pin_locked" }));
-    assert.equal(attemptsNotice(0), "Código bloqueado por demasiados intentos. Llame a Central.");
+    assert.equal(attemptsNotice(0), message);
+  });
+
+  it("says a locked order waits for Central and a new code, and what to do otherwise", () => {
+    const message = refusalMessage({ error: "pin_locked", attempts_left: 0 });
+    assert.match(message, /bloqueado/);
+    assert.match(message, /No entregue el paquete/);
+    assert.match(message, /Llame a Central/);
+    assert.match(message, /código nuevo/);
+    assert.match(message, /márquelo como no entregado/);
+  });
+
+  it("counts the attempts per order, in proper Spanish", () => {
+    assert.equal(attemptsNotice(3), null);
+    assert.equal(attemptsNotice(2), "Le quedan 2 intentos de código para este pedido.");
+    assert.equal(attemptsNotice(1), "Le queda 1 intento de código para este pedido.");
   });
 });
 

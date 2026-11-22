@@ -298,9 +298,14 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
   // Lost access: the same. The account's unsent actions go too, since the
   // server would refuse them.
+  // The day read before access was lost goes from memory too: when Central
+  // makes the driver active again, their unfinished stops are on a new route
+  // (the database hands them back to dispatch), so the old one must not show.
   useEffect(() => {
-    if (access === "denied") void forgetDay(userId);
-  }, [access, userId, forgetDay]);
+    if (access !== "denied") return;
+    void forgetDay(userId);
+    client.removeQueries({ queryKey: ["user", userId ?? "anonymous", ...DAY_KEY] });
+  }, [access, userId, forgetDay, client]);
 
   // Signed out (or the session ended on the server). Not the "signed out"
   // state a start-up without signal can pass through (offline-session.ts):
