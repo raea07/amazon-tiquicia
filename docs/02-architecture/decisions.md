@@ -884,3 +884,124 @@ accounts to the website until it gets the same screen.
 - Enrolling or removing an authenticator stays on the website.
 - Checked against the local stand-in for Auth (the seller journey); the hosted
   project's Auth was not tried from the apps.
+
+## 30. The web apps' own sign-in limit, per visitor and per account
+
+**Context.** Sign-in, sign-up, password reset, e-mailed codes and token
+refreshes all reach Supabase Auth from the apps' servers, so Auth's limits by
+network address (a bucket of 30 on `/auth/v1/token`, for example) count the
+server, not the visitor: one visitor could spend them for everybody, and they
+stop nobody in particular (WEB-2 of the review of 21 November 2026). Auth can
+count a forwarded address (`Sb-Forwarded-For`), but only on requests made with
+a **secret** key, with the setting switched on per project; publishable keys
+are not accepted. The apps hold no secret key, by design (decision 2).
+
+**Decision.**
+
+- **Not `Sb-Forwarded-For`, for now.** Using it would mean giving the apps a
+  secret key, or moving sign-in into a server-side function that holds one.
+  The second is the better long-term shape and is left for when sign-in moves
+  behind such a function; nothing below has to change for it.
+- **The apps' own limit, kept in the database**
+  (`auth_limit_reserve` / `auth_limit_release`, migration `083300`), in front
+  of every call to Auth a visitor can repeat: sign-in, sign-up, reset and
+  confirmation e-mails, e-mailed codes, the current password asked again, and
+  the proxy's token refreshes. Counted before the call, under a lock, so a
+  burst cannot outrun it; a right password or code gives its attempt back.
+
+  | What                           | Per visitor address | Per account | Window     |
+  | ------------------------------ | ------------------- | ----------- | ---------- |
+  | Wrong passwords                | 20                  | 5           | 15 minutes |
+  | Sign-ups                       | 10                  | 3           | 1 hour     |
+  | Reset and confirmation e-mails | 10                  | 5           | 1 hour     |
+  | Wrong e-mailed codes           | 20                  | 5           | 15 minutes |
+  | Current password asked again   | 20                  | 5           | 15 minutes |
+  | Token refreshes                | 120                 | —           | 10 minutes |
+
+- **Only keyed hashes are stored**, for two hours: HMAC-SHA-256 of the
+  address and of the e-mail typed, with `AUTH_GUARD_KEY`, a server-only key
+  the database never sees. A caller without the key cannot compute anyone
+  else's hash, so calling the functions directly (they are open to visitors,
+  since sign-in comes before a session) cannot count against a real person.
+- **Nothing looks the account up**: an address with no account is counted and
+  answered word for word like one with an account.
+- **An honest person is not locked out for long**: the account limit lasts 15
+  minutes; it is skipped for a browser that signed in to that account before
+  (a signed `yt-dispositivo` cookie, at most three accounts); the per-address
+  limit still applies there; and a reset code always gets the person in.
+- **Which header says who the visitor is.** On Vercel, `x-vercel-forwarded-for`
+  (which Vercel writes and a proxy in front cannot replace), then `x-real-ip`;
+  Vercel overwrites both. Elsewhere only what the operator names in
+  `AUTH_CLIENT_IP_HEADER` and `AUTH_CLIENT_IP_HOPS` (the entry written by the
+  proxy nearest the app; entries further left are the visitor's own words).
+  Without either, there is no per-address limit: one shared bucket for every
+  visitor would recreate the outage this fixes. IPv6 is counted per /64.
+- **Fails closed**: outside a local run, a missing, short or example
+  `AUTH_GUARD_KEY`, or a database that does not answer, stops sign-in with a
+  generic message rather than letting attempts through uncounted. The one
+  exception is a refresh, which goes ahead if the limit cannot be asked: a
+  fault in the limit must not sign everybody out.
+- **The human check is wired in and off.** Cloudflare Turnstile, which Auth
+  verifies once its CAPTCHA protection is on: the widget appears on the
+  sign-in, sign-up, reset, resend, password-change and deletion forms when
+  `NEXT_PUBLIC_AUTH_CAPTCHA_SITE_KEY` is set at build time, and the token goes
+  to Auth as `captchaToken`. The content-security policy adds Turnstile's
+  origin only then.
+
+This refines decision 27 for sign-in only: the other limits stay per account
+and per target, because the database cannot see a trustworthy address; these
+can, because the apps' server reads it from a header the host guarantees.
+
+**Consequences.**
+
+- Someone with many addresses still gets 5 wrong passwords per account per 15
+  minutes, about 480 a day per account, against passwords that must pass the
+  rules in `auth-rules.ts`. The edge (Vercel's firewall) is the next layer.
+- Calling `auth_limit_reserve` directly can add rows with made-up hashes; they
+  touch nobody and are gone within two hours, but nothing caps their number
+  except the platform's request limits.
+- Auth's own limits still apply behind ours, per server address. Ours are set
+  below them per visitor, so a single visitor can no longer exhaust them;
+  enough honest traffic from one server address still could (no different from
+  before).
+
+## 31. Session lifetimes per app
+
+**Context.** Every app kept @supabase/ssr's default cookie of 400 days, and
+Supabase refresh tokens do not expire by default, so a warehouse handheld or a
+staff laptop stayed signed in for over a year (WEB-5). Auth's own time-box and
+inactivity timeout exist but are a Pro-plan setting; the preview project is on
+the free plan.
+
+**Decision.** Each app has a lifetime, enforced by the apps whatever the plan
+(`SESSION_POLICIES` in `packages/next-kit/src/guard.ts`, chosen by
+`baseConfig({ app })`):
+
+| App           | From sign-in | Idle       | Why                                                                     |
+| ------------- | ------------ | ---------- | ----------------------------------------------------------------------- |
+| Shop          | 90 days      | —          | A personal device; checkout re-checks everything that matters           |
+| Seller centre | 30 days      | —          | Money and payout requests behind it, usually an own device              |
+| Staff console | 12 hours     | 30 minutes | One working day; away from the desk ends it; the audit names the person |
+| Field app     | 12 hours     | —          | One shift on a shared handheld                                          |
+
+The time from sign-in comes from Auth's signed `amr` claim, so it survives
+token refreshes; the console's last activity is a cookie signed for that
+session (`yt-actividad`), renewed by every request except background
+prefetches. The proxy checks both on every request. A session past either is
+ended closed: its refresh token is revoked at Auth (`signOut` for this
+session), the cookies are removed, the page sends the person to sign in with
+the address they were on, and sign-in says why and brings them back. The
+session cookies also carry the app's lifetime as their `Max-Age`.
+
+**Consequences.**
+
+- How it fits Auth's tokens: the access token still lasts one hour and is
+  renewed by the proxy; these limits end the whole session on top. A refresh
+  token copied out of the browser before the end keeps working against Auth
+  directly until Auth's own time-box ends it, which on the free plan is never:
+  turn on Auth's time-box (12 hours) and inactivity timeout on the production
+  project as well.
+- Someone at the console when the 12 hours run out signs in again, even if
+  active. A page that polls would count as activity; none does today.
+- Sessions of the native apps are not covered (they keep the session in the
+  phone's secure store, decision 18).
