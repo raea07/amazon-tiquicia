@@ -26,6 +26,7 @@
  *
  * Control endpoints (all under /_fake):
  *   GET  /_fake/documents[?clave=]   what was received, with its state
+ *   GET  /_fake/xml?clave=           the signed XML of one, byte for byte as received
  *   GET  /_fake/requests             every request, in order
  *   POST /_fake/behaviour {rules}
  *   POST /_fake/answer {clave, state, cause?}   answer a document now
@@ -340,6 +341,15 @@ export function createFake(options: FakeOptions) {
             type: doc.clave.slice(29, 31),
           })),
       );
+    }
+    if (path === "/_fake/xml" && request.method === "GET") {
+      // The signed document exactly as it was received, for checks of what was sent.
+      const doc = documents.get(url.searchParams.get("clave") ?? "");
+      if (!doc) return json(404, { error: "unknown clave" });
+      return new Response(doc.xml, {
+        status: 200,
+        headers: { "content-type": "application/xml; charset=utf-8" },
+      });
     }
     if (path === "/_fake/requests" && request.method === "GET") return json(200, requests);
     if (path === "/_fake/behaviour" && request.method === "POST") {

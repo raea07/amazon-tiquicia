@@ -14,7 +14,15 @@ import {
   type Outcome,
   runOnce,
 } from "@yuntera/invoicing";
-import { lineFromGross, sampleDocument, throwawaySigner } from "@yuntera/invoicing/testing";
+import { cleanText } from "@yuntera/invoicing/codes";
+import {
+  checkSignature,
+  lineFromGross,
+  sampleDocument,
+  schemaErrors,
+  textAt,
+  throwawaySigner,
+} from "@yuntera/invoicing/testing";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFake } from "./fake.ts";
 
@@ -107,7 +115,12 @@ class MemoryQueue implements InvoiceQueue {
   async health(_report: HealthReport) {}
 }
 
-async function chain(fixture: ReturnType<typeof setup>, sequence: number, receiver = false) {
+async function chain(
+  fixture: ReturnType<typeof setup>,
+  sequence: number,
+  receiver = false,
+  text = { name: "Ana Prueba", description: "Entrega" },
+) {
   const test = await throwawaySigner();
   const queue = new MemoryQueue();
   const doc: ClaimedInvoice = {
@@ -124,13 +137,13 @@ async function chain(fixture: ReturnType<typeof setup>, sequence: number, receiv
         lineFromGross(1, {
           cabys: "6803000000000",
           unit: "Os",
-          description: "Entrega",
+          description: text.description,
           grossMinor: 150_000,
         }),
       ],
       receiver: receiver
         ? {
-            name: "Ana Prueba",
+            name: text.name,
             id_type: "01",
             id_number: "109870654",
             email: null,
@@ -306,6 +319,39 @@ describe("the worker against the fake", () => {
     expect(entry()?.events).toEqual(["retry", "retry", "received"]);
     await run();
     expect(entry()?.status).toBe("accepted");
+  });
+
+  it("receives hostile text as text: what it keeps is valid, signed and says what was typed", async () => {
+    const name =
+      'Ana </Nombre><Nombre>Otra & "Cía" \'Ltda\' ]]> <!DOCTYPE x [<!ENTITY e "ja">]> &e;';
+    const description = "Libreta <b>A5</b> & ]]> &amp; &#60;";
+    const fixture = setup(0);
+    const { run, entry, doc } = await chain(fixture, 5, true, { name, description });
+    await run();
+    await run();
+    expect(entry()?.status).toBe("accepted");
+    const response = await fixture.fake.handle(
+      new Request(`${BASE}/_fake/xml?clave=${doc.document.clave}`),
+    );
+    expect(response.headers.get("content-type")).toContain("application/xml");
+    const xml = await response.text();
+    // Byte for byte what the worker signed and stored.
+    expect(xml).toBe(entry()?.claimed.signed_xml);
+    expect(schemaErrors(xml, "01")).toEqual([]);
+    expect(textAt(xml, "FacturaElectronica", "Receptor", "Nombre")).toBe(cleanText(name, 100));
+    expect(textAt(xml, "FacturaElectronica", "DetalleServicio", "LineaDetalle", "Detalle")).toBe(
+      cleanText(description, 200),
+    );
+    expect(checkSignature(xml)).toEqual({
+      documentDigest: true,
+      propertiesDigest: true,
+      signature: true,
+    });
+    // A clave it never received is not found.
+    const unknown = await fixture.fake.handle(
+      new Request(`${BASE}/_fake/xml?clave=${"0".repeat(50)}`),
+    );
+    expect(unknown.status).toBe(404);
   });
 
   it("calls back twice when told to, with the documented body", async () => {
