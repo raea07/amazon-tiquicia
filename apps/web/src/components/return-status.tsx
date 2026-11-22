@@ -48,7 +48,7 @@ export function ReturnStatusList({
           <p className="mt-1">{nextStep(item)}</p>
           {item.can_withdraw ? (
             <details className="mt-2">
-              <summary className="cursor-pointer font-semibold text-link">
+              <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-link">
                 ¿La abrió por error? Retirar la solicitud
               </summary>
               <div className="mt-2">

@@ -463,6 +463,16 @@ begin
   perform pg_temp.logout();
 end
 $$;
+-- stop_district_names: the joining words of the names are in lower case.
+do $$
+begin
+  assert (select name from public.cantons where code = '115') = 'Montes de Oca', 'stop_district_names: canton';
+  assert (select name from public.districts where postal_code = '60110') = 'Isla del Coco', 'stop_district_names: district';
+  assert not exists (select 1 from public.cantons where name ~ ' (De|Del|Y) ')
+     and not exists (select 1 from public.districts where name ~ ' (De|Del|Y) '),
+    'stop_district_names: none left';
+end
+$$;
 -- stop_district_wrong_caller: a shopper gets no driver's day.
 select pg_temp.act('seguimiento1@yuntera.example');
 select pg_temp.refused('select public.driver_today()', 'not_a_driver');
@@ -553,6 +563,67 @@ begin
 end
 $$;
 
+-- action_time_clock_skew: the app sends the phone's clock at sending with the
+-- time of the action, and only the difference counts. A phone an hour fast
+-- that held an action ten minutes is recorded ten minutes ago, not refused.
+do $$
+begin
+  assert private.action_time(now() + interval '50 minutes', null, now() + interval '1 hour')
+         = now() - interval '10 minutes', 'action_time_clock_skew: an hour fast';
+  assert private.action_time(now() - interval '3 hours 5 minutes', null, now() - interval '3 hours')
+         = now() - interval '5 minutes', 'action_time_clock_skew: three hours slow';
+  -- Still bounded: never after it was sent, never more than a day held.
+  assert private.action_time(now() - interval '2 hours', now() - interval '1 minute', now())
+         = now() - interval '1 minute', 'action_time_clock_skew: not before what it follows';
+end
+$$;
+-- action_time_clock_skew_hostile_input: an action after its own sending, held
+-- more than a day, or an infinite sending time.
+select pg_temp.act('repartidor@yuntera.example');
+select pg_temp.refused('select public.driver_report_position(9.93, -84.05, 10, now(), now() - interval ''1 second'')',
+  'action_time_in_future');
+select pg_temp.refused('select public.driver_report_position(9.93, -84.05, 10, now() + interval ''5 days'', now() + interval ''6 days 1 second'')',
+  'action_time_too_old');
+select pg_temp.refused('select public.driver_report_position(9.93, -84.05, 10, now(), ''infinity''::timestamptz)',
+  'action_time_in_future');
+select pg_temp.refused('select public.driver_report_position(9.93, -84.05, 10, now(), ''-infinity''::timestamptz)',
+  'action_time_in_future');
+select pg_temp.logout();
+-- action_time_clock_skew_wrong_caller: a shopper still cannot report one.
+select pg_temp.act('seguimiento1@yuntera.example');
+select pg_temp.refused('select public.driver_report_position(9.93, -84.05, 10, now(), now())', 'forbidden');
+select pg_temp.logout();
+
+-- position_older_after_newer: a position read now, then one the queue sends
+-- late (read ten minutes ago, from a phone an hour fast): the newer stays.
+select pg_temp.act('repartidor@yuntera.example');
+select public.driver_report_position(9.97, -84.12, 10, now());
+select public.driver_report_position(9.98, -84.13, 10, now() + interval '50 minutes', now() + interval '1 hour');
+select pg_temp.logout();
+do $$
+begin
+  assert (select dp.lat = 9.97 and dp.recorded_at = now() from public.driver_positions dp
+          join public.drivers d on d.id = dp.driver_id join auth.users u on u.id = d.user_id
+          where u.email = 'repartidor@yuntera.example'),
+    'position_older_after_newer: an older position does not overwrite a newer one';
+end
+$$;
+
+-- position_flag_on_board: Central's dispatch board shows the flag of the stop
+-- delivered "in Madrid", and when the server received each closing.
+select pg_temp.act('central@yuntera.example');
+do $$
+declare
+  v_stop jsonb := (select x from jsonb_array_elements(public.ops_dispatch_board() -> 'routes') r,
+                   jsonb_array_elements(r -> 'stops') x
+                   where x ->> 'stop_id' = current_setting('t.stop1'));
+begin
+  assert (v_stop ->> 'pod_outside_area')::boolean and v_stop ? 'completed_received_at',
+    format('position_flag_on_board: %s', v_stop);
+end
+$$;
+select pg_temp.logout();
+
 -- ═══ 5. Returns ════════════════════════════════════════════════════════════
 
 -- A two-unit line delivered to seguimiento1.
@@ -577,6 +648,10 @@ select pg_temp.refused(format('select public.request_return(%L, ''withdrawal'', 
   'invalid_quantity');
 select pg_temp.refused(format('select public.request_return(%L, ''withdrawal'', -2)', current_setting('t.ret_item')),
   'invalid_quantity');
+-- A quantity at the top of the integer range answers with its code, not an
+-- overflow (the sum with the units already in a return used to overflow).
+select pg_temp.refused(format('select public.request_return(%L, ''damaged'', 2147483647, ''Llegó roto el empaque y la tapa'')',
+  current_setting('t.ret_item')), 'return_more_than_received');
 reset role;
 
 -- return_withdraw_wrong_caller: another shopper, a visitor, a made-up id.
@@ -597,12 +672,13 @@ select pg_temp.refused(format('select public.withdraw_return_request(%L)', curre
 reset role;
 
 -- return_withdraw_right_caller: the shopper withdraws the claim; it is
--- closed as theirs, its units are free again, and a second withdrawal or one
--- of an approved return is refused.
+-- closed as theirs, its units are free again, and withdrawing an approved
+-- return is refused.
 select pg_temp.login('seguimiento1@yuntera.example');
 select public.withdraw_return_request(current_setting('t.ret_claim')::uuid) ->> 'status' as withdrawn;
-select pg_temp.refused(format('select public.withdraw_return_request(%L)', current_setting('t.ret_claim')),
-  'return_not_withdrawable');
+-- return_withdraw_twice: a second withdrawal (a second tab, a double submit)
+-- says the same again instead of "we already reviewed it", and changes nothing.
+select pg_temp.remember('ret_wd_again', public.withdraw_return_request(current_setting('t.ret_claim')::uuid)::text);
 do $$
 declare
   v_list jsonb := public.my_order_returns(current_setting('t.ret_number'));
@@ -629,6 +705,15 @@ begin
   assert exists (select 1 from public.order_events where order_id = current_setting('t.ret')::uuid
                  and note like 'Retiró su solicitud de devolución%'),
     'return_withdraw_right_caller: in the history';
+  assert current_setting('t.ret_wd_again')::jsonb ->> 'status' = 'rejected'
+     and (current_setting('t.ret_wd_again')::jsonb ->> 'withdrawn_at')::timestamptz
+         = (select withdrawn_at from public.return_requests where id = current_setting('t.ret_claim')::uuid),
+    format('return_withdraw_twice: %s', current_setting('t.ret_wd_again'));
+  assert (select count(*) from public.order_events where order_id = current_setting('t.ret')::uuid
+          and note like 'Retiró su solicitud de devolución%') = 1, 'return_withdraw_twice: written once';
+  assert (select count(*) from private.outbox_events where topic = 'return.withdrawn'
+          and payload ->> 'return_request_id' = current_setting('t.ret_claim')) = 1,
+    'return_withdraw_twice: announced once';
 end
 $$;
 
@@ -772,6 +857,81 @@ begin
   -- Back to the real schedule for the rest of the suite (rolled back anyway).
   update public.fee_schedules set active = false where version = '2026-12-test';
   update public.fee_schedules set active = true where version = current_setting('t.fee_old');
+end
+$$;
+
+-- fee_floor_active_amounts: raising the active schedule's own amounts (how a
+-- migration would raise commissions) re-checks the offers like switching on
+-- a new schedule does.
+do $$
+declare
+  v_version text := (select version from public.fee_schedules where active);
+begin
+  -- (Section 6 left the cheapest offers paused; this minimum reaches the rest.)
+  update public.fee_schedules set min_referral_fee_per_unit_minor = 5000000, default_referral_bps = 4500
+  where active;
+  assert exists (select 1 from private.fee_floor_breaches where schedule_version = v_version),
+    'fee_floor_active_amounts: offers were paused';
+  assert not exists (
+    select 1 from public.offers o join public.skus k on k.id = o.sku_id join public.products p on p.id = k.product_id
+    where o.status = 'active'
+      and private.worst_unit_payout(o.price_minor, o.fulfillment, p.category_id, k.weight_grams,
+                                    greatest(k.length_cm, k.width_cm, k.height_cm)) < 0),
+    'fee_floor_active_amounts: nothing on sale is below the floor';
+  raise exception 'undo' using errcode = 'P0002';
+exception when sqlstate 'P0002' then
+  null;
+end
+$$;
+-- The tax on the fees alone counts too.
+do $$
+declare
+  v_version text := (select version from public.fee_schedules where active);
+begin
+  update public.fee_schedules set fee_tax_bps = 1000000 where active;
+  assert exists (select 1 from private.fee_floor_breaches where schedule_version = v_version),
+    'fee_floor_active_amounts: a higher tax on the fees pauses offers too';
+  raise exception 'undo' using errcode = 'P0002';
+exception when sqlstate 'P0002' then
+  null;
+end
+$$;
+
+-- fee_floor_one_message_per_change: a change that touches two fee tables runs
+-- the re-check twice; each shop is still told once, and the message lists
+-- and counts what both passes paused.
+do $$
+declare
+  v_version text := (select version from public.fee_schedules where active);
+  v_from bigint := (select coalesce(max(id), 0) from private.outbox_events);
+  v_seller uuid;
+  v_vars jsonb;
+begin
+  update public.fee_payment_methods set fixed_minor = fixed_minor + 1500000 where schedule_version = v_version;
+  assert exists (select 1 from private.fee_floor_breaches where schedule_version = v_version),
+    'fee_floor_one_message_per_change: the first pass paused some';
+  update public.fee_payment_methods set fixed_minor = fixed_minor + 2000000 where schedule_version = v_version;
+  assert (select count(*) from private.outbox_events where topic = 'fees.offers_paused' and id > v_from)
+         = (select count(distinct seller_id) from private.fee_floor_breaches where schedule_version = v_version),
+    'fee_floor_one_message_per_change: one event per shop';
+  assert (select count(*) from private.outbox_events where topic = 'fees.offers_paused' and id > v_from)
+         = (select count(distinct payload ->> 'seller_id') from private.outbox_events
+            where topic = 'fees.offers_paused' and id > v_from),
+    'fee_floor_one_message_per_change: no shop twice';
+  -- messages_vars_fees: the variables of that message can be worked out (a
+  -- clash of names there once failed every claim of the worker).
+  select seller_id into v_seller from private.fee_floor_breaches where schedule_version = v_version
+  group by seller_id order by count(*) desc limit 1;
+  v_vars := private.notify_vars(jsonb_build_object('seller_id', v_seller, 'schedule_version', v_version,
+                                                   'offer_count', 1));
+  assert (v_vars ->> 'paused_count')::integer = (select count(*) from private.fee_floor_breaches
+           where schedule_version = v_version and seller_id = v_seller)
+     and jsonb_array_length(v_vars -> 'paused_offers') = least(20, (v_vars ->> 'paused_count')::integer)
+     and v_vars #>> '{paused_offers,0,title}' is not null,
+    format('messages_vars_fees: %s', v_vars);
+  raise exception 'undo' using errcode = 'P0002';
+exception when sqlstate 'P0002' then
+  null;
 end
 $$;
 
@@ -932,6 +1092,93 @@ begin
   assert not exists (select 1 from private.notification_deliveries
                      where recipient not similar to '(user|seller|team|report):%'),
     'messages_planned: only to accounts, shops and team mailboxes';
+end
+$$;
+
+-- invitation_mail_limit: a shop (one still waiting for approval) renews the
+-- same invitation, then revokes it and invites again: the invited account
+-- gets one message, not one per call.
+select pg_temp.remember('inv_from', (select coalesce(max(id), 0) from private.outbox_events)::text);
+select pg_temp.login('bazar@yuntera.example');
+select pg_temp.remember('inv1', public.seller_invite_member(
+  (select id from public.sellers where trade_name = 'Bazar Nuevo'), 'seguimiento3@yuntera.example', 'staff')::text);
+select public.seller_invite_member((select id from public.sellers where trade_name = 'Bazar Nuevo'),
+  'seguimiento3@yuntera.example', 'staff') is not null as renewed;
+select public.seller_invite_member((select id from public.sellers where trade_name = 'Bazar Nuevo'),
+  ' SEGUIMIENTO3@yuntera.example ', 'staff') is not null as renewed_again;
+select public.seller_revoke_invitation(current_setting('t.inv1')::uuid);
+select public.seller_invite_member((select id from public.sellers where trade_name = 'Bazar Nuevo'),
+  'seguimiento3@yuntera.example', 'staff') is not null as invited_again;
+reset role;
+do $$
+declare
+  e private.outbox_events;
+  v_events integer := 0;
+begin
+  for e in select * from private.outbox_events where topic = 'seller.member_invited'
+           and id > current_setting('t.inv_from')::bigint order by id loop
+    perform private.notify_plan_event(e);
+    v_events := v_events + 1;
+  end loop;
+  assert v_events = 4, format('invitation_mail_limit: %s events', v_events);
+  assert (select count(*) from private.notification_deliveries
+          where template = 'seller_invitation' and channel = 'email'
+            and recipient_user_id = (select id from auth.users where email = 'seguimiento3@yuntera.example'))
+         = 1, 'invitation_mail_limit: one message for four calls';
+  -- Another shop inviting the same account is a different invitation.
+  e := null;
+  insert into private.outbox_events (topic, payload)
+  values ('seller.member_invited', jsonb_build_object('invitation_id', gen_random_uuid(),
+          'seller_id', (select id from public.sellers where trade_name = 'TecnoCasa'),
+          'invitee_id', (select id from auth.users where email = 'seguimiento3@yuntera.example')))
+  returning * into e;
+  perform private.notify_plan_event(e);
+  assert (select count(*) from private.notification_deliveries
+          where template = 'seller_invitation' and channel = 'email'
+            and recipient_user_id = (select id from auth.users where email = 'seguimiento3@yuntera.example'))
+         = 2, 'invitation_mail_limit: another shop''s invitation goes out';
+end
+$$;
+
+-- worker_claim_survives_a_bad_message: one delivery whose variables cannot be
+-- worked out goes to the dead letters; the worker still gets the rest,
+-- among them a fee-pause message to a shop.
+do $$
+declare
+  v_seller uuid := (select id from public.sellers where trade_name = 'TecnoCasa');
+  v_user uuid := (select id from auth.users where email = 'seguimiento1@yuntera.example');
+  v_bad uuid;
+  v_claim jsonb;
+begin
+  update private.notification_deliveries set status = 'skipped' where status in ('pending', 'sending');
+  insert into private.fee_floor_breaches (schedule_version, offer_id, seller_id, price_minor, min_price_minor)
+  select '2026-12-claim', o.id, o.seller_id, o.price_minor, o.price_minor + 100000
+  from public.offers o where o.seller_id = v_seller limit 2;
+  insert into private.notification_deliveries
+    (dedupe_key, ordering_key, sequence, channel, template, recipient, recipient_seller_id, audience, context)
+  values ('test/fees', 'seller:' || v_seller, 1, 'email', 'seller_offers_paused_fees', 'seller:' || v_seller,
+          v_seller, 'seller', jsonb_build_object('seller_id', v_seller, 'schedule_version', '2026-12-claim',
+                                                 'offer_count', 2));
+  insert into private.notification_deliveries
+    (dedupe_key, ordering_key, sequence, channel, template, recipient, recipient_user_id, audience, context)
+  values ('test/bad', 'user:' || v_user, 1, 'email', 'order_placed', 'user:' || v_user, v_user, 'shopper',
+          jsonb_build_object('order_id', 'not-an-id'))
+  returning id into v_bad;
+  perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  perform set_config('role', 'service_role', true);
+  v_claim := public.worker_notify_claim('w-test', 20, 60);
+  reset role;
+  perform set_config('request.jwt.claims', '', true);
+  assert jsonb_array_length(v_claim) = 1
+     and v_claim #>> '{0,template}' = 'seller_offers_paused_fees'
+     and (v_claim #>> '{0,vars,paused_count}')::integer = 2,
+    format('worker_claim_survives_a_bad_message: %s', v_claim);
+  assert (select status = 'dead' and last_error_code = 'render_failed' and last_error = 'SQLSTATE 22P02'
+          from private.notification_deliveries where id = v_bad),
+    'worker_claim_survives_a_bad_message: the bad one is a dead letter';
+  raise exception 'undo' using errcode = 'P0002';
+exception when sqlstate 'P0002' then
+  null;
 end
 $$;
 

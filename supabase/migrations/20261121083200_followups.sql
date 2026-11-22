@@ -267,28 +267,51 @@ $$;
 -- When an action a driver took (possibly without signal) happened. The phone
 -- says; the database accepts it only within sane bounds:
 --   * none given: now;
+--   * with the phone's clock at sending (p_sent_at): the time is taken as the
+--     database's now minus how long the phone held it (p_sent_at - p_at), so
+--     a phone clock that runs fast or slow does not matter; a time after the
+--     sending is refused;
 --   * more than two minutes ahead of the database's clock (a phone clock that
---     is wrong, or made up): refused; up to two minutes ahead counts as now;
+--     is wrong, or made up, sent without p_sent_at): refused; up to two
+--     minutes ahead counts as now;
 --   * more than a day ago: refused (the app keeps stop actions a day);
 --   * before what it follows (the route's start, the arrival): moved up to it.
 create or replace function private.action_time(
   p_at timestamptz,
-  p_not_before timestamptz default null
+  p_not_before timestamptz default null,
+  p_sent_at timestamptz default null
 ) returns timestamptz
 language plpgsql stable
 set search_path = ''
 as $$
+declare
+  v_at timestamptz := p_at;
 begin
   if p_at is null then
     return now();
   end if;
-  if p_at = 'infinity'::timestamptz or p_at > now() + interval '2 minutes' then
+  if p_at = 'infinity'::timestamptz then
     perform private.fail('action_time_in_future');
   end if;
-  if p_at = '-infinity'::timestamptz or p_at < now() - interval '24 hours' then
+  if p_at = '-infinity'::timestamptz then
     perform private.fail('action_time_too_old');
   end if;
-  return greatest(least(p_at, now()), coalesce(p_not_before, '-infinity'::timestamptz));
+  if p_sent_at is not null then
+    if p_sent_at in ('infinity'::timestamptz, '-infinity'::timestamptz) or p_at > p_sent_at then
+      perform private.fail('action_time_in_future');
+    end if;
+    if p_sent_at - p_at > interval '24 hours' then
+      perform private.fail('action_time_too_old');
+    end if;
+    v_at := now() - (p_sent_at - p_at);
+  end if;
+  if v_at > now() + interval '2 minutes' then
+    perform private.fail('action_time_in_future');
+  end if;
+  if v_at < now() - interval '24 hours' then
+    perform private.fail('action_time_too_old');
+  end if;
+  return greatest(least(v_at, now()), coalesce(p_not_before, '-infinity'::timestamptz));
 end;
 $$;
 
@@ -307,10 +330,12 @@ alter table public.driver_positions
 -- Replaces the version in fulfillment: the time of arrival may come from the
 -- phone (p_occurred_at), and the caller is checked first.
 drop function if exists public.driver_arrive(uuid);
+drop function if exists public.driver_arrive(uuid, timestamptz);
 
 create or replace function public.driver_arrive(
   p_stop_id uuid,
-  p_occurred_at timestamptz default null
+  p_occurred_at timestamptz default null,
+  p_sent_at timestamptz default null
 ) returns void
 language plpgsql security definer
 set search_path = ''
@@ -332,7 +357,7 @@ begin
   if not found or v_stop.status <> 'pending' then
     perform private.fail('stop_not_found');
   end if;
-  v_at := private.action_time(p_occurred_at, v_started);
+  v_at := private.action_time(p_occurred_at, v_started, p_sent_at);
   update public.route_stops
   set status = 'arrived', arrived_at = v_at, arrived_received_at = now()
   where id = p_stop_id;
@@ -464,13 +489,15 @@ $$;
 -- parcel's history and the shopper's timeline show that time, and the time
 -- the server received it is kept beside it.
 drop function if exists public.driver_fail_stop(uuid, text, double precision, double precision);
+drop function if exists public.driver_fail_stop(uuid, text, double precision, double precision, timestamptz);
 
 create or replace function public.driver_fail_stop(
   p_stop_id uuid,
   p_reason text,
   p_lat double precision default null,
   p_lng double precision default null,
-  p_occurred_at timestamptz default null
+  p_occurred_at timestamptz default null,
+  p_sent_at timestamptz default null
 ) returns jsonb
 language plpgsql security definer
 set search_path = ''
@@ -507,7 +534,7 @@ begin
      or p_reason not in ('nobody_home', 'wrong_address', 'refused', 'cannot_pay', 'unsafe', 'damaged', 'other') then
     perform private.fail('invalid_failure_reason');
   end if;
-  v_at := private.action_time(p_occurred_at, coalesce(v_stop.arrived_at, v_started));
+  v_at := private.action_time(p_occurred_at, coalesce(v_stop.arrived_at, v_started), p_sent_at);
 
   update public.route_stops
   set status = 'failed', completed_at = v_at, completed_received_at = now(),
@@ -542,12 +569,14 @@ $$;
 -- A position may carry the time it was read; an older one than the one on
 -- file never overwrites it (a queue sending late).
 drop function if exists public.driver_report_position(double precision, double precision, real);
+drop function if exists public.driver_report_position(double precision, double precision, real, timestamptz);
 
 create or replace function public.driver_report_position(
   p_lat double precision,
   p_lng double precision,
   p_accuracy_m real default null,
-  p_occurred_at timestamptz default null
+  p_occurred_at timestamptz default null,
+  p_sent_at timestamptz default null
 ) returns void
 language plpgsql security definer
 set search_path = ''
@@ -565,13 +594,87 @@ begin
   if not private.check_position(p_lat, p_lng, p_accuracy_m) then
     perform private.fail('position_outside_area');
   end if;
-  v_at := private.action_time(p_occurred_at);
+  v_at := private.action_time(p_occurred_at, null, p_sent_at);
   insert into public.driver_positions as dp (driver_id, lat, lng, accuracy_m, recorded_at, received_at)
   values (v_driver, p_lat, p_lng, p_accuracy_m, v_at, now())
   on conflict (driver_id) do update
     set lat = excluded.lat, lng = excluded.lng, accuracy_m = excluded.accuracy_m,
         recorded_at = excluded.recorded_at, received_at = excluded.received_at
     where dp.recorded_at <= excluded.recorded_at;
+end;
+$$;
+
+-- Replaces the version in api_operations: each stop on the dispatch board
+-- also says when the server received its closing (it differs from when it
+-- happened when the phone had no signal) and whether the position given at
+-- the door lay outside the service area, so Central sees the flag.
+create or replace function public.ops_dispatch_board(p_date date default null) returns jsonb
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  v_date date := coalesce(p_date, private.cr_local(now())::date);
+begin
+  if not private.has_staff_role('ops') then
+    perform private.fail('forbidden');
+  end if;
+
+  return jsonb_build_object(
+    'date', v_date,
+    'depots', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', w.id, 'code', w.code, 'name', w.name, 'lat', w.lat, 'lng', w.lng) order by w.code)
+      from public.warehouses w where w.kind = 'platform' and w.active), '[]'::jsonb),
+    'ready', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'shipment_id', sh.id, 'tracking_code', sh.tracking_code, 'status', sh.status,
+        'order_number', o.order_number, 'origin_code', w.code, 'origin_kind', w.kind,
+        'recipient_name', o.ship_recipient_name, 'lat', o.ship_lat, 'lng', o.ship_lng,
+        'canton', (select c.name from public.districts d join public.cantons c on c.code = d.canton_code
+                   where d.postal_code = o.ship_postal_code),
+        'weight_grams', coalesce(sh.weight_grams, 1000), 'package_count', sh.package_count,
+        'promise_latest', sh.promise_latest, 'attempt_count', sh.attempt_count,
+        'cash_on_delivery', o.payment_method = 'cash_on_delivery'
+      ) order by sh.promise_latest, o.placed_at)
+      from public.shipments sh
+      join public.orders o on o.id = sh.order_id
+      join public.warehouses w on w.id = sh.origin_warehouse_id
+      where sh.status in ('packed', 'delivery_failed')
+        and not exists (select 1 from public.route_stops rs
+                        where rs.shipment_id = sh.id and rs.status in ('pending', 'arrived'))
+    ), '[]'::jsonb),
+    'drivers', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', d.id, 'full_name', d.full_name, 'vehicle_type', d.vehicle_type,
+        'capacity_kg', d.capacity_kg, 'phone', d.phone,
+        'active_routes', (select count(*) from public.routes r
+                          where r.driver_id = d.id and r.status in ('assigned', 'in_progress')),
+        'position', (select jsonb_build_object('lat', dp.lat, 'lng', dp.lng, 'recorded_at', dp.recorded_at)
+                     from public.driver_positions dp where dp.driver_id = d.id)
+      ) order by d.full_name)
+      from public.drivers d where d.status = 'active'), '[]'::jsonb),
+    'routes', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'route_id', r.id, 'code', r.code, 'status', r.status, 'service_date', r.service_date,
+        'driver_name', (select d.full_name from public.drivers d where d.id = r.driver_id),
+        'planned_km', r.planned_km, 'planned_minutes', r.planned_minutes,
+        'started_at', r.started_at, 'completed_at', r.completed_at,
+        'stops', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'stop_id', rs.id, 'sequence', rs.sequence, 'status', rs.status,
+            'recipient_name', rs.recipient_name, 'lat', rs.lat, 'lng', rs.lng,
+            'tracking_code', sh.tracking_code, 'cod_amount_minor', rs.cod_amount_minor,
+            'failure_reason', rs.failure_reason, 'completed_at', rs.completed_at,
+            'completed_received_at', rs.completed_received_at,
+            'pod_outside_area', rs.pod_outside_area
+          ) order by rs.sequence)
+          from public.route_stops rs join public.shipments sh on sh.id = rs.shipment_id
+          where rs.route_id = r.id), '[]'::jsonb)
+      ) order by (r.status = 'in_progress') desc, r.code desc)
+      from public.routes r
+      where r.service_date = v_date or r.status in ('draft', 'assigned', 'in_progress')
+    ), '[]'::jsonb)
+  );
 end;
 $$;
 
@@ -636,6 +739,19 @@ end;
 $$;
 
 revoke all on function private.driver_today_active() from public, anon, authenticated;
+
+
+-- The names of cantons and districts came in title case from the source
+-- ('Montes De Oca'); now that drivers read them on every stop, the joining
+-- words go in lower case as Spanish writes them ('Montes de Oca', 'Isla del
+-- Coco'). 'La' and 'El' stay: they are part of the name ('San Isidro de El
+-- General', 'Valle La Estrella').
+update public.cantons
+set name = replace(replace(replace(name, ' De ', ' de '), ' Del ', ' del '), ' Y ', ' y ')
+where name ~ ' (De|Del|Y) ';
+update public.districts
+set name = replace(replace(replace(name, ' De ', ' de '), ' Del ', ' del '), ' Y ', ' y ')
+where name ~ ' (De|Del|Y) ';
 
 -- ═══ 5. Returns ════════════════════════════════════════════════════════════
 
@@ -719,7 +835,8 @@ begin
   if p_quantity is null or p_quantity <= 0 then
     perform private.fail('invalid_quantity');
   end if;
-  if p_quantity + v_already > v_delivered then
+  -- In bigint: a huge quantity must answer with its code, not an overflow.
+  if p_quantity::bigint + v_already > v_delivered then
     if v_already > 0 and p_quantity <= v_delivered then
       perform private.fail('units_already_in_return', (v_delivered - v_already)::text);
     end if;
@@ -776,6 +893,12 @@ begin
   end if;
   perform 1 from public.orders where id = v_order_id for update;
   select * into v_return from public.return_requests where id = p_return_id for update;
+  -- Already withdrawn (a second tab, a double submit): it is done, say so
+  -- again rather than suggest that staff decided it.
+  if v_return.withdrawn_at is not null then
+    return jsonb_build_object('id', p_return_id, 'status', v_return.status,
+                              'withdrawn_at', v_return.withdrawn_at);
+  end if;
   if v_return.status <> 'requested' then
     perform private.fail('return_not_withdrawable', v_return.status);
   end if;
@@ -987,6 +1110,8 @@ declare
   v_version text;
   r record;
   v_count integer := 0;
+  v_offers uuid[] := '{}';
+  v_sellers uuid[] := '{}';
 begin
   select version into v_version from public.fee_schedules where active;
   if not found then
@@ -1011,17 +1136,30 @@ begin
       on conflict (schedule_version, offer_id) do update
         set price_minor = excluded.price_minor, min_price_minor = excluded.min_price_minor,
             paused_at = now();
+      v_offers := v_offers || r.id;
+      v_sellers := v_sellers || r.seller_id;
       v_count := v_count + 1;
     end if;
   end loop;
 
+  -- One message per shop and schedule for this change, however many passes
+  -- of the re-check it takes (a migration that touches several fee tables
+  -- runs one per statement). Events of this transaction share its now(); the
+  -- message lists the shop's paused offers when it is written, after commit,
+  -- so a later pass's offers are in it too.
   if v_count > 0 then
     perform private.emit('fees.offers_paused', jsonb_build_object(
-      'seller_id', b.seller_id, 'schedule_version', v_version, 'offer_count', count(*)))
-    from private.fee_floor_breaches b
-    where b.schedule_version = v_version and b.paused_at = now()
-    group by b.seller_id
-    order by b.seller_id;
+      'seller_id', x.seller_id, 'schedule_version', v_version, 'offer_count', x.n))
+    from (
+      select r2.seller_id, count(*) as n
+      from unnest(v_offers, v_sellers) as r2(offer_id, seller_id)
+      group by r2.seller_id) x
+    where not exists (
+      select 1 from private.outbox_events e
+      where e.topic = 'fees.offers_paused' and e.created_at = now()
+        and e.payload ->> 'seller_id' = x.seller_id::text
+        and e.payload ->> 'schedule_version' = v_version)
+    order by x.seller_id;
   end if;
   return v_count;
 end;
@@ -1040,7 +1178,8 @@ $$;
 -- A schedule switched on, or a change to the active one's amounts or to a
 -- category's commission: whatever path (in practice a migration) made it.
 create trigger fee_schedules_recheck_offers
-  after insert or update of active on public.fee_schedules
+  after insert or update of active, default_referral_bps, min_referral_fee_per_unit_minor, fee_tax_bps
+  on public.fee_schedules
   for each row when (new.active) execute function private.fees_changed();
 create trigger fee_payment_methods_recheck_offers
   after insert or update or delete on public.fee_payment_methods
@@ -1222,6 +1361,12 @@ drop trigger if exists payments_emit_refunded on public.payments;
 -- only one whose address is confirmed is written to); a decided change of a
 -- shop's details or payout account; a payout paid; offers paused by a fee
 -- change.
+-- The planner asks whether an account already had a given message (the
+-- invitation's limit below); account deletion's cascade uses it as well.
+create index if not exists notification_recipient_user_idx
+  on private.notification_deliveries (recipient_user_id, template, created_at desc)
+  where recipient_user_id is not null;
+
 create or replace function private.notify_plan_event(p_event private.outbox_events) returns void
 language plpgsql security definer
 set search_path = ''
@@ -1385,8 +1530,18 @@ begin
 
     when 'seller.member_invited' then
       -- To the invited account's own, confirmed address; never to what was typed.
+      -- At most one message per shop and account in an invitation's life (14
+      -- days): renewing an invitation, or revoking and sending it again, emits
+      -- the event every time, and without this any shop (one still waiting for
+      -- approval too) could send our mail to any account as often as it liked.
+      -- The invitation itself still shows in the invited account's seller centre.
       select u.id into r from auth.users u
-      where u.id = (p ->> 'invitee_id')::uuid and u.email_confirmed_at is not null and u.deleted_at is null;
+      where u.id = (p ->> 'invitee_id')::uuid and u.email_confirmed_at is not null and u.deleted_at is null
+        and not exists (
+          select 1 from private.notification_deliveries d
+          where d.template = 'seller_invitation' and d.recipient_user_id = u.id
+            and d.context ->> 'seller_id' = p ->> 'seller_id'
+            and d.created_at > now() - interval '14 days');
       if r.id is not null then
         perform private.notify_person(v_id, 'seller_invitation', r.id, array['email', 'push'],
           'user:' || r.id,
@@ -1561,24 +1716,127 @@ begin
       from public.payouts po where po.id = (p_context ->> 'payout_id')::uuid), '{}'::jsonb);
   end if;
 
+  -- The offers of this shop paused by this schedule (the aliases differ from
+  -- the variables o and s above: a clash makes every claim fail). The count
+  -- is the shop's whole list, not what one pass of the re-check paused.
   if p_context ? 'schedule_version' and p_context ? 'seller_id' then
-    v := v || jsonb_build_object('paused_offers', coalesce((
-      select jsonb_agg(jsonb_build_object('title', x.title, 'variant', x.variant_name,
-               'min_price_minor', x.min_price_minor) order by x.title)
+    v := v || coalesce((
+      select jsonb_build_object(
+               'paused_offers', coalesce(jsonb_agg(jsonb_build_object('title', x.title, 'variant', x.variant_name,
+                                  'min_price_minor', x.min_price_minor) order by x.title)
+                                  filter (where x.rn <= 20), '[]'::jsonb),
+               'paused_count', count(*))
       from (
-        select p.title, k.variant_name, b.min_price_minor
+        select pr.title, k.variant_name, b.min_price_minor,
+               row_number() over (order by pr.title, b.id) as rn
         from private.fee_floor_breaches b
-        join public.offers o on o.id = b.offer_id
-        join public.skus k on k.id = o.sku_id
-        join public.products p on p.id = k.product_id
+        join public.offers ofr on ofr.id = b.offer_id
+        join public.skus k on k.id = ofr.sku_id
+        join public.products pr on pr.id = k.product_id
         where b.seller_id = (p_context ->> 'seller_id')::uuid
-          and b.schedule_version = p_context ->> 'schedule_version'
-        order by p.title limit 20) x), '[]'::jsonb));
+          and b.schedule_version = p_context ->> 'schedule_version') x),
+      jsonb_build_object('paused_offers', '[]'::jsonb, 'paused_count', 0));
   end if;
 
   return v || (p_context - 'order_id' - 'shipment_id' - 'route_id' - 'seller_id' - 'return_request_id'
                          - 'complaint_id' - 'report_id' - 'product_id' - 'invitation_id'
                          - 'change_request_id' - 'payout_request_id' - 'payout_id');
+end;
+$$;
+
+-- Replaces the version in notifications. What changed: a delivery whose
+-- recipient or variables cannot be worked out (an error in notify_resolve or
+-- notify_vars) is set aside as a dead letter ('render_failed') instead of
+-- failing the whole claim, which stopped every message for everyone.
+create or replace function public.worker_notify_claim(
+  p_worker text,
+  p_limit integer default 20,
+  p_lease_seconds integer default 120
+) returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  d private.notification_deliveries;
+  v_resolved jsonb;
+  v_vars jsonb;
+  v_out jsonb := '[]';
+begin
+  perform private.require_worker();
+  if coalesce(char_length(p_worker), 0) not between 1 and 100 then
+    perform private.fail('worker_only');
+  end if;
+
+  -- Stale news and workers that died with attempts used up.
+  update private.notification_deliveries
+  set status = 'expired', locked_by = null, locked_until = null, request_body = null
+  where status in ('pending', 'sending') and expires_at < now()
+    and (status = 'pending' or locked_until < now());
+  update private.notification_deliveries
+  set status = 'dead', locked_by = null, locked_until = null, request_body = null,
+      last_error_code = coalesce(last_error_code, 'lease_expired')
+  where status = 'sending' and locked_until < now() and attempts >= max_attempts;
+
+  for d in
+    with picked as materialized (
+      select x.id
+      from private.notification_deliveries x
+      where ((x.status = 'pending' and x.available_at <= now())
+          or (x.status = 'sending' and x.locked_until < now()))
+        and not exists (
+          select 1 from private.notify_channel_pauses cp
+          where cp.channel = x.channel and cp.paused_until > now())
+        and not exists (
+          select 1 from private.notification_deliveries e
+          where e.ordering_key = x.ordering_key and e.channel = x.channel
+            and e.recipient = x.recipient
+            and e.sequence < x.sequence
+            and e.status in ('pending', 'sending'))
+      order by x.available_at, x.sequence
+      limit greatest(1, least(p_limit, 100))
+      for update of x skip locked)
+    update private.notification_deliveries t
+    set status = 'sending', attempts = t.attempts + 1, locked_by = p_worker,
+        locked_until = now() + make_interval(secs => greatest(10, least(p_lease_seconds, 600)))
+    from picked where t.id = picked.id
+    returning t.*
+  loop
+    -- One message that cannot be written (a fault in its data or in the
+    -- code that gathers it) goes to the dead letters for staff, with the
+    -- error's code only; it must not stop every other message in the batch.
+    begin
+      v_resolved := private.notify_resolve(d);
+      v_vars := private.notify_vars(d.context);
+    exception when others then
+      update private.notification_deliveries
+      set status = 'dead', locked_by = null, locked_until = null, request_body = null,
+          last_error_code = 'render_failed', last_error = 'SQLSTATE ' || sqlstate
+      where id = d.id;
+      continue;
+    end;
+    if v_resolved ? 'skip' then
+      update private.notification_deliveries
+      set status = 'skipped', skip_reason = v_resolved ->> 'skip', locked_by = null,
+          locked_until = null, request_body = null
+      where id = d.id;
+      continue;
+    end if;
+    v_out := v_out || jsonb_build_array(jsonb_build_object(
+      'id', d.id,
+      'channel', d.channel,
+      'category', d.category,
+      'template', d.template,
+      'locale', d.locale,
+      'audience', d.audience,
+      'generation', d.generation,
+      'attempts', d.attempts,
+      'request_body', d.request_body,
+      'commercial_consent', d.category <> 'marketing'
+        or private.commercial_allowed(d.recipient_user_id, d.recipient_seller_id),
+      'to', v_resolved -> 'to',
+      'vars', v_vars));
+  end loop;
+  return v_out;
 end;
 $$;
 
@@ -1626,7 +1884,7 @@ revoke all on function
   private.upc_e_expand(text), private.scan_keys(text), private.scan_matches_sku(text, uuid),
   private.inside_service_area(double precision, double precision),
   private.check_position(double precision, double precision, double precision),
-  private.action_time(timestamptz, timestamptz),
+  private.action_time(timestamptz, timestamptz, timestamptz),
   private.return_quantity_within_line(), private.sync_order_status(uuid),
   private.recheck_offers_against_fees(), private.fees_changed(),
   private.confirm_refund(uuid, text), private.refund_confirm_when_nothing_moves(),
@@ -1636,10 +1894,10 @@ from public, anon, authenticated;
 
 revoke all on function
   public.wms_confirm_pick(uuid, integer, uuid, text),
-  public.driver_arrive(uuid, timestamptz),
+  public.driver_arrive(uuid, timestamptz, timestamptz),
   public.driver_complete_stop(uuid, text, text, bigint, text, double precision, double precision),
-  public.driver_fail_stop(uuid, text, double precision, double precision, timestamptz),
-  public.driver_report_position(double precision, double precision, real, timestamptz),
+  public.driver_fail_stop(uuid, text, double precision, double precision, timestamptz, timestamptz),
+  public.driver_report_position(double precision, double precision, real, timestamptz, timestamptz),
   public.request_return(uuid, text, integer, text),
   public.withdraw_return_request(uuid),
   public.my_order_returns(text),
@@ -1648,10 +1906,10 @@ from public, anon;
 
 grant execute on function
   public.wms_confirm_pick(uuid, integer, uuid, text),
-  public.driver_arrive(uuid, timestamptz),
+  public.driver_arrive(uuid, timestamptz, timestamptz),
   public.driver_complete_stop(uuid, text, text, bigint, text, double precision, double precision),
-  public.driver_fail_stop(uuid, text, double precision, double precision, timestamptz),
-  public.driver_report_position(double precision, double precision, real, timestamptz),
+  public.driver_fail_stop(uuid, text, double precision, double precision, timestamptz, timestamptz),
+  public.driver_report_position(double precision, double precision, real, timestamptz, timestamptz),
   public.request_return(uuid, text, integer, text),
   public.withdraw_return_request(uuid),
   public.my_order_returns(text),

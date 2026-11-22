@@ -87,6 +87,7 @@ export const SKIP_REASON: Record<string, string> = {
 /** What went wrong, in words; the raw provider code is never shown. */
 export function failureOf(code: string | null): string {
   if (!code) return "no se pudo entregar";
+  if (code === "render_failed") return "no se pudo preparar el mensaje; avise al equipo técnico";
   if (/^bounce|bounced/.test(code)) return "el correo rebotó";
   if (/^(401|403|412|421)\b|no_api_key|no_sender|no_adapter/.test(code)) {
     return "falta configurar el proveedor de mensajes";

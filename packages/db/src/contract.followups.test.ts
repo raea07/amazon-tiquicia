@@ -86,9 +86,19 @@ describe.skipIf(!db.enabled)("follow-ups contract (against a seeded database)", 
       can_withdraw: false,
       withdrawn_at: expect.any(String),
     });
-    await expect(shopper().withdrawReturnRequest(returnId)).rejects.toMatchObject({
-      code: "return_not_withdrawable",
-    });
+    // A second withdrawal (another tab, a double submit) says the same again.
+    await expect(shopper().withdrawReturnRequest(returnId)).resolves.toEqual(withdrawn);
+  });
+
+  it("gives Central each stop's door flag and received time on the dispatch board", async () => {
+    const board = await db.as("central@yuntera.example").opsDispatchBoard();
+    const stops = board.routes.flatMap((route) => route.stops);
+    expect(stops.length).toBeGreaterThan(0);
+    for (const stop of stops) {
+      expect(typeof stop.pod_outside_area, stop.stop_id).toBe("boolean");
+      expect(stop).toHaveProperty("completed_received_at");
+    }
+    await expect(shopper().opsDispatchBoard()).rejects.toMatchObject({ code: "forbidden" });
   });
 
   it("lists the offers a fee change paused for finance and catalogue staff only", async () => {

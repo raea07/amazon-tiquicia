@@ -154,7 +154,10 @@ async function as(email) {
   // Tab A, reloaded: the claim waits for a decision and can be withdrawn.
   await a.goto(orderUrl, { waitUntil: "load" });
   const claim = a.locator("main:visible li", { hasText: "Reclamo por producto dañado" }).first();
-  await claim.locator("summary", { hasText: "Retirar la solicitud" }).click();
+  const opener = claim.locator("summary", { hasText: "Retirar la solicitud" });
+  const box = await opener.boundingBox();
+  check(box && box.height >= 44, `the withdraw opener is at least 44 px tall (${box?.height})`);
+  await opener.click();
   await a.screenshot({ path: SHOTS + "/fu2-withdraw-offer.png", fullPage: true });
   await claim.locator('button:has-text("Retirar la solicitud")').click();
   // The page is redrawn with the request closed as the shopper's own doing.

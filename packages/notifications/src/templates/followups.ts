@@ -219,7 +219,10 @@ export const FOLLOWUP_TEMPLATES: Record<string, Template> = {
   },
 
   seller_offers_paused_fees: ({ vars: v, name, links }) => {
-    const count = n(v.offer_count);
+    // The shop's whole list as the database sees it when the message is
+    // written; the count in the event is only what one re-check paused.
+    const count = Math.max(1, n(v.paused_count) || n(v.offer_count));
+    const one = count === 1;
     // What each paused offer needs to cover the fees now.
     const offers = (Array.isArray(v.paused_offers) ? v.paused_offers : [])
       .slice(0, 20)
@@ -235,22 +238,30 @@ export const FOLLOWUP_TEMPLATES: Record<string, Template> = {
             : "revise el precio",
         ];
       });
-    const what = count === 1 ? "una de sus ofertas" : `${count} de sus ofertas`;
+    const what = one ? "una de sus ofertas" : `${count} de sus ofertas`;
     return {
       from: "sellers",
       subject: `Pausamos ${what} por el cambio de comisiones`,
-      preheader: "Suba el precio para volver a venderlas.",
+      preheader: one
+        ? "Suba el precio para volver a venderla."
+        : "Suba el precio para volver a venderlas.",
       greeting: shopHello(v, name),
       paragraphs: [
-        `Cambiaron las comisiones y costos de Yuntera, y con el precio actual ${count === 1 ? "esta oferta ya no cubre" : "estas ofertas ya no cubren"} lo que cuesta venderla${count === 1 ? "" : "s"}: cada venta le dejaría una deuda en lugar de un pago. Por eso ${count === 1 ? "la pausamos" : "las pausamos"}; nadie las puede comprar mientras tanto.`,
-        "Para volver a venderlas, ponga en Yuntera Vende un precio igual o mayor al mínimo que indicamos y actívelas. Si prefiere no hacerlo, pueden quedar en pausa.",
+        one
+          ? "Cambiaron las comisiones y costos de Yuntera, y con el precio actual esta oferta ya no cubre lo que cuesta venderla: cada venta le dejaría una deuda en lugar de un pago. Por eso la pausamos; nadie la puede comprar mientras tanto."
+          : "Cambiaron las comisiones y costos de Yuntera, y con el precio actual estas ofertas ya no cubren lo que cuesta venderlas: cada venta le dejaría una deuda en lugar de un pago. Por eso las pausamos; nadie las puede comprar mientras tanto.",
+        one
+          ? "Para volver a venderla, ponga en Yuntera Vende un precio igual o mayor al mínimo que indicamos y actívela. Si prefiere no hacerlo, puede quedar en pausa."
+          : "Para volver a venderlas, ponga en Yuntera Vende un precio igual o mayor al mínimo que indicamos y actívelas. Si prefiere no hacerlo, pueden quedar en pausa.",
       ],
       facts: offers,
       action: { label: "Ver sus productos", url: `${links.seller}/productos` },
       note: SELLER_FOOTER,
       push: {
-        title: "Ofertas en pausa",
-        body: `${count === 1 ? "Una oferta" : `${count} ofertas`}: suba el precio para venderlas.`,
+        title: one ? "Oferta en pausa" : "Ofertas en pausa",
+        body: one
+          ? "Una oferta: suba el precio para venderla."
+          : `${count} ofertas: suba el precio para venderlas.`,
         url: "/productos",
       },
     };

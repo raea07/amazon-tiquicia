@@ -10,15 +10,23 @@
  *
  * Some methods here replace a core method of the same name (they are spread
  * after the core ones in createApi): `wmsConfirmPick`, `driverArrive`,
- * `driverFailStop` and `driverReportPosition` take the new arguments, and
- * `driverToday` reads the stops' district. Callers that pass only the old
+ * `driverFailStop` and `driverReportPosition` take the new arguments,
+ * `driverToday` reads the stops' district and `opsDispatchBoard` the flags
+ * of each stop. Callers that pass only the old
  * arguments work as before.
  *
  * SQL: supabase/migrations/20261121083200_followups.sql.
  */
 
 import { z } from "zod";
-import { driverDay, driverRoute, driverStop, type failureReason, stopFailed } from "../schemas";
+import {
+  dispatchBoard,
+  driverDay,
+  driverRoute,
+  driverStop,
+  type failureReason,
+  stopFailed,
+} from "../schemas";
 import type { Caller, Messages } from "./types";
 
 const id = z.uuid();
@@ -34,6 +42,22 @@ export const placedDriverRoute = driverRoute.extend({ stops: z.array(placedDrive
 export type PlacedDriverRoute = z.infer<typeof placedDriverRoute>;
 export const placedDriverDay = driverDay.extend({ routes: z.array(placedDriverRoute) });
 export type PlacedDriverDay = z.infer<typeof placedDriverDay>;
+
+/**
+ * The dispatch board, each stop also saying when the server received its
+ * closing and whether the position given at the door lay outside the
+ * service area (kept, flagged for Central).
+ */
+const boardRoute = dispatchBoard.shape.routes.element;
+export const flaggedDispatchStop = boardRoute.shape.stops.element.extend({
+  completed_received_at: timestamp.nullable(),
+  pod_outside_area: z.boolean(),
+});
+export type FlaggedDispatchStop = z.infer<typeof flaggedDispatchStop>;
+export const flaggedDispatchBoard = dispatchBoard.extend({
+  routes: z.array(boardRoute.extend({ stops: z.array(flaggedDispatchStop) })),
+});
+export type FlaggedDispatchBoard = z.infer<typeof flaggedDispatchBoard>;
 
 /** What withdrawing a return request left. */
 export const withdrawnReturn = z.object({
@@ -62,6 +86,19 @@ export type FeeFloorBreach = z.infer<typeof feeFloorBreach>;
 /** A time for the database, as an ISO string. */
 const when = (at: Date | string | null | undefined) =>
   at == null ? undefined : typeof at === "string" ? at : at.toISOString();
+
+/**
+ * When an action happened, as the phone's clock says, together with that
+ * clock's time now (`p_sent_at`). The database takes only the difference (how
+ * long the phone held the action), so a phone clock that is minutes or hours
+ * off does not get every queued action refused as "in the future".
+ */
+const happened = (at: Date | string | null | undefined) => {
+  const occurred = when(at);
+  return occurred === undefined
+    ? { p_occurred_at: undefined, p_sent_at: undefined }
+    : { p_occurred_at: occurred, p_sent_at: new Date().toISOString() };
+};
 
 export const followupsErrors = {
   // ── Picking ──
@@ -142,7 +179,7 @@ export const followupsApi = ({ call, run }: Caller) => ({
   driverToday: () => call("driver_today", {}, placedDriverDay),
   /** Arrival at a stop; `occurredAt` when it is sent after the fact (no signal). */
   driverArrive: (stopId: string, occurredAt?: Date | string | null) =>
-    run("driver_arrive", { p_stop_id: stopId, p_occurred_at: when(occurredAt) }),
+    run("driver_arrive", { p_stop_id: stopId, ...happened(occurredAt) }),
   driverFailStop: (input: {
     stopId: string;
     reason: z.infer<typeof failureReason>;
@@ -157,7 +194,7 @@ export const followupsApi = ({ call, run }: Caller) => ({
         p_reason: input.reason,
         p_lat: input.lat ?? undefined,
         p_lng: input.lng ?? undefined,
-        p_occurred_at: when(input.occurredAt),
+        ...happened(input.occurredAt),
       },
       stopFailed,
     ),
@@ -171,11 +208,14 @@ export const followupsApi = ({ call, run }: Caller) => ({
       p_lat: lat,
       p_lng: lng,
       p_accuracy_m: accuracyM,
-      p_occurred_at: when(occurredAt),
+      ...happened(occurredAt),
     }),
   /** The shopper withdraws a return request that is still waiting for a decision. */
   withdrawReturnRequest: (returnId: string) =>
     call("withdraw_return_request", { p_return_id: returnId }, withdrawnReturn),
+  /** The dispatch board; each stop says whether its door position was flagged. */
+  opsDispatchBoard: (date?: string | null) =>
+    call("ops_dispatch_board", { p_date: date ?? undefined }, flaggedDispatchBoard),
   /** Finance and catalogue staff: offers a fee change paused, still paused. */
   opsFeeFloorBreaches: () => call("ops_fee_floor_breaches", {}, z.array(feeFloorBreach)),
 });

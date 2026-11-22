@@ -481,6 +481,13 @@ async function newRoute() {
       Number.isFinite(at) && at < Date.now() - 5_000,
       `${fn} carries the time it happened offline (${sent[fn]?.p_occurred_at})`,
     );
+    // And the phone's clock at sending, so the database counts only how long
+    // the phone held it: a phone clock that is off does not get it refused.
+    const sentAt = Date.parse(sent[fn]?.p_sent_at ?? "");
+    check(
+      Number.isFinite(sentAt) && sentAt - at >= 5_000,
+      `${fn} carries the phone's clock at sending (${sent[fn]?.p_sent_at})`,
+    );
   }
   const driver = await as(DRIVER);
   const after = (await driver("driver_today")).routes.find((r) => r.code === B);

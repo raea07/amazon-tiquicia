@@ -46,8 +46,9 @@ export const STOP_ACTION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /**
  * When the action happened: the moment it was queued (the driver pressed the
  * button then, with or without signal), or for a position the moment the
- * phone read it. The database checks the bounds and keeps the time it
- * received it as well.
+ * phone read it. The client sends the phone's clock at sending with it, and
+ * the database counts only the difference, so a phone clock that is off does
+ * not matter. It checks the bounds and keeps the time it received it as well.
  */
 export const happenedAt = (entry: QueueEntry) =>
   new Date((entry.payload as Partial<PositionPayload>).at ?? entry.createdAt);

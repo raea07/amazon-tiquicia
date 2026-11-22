@@ -164,6 +164,37 @@ describe("messages added with migration 083200", () => {
     const one = email("seller_offers_paused_fees", { shop_name: "TecnoCasa", offer_count: 1 });
     expect(one.subject).toBe("Pausamos una de sus ofertas por el cambio de comisiones");
   });
+
+  it("speaks of one offer in the singular throughout", () => {
+    const mail = email("seller_offers_paused_fees", {
+      shop_name: "TecnoCasa",
+      offer_count: 1,
+      paused_count: 1,
+      paused_offers: [{ title: "Bombillo LED", variant: "", min_price_minor: 612_345 }],
+    });
+    expect(mail.text).toContain("Por eso la pausamos; nadie la puede comprar");
+    expect(mail.text).toContain("Para volver a venderla,");
+    expect(mail.text).toContain("actívela");
+    expect(mail.text).toContain("puede quedar en pausa");
+    expect(mail.text).not.toMatch(/las pausamos|nadie las|venderlas|actívelas|pueden quedar/);
+  });
+
+  it("counts the shop's whole list, not what one re-check paused", () => {
+    // Two passes of the re-check in one change: the event says 1, the
+    // database's list (paused_count) says 3.
+    const mail = email("seller_offers_paused_fees", {
+      shop_name: "TecnoCasa",
+      offer_count: 1,
+      paused_count: 3,
+      paused_offers: [
+        { title: "A", variant: "", min_price_minor: 100_000 },
+        { title: "B", variant: "", min_price_minor: 100_000 },
+        { title: "C", variant: "", min_price_minor: 100_000 },
+      ],
+    });
+    expect(mail.subject).toBe("Pausamos 3 de sus ofertas por el cambio de comisiones");
+    expect(mail.text).toContain("Por eso las pausamos; nadie las puede comprar");
+  });
 });
 
 describe("the planner's rules for these messages", () => {
