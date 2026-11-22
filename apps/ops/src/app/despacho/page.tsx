@@ -11,6 +11,7 @@ import {
   Skeleton,
 } from "@yuntera/ui";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { assignRoute, planDay, returnShipment } from "@/app/actions";
@@ -291,6 +292,13 @@ async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParam
         <h2 id="rutas" className="text-xl font-bold">
           Rutas del {formatDate(date)}
         </h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          Para quitar una parada o cerrar una ruta que no puede terminar, vaya a{" "}
+          <Link href="/operacion/rutas" className="text-link underline">
+            Rutas detenidas
+          </Link>
+          .
+        </p>
         {board.routes.length === 0 ? (
           <p className="mt-2 text-sm text-ink-muted">Todavía no hay rutas para este día.</p>
         ) : (
