@@ -20,7 +20,7 @@ apps/
   field/       Yuntera Ruta      drivers' routes and deliveries   (/ruta)
                Yuntera Bodega    warehouse picking and receiving  (/bodega)
   shop-native/       Yuntera         shopper app for iOS and Android (Expo)
-  seller-native/     Yuntera Vende   seller app: orders, listings, stock, payouts, shop registration
+  seller-native/     Yuntera Vende   seller app: orders, listings, stock, payouts, shop registration, team
   driver-native/     Yuntera Ruta    drivers' app: routes, deliveries, position sharing, work without signal
   warehouse-native/  Yuntera Bodega  warehouse app: picking by scan, packing, receiving, stock lookup
 packages/
@@ -96,14 +96,15 @@ e-mail confirmation on or off for that database. Notifications go to local
 fake providers, started by `tools/dev/stack.sh up` (or `notify`) next to the
 worker; nothing can reach a real provider.
 
-| Command                     | What it does                                                    |
-| --------------------------- | --------------------------------------------------------------- |
-| `pnpm ci`                   | Lint, typecheck, unit tests and production builds               |
-| `pnpm test`                 | Unit tests for every package                                    |
-| `pnpm lint` / `pnpm format` | Check / fix formatting and lint rules (Biome)                   |
-| `pnpm db:local:reset`       | Rebuild the local database from migrations and seed data        |
-| `pnpm db:local:test`        | Run the database tests, including the access-control checks     |
-| `pnpm e2e`                  | Browser journeys for all four apps ([how](tools/e2e/README.md)) |
+| Command                                          | What it does                                                                                                                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm ci`                                        | Lint, typecheck, unit tests and production builds                                                                                                             |
+| `pnpm test`                                      | Unit tests for every package                                                                                                                                  |
+| `pnpm lint` / `pnpm format`                      | Check / fix formatting and lint rules (Biome)                                                                                                                 |
+| `pnpm db:local:reset`                            | Rebuild the local database from migrations and seed data                                                                                                      |
+| `pnpm db:local:test`                             | Run the database tests, including the access-control checks                                                                                                   |
+| `supabase/scripts/used-db-check.sh <lane> quick` | The database tests twice on a lane's database made to look like the hosted preview, counting every table's rows (`all` first runs the browser journeys on it) |
+| `pnpm e2e`                                       | Browser journeys for all four apps ([how](tools/e2e/README.md))                                                                                               |
 
 ## Running a native app during development
 
@@ -188,12 +189,17 @@ tools/dev/stack.sh native 1
 tools/dev/stack.sh native-e2e 1
 ```
 
-That runs the five native journeys, each on a freshly seeded database: `shop`
+That runs the eight native journeys, each on a freshly seeded database: `shop`
 (including a return), `seller` (including a price below the fees and a
 seller's second step), `driver` (including a stretch without signal, a
 suspension that hands the route back to Central and a delivery code locked
 and released), `warehouse` (picking by scan, refused receipts and a returned
 parcel) and `staff` (the right and wrong kinds of account for the three staff
+apps), and the account screens of each app: `accounts-shop` (deletion, the
+password reset and change, the second step inside the app, reporting a
+listing, message channels), `accounts-seller` (the team, invitations, a shop
+change, the shop's notification settings, its description and logo) and
+`accounts-field` (deletion and the password in the drivers' and warehouse
 apps). Name some to run only those,
 for example `tools/dev/stack.sh native-e2e 1 driver`. The seller, driver and
 warehouse apps also have unit tests for their own rules
