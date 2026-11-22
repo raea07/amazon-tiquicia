@@ -8,10 +8,12 @@ import {
   Badge,
   Button,
   Card,
+  Divider,
   ErrorState,
   FormMessage,
   formatDate,
   LinkButton,
+  ListRow,
   LoadingState,
   Screen,
   Stack,
@@ -20,6 +22,7 @@ import {
 } from "@yuntera/expo-kit/ui";
 import { type ReactNode, useState } from "react";
 import { View } from "react-native";
+import { ChangeStatus, ContactForm, FiscalForm, ShopNameForm } from "@/components/shop-changes";
 import { KYC_STATUS, SHOP_STATUS } from "@/lib/labels";
 import {
   checkPayoutRequest,
@@ -155,24 +158,36 @@ export default function AccountScreen() {
     (api) => api.sellerPayoutDetails(shop.id),
     { personal: true },
   );
+  const changes = useApiQuery(
+    shopKey(shop.id, "shop-changes"),
+    (api) => api.sellerShopChanges(shop.id),
+    { personal: true },
+  );
 
-  if (overview.isPending || payout.isPending) return <LoadingState />;
+  if (overview.isPending || payout.isPending || changes.isPending) return <LoadingState />;
   if (overview.isError)
     return <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />;
   if (payout.isError)
     return <ErrorState error={payout.error} onRetry={() => void payout.refetch()} />;
+  if (changes.isError)
+    return <ErrorState error={changes.error} onRetry={() => void changes.refetch()} />;
 
   const { seller, account } = overview.data;
   const { current, request } = payout.data;
   const status = SHOP_STATUS[seller.status];
   const kyc = KYC_STATUS[account.kyc_status];
+  const shopChanges = changes.data;
+  const contactPending = shopChanges.requests.some(
+    (item) => item.kind === "contact" && item.status === "pending",
+  );
 
   return (
     <Screen
-      refreshing={overview.isRefetching || payout.isRefetching}
+      refreshing={overview.isRefetching || payout.isRefetching || changes.isRefetching}
       onRefresh={() => {
         void overview.refetch();
         void payout.refetch();
+        void changes.refetch();
       }}
     >
       <Text tint="muted">Los datos de su tienda tal como los tenemos registrados.</Text>
@@ -187,7 +202,39 @@ export default function AccountScreen() {
         <Item label="Nombre">{seller.trade_name}</Item>
         <Item label="Dirección en Yuntera">/{seller.slug}</Item>
         <Item label="Correo de contacto">{account.contact_email}</Item>
-        <Item label="Teléfono">{account.contact_phone}</Item>
+        <Item label="Teléfono">
+          {parsePhone(account.contact_phone)?.formatted ?? account.contact_phone}
+        </Item>
+        <ChangeStatus changes={shopChanges} kind="shop_name" />
+        <ChangeStatus changes={shopChanges} kind="contact" />
+        {shopChanges.can_request ? (
+          <Stack gap={5}>
+            <Stack gap={2}>
+              <Text variant="bodyStrong">Cambiar el nombre de la tienda</Text>
+              <Text variant="small" tint="muted">
+                Lo revisamos antes de mostrarlo, para que nadie use un nombre que confunda a los
+                compradores.
+              </Text>
+              <ShopNameForm />
+            </Stack>
+            <Stack gap={2}>
+              <Text variant="bodyStrong">Cambiar el correo o el teléfono</Text>
+              {shopChanges.payout_request_open ? (
+                <Text variant="small">
+                  Hay un cambio de cuenta bancaria en revisión, y lo confirmamos llamando al
+                  teléfono actual. Cuando lo resolvamos podrá pedir este cambio.
+                </Text>
+              ) : (
+                <>
+                  <Text variant="small" tint="muted">
+                    Lo confirmamos con usted al teléfono que ya tenemos antes de cambiarlo.
+                  </Text>
+                  <ContactForm email={account.contact_email} phone={account.contact_phone} />
+                </>
+              )}
+            </Stack>
+          </Stack>
+        ) : null}
       </Card>
 
       <Card>
@@ -208,11 +255,26 @@ export default function AccountScreen() {
             {account.kyc_notes}
           </Alert>
         ) : null}
-        <Text variant="small" tint="muted">
-          El nombre de la tienda, los datos fiscales, el correo y el teléfono de contacto no se
-          cambian desde la aplicación: pida el cambio en el sitio de vendedores, en Cuenta. Lo
-          revisamos con usted antes de aplicarlo.
-        </Text>
+        <ChangeStatus changes={shopChanges} kind="fiscal" />
+        {shopChanges.can_request ? (
+          <Stack gap={2}>
+            <Text variant="bodyStrong">Cambiar los datos fiscales</Text>
+            <Text variant="small" tint="muted">
+              Los verificamos con Hacienda antes de cambiarlos. El nombre o la razón social y la
+              identificación no se cambian: si cambiaron, escríbanos desde su correo de contacto.
+            </Text>
+            <FiscalForm
+              taxRegime={account.tax_regime}
+              fiscalAddress={account.fiscal_address}
+              postalCode={shopChanges.current?.fiscal.postal_code ?? null}
+              economicActivityCode={shopChanges.current?.fiscal.economic_activity_code ?? null}
+            />
+          </Stack>
+        ) : (
+          <Text variant="small" tint="muted">
+            Solo la persona dueña o administradora de la tienda puede pedir cambios en estos datos.
+          </Text>
+        )}
       </Card>
 
       <Card testID="payout-account">
@@ -267,7 +329,13 @@ export default function AccountScreen() {
             ? " Si envía otra solicitud, reemplaza a la que está en revisión."
             : ""}
         </Text>
-        {payout.data.can_request ? (
+        {payout.data.can_request && contactPending ? (
+          <Text variant="small">
+            Hay un cambio del teléfono o el correo de la tienda en revisión, y confirmamos los
+            cambios de cuenta llamando al teléfono registrado. Cuando lo resolvamos, o si retira esa
+            solicitud, podrá pedir este cambio.
+          </Text>
+        ) : payout.data.can_request ? (
           <PayoutDetailsForm
             hasAccount={current.iban_masked !== null}
             currentSinpe={current.sinpe_number}
@@ -289,6 +357,48 @@ export default function AccountScreen() {
           Registrar otra tienda
         </LinkButton>
       </Card>
+
+      <Card style={{ padding: 0, overflow: "hidden" }} testID="account-links">
+        <ListRow
+          href="/equipo"
+          title="Equipo"
+          subtitle="Quién trabaja en la tienda, invitar y quitar personas"
+          testID="open-team"
+        />
+        <Divider />
+        <ListRow
+          href="/notificaciones"
+          title="Notificaciones de la tienda"
+          subtitle="Correo, WhatsApp y publicidad"
+          testID="open-shop-notifications"
+        />
+        <Divider />
+        <ListRow
+          href="/invitaciones"
+          title="Invitaciones"
+          subtitle="Tiendas que le invitaron a su equipo"
+          testID="open-invitations"
+        />
+      </Card>
+
+      <Stack gap={3}>
+        <Text variant="heading">Su acceso</Text>
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <ListRow
+            href="/contrasena"
+            title="Contraseña"
+            subtitle="Al cambiarla, cerramos las demás sesiones abiertas de su cuenta."
+            testID="open-password"
+          />
+          <Divider />
+          <ListRow
+            href="/eliminar-cuenta"
+            title="Eliminar su cuenta"
+            subtitle="Antes le explicamos qué se borra y qué debemos conservar por ley."
+            testID="open-delete-account"
+          />
+        </Card>
+      </Stack>
 
       <Stack gap={1}>
         {viewer?.email ? (

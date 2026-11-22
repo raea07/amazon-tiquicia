@@ -1,4 +1,5 @@
 import { apps } from "@yuntera/brand";
+import { AccountDeletedNotice, ForgotPasswordForm } from "@yuntera/expo-kit/account";
 import { SignInForm, SignUpForm, useSession } from "@yuntera/expo-kit/auth";
 import { colors, space } from "@yuntera/expo-kit/theme";
 import { Button, Card, Logo, Screen, Text } from "@yuntera/expo-kit/ui";
@@ -22,6 +23,7 @@ const legalBase = shopUrl || `https://${apps.shop.host}`;
  */
 export default function SignInScreen() {
   const [creating, setCreating] = useState(false);
+  const [recovering, setRecovering] = useState(false);
   // After the password, an account with an authenticator app is asked for
   // its code here (the kit's SignInForm); nothing else belongs on screen then.
   const secondStep = useSession().status === "secondStep";
@@ -38,10 +40,23 @@ export default function SignInScreen() {
       </Screen>
     );
   }
+  if (recovering) {
+    return (
+      <Screen edges={["top", "bottom", "left", "right"]}>
+        <View style={{ flex: 1, justifyContent: "center", gap: 24 }}>
+          <Logo app="seller" size={36} />
+          <Card>
+            <ForgotPasswordForm onBack={() => setRecovering(false)} />
+          </Card>
+        </View>
+      </Screen>
+    );
+  }
   return (
     <Screen edges={["top", "bottom", "left", "right"]}>
       <View style={{ flex: 1, justifyContent: "center", gap: 24 }}>
         <Logo app="seller" size={36} />
+        <AccountDeletedNotice />
         <Card>
           <Text variant="title">{creating ? "Primero, su cuenta" : "Ingresar"}</Text>
           <Text tint="muted">
@@ -70,7 +85,7 @@ export default function SignInScreen() {
               }
             />
           ) : (
-            <SignInForm />
+            <SignInForm onForgotPassword={() => setRecovering(true)} />
           )}
           <View
             style={{

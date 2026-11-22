@@ -24,7 +24,18 @@ interface ShopValue {
   /** Set right after a new shop was registered from the app, for the welcome message. */
   justRegistered: string | null;
   setJustRegistered(shopId: string | null): void;
+  /**
+   * What just happened to the person's place in a team, said once on the
+   * screen they land on: they joined a shop (Inicio of that shop), or left
+   * one (the screen for an account without a shop, when it was the last).
+   */
+  teamNotice: TeamNotice | null;
+  setTeamNotice(notice: TeamNotice | null): void;
+  /** Forgets the remembered shop on this phone (after an account deletion). */
+  forget(): Promise<void>;
 }
+
+export type TeamNotice = { kind: "joined"; shopId: string } | { kind: "left"; tradeName: string };
 
 const ShopContext = createContext<ShopValue | null>(null);
 
@@ -69,6 +80,14 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     [userId],
   );
 
+  const [teamNotice, setTeamNotice] = useState<TeamNotice | null>(null);
+  const forget = useCallback(async () => {
+    setChosen(null);
+    setTeamNotice(null);
+    setJustRegistered(null);
+    if (userId) await appStorage.removeItem(keyFor(userId)).catch(() => undefined);
+  }, [userId]);
+
   const value = useMemo<ShopValue>(() => {
     const shops = roles?.sellers ?? [];
     return {
@@ -78,8 +97,11 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       choose,
       justRegistered,
       setJustRegistered,
+      teamNotice,
+      setTeamNotice,
+      forget,
     };
-  }, [roles, chosen, userId, readFor, choose, justRegistered]);
+  }, [roles, chosen, userId, readFor, choose, justRegistered, teamNotice, forget]);
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;
 }
