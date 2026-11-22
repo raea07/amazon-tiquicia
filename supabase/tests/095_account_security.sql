@@ -788,6 +788,65 @@ select pg_temp.remember('gone_refunds', (
 select pg_temp.remember('gone_attempts', (
   select count(*)::text from private.delivery_code_attempts a
   join public.orders o on o.id = a.order_id where o.user_id = current_setting('t.gone')::uuid));
+-- And what the follow-ups added (083200, 083300): a second return claim, its
+-- reason naming them, withdrawn before staff decided; a delivery code locked
+-- and released on one of their orders, which messages them and support; the
+-- invitations above, which now message them too; all planned, and the one the
+-- worker can claim (messages to one person go out in order, after the earlier
+-- ones still waiting) frozen with their name and address in it. The apps' sign-in limit
+-- counted them signing in, as a keyed hash of their address and e-mail.
+select pg_temp.remember('gone_item2', (
+  select i.id::text from public.order_items i join public.orders o on o.id = i.order_id
+  where o.user_id = current_setting('t.gone')::uuid and private.delivered_units(i.id) > 0
+    and not exists (select 1 from public.return_requests r where r.order_item_id = i.id)
+  order by i.id limit 1));
+select pg_temp.login('comprador2@yuntera.example', 'aal2');
+select set_config('t.gone_withdrawn', public.request_return(current_setting('t.gone_item2')::uuid,
+  'damaged', 1, 'Me equivoqué; soy ' || current_setting('t.gone_name') || '.')::text, true);
+select public.withdraw_return_request(current_setting('t.gone_withdrawn')::uuid);
+reset role;
+insert into private.outbox_events (topic, payload)
+select t.topic, jsonb_build_object('order_id', o.id)
+from (select o.id from public.orders o where o.user_id = current_setting('t.gone')::uuid
+      order by o.placed_at limit 1) o
+cross join (values ('delivery_code.locked'), ('delivery_code.released')) t (topic);
+select pg_temp.login_anon();
+select public.auth_limit_reserve('sign_in', repeat('a', 64), repeat('b', 64));
+reset role;
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+set local role service_role;
+select public.worker_notify_plan(100);
+select public.worker_notify_claim('prueba-borrado-2', 100);
+reset role;
+select pg_temp.remember('frozen2', (
+  select d.id::text || '|' || d.generation from private.notification_deliveries d
+  where d.recipient_user_id = current_setting('t.gone')::uuid
+    and d.template in ('delivery_code_locked', 'delivery_code_released', 'seller_invitation')
+    and d.channel = 'email' and d.status = 'sending'
+  limit 1));
+set local role service_role;
+select public.worker_notify_freeze(split_part(current_setting('t.frozen2'), '|', 1)::uuid, 'prueba-borrado-2',
+  split_part(current_setting('t.frozen2'), '|', 2)::int,
+  json_build_object('to', 'comprador2@yuntera.example', 'name', current_setting('t.gone_name'))::text);
+reset role;
+do $$
+begin
+  assert (select withdrawn_at is not null and reason like '%' || current_setting('t.gone_name') || '%'
+          from public.return_requests where id = current_setting('t.gone_withdrawn')::uuid),
+    'the withdrawn claim names the person';
+  assert (select count(*) from private.notification_deliveries
+          where recipient_user_id = current_setting('t.gone')::uuid
+            and template in ('delivery_code_locked', 'delivery_code_released', 'seller_invitation')) >= 3,
+    'the new messages were planned for the person';
+  assert exists (select 1 from private.notification_deliveries
+                 where template = 'staff_delivery_code_locked'
+                   and context ->> 'order_id' in (select id::text from public.orders
+                                                  where user_id = current_setting('t.gone')::uuid)),
+    'support was told about the locked code';
+  assert exists (select 1 from private.auth_attempts where account_hash = repeat('b', 64)),
+    'the sign-in limit counted the attempt';
+end
+$$;
 -- What identifies the person, to search for afterwards in every table.
 select pg_temp.remember('needles', (
   select jsonb_build_array(u.email, p.full_name, a.phone, a.senas, a.recipient_name,
@@ -884,6 +943,21 @@ begin
          = current_setting('t.gone_refunds'), 'every refund stays in the register, amounts unchanged';
   assert (select reason is null and status = 'refunded' from public.return_requests
           where id = current_setting('t.gone_return')::uuid), 'the return stays refunded, without its reason';
+
+  -- What the follow-ups added (083200, 083300).
+  assert (select reason is null and withdrawn_at is not null from public.return_requests
+          where id = current_setting('t.gone_withdrawn')::uuid),
+    'the withdrawn claim stays withdrawn, without its reason';
+  assert not exists (select 1 from private.notification_deliveries
+                     where recipient_user_id = v_user
+                       and template in ('delivery_code_locked', 'delivery_code_released', 'seller_invitation')
+                       and (status in ('pending', 'sending') or request_body is not null)),
+    'none of the new messages to the person is left to send or holds its text';
+  -- The sign-in limit holds keyed hashes only, which the database cannot
+  -- link to the person (the key is in the apps), for two hours at most.
+  assert not exists (select 1 from private.auth_attempts a
+                     where a.address_hash !~ '^[0-9a-f]{64}$' or a.account_hash !~ '^[0-9a-f]{64}$'),
+    'the sign-in limit holds nothing but hashes';
 
   -- Kept records still add up.
   assert (select count(*) || ':' || sum(total_minor) from public.orders where user_id = v_user)
