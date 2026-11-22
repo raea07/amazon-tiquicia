@@ -62,7 +62,11 @@ export async function reviewNewListing(
       // A seller who changes the photos while the listing waits sends it back
       // to draft, so this cannot publish photos added after the page was drawn.
       await api.opsReviewProduct(productId.data, approve, note || null);
-      if (!approve) return "Producto rechazado; el vendedor ve el motivo.";
+      if (!approve) {
+        // A rejected listing may have been showing (WEB-6): the shop forgets it now.
+        await refreshShopCatalog();
+        return "Producto rechazado; el vendedor ve el motivo.";
+      }
       const outcome = await publishApprovedPhotos(api, productId.data);
       await refreshShopCatalog();
       return published(outcome, "Producto publicado con sus fotos.");

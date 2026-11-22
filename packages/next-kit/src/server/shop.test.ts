@@ -12,6 +12,10 @@ describe("refreshShopCatalog", () => {
   let errorLog: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    // A local run (the API on this machine): readable keys are accepted.
+    vi.stubEnv("VERCEL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:54321");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
     vi.stubEnv("NEXT_PUBLIC_SHOP_URL", "https://shop.example");
     vi.stubEnv("SHOP_REFRESH_KEY", "a-shared-key");
     fetchMock = vi.fn();
@@ -98,5 +102,21 @@ describe("refreshShopCatalog", () => {
     await refreshShopCatalog();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(errorLog).not.toHaveBeenCalled();
+  });
+
+  it("WEB-8: deployed, refuses an example or short key and asks nothing", async () => {
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://abcdefghijklmnop.supabase.co");
+    for (const key of ["local-development-only", "a-shared-key"]) {
+      vi.stubEnv("SHOP_REFRESH_KEY", key);
+      await refreshShopCatalog();
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalledTimes(2);
+    expect(String(errorLog.mock.calls[0]?.[0])).not.toContain("local-development-only");
+    fetchMock.mockResolvedValue(answer(204));
+    vi.stubEnv("SHOP_REFRESH_KEY", "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822c");
+    await refreshShopCatalog();
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
