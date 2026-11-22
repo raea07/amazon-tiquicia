@@ -523,7 +523,9 @@ $$;
 select pg_temp.logout();
 
 -- Only an administrator, with a reason, and only to an environment the worker
--- reported ready a few minutes ago.
+-- reported ready a few minutes ago. (A local stack's worker may have reported
+-- already; this suite starts from no report.)
+delete from private.payment_gateway_status;
 select pg_temp.login('pagos-finanzas@yuntera.example');
 select pg_temp.refused('select public.ops_set_payments_mode(''test'', ''Probar la pasarela'')', 'forbidden');
 reset role;
