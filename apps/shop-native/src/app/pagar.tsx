@@ -26,6 +26,7 @@ import { Link, Redirect, router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useCart } from "@/lib/cart-context";
+import { needsSignIn } from "@/lib/guard";
 
 type Method = "sinpe_movil" | "card" | "cash_on_delivery";
 
@@ -84,7 +85,7 @@ export default function CheckoutScreen() {
     { invalidates: [["orders"]] },
   );
 
-  if (status === "signedOut") return <Redirect href={signInPath("/pagar")} />;
+  if (needsSignIn(status)) return <Redirect href={signInPath("/pagar")} />;
   if (cart.ready && cart.items.length === 0 && !place.isSuccess)
     return <Redirect href="/carrito" />;
   if (addresses.isPending || !cart.ready) return <LoadingState />;

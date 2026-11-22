@@ -53,6 +53,10 @@ export default function AppLayout() {
       <Stack.Screen name="lugar" options={titled("Lugar de recolección")} />
       <Stack.Screen name="envio" options={titled("Enviar a la bodega")} />
       <Stack.Screen name="cuenta" options={titled("Cuenta")} />
+      <Stack.Screen name="equipo" options={titled("Equipo")} />
+      <Stack.Screen name="notificaciones" options={titled("Notificaciones")} />
+      <Stack.Screen name="invitaciones" options={{ title: "Invitaciones" }} />
+      <Stack.Screen name="contrasena" options={{ title: "Contraseña" }} />
       <Stack.Screen name="nueva-tienda" options={{ title: "Registrar otra tienda" }} />
     </Stack>
   );

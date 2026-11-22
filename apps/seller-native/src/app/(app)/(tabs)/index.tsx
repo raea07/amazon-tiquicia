@@ -25,7 +25,7 @@ import { todayItems, todaySentence } from "@/lib/today";
  */
 export default function HomeScreen() {
   const shop = useShop();
-  const { justRegistered } = useShops();
+  const { justRegistered, teamNotice } = useShops();
   const { viewer } = useSession();
   const overview = useApiQuery(shopKey(shop.id, "overview"), (api) => api.sellerOverview(shop.id), {
     personal: true,
@@ -66,6 +66,16 @@ export default function HomeScreen() {
           <Text tint="muted">Lo que necesita atender hoy y cómo va su tienda.</Text>
         </Stack>
 
+        {teamNotice?.kind === "joined" && teamNotice.shopId === shop.id ? (
+          <Alert tone="success" title="Ya es parte del equipo" testID="team-joined">
+            Ya puede trabajar en la tienda.
+          </Alert>
+        ) : null}
+        {teamNotice?.kind === "left" ? (
+          <Alert tone="success" title="Salió del equipo" testID="team-left">
+            {`Ya no ve ni trabaja en ${teamNotice.tradeName}. Si fue un error, pida a la persona dueña que le invite de nuevo.`}
+          </Alert>
+        ) : null}
         {justRegistered === shop.id ? (
           <Alert tone="success" title="Recibimos su solicitud">
             Mientras verificamos sus datos puede ir preparando sus productos como borradores. Los

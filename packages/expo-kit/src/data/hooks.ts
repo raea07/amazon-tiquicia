@@ -23,12 +23,14 @@ export function useApiQuery<T>(
   } = {},
 ) {
   const api = useApi();
-  const { viewer } = useSession();
+  const { viewer, status } = useSession();
   const { personal = false, enabled = true, ...rest } = options;
   return useQuery({
     queryKey: personal ? ["user", viewer?.id ?? "anonymous", ...key] : key,
     queryFn: () => read(api),
-    enabled: personal ? enabled !== false && Boolean(viewer) : enabled,
+    // Only once fully signed in: halfway through the second step the
+    // database refuses everything but the second step's own calls.
+    enabled: personal ? enabled !== false && Boolean(viewer) && status === "signedIn" : enabled,
     ...rest,
   });
 }

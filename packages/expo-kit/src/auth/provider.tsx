@@ -47,7 +47,7 @@ export function AppProviders({
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <SessionProvider supabase={supabase} secondStep={secondStep}>
+        <SessionProvider supabase={supabase} env={env} secondStep={secondStep}>
           <StatusBar style="dark" />
           <HideSplashWhenReady>{children}</HideSplashWhenReady>
         </SessionProvider>

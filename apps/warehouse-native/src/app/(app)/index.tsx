@@ -191,6 +191,9 @@ export default function BoardScreen() {
         </View>
       )}
 
+      <LinkButton href="/cuenta" variant="secondary" block testID="open-account">
+        Su cuenta
+      </LinkButton>
       <SignOutButton />
     </Screen>
   );

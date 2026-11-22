@@ -1,4 +1,5 @@
 import { brand } from "@yuntera/brand";
+import { AccountDeletedNotice } from "@yuntera/expo-kit/account";
 import { useApiQuery } from "@yuntera/expo-kit/data";
 import { colors, radius, space } from "@yuntera/expo-kit/theme";
 import {
@@ -70,6 +71,9 @@ export default function HomeScreen() {
           </Pressable>
         </Link>
       </View>
+
+      {/* Once, right after an account deletion brought the shopper back here. */}
+      <AccountDeletedNotice />
 
       <SearchBox testID="home-search-input" />
 

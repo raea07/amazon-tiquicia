@@ -53,7 +53,9 @@ const webBack =
  */
 export default function RootLayout() {
   return (
-    <AppProviders env={env}>
+    // An account with an authenticator app gives its code on the sign-in
+    // screen of this app, as in the other three (kit: SecondStepForm).
+    <AppProviders env={env} secondStep="in-app">
       <CartProvider>
         <Stack
           screenOptions={{
@@ -78,6 +80,10 @@ export default function RootLayout() {
           <Stack.Screen name="ingresar" options={{ title: "Ingresar" }} />
           <Stack.Screen name="ayuda" options={{ title: "Ayuda" }} />
           <Stack.Screen name="direcciones/nueva" options={{ title: "Nueva dirección" }} />
+          <Stack.Screen name="reportar" options={{ title: "Reportar un problema" }} />
+          <Stack.Screen name="cuenta/notificaciones" options={{ title: "Notificaciones" }} />
+          <Stack.Screen name="cuenta/contrasena" options={{ title: "Contraseña" }} />
+          <Stack.Screen name="cuenta/eliminar" options={{ title: "Eliminar su cuenta" }} />
           <Stack.Screen
             name="zona"
             options={{ title: "Su zona de entrega", presentation: "modal" }}

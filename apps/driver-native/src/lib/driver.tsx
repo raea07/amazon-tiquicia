@@ -147,6 +147,8 @@ export interface DriverValue {
   leaveForLater(stopId: string): void;
   /** Resolves to false when the phone could not be signed out (the kit's signOutDevice). */
   signOut(): Promise<boolean>;
+  /** Removes the saved day and every queued action of the account (after its deletion). */
+  forgetAccount(): Promise<void>;
 }
 
 const DriverContext = createContext<DriverValue | null>(null);
@@ -572,6 +574,20 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     return session.signOut();
   }, [session]);
 
+  // After the account is deleted: nothing of it stays on this phone, not even
+  // the actions it queued (the database would refuse them now), and nothing
+  // more is sent from it. The session itself goes with the sign-out after.
+  const forgetAccount = useCallback(async () => {
+    await stopTracking();
+    setTracking("off");
+    setSaved((current) => ({ ...current, day: null, savedAt: null }));
+    await savedDay.clear();
+    const owner = userId;
+    await outbox.discard((entry) => entry.kind === "position" || entry.owner === owner);
+    await outbox.setOwner(null);
+    connectOutbox(null);
+  }, [userId]);
+
   const value: DriverValue = {
     routes,
     driverName: shownDay?.driver.full_name ?? viewer?.name ?? null,
@@ -596,6 +612,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     later,
     leaveForLater,
     signOut,
+    forgetAccount,
   };
 
   return (

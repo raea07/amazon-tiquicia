@@ -1,5 +1,6 @@
 import { SignInScreen } from "@yuntera/expo-kit/auth";
+import { shopUrl } from "@/lib/env";
 
 export default function SignIn() {
-  return <SignInScreen app="warehouse" />;
+  return <SignInScreen app="warehouse" website={shopUrl} />;
 }
