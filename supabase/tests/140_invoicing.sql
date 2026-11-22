@@ -104,17 +104,16 @@ $$;
 -- captured before invoicing existed: they have no invoice job and, by design,
 -- never get a document (runbook, "Migrations 083400 and 083500"); nor did its
 -- seed set the demo issuer and policy. For this transaction only, which rolls
--- back, give it what a database seeded after the migration has: the jobs the
--- route makes for each captured payment, and the seed's settings for
--- Hacienda's fictitious demo issuer.
+-- back, give it what a database seeded after the migration has: the job the
+-- route makes for each captured payment that lacks one (payments taken there
+-- after the migration already have theirs), and the seed's settings for
+-- Hacienda's fictitious demo issuer. On a fresh seed this changes nothing.
 do $$
 begin
-  if exists (select 1 from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
-             where j.consumer = 'invoice' and e.topic = 'payment.captured') then
-    return;
-  end if;
   insert into private.outbox_jobs (event_id, consumer)
-  select e.id, 'invoice' from private.outbox_events e where e.topic = 'payment.captured';
+  select e.id, 'invoice' from private.outbox_events e
+  where e.topic = 'payment.captured'
+    and not exists (select 1 from private.outbox_jobs j where j.event_id = e.id and j.consumer = 'invoice');
   perform pg_temp.seed_invoicing_settings();
 end
 $$;
@@ -122,6 +121,10 @@ $$;
 select pg_temp.remember('capture_jobs', (
   select count(*)::text from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
   where j.consumer = 'invoice' and e.topic = 'payment.captured'));
+-- Every job waiting for invoicing: the captured payments' and, on a used
+-- preview, those of refunds booked there since the migration.
+select pg_temp.remember('invoice_jobs', (
+  select count(*)::text from private.outbox_jobs where consumer = 'invoice'));
 
 do $$
 begin
@@ -142,7 +145,7 @@ begin
   assert not exists (select 1 from public.electronic_invoices), 'no document';
   assert not exists (select 1 from private.fiscal_counters), 'no number taken';
   assert (select count(*) from private.outbox_jobs where consumer = 'invoice' and status = 'pending' and attempts = 0)
-         = current_setting('t.capture_jobs')::integer, 'the jobs wait, uncounted';
+         = current_setting('t.invoice_jobs')::integer, 'the jobs wait, uncounted';
 end
 $$;
 update public.app_settings set value = jsonb_set(value, '{ready}', 'true') where key = 'invoicing_issuer';
