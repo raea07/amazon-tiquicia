@@ -43,6 +43,7 @@ async function Queues() {
   const canDecide = canSee(staff.staff_role, ["support", "ops"]);
   const canRefund = canSee(staff.staff_role, ["finance", "support"]);
   const canModerate = canSee(staff.staff_role, ["catalog", "support", "ops"]);
+  const catalogue = canSee(staff.staff_role, ["catalog"]);
 
   return (
     <div className="flex flex-col gap-10">
@@ -205,6 +206,22 @@ async function Queues() {
                 {item.details ? (
                   <p className="mt-2 rounded-md bg-surface-muted p-3">“{item.details}”</p>
                 ) : null}
+                {catalogue && item.target_label && item.target_type !== "seller" ? (
+                  <p className="mt-2">
+                    <Link
+                      href={
+                        (item.target_type === "review"
+                          ? `/catalogo/resenas?resena=${item.target_id}`
+                          : `/catalogo/productos?producto=${item.target_id}`) as Route
+                      }
+                      className="inline-flex min-h-11 items-center text-link underline"
+                    >
+                      {item.target_type === "review"
+                        ? "Moderar esta reseña: ocultarla con un motivo, u ocultar solo la respuesta"
+                        : "Abrir el producto en Catálogo: corregirlo, retirarlo o volver a publicarlo"}
+                    </Link>
+                  </p>
+                ) : null}
                 {canModerate ? (
                   <div className="mt-4 border-t border-border pt-4">
                     <DecisionForm
@@ -213,7 +230,9 @@ async function Queues() {
                       noteHint={
                         item.target_type === "seller"
                           ? "Para suspender a un vendedor use la sección Vendedores; aquí solo se cierra el reporte."
-                          : "Si retira el contenido, el vendedor ve este motivo."
+                          : item.target_type === "review"
+                            ? "Si la retira, la reseña se oculta y su autor ve el motivo en su pedido; el reporte se cierra con este texto."
+                            : "Si retira el contenido, el vendedor ve este motivo."
                       }
                       noteOptional={false}
                       yes={item.target_type === "seller" ? "Atendido" : "Retirar el contenido"}

@@ -1,12 +1,13 @@
 import { refreshSession } from "@yuntera/next-kit/proxy";
 import { type NextRequest, NextResponse } from "next/server";
-import { shopPathExists, shopPathOf } from "@/lib/shop-paths";
+import { categoryRedirect, shopPathExists, shopPathOf } from "@/lib/shop-paths";
 
 /**
  * Runs before a page is sent. Two jobs:
  *
  * 1. An address of a product or category that does not exist is answered with
- *    the not-found page and the status 404. It has to happen here: those pages
+ *    the not-found page and the status 404 (an old address of a renamed
+ *    category is answered with a permanent redirect to its new one). It has to happen here: those pages
  *    start sending their prepared shell immediately, and once a response has
  *    started its status can no longer change (it would be a "200" page that
  *    merely says "not found", which search engines treat as a real page).
@@ -15,6 +16,16 @@ import { shopPathExists, shopPathOf } from "@/lib/shop-paths";
 export async function proxy(request: NextRequest) {
   if (request.method === "GET" || request.method === "HEAD") {
     const path = shopPathOf(request.nextUrl.pathname);
+    if (path && path !== "malformed" && path.kind === "category" && !(await shopPathExists(path))) {
+      // A category staff renamed: its old address leads to the new one.
+      const target = await categoryRedirect(path.slug);
+      if (target) {
+        const to = request.nextUrl.clone();
+        to.pathname = `/c/${target}`;
+        return NextResponse.redirect(to, 308);
+      }
+      return NextResponse.rewrite(new URL(NOT_FOUND_PATH, request.url));
+    }
     if (path === "malformed" || (path && !(await shopPathExists(path)))) {
       // An address no route answers: the framework serves the not-found page
       // (src/app/not-found.tsx) with the status 404, at the address requested.

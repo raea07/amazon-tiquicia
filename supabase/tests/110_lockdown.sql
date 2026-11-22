@@ -30,9 +30,9 @@ create temporary table allowed (role text, schema text, fn text) on commit drop;
 insert into allowed (role, schema, fn)
 -- BEGIN visitor functions
 select 'anon', 'public', unnest(array[
-  'auth_limit_release', 'auth_limit_reserve', 'cart_alternatives', 'cart_lines', 'check_request', 'checkout_quote', 'delivery_estimate', 'get_product', 'get_shop',
-  'list_categories', 'list_districts', 'report_content', 'search_products', 'shop_path_exists',
-  'suggest_products'
+  'auth_limit_release', 'auth_limit_reserve', 'cart_alternatives', 'cart_lines', 'category_redirect', 'check_request',
+  'checkout_quote', 'delivery_estimate', 'get_product', 'get_shop', 'list_brands', 'list_categories', 'list_districts',
+  'report_content', 'search_products', 'shop_path_exists', 'suggest_products'
 ])
 -- END visitor functions
 union all
@@ -821,5 +821,50 @@ reset role;
 revoke select on public.profiles, public.drivers, public.orders, public.order_items,
                   public.payments, public.route_stops
 from authenticated;
+
+-- ═══ Part 4: the per-request check knows every function ════════════════════
+--
+-- An account with a second factor that has not passed it in this session
+-- gets nothing but the second-step screen's own five functions
+-- (public.check_request). This walks every function a signed-in user may
+-- execute, so a function added by any later migration is covered without
+-- being named here: each must be refused before it runs.
+
+insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret)
+select gen_random_uuid(), u.id, 'guard', 'totp', 'verified', now(), now(), 'JBSWY3DPEHPK3PXP'
+from auth.users u where u.email = 'comprador2@yuntera.example';
+
+create temporary table second_step_only (fn text) on commit drop;
+insert into second_step_only
+select unnest(array['my_security', 'my_roles', 'mfa_attempt_status', 'mfa_reserve_attempt',
+                    'mfa_attempt_succeeded']);
+create temporary table api_functions (fn text) on commit drop;
+insert into api_functions
+select distinct p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.prorettype <> 'trigger'::regtype
+  and has_function_privilege('authenticated', p.oid, 'execute')
+  and p.proname not in (select fn from pg_temp.second_step_only);
+grant select on pg_temp.api_functions to authenticated;
+
+select pg_temp.login('comprador2@yuntera.example', 'aal1');
+do $$
+declare
+  v_fn text;
+  v_count integer := 0;
+begin
+  for v_fn in select fn from pg_temp.api_functions order by fn loop
+    perform set_config('request.path', '/rpc/' || v_fn, true);
+    begin
+      perform public.check_request();
+      raise exception 'before_second_step: % passed the check at aal1', v_fn;
+    exception when others then
+      if sqlerrm <> 'second_factor_required' then raise; end if;
+    end;
+    v_count := v_count + 1;
+  end loop;
+  assert v_count > 150, format('the guard walked only %s functions', v_count);
+end
+$$;
+reset role;
 
 rollback;

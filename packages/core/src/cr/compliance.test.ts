@@ -193,9 +193,41 @@ describe("the fixed payment fee is split the way the database splits it", () => 
   });
 });
 
-describe("search ranking matches the database", () => {
-  const search = migration("20261121081200_search.sql");
+/**
+ * The search body as it runs now: the newest migration that defines it. The
+ * constants are checked in the first definition and in this one, so a later
+ * copy of the body (it is redefined whole whenever a filter changes) cannot
+ * drift from the specification either.
+ */
+const searchBodies = (() => {
+  const files = readdirSync(migrationsDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort()
+    .filter((file) =>
+      /create (or replace )?function (public\.search_products|private\.search_products_unbounded)\(/.test(
+        migration(file),
+      ),
+    )
+    .filter((file) => migration(file).includes("power(s.text_score,"));
+  const latest = files.at(-1) ?? "20261121081200_search.sql";
+  return [...new Set(["20261121081200_search.sql", latest])];
+})();
 
+describe("search ranking matches the database", () => {
+  it("checks the first and the current definition of the search body", () => {
+    expect(searchBodies[0]).toBe("20261121081200_search.sql");
+    expect(searchBodies.at(-1)).not.toBe("20261121081200_search.sql");
+  });
+
+  for (const file of searchBodies) {
+    describe(file, () => {
+      const search = migration(file);
+      checkRanking(search);
+    });
+  }
+});
+
+function checkRanking(search: string) {
   it("composes text relevance from the same constants", () => {
     const t = TEXT_RELEVANCE;
     expect(search).toContain(
@@ -216,7 +248,9 @@ describe("search ranking matches the database", () => {
     expect(search).toContain(`then ${DEFAULT_RANKING.newListingBoost} else 1 end`);
     expect(search).toContain(`interval '${DEFAULT_RANKING.newListingDays} days'`);
   });
+}
 
+describe("search input limits match the database", () => {
   it("bounds what a search box sends the same way", () => {
     const limits = migration("20261121083000_limits.sql");
     const { maxChars, maxWords } = SEARCH_INPUT_LIMITS;

@@ -1309,3 +1309,64 @@ such an offer needs review, and who owns a listing several shops sell.
 - A shop that takes over a listing cannot remove the photos the closed shop
   uploaded; staff can.
 - Details: [offers and the product page](../04-algorithms/featured-offer.md).
+
+## 40. Catalogue staff change the catalogue through functions; hiding is not taking down
+
+**Context.** The lockdown left categories, brands, search synonyms and review
+moderation without a door. Staff need them, and the shop must follow at once
+without breaking links, the rating or the fees.
+
+**Decision.** One function per change, for catalogue staff and
+administrators only, each audited (migration 083700, console section
+Catálogo). Chosen where the work offered a choice:
+
+- **Hiding a category** takes it and everything under it out of the menus and
+  category pages and out of sellers' choices; its products stay on sale, in
+  search and at their own address (breadcrumbs show only what shows). Taking
+  goods off sale is a separate, explicit act: a product take-down.
+- **A renamed category keeps its old address** as an alias the shop answers
+  with a permanent redirect (308) in its proxy, so links and search engines
+  follow. Addresses and old addresses share one namespace, and a few words the
+  shop keeps for itself are refused.
+- **Commission never changes as a side effect.** A category move that would
+  change what a listed product pays is refused; commissions change in a
+  migration with the TypeScript mirror. A staff correction of one product's
+  category may change its commission, because the product was misfiled; it is
+  refused if an offer would then sell at a loss, and the seller is told the old
+  and new rate (and the IVA, which follows the category as when a seller's edit
+  is approved).
+- **A merged brand stays as a row** that points at the survivor: its name
+  becomes a search alias and its filter address shows the survivor, so nothing
+  that pointed at it breaks. A renamed brand keeps its old name as an alias
+  and its old filter address too (`brands.former_slugs`). Merging into a brand
+  that is out of the filter is refused, so the moved products never drop out
+  of it.
+- **A hidden review keeps its row and is excluded from the rating** by the
+  existing trigger (it counts published reviews only); the reasons are a short
+  fixed list, never a low rating; the author reads why on their order page,
+  never who did it. Hiding only the seller's reply leaves the rating alone.
+  The trigger locks the product row before it counts, so two reviews of one
+  product changing at once cannot leave a stale rating.
+- **Content reports use the same doors**: acting on a product report is a
+  take-down that can be put back, and on a review report a hiding with the
+  closest reason, closing the review's other open reports.
+- **Putting back never publishes what no one reviewed.** A take-down records
+  a digest of the listing (`taken_down_fingerprint`: text, category, brand,
+  variants and packages). A seller may change a listing that is not on sale in
+  place, so a restore is refused once it differs
+  (`listing_changed_since_take_down`); a staff correction while it is down
+  keeps it restorable. A take-down ends when the listing leaves `rejected` any
+  other way (the seller sends it to review, review decides), so a listing
+  review turned down cannot be "put back" either.
+
+**Consequences.**
+
+- The seller is told of a correction, take-down or restoration by a new
+  message (`seller_listing_staff_change`); the reviewer of a hidden review is
+  not messaged, only shown on the order page.
+- Only the listing's own shop is told; other shops offering on a shared
+  listing are not.
+- A seller who edits a reply staff hid keeps it hidden until staff show it.
+- The commission spec in `packages/core/src/fees.ts` is keyed by the launch
+  slugs of the departments; the live rate stays on the category row, so a
+  renamed department keeps its rate while the spec keeps the old slug.

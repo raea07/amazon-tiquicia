@@ -1426,7 +1426,11 @@ begin
       -- who added an offer to another shop's listing, uploaded or decided a
       -- shop's logo (083600): kept as a bare id; the logo is the shop's, and
       -- a shop that closes (also with nobody left in charge) loses its logo
-      'private.offer_additions.added_by', 'shop_logos.created_by', 'shop_logos.decided_by');
+      'private.offer_additions.added_by', 'shop_logos.created_by', 'shop_logos.decided_by',
+      -- kept as a bare id: who added a search synonym, hid a review or a
+      -- seller's reply, or took a product down (083700)
+      'search_synonyms.created_by', 'reviews.hidden_by', 'reviews.reply_hidden_by',
+      'products.taken_down_by');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end
 $$;

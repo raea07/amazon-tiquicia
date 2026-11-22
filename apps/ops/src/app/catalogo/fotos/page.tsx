@@ -4,9 +4,9 @@ import { messageOf, photoPreviews, sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Alert, Badge, buttonClass, Skeleton, TextAreaField } from "@yuntera/ui";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 import { takeDownPhoto } from "@/app/photo-actions";
+import { CatalogueNav } from "@/components/catalogue-nav";
 import { requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Retirar fotos" };
@@ -14,11 +14,7 @@ export const metadata: Metadata = { title: "Retirar fotos" };
 export default function TakeDownPhotosPage({ searchParams }: PageProps<"/catalogo/fotos">) {
   return (
     <div className="shell py-8">
-      <p className="text-sm">
-        <Link href="/catalogo" className="inline-flex min-h-11 items-center text-link underline">
-          ← Productos por revisar
-        </Link>
-      </p>
+      <CatalogueNav current="/catalogo/fotos" />
       <PageHeader title="Retirar fotos de un producto">
         Para una foto que no debe mostrarse aunque ya esté aprobada: de otra persona o marca,
         ofensiva o con datos personales. Se quita de la tienda y de los pedidos en el acto y sus

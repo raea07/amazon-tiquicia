@@ -1,5 +1,13 @@
+import { brand } from "@yuntera/brand";
 import { ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
-import { ApiError, type MyOrderReturn, type OrderDetail, type OrderPayment } from "@yuntera/db";
+import {
+  ApiError,
+  type MyOrderReturn,
+  type MyOrderReview,
+  type OrderDetail,
+  type OrderPayment,
+  type ReviewHideReason,
+} from "@yuntera/db";
 import { ProductImage } from "@yuntera/next-kit/product-image";
 import {
   Alert,
@@ -40,6 +48,17 @@ export default function OrderPage(props: PageProps<"/pedidos/[numero]">) {
   );
 }
 
+/** Why staff hid a shopper's review, as the shopper reads it. */
+const HIDDEN_REVIEW_REASON: Record<ReviewHideReason, string> = {
+  offensive: "El motivo: tenía insultos o lenguaje ofensivo.",
+  personal_data: "El motivo: incluía datos personales, suyos o de otra persona.",
+  off_topic: "El motivo: no hablaba del producto ni de su compra.",
+  spam: "El motivo: tenía publicidad o enlaces.",
+  not_genuine: "El motivo: no describía una experiencia real con el producto.",
+  illegal: "El motivo: incluía contenido que la ley no permite publicar.",
+  rules: "El motivo: no cumplía las reglas para publicar reseñas.",
+};
+
 const PAYMENT_LABEL = {
   card: "Tarjeta",
   sinpe_movil: "SINPE Móvil",
@@ -64,6 +83,8 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
   const returns: MyOrderReturn[] = await api.myOrderReturns(numero);
   // How its payment stands at the gateway, and its refunds on their way.
   const payment: OrderPayment = await api.orderPayment(numero);
+  // Which of the shopper's reviews on this order staff hid, and why.
+  const reviewStates: MyOrderReview[] = await api.myOrderReviews(numero);
   const throughGateway = [
     "start",
     "preparing",
@@ -194,6 +215,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
             <ul className="mt-3 flex flex-col gap-3">
               {order.items.map((item) => {
                 const returnable = item.quantity - item.returned_quantity;
+                const moderation = reviewStates.find((state) => state.order_item_id === item.id);
                 const itemReturns = returns.filter((entry) => entry.order_item_id === item.id);
                 return (
                   <li key={item.id} className="rounded-lg border border-border bg-surface p-4">
@@ -229,6 +251,17 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                         {formatPrice(item.line_total_minor)}
                       </p>
                     </div>
+
+                    {moderation?.hidden ? (
+                      <Alert tone="warning" className="mt-4" title="Retiramos su reseña">
+                        {moderation.hidden_at
+                          ? `El ${formatDate(moderation.hidden_at, { day: "numeric", month: "long", year: "numeric" })} la quitamos`
+                          : "La quitamos"}{" "}
+                        de la página del producto y ya no cuenta en su calificación.{" "}
+                        {HIDDEN_REVIEW_REASON[moderation.hidden_reason ?? "rules"]} Si cree que es
+                        un error, escríbanos a {brand.support.email} y la revisamos de nuevo.
+                      </Alert>
+                    ) : null}
 
                     {delivered ? (
                       <div className="mt-4 grid gap-4 border-t border-border pt-4 md:grid-cols-2">

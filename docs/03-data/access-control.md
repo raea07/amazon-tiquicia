@@ -137,10 +137,11 @@ shop's name, description, logo or fiscal details; managing a shop's members;
 withdrawing a consent; moderating a review; editing categories, brands,
 synonyms, fees, delivery zones or the calendar; changing a listing's photos or
 switching a variant off. None of them was used by an app; each needs a
-function before it can be done again through the API. (Since then: photos in
-082700; members and the shop's name, fiscal details and contact in 083000;
-variants, a listing back to draft, an offer on another shop's listing and the
-shop's description and logo in 083600.)
+function before it can be done again through the API. (Since then: photos in 082700; members and the shop's name,
+fiscal details and contact in 083000; variants, a listing back to draft, an
+offer on another shop's listing and the shop's description and logo in 083600;
+categories, brands, search synonyms and review moderation in 083700, see
+[Catalogue staff](#catalogue-staff).)
 
 Supabase's own guidance is the same model — privileges decide whether a role
 can touch an object at all, policies decide which rows — and the platform is
@@ -257,13 +258,13 @@ Admin implies every role below. "Reach" is what the `ops_*` and other staff
 functions return to that role; the read policies name the same roles, but only
 as the second lock.
 
-| Role      | Reach                                                                                                                                                                                                                                    |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, the dispatch board, routes, settlements, returns; approve or suspend sellers; zones and calendar have no function yet                                       |
-| `support` | Orders and timelines (with the shopper's contact and address), sellers' private details, returns, complaints, content reports; cancel an order for a shopper; see which messages an order produced and resend a stuck one                |
-| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs; sees offers a fee change paused (`ops_fee_floor_breaches`, also `catalog`) |
-| `catalog` | All listings; approve or reject a listing, a listing edit and its photos; take down any photo; resolve content reports. Categories, brands, synonyms and review moderation have no function yet                                          |
-| `admin`   | All of the above, plus staff membership, the audit log and resetting a colleague's second factor (never their own); settings have no function yet                                                                                        |
+| Role      | Reach                                                                                                                                                                                                                                                     |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, the dispatch board, routes, settlements, returns; approve or suspend sellers; zones and calendar have no function yet                                                        |
+| `support` | Orders and timelines (with the shopper's contact and address), sellers' private details, returns, complaints, content reports; cancel an order for a shopper; see which messages an order produced and resend a stuck one                                 |
+| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs; sees offers a fee change paused (`ops_fee_floor_breaches`, also `catalog`)                  |
+| `catalog` | All listings; approve or reject a listing, a listing edit and its photos; take down any photo; resolve content reports; categories, brands, search synonyms, review moderation, and correcting, taking down and putting back a published product (083700) |
+| `admin`   | All of the above, plus staff membership, the audit log and resetting a colleague's second factor (never their own); settings have no function yet                                                                                                         |
 
 Sensitive changes by staff — to staff membership, seller status and private
 details, drivers, warehouse assignments, settings, fees, payouts — are written
@@ -286,6 +287,27 @@ shop's phone on file, so sellers cannot change that phone or the contact e-mail
 directly either, and a request made within 30 days of a change to them is
 flagged. Nobody in finance decides a request they made, or one for a shop they
 belong to.
+
+## Catalogue staff
+
+Migration `20261121083700_console_catalogue.sql` gives catalogue staff (and
+administrators; every other staff role gets `forbidden`) a door for each
+catalogue change they used to make by writing tables. Every one is audited:
+categories, brands and synonyms by the audit trigger on their tables,
+reviews and products by an entry the function writes (a review's text is
+never copied into the log, only its id, the reason and the rating).
+
+| Change              | Function                                                                                                                                  | Rules                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Categories          | `ops_create_category`, `ops_update_category`, `ops_move_category`, `ops_shift_category`, `ops_set_category_active`, `ops_delete_category` | Three levels at most, no loops, names unique among siblings; an address is unique among categories and their old addresses and never a word the shop keeps (`buscar`, `carrito`…); a renamed address stays as a redirect (`category_redirect`); a move that would change the commission of a listed product is refused; only an unused category is deleted |
+| Brands              | `ops_create_brand`, `ops_update_brand`, `ops_set_brand_active`, `ops_merge_brands`                                                        | Names unique (accents and case ignored) including old names; a merge moves the products and keeps the old name for search and the old address for the filter                                                                                                                                                                                               |
+| Search synonyms     | `ops_add_search_synonym`, `ops_remove_search_synonym`, `ops_search_preview`                                                               | Stored folded with single spaces, as search reads them; refused when empty, too long, repeated, a word search ignores, or matching nearly every listing                                                                                                                                                                                                    |
+| Reviews             | `ops_reviews`, `ops_hide_review`, `ops_show_review`, `ops_hide_review_reply`, `ops_show_review_reply`                                     | A reason from a fixed list (never a low rating); the rating follows at once; open reports about it close as acted on; staff see of the reviewer only the shop's "María F."; the author reads why on their order (`my_order_reviews`)                                                                                                                       |
+| A published product | `ops_catalog_product`, `ops_correct_product`, `ops_take_down_product`, `ops_restore_product`                                              | Category and brand corrected with a reason the seller reads; refused while the seller's own edit waits, or when an offer would sell below the fees; a take-down is a rejection with a reason that can be put back, as it was (refused once the seller changed it); the seller is told (`product.staff_changed`)                                            |
+
+`ops_resolve_report` uses the same doors: acting on a product report is a
+take-down staff can undo, and acting on a review report hides the review with
+the reason closest to the report's.
 
 ## Access that ends at once
 
@@ -448,12 +470,15 @@ name it here and in the test, and say why in the pull request.
   hashes, see [Limits on signing in](#limits-on-signing-in))
 - `cart_alternatives` (for a cart line that can no longer be bought, another shop's offer of the same variant: public data of a product a shopper can open)
 - `cart_lines`
+- `category_redirect` (where an old category address points now, for the
+  shop's permanent redirect)
 - `check_request` (the Data API runs it before every request, a visitor's
   included; for a visitor it returns at once)
 - `checkout_quote`
 - `delivery_estimate`
 - `get_product`
 - `get_shop` (a shop's public page: name, description, logo and what it sells; only an active shop has one)
+- `list_brands` (the brands of the shop's filter)
 - `list_categories`
 - `list_districts`
 - `report_content`
@@ -711,12 +736,13 @@ Only confirmation on closes it.
   for requests; it means SQL run by an administrator in the dashboard sees
   everything.
 - **Actions that only ever existed as direct writes** have no function now
-  that no role may write a table: moderating reviews, editing categories,
-  brands, synonyms, fees, delivery zones, holidays, zone closures, districts
-  and settings, and ops creating warehouse locations. Each needs a function
-  before it can be done again through the API. (Migration 083600 gave the
-  seller's ones back: an offer on another shop's listing, a variant switched
-  off and on, a listing back to draft, the shop's description and logo.)
+  that no role may write a table: editing fees, delivery zones, holidays,
+  zone closures, districts and settings, and ops creating warehouse
+  locations. Each needs a function before it can be done again through the
+  API. (Migration 083600 gave the seller's ones back: an offer on another
+  shop's listing, a variant switched off and on, a listing back to draft, the
+  shop's description and logo; 083700 gave staff categories, brands,
+  synonyms and review moderation.)
 - **The storage rules after the lockdown.** They call only owner's-rights
   helpers, so the lockdown does not change what they allow; that was checked
   locally (`105_product_photos.sql`, the photos journey) and is to be checked

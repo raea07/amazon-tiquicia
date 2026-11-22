@@ -40,20 +40,44 @@ let api: Api | undefined;
  * or not configured) the answer is "yes": the page then renders and reports
  * the problem itself, which is better than calling the whole catalogue missing.
  */
-export async function shopPathExists(path: ShopPath): Promise<boolean> {
+function catalogueApi(): Api | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) return true;
+  if (!url || !key) return null;
   if (!api) {
     const client = createClient(url, key, {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
     api = createApi({ rpc: (fn, args) => client.rpc(fn, args) });
   }
+  return api;
+}
+
+export async function shopPathExists(path: ShopPath): Promise<boolean> {
+  const client = catalogueApi();
+  if (!client) return true;
   try {
-    return await api.shopPathExists(path.kind, path.slug);
+    return await client.shopPathExists(path.kind, path.slug);
   } catch (error) {
     console.error("Could not check whether a shop page exists", error);
     return true;
+  }
+}
+
+/**
+ * Where a category that was renamed lives now: staff keep the old address
+ * working, and the shop answers it with a permanent redirect so links and
+ * search engines follow. Null when the address was never a category's, or
+ * the category no longer shows (then it is "not found", as before).
+ */
+export async function categoryRedirect(slug: string): Promise<string | null> {
+  const client = catalogueApi();
+  if (!client) return null;
+  try {
+    const target = await client.categoryRedirect(slug);
+    return target && SLUG.test(target) && target !== slug ? target : null;
+  } catch (error) {
+    console.error("Could not look up an old category address", error);
+    return null;
   }
 }

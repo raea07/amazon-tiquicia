@@ -9,6 +9,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { reviewListingEdit } from "@/app/listing-actions";
 import { reviewNewListing } from "@/app/photo-actions";
+import { CatalogueNav } from "@/components/catalogue-nav";
 import { PhotoChangeReview, PhotoPublishRetry, PhotoStrip } from "@/components/photo-review";
 import { SELLER_STATUS } from "@/lib/labels";
 import { requireStaff } from "@/lib/staff";
@@ -18,6 +19,7 @@ export const metadata: Metadata = { title: "Catálogo" };
 export default function CatalogPage() {
   return (
     <div className="shell py-8">
+      <CatalogueNav current="/catalogo" />
       <PageHeader title="Productos por revisar">
         Cada producto nuevo, y cada cambio a uno ya publicado, se revisa antes de mostrarse: que sea
         legal venderlo, que la descripción sea veraz y que no copie una marca ajena. Un precio alto

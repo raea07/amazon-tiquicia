@@ -3,7 +3,7 @@ import { buttonClass } from "@yuntera/ui";
 import type { Route } from "next";
 import Link from "next/link";
 import { ProductGrid } from "@/components/product-card";
-import { getCategories, searchCatalog } from "@/lib/data";
+import { getMenuCategories, searchCatalog } from "@/lib/data";
 
 /**
  * Home. Everything here is the same for every visitor, so it is read through
@@ -11,7 +11,7 @@ import { getCategories, searchCatalog } from "@/lib/data";
  */
 export default async function HomePage() {
   const [categories, popular, madeHere] = await Promise.all([
-    getCategories(),
+    getMenuCategories(),
     searchCatalog({ inStockOnly: true, limit: 8 }),
     searchCatalog({ madeInCr: true, inStockOnly: true, limit: 4 }),
   ]);

@@ -59,6 +59,7 @@ mailbox, not to each person.
 | `report.resolved`           | `report_resolved`               | whoever reported it    | `email`                            |
 | `product.reviewed`          | `seller_listing_approved`       | the listing's shop     | `email`, `push`                    |
 | `product.reviewed`          | `seller_listing_rejected`       | the listing's shop     | `email`, `push`                    |
+| `product.staff_changed`     | `seller_listing_staff_change`   | the listing's shop     | `email`, `push`                    |
 | `seller.status_changed`     | `seller_account_status`         | the shop               | `email`                            |
 | `seller.member_invited`     | `seller_invitation`             | the invited account    | `email`, `push`                    |
 | `seller.change_decided`     | `seller_change_decided`         | the shop               | `email`, `push`                    |
@@ -108,6 +109,12 @@ When each event happens:
 - A message whose variables cannot be worked out is set aside as a dead
   letter (`render_failed`, "no se pudo preparar el mensaje") instead of
   stopping the worker's whole batch.
+- `product.staff_changed` (migration 083700) when catalogue staff correct a
+  listing's category or brand, take it down (also from a content report) or
+  put it back. One template says which, with the reason, and for a
+  correction the old and new category and brand, the commission and IVA
+  when they change, and whether the listing is on sale (`on_sale`; staff may
+  correct one that is in review, rejected or taken down).
 - The rest come from the care, catalogue and seller-verification screens.
 - `invoice.requested` is for electronic invoicing and sends nothing here.
 

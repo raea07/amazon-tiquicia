@@ -1,16 +1,19 @@
 import { Skeleton, YunteraLogo } from "@yuntera/ui";
 import type { Route } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { cartUnits, readCart, readLocation } from "@/lib/cart";
-import { getCategories, getDistricts } from "@/lib/data";
+import { getDistricts, getMenuCategories } from "@/lib/data";
 import { getViewer } from "@/lib/session";
 
 /**
- * The header is part of the prerendered shell: logo, search and categories
- * arrive instantly. The three things that depend on who is looking — delivery
+ * The header is part of the prerendered shell: logo and search arrive
+ * instantly. The three things that depend on who is looking — delivery
  * district, account, cart — are small islands that stream in behind fallbacks
- * of the same size, so nothing shifts when they arrive.
+ * of the same size, so nothing shifts when they arrive. So is the category
+ * menu, which staff can change at any time: read from the cache on each
+ * request, it never forces every page's prepared shell to be rebuilt.
  */
 export function Header() {
   return (
@@ -59,7 +62,9 @@ export function Header() {
         </nav>
       </div>
 
-      <CategoryBar />
+      <Suspense fallback={<div className="h-12 border-t border-border" aria-hidden="true" />}>
+        <CategoryBar />
+      </Suspense>
     </header>
   );
 }
@@ -113,7 +118,11 @@ async function CartLink() {
 }
 
 async function CategoryBar() {
-  const categories = (await getCategories()).filter((c) => !c.parent_slug && c.product_count > 0);
+  // A hole in the shell, not part of it (see the comment on Header).
+  await connection();
+  const categories = (await getMenuCategories()).filter(
+    (c) => !c.parent_slug && c.product_count > 0,
+  );
   return (
     <nav aria-label="Categorías" className="border-t border-border">
       <ul className="shell flex gap-1 overflow-x-auto py-1 text-sm">
