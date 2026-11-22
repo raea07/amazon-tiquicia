@@ -43,7 +43,7 @@ its own entry, not something that happens by drift.
 | 34  | ["Refund completed" waits for a recorded confirmation](#34-refund-completed-waits-for-a-recorded-confirmation)                                      | Built; gateway not built                 |
 | 35  | [The web apps' own sign-in limit, per visitor and per account](#35-the-web-apps-own-sign-in-limit-per-visitor-and-per-account)                      | Built; not on the preview yet            |
 | 36  | [Session lifetimes per app](#36-session-lifetimes-per-app)                                                                                          | Built; not on the preview yet            |
-| 37  | [Payments through a gateway worker, confirmed only by the gateway](#37-payments-through-a-gateway-worker-confirmed-only-by-the-gateway) | Built against a local fake; not deployed |
+| 37  | [Payments through a gateway worker, confirmed only by the gateway](#37-payments-through-a-gateway-worker-confirmed-only-by-the-gateway)             | Built against a local fake; not deployed |
 
 ---
 
