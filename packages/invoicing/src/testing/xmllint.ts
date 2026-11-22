@@ -43,3 +43,23 @@ export function exclusiveC14n(xml: string): string {
   if (run.status !== 0) throw new Error(`xmllint --exc-c14n failed: ${run.stderr}`);
   return run.stdout;
 }
+
+/**
+ * The text of the first element at a path of local names (namespaces
+ * ignored), as libxml2 parses it: character references resolved, no DTD
+ * loaded, nothing fetched (--nonet). Null when there is no such element.
+ */
+export function textAt(xml: string, ...path: string[]): string | null {
+  const xpath = `/${path.map((name) => `/*[local-name()='${name}']`).join("")}`;
+  const count = xmllint(["--nonet", "--xpath", `count(${xpath})`, "-"], xml);
+  if (count.status !== 0 || Number(count.stdout.trim()) === 0) return null;
+  const run = xmllint(["--nonet", "--xpath", `string(${xpath}[1])`, "-"], xml);
+  if (run.status !== 0) throw new Error(`xmllint --xpath failed: ${run.stderr}`);
+  // xmllint ends what it prints with a newline of its own.
+  return run.stdout.replace(/\n$/, "");
+}
+
+/** Whether libxml2 reads it as well-formed XML (no DTD loaded, nothing fetched). */
+export function wellFormed(xml: string): boolean {
+  return xmllint(["--noout", "--nonet", "-"], xml).status === 0;
+}

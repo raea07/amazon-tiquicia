@@ -15,6 +15,8 @@ select pg_temp.remember('laptop', pg_temp.offer('laptop-14-nimbo-libro')::text);
 select pg_temp.remember('hamaca', pg_temp.offer('hamaca-algodon-doble')::text);
 select pg_temp.remember('carreta', pg_temp.offer('carreta-decorativa-pintada-20cm')::text);
 select pg_temp.remember('unpaid', pg_temp.unpaid_order('test-unpaid-030')::text);
+-- The seed's shop and listing awaiting approval, also on a used database (_helpers.sql).
+select pg_temp.seed_awaiting_approval();
 select pg_temp.remember('pending_offer',
   (select o.id::text from public.offers o join public.sellers s on s.id = o.seller_id
    where s.slug = 'bazar-nuevo'));
@@ -33,7 +35,7 @@ do $$
 declare
   r jsonb;
   o public.orders%rowtype;
-  v_address uuid := (select id from public.addresses where is_default);
+  v_address uuid := (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null);
 begin
   -- Two coffees at ₡4 950: below the free-shipping threshold, so ₡1 500 shipping.
   r := public.place_order(
@@ -86,7 +88,7 @@ begin
     jsonb_build_array(
       jsonb_build_object('offer_id', current_setting('t.cafe'), 'quantity', 3),
       jsonb_build_object('offer_id', current_setting('t.cafe'), 'quantity', 3)),
-    (select id from public.addresses where is_default), 'sinpe_movil', 'test-pricing-002');
+    (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null), 'sinpe_movil', 'test-pricing-002');
   select * into o from public.orders where id = (r ->> 'order_id')::uuid;
   assert o.items_total_minor = 2970000 and o.shipping_minor = 0, 'free shipping over the threshold';
   assert (select count(*) from public.order_items where order_id = o.id) = 1, 'duplicate lines merged';
@@ -102,7 +104,7 @@ do $$
 begin
   perform public.place_order(
     jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.cafe'), 'quantity', 1)),
-    (select id from public.addresses where is_default), 'card', 'test-refuse-001', 1);
+    (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null), 'card', 'test-refuse-001', 1);
   raise exception 'accepted a stale total';
 exception when others then
   if sqlerrm <> 'price_changed' then raise; end if;
@@ -123,7 +125,7 @@ begin
     ) c (items, expected)
   loop
     begin
-      perform public.place_order(v_case.items, (select id from public.addresses where is_default),
+      perform public.place_order(v_case.items, (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null),
                                  'card', 'test-refuse-' || v_case.expected || md5(v_case.items::text));
       raise exception 'accepted % (expected %)', v_case.items, v_case.expected;
     exception when others then
@@ -160,7 +162,7 @@ do $$
 begin
   perform public.place_order(
     jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.laptop'), 'quantity', 1)),
-    (select id from public.addresses where is_default), 'cash_on_delivery', 'test-refuse-cod');
+    (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null), 'cash_on_delivery', 'test-refuse-cod');
   raise exception 'accepted a high-value cash order';
 exception when others then
   if sqlerrm <> 'cod_not_available' then raise; end if;
@@ -190,7 +192,7 @@ declare
 begin
   r := public.place_order(
     jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.hamaca'), 'quantity', 2)),
-    (select id from public.addresses where is_default), 'card', 'test-stock-001');
+    (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null), 'card', 'test-stock-001');
   perform set_config('t.stock_order', r ->> 'order_id', true);
 end
 $$;
@@ -203,7 +205,7 @@ begin
     'one unit left after the first order';
   perform public.place_order(
     jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.hamaca'), 'quantity', 2)),
-    (select id from public.addresses where is_default), 'card', 'test-stock-002');
+    (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null), 'card', 'test-stock-002');
   raise exception 'sold two units when one was left';
 exception when others then
   if sqlerrm <> 'insufficient_stock' then raise; end if;
@@ -217,7 +219,7 @@ begin
   -- … and the one remaining unit can still be bought.
   perform public.place_order(
     jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.hamaca'), 'quantity', 1)),
-    (select id from public.addresses where is_default), 'card', 'test-stock-003');
+    (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null), 'card', 'test-stock-003');
   assert (select available_quantity from public.offers where id = current_setting('t.hamaca')::uuid) = 0,
     'sold out';
   assert not (select in_stock from public.products where slug = 'hamaca-algodon-doble'),
@@ -292,8 +294,7 @@ end
 $$;
 
 -- Once the warehouse has started, the shopper can no longer cancel on their own.
-select pg_temp.remember('in_prep',
-  (select o.id::text from public.orders o where o.idempotency_key = 'seed-today-d1'));
+select pg_temp.remember('in_prep', pg_temp.paid_order('test-paid-030')::text);
 select pg_temp.login('bodega@yuntera.example');
 do $$
 begin

@@ -83,6 +83,14 @@ jobs:
         run: pnpm db:local:test
       - name: API contract tests
         run: pnpm --filter @yuntera/db test
+      # The suites again, on a second database made to look like the hosted
+      # preview (seeded before invoicing, the network extension granted by a
+      # platform role), twice without a reset, leaving every table's row count
+      # as it was; and a suite broken on purpose must fail. The full version,
+      # with every browser journey run first to fill it, is
+      # `used-db-check.sh <lane> all` (too slow for every push).
+      - name: Database suites on a used-looking database
+        run: supabase/scripts/used-db-check.sh 1 quick
 
   journeys:
     name: Build and browser journeys

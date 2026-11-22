@@ -71,7 +71,7 @@ language plpgsql as $$
 begin
   perform set_config('request.jwt.claims',
     json_build_object('sub', (select id from auth.users where email = p_email),
-                      'role', 'authenticated')::text, true);
+                      'role', 'authenticated', 'aal', 'aal2')::text, true);
 end;
 $$;
 
@@ -103,7 +103,7 @@ create function pg_temp.pay(p_order uuid) returns void
 language plpgsql as $$
 begin
   perform set_config('request.jwt.claims', json_build_object(
-    'sub', (select user_id from public.orders where id = p_order), 'role', 'authenticated')::text, true);
+    'sub', (select user_id from public.orders where id = p_order), 'role', 'authenticated', 'aal', 'aal2')::text, true);
   perform public.confirm_sandbox_payment(p_order);
   perform pg_temp.logout();
 end;
@@ -1320,6 +1320,8 @@ select pg_temp.check_invariants('REV-3');
 
 -- ═══ INT-10: a payout paid after its order was refunded ════════════════════
 
+-- An open payout run of a used database is set aside (_helpers.sql).
+select pg_temp.set_aside_payout_runs();
 update public.app_settings set value = '0' where key = 'payout_hold_days';
 select pg_temp.remember('int10', pg_temp.place('integridad1@yuntera.example',
   pg_temp.items('parlante-bluetooth-nimbo-ola:1'), 'card', 'int-int10-01')::text);

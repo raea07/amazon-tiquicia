@@ -4,6 +4,11 @@
 
 begin;
 \ir _helpers.sql
+\ir _money_helpers.sql
+-- An open payout run of a used database is set aside (_helpers.sql).
+select pg_temp.set_aside_payout_runs();
+select pg_temp.remember('tecnocasa_payouts_before', (select count(*)::text from public.payouts p
+  join public.sellers x on x.id = p.seller_id where x.slug = 'tecnocasa'));
 select pg_temp.allow_inspection();
 
 select pg_temp.remember('tecnocasa', (select id::text from public.sellers where slug = 'tecnocasa'));
@@ -46,7 +51,7 @@ declare
 begin
   perform set_config('request.jwt.claims', json_build_object(
     'sub', (select user_id from public.staff_members where role = 'admin' and active limit 1),
-    'role', 'authenticated')::text, true);
+    'role', 'authenticated', 'aal', 'aal2')::text, true);
   for b in
     select s.slug, x.*
     from private.seller_balances(private.cr_local(now())::date, private.payout_hold_days()) x
@@ -105,7 +110,7 @@ begin
     'comprador@yuntera.example', 'vendedor@yuntera.example', 'repartidor@yuntera.example'
   ] loop
     perform set_config('request.jwt.claims', json_build_object(
-      'sub', (select id from auth.users where email = v_email), 'role', 'authenticated')::text, true);
+      'sub', (select id from auth.users where email = v_email), 'role', 'authenticated', 'aal', 'aal2')::text, true);
     set local role authenticated;
     for t in select * from (values
       ('select public.ops_staff()'),
@@ -329,7 +334,7 @@ begin
     'comprador@yuntera.example', 'vendedor@yuntera.example', 'comprador2@yuntera.example'
   ] loop
     perform set_config('request.jwt.claims', json_build_object(
-      'sub', (select id from auth.users where email = v_email), 'role', 'authenticated')::text, true);
+      'sub', (select id from auth.users where email = v_email), 'role', 'authenticated', 'aal', 'aal2')::text, true);
     set local role authenticated;
     for t in select * from (values
       ('select public.ops_save_driver(''Sofía Vargas Rojas'', ''+50661113456'', ''fisica'', ''109870123'', ''motorcycle'', ''MOT-123456'', 40, ''A2'', current_date + 300, current_date + 200, current_date + 100, ''comprador3@yuntera.example'')'),
@@ -652,7 +657,7 @@ begin
     'central@yuntera.example'      -- staff: they decide requests, they do not make them
   ] loop
     perform set_config('request.jwt.claims', json_build_object(
-      'sub', (select id from auth.users where email = v_email), 'role', 'authenticated')::text, true);
+      'sub', (select id from auth.users where email = v_email), 'role', 'authenticated', 'aal', 'aal2')::text, true);
     set local role authenticated;
     begin
       perform public.seller_request_payout_details(
@@ -668,6 +673,16 @@ begin
 end
 $$;
 
+-- The shop's account on file as the seed set it: on a used database the shop
+-- may have changed it through an approved request (the payouts journey does);
+-- for this transaction, which rolls back, it is the seed's again.
+update public.seller_private set payout_iban = 'CR26010200009123456789'
+where seller_id = current_setting('t.tecnocasa')::uuid and payout_iban <> 'CR26010200009123456789';
+-- Requests the shop made before this suite (none in the seed; on a used
+-- database the shop may have changed its account, and the last decided
+-- request is then shown).
+select pg_temp.remember('tecnocasa_prior_requests', (select count(*)::text from public.payout_detail_requests
+  where seller_id = current_setting('t.tecnocasa')::uuid));
 select pg_temp.login('vendedor@yuntera.example');
 do $$
 declare
@@ -697,7 +712,9 @@ begin
   end loop;
 
   d := public.seller_payout_details(v_seller);
-  assert d ->> 'request' is null and (d ->> 'can_request')::boolean, 'no request yet';
+  assert case when current_setting('t.tecnocasa_prior_requests')::integer = 0 then d ->> 'request' is null
+              else d #>> '{request,status}' <> 'pending' end
+     and (d ->> 'can_request')::boolean, 'no request waiting yet';
   assert d #>> '{current,iban_masked}' = 'CR•• •••• •••• •••• 6789', 'the current account, masked';
 
   -- Typed the way people type it: in groups, in lower case.
@@ -772,7 +789,7 @@ begin
     'comprador@yuntera.example', 'cafetal@yuntera.example', 'repartidor@yuntera.example'
   ] loop
     perform set_config('request.jwt.claims', json_build_object(
-      'sub', (select id from auth.users where email = v_email), 'role', 'authenticated')::text, true);
+      'sub', (select id from auth.users where email = v_email), 'role', 'authenticated', 'aal', 'aal2')::text, true);
     set local role authenticated;
     for t in select * from (values
       (format('select public.seller_payout_details(%L)', current_setting('t.tecnocasa'))),
@@ -802,7 +819,7 @@ begin
   -- them, and nothing of finance's.
   perform set_config('request.jwt.claims', json_build_object(
     'sub', (select id from auth.users where email = 'comprador2@yuntera.example'),
-    'role', 'authenticated')::text, true);
+    'role', 'authenticated', 'aal', 'aal2')::text, true);
   set local role authenticated;
   assert public.seller_payout_details(current_setting('t.tecnocasa')::uuid) #>> '{request,status}' = 'pending',
     'support sees the state of a request';
@@ -1050,7 +1067,25 @@ $$;
 -- from their return. (YT-100012 has one item from Tienda Sendero and one from
 -- TecnoCasa in one parcel; here TecnoCasa's goes into a second parcel that comes back.)
 savepoint split_order;
-select pg_temp.remember('split_order', (select id::text from public.orders where order_number = 'YT-100012'));
+-- It is out for delivery in the seed (seed-today-b2). On a used database it
+-- may have moved on: there the same basket is placed, paid, packed and sent
+-- out on a route now, as the seed did, for this savepoint only.
+do $$
+declare
+  v_order uuid := (select o.id from public.orders o join public.shipments s on s.order_id = o.id
+                   where o.idempotency_key = 'seed-today-b2' and s.status = 'out_for_delivery');
+begin
+  if v_order is null then
+    perform pg_temp.shopper('pagos085@yuntera.example', 'Prueba Pagos Divididos');
+    v_order := pg_temp.place('pagos085@yuntera.example',
+      pg_temp.items('abanico-pie-volcan-18:1', 'rompecabezas-volcanes-500:1'), 'card', 'test-085-split');
+    perform pg_temp.pay(v_order);
+    perform pg_temp.pack(pg_temp.shipment(v_order, 'platform'));
+    perform pg_temp.route(pg_temp.shipment(v_order, 'platform'));
+  end if;
+  perform pg_temp.remember('split_order', v_order::text);
+end
+$$;
 select pg_temp.remember('split_sendero', (
   select (-sum(e.amount_minor))::text from public.ledger_entries e
   join public.ledger_accounts a on a.id = e.account_id
@@ -1140,6 +1175,9 @@ rollback to savepoint split_order;
 savepoint invalid_account;
 update public.seller_private set payout_iban = 'CR21010200009123456789'
 where seller_id = current_setting('t.tecnocasa')::uuid;
+-- Payouts the shop already had (none in the seed; a used database may have some).
+select pg_temp.remember('tecnocasa_payouts', (select count(*)::text from public.payouts
+  where seller_id = current_setting('t.tecnocasa')::uuid));
 select pg_temp.login('central@yuntera.example');
 do $$
 declare
@@ -1147,11 +1185,23 @@ declare
               where (x ->> 'seller_id')::uuid = current_setting('t.tecnocasa')::uuid);
   r jsonb;
 begin
-  assert s -> 'reasons' = '["invalid_bank_details"]'::jsonb and not (s ->> 'will_pay')::boolean,
+  -- (On a used database the shop may also have too little left to pay: that
+  -- reason may come too, never instead.)
+  assert (s -> 'reasons') - 'below_minimum' = '["invalid_bank_details"]'::jsonb and not (s ->> 'will_pay')::boolean,
     format('an account that fails the check is not paid: %s', s);
-  r := public.ops_create_payout_run(current_setting('t.today')::date);
+  begin
+    r := public.ops_create_payout_run(current_setting('t.today')::date);
+  exception when others then
+    -- Only where nobody at all is due a payout (a used database whose money was paid out).
+    if sqlerrm <> 'nothing_to_pay' or exists (
+         select 1 from jsonb_array_elements(public.ops_payout_preview() -> 'sellers') x
+         where (x ->> 'will_pay')::boolean) then
+      raise;
+    end if;
+  end;
   assert probe.value(format('select count(*) from public.payouts where seller_id = %L',
-                            current_setting('t.tecnocasa'))) = '0', 'and the run leaves it out';
+                            current_setting('t.tecnocasa'))) = current_setting('t.tecnocasa_payouts'),
+    'and the run leaves it out';
   assert (public.seller_payouts(current_setting('t.tecnocasa')::uuid) -> 'blocked_by')
          ? 'invalid_bank_details', 'the seller''s screen says why';
 end
@@ -1567,7 +1617,7 @@ begin
   assert v -> 'blocked_by' = '["below_minimum"]'::jsonb, 'and why no payout is due right now';
   assert v #>> '{account,iban_masked}' = 'CR•• •••• •••• •••• 2345', 'where they are paid, masked';
 
-  assert jsonb_array_length(v -> 'payouts') = 1
+  assert jsonb_array_length(v -> 'payouts') = current_setting('t.tecnocasa_payouts_before')::integer + 1
      and v #>> '{payouts,0,status}' = 'paid' and (v #>> '{payouts,0,amount_minor}')::bigint = v_expected
      and v #>> '{payouts,0,bank_reference}' = 'BNCR-2026-0001'
      and v #>> '{payouts,0,reference}' like 'YUNTERA PV-%-001'

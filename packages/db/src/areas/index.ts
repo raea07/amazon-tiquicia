@@ -17,6 +17,7 @@ import { catalogueApi, catalogueErrors } from "./catalogue";
 import { followupsApi, followupsErrors } from "./followups";
 import { integrityApi, integrityErrors } from "./integrity";
 import { invoicingApi, invoicingErrors } from "./invoicing";
+import { invoicingFixesApi, invoicingFixesErrors } from "./invoicing-fixes";
 import { limitsApi, limitsErrors } from "./limits";
 import { listingsApi, listingsErrors } from "./listings";
 import * as notifications from "./notifications";
@@ -58,6 +59,7 @@ export * from "./catalogue";
 export * from "./followups";
 export * from "./integrity";
 export * from "./invoicing";
+export * from "./invoicing-fixes";
 export * from "./limits";
 export * from "./listings";
 export {
@@ -104,6 +106,7 @@ export const areaErrors = {
   ...webFollowupsErrors,
   ...paymentsErrors,
   ...invoicingErrors,
+  ...invoicingFixesErrors,
   ...sellerListingsErrors,
   ...catalogueErrors,
 } as const satisfies Messages;
@@ -119,6 +122,7 @@ export const areaApi = (caller: Caller) => ({
   ...webFollowupsApi(caller),
   ...paymentsApi(caller),
   ...invoicingApi(caller),
+  ...invoicingFixesApi(caller),
   // After listings and limits: some of its methods replace theirs (see seller-listings.ts).
   ...sellerListingsApi(caller),
   // Replaces the core searchProducts with one that also filters by brand.

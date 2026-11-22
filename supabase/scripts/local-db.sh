@@ -86,7 +86,9 @@ case "${1:-}" in
     # A suite that could not run part of itself ends with a row named
     # "skipped". It is shown; in CI (CI=true) it fails the run, so nothing that
     # runs here today can quietly stop running.
-    for file in "$ROOT"/tests/[0-9]*.sql; do
+    # YUNTERA_TESTS_DIR runs another copy of the suites (used-db-check.sh
+    # breaks one on purpose in a copy, to prove that a broken suite fails).
+    for file in "${YUNTERA_TESTS_DIR:-$ROOT/tests}"/[0-9]*.sql; do
       if run -f "$file" >"$log" 2>&1; then
         skipped="$(awk '/^ *skipped *$/ { getline; getline; print }' "$log" | sed 's/^ *//' | grep -v '^(0 rows)$' || true)"
         if [ -n "$skipped" ] && [ "${CI:-}" = "true" ]; then

@@ -132,7 +132,7 @@ begin
       jsonb_build_object('offer_id', current_setting('t.fee_a'), 'quantity', 1),
       jsonb_build_object('offer_id', current_setting('t.fee_b'), 'quantity', 1),
       jsonb_build_object('offer_id', current_setting('t.fee_c'), 'quantity', 1)),
-    (select id from public.addresses where is_default), 'card', 'test-fixes-fee-001');
+    (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null), 'card', 'test-fixes-fee-001');
   perform public.confirm_sandbox_payment((r ->> 'order_id')::uuid);
   perform set_config('t.fee_order', r ->> 'order_id', true);
 end
@@ -253,7 +253,7 @@ select pg_temp.login('comprador@yuntera.example');
 do $$
 declare
   r jsonb;
-  v_address uuid := (select id from public.addresses where is_default);
+  v_address uuid := (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null);
 begin
   -- What the shop shows a visitor…
   assert (select available from public.cart_lines(array[current_setting('t.split')::uuid])) = 2,
@@ -335,7 +335,7 @@ select pg_temp.login('comprador@yuntera.example');
 do $$
 declare
   r jsonb;
-  v_address uuid := (select id from public.addresses where is_default);
+  v_address uuid := (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null);
 begin
   r := public.place_order(
     jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.split'), 'quantity', 2)),
@@ -512,6 +512,11 @@ reset role; select pg_temp.logout();
 -- ═══ 4. Editing a listing ══════════════════════════════════════════════════
 
 select pg_temp.remember('laptop', (select id::text from public.products where slug = 'laptop-14-nimbo-libro'));
+-- A proposal for it that staff turned down before this suite (none in the
+-- seed; a used database may have one): the listing then shows that refusal.
+select pg_temp.remember('laptop_rejected_before', (exists (
+  select 1 from public.product_change_requests r
+  where r.product_id = current_setting('t.laptop')::uuid and r.status = 'rejected'))::text);
 select pg_temp.remember('teclado', (select id::text from public.products where slug = 'teclado-mecanico-compacto-nimbo'));
 select pg_temp.remember('cargador', (select id::text from public.products where slug = 'cargador-usb-c-30w-nimbo'));
 select pg_temp.remember('parlante', (select id::text from public.products where slug = 'parlante-bluetooth-nimbo-ola'));
@@ -544,7 +549,8 @@ declare
 begin
   l := public.seller_listing(current_setting('t.laptop')::uuid);
   assert l ->> 'status' = 'active' and l #>> '{content,title}' = current_setting('t.laptop_title')
-     and l -> 'pending' = 'null'::jsonb and l -> 'last_rejection' = 'null'::jsonb
+     and l -> 'pending' = 'null'::jsonb
+     and (l -> 'last_rejection' = 'null'::jsonb) <> current_setting('t.laptop_rejected_before')::boolean
      and not (l ->> 'shared')::boolean and jsonb_array_length(l -> 'variants') = 1,
     format('the listing as it stands: %s', l);
   assert (public.seller_listing(current_setting('t.audifonos')::uuid) ->> 'shared')::boolean,
@@ -987,6 +993,11 @@ reset role; select pg_temp.logout();
 
 -- ── Archiving ──────────────────────────────────────────────────────────────
 
+-- The listing archived below is on sale in the seed; a used database may have
+-- archived it already (the seller journey does): it is put back on sale for
+-- this transaction, which rolls back.
+update public.products set status = 'active'
+where id = current_setting('t.teclado')::uuid and status = 'archived';
 select pg_temp.remember('teclado_offer', pg_temp.offer('teclado-mecanico-compacto-nimbo')::text);
 select pg_temp.remember('teclado_stock',
   (select sum(on_hand)::text from public.stock_levels l join public.skus k on k.id = l.sku_id
@@ -1050,7 +1061,7 @@ do $$
 begin
   perform pg_temp.refused(format(
     $q$select public.place_order('[{"offer_id": "%s", "quantity": 1}]', '%s', 'card', 'test-fixes-archived-001')$q$,
-    current_setting('t.teclado_offer'), (select id from public.addresses where is_default)), 'offer_unavailable');
+    current_setting('t.teclado_offer'), (select id from public.addresses where is_default and user_id = (select auth.uid()) and deleted_at is null)), 'offer_unavailable');
 end
 $$;
 reset role; select pg_temp.logout();

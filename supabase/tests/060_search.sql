@@ -2,6 +2,12 @@
 
 begin;
 \ir _helpers.sql
+select pg_temp.seed_awaiting_approval();
+-- Every product a visitor may see (26 in the seed; a used database may have
+-- more, listed and approved since).
+select pg_temp.remember('catalogue',
+  (select count(*)::text from public.products p join public.categories c on c.id = p.category_id
+   where p.status = 'active' and p.min_price_minor is not null and c.active));
 
 select pg_temp.login_anon();
 
@@ -43,9 +49,11 @@ begin
 
   -- No query: the full catalogue, paged.
   select count(*) into n from public.search_products(null, null, null, null, false, false, 'relevance', 60);
-  assert n = 26, format('browse returns the whole catalogue, got %s', n);
+  assert n = least(current_setting('t.catalogue')::integer, 60) and n >= 26,
+    format('browse returns the whole catalogue, got %s of %s', n, current_setting('t.catalogue'));
   assert (select count(*) from public.search_products(p_limit => 5)) = 5, 'limit is honoured';
-  assert (select max(total_count) from public.search_products(p_limit => 5)) = 26, 'total count spans all pages';
+  assert (select max(total_count) from public.search_products(p_limit => 5)) = current_setting('t.catalogue')::integer,
+    'total count spans all pages';
   assert (select count(*) from public.search_products(p_limit => 500)) <= 60, 'page size is capped';
   assert not exists (
     select 1 from public.search_products(p_limit => 13, p_offset => 0) a

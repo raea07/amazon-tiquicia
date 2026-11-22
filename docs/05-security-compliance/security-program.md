@@ -359,6 +359,28 @@ evidence are in [access control](../03-data/access-control.md),
   proxy or edge function of our own in front of the Data API with a body
   limit, or Supabase documenting a setting (ask support before launch).
   Recheck the documentation when the platform's API gateway settings change.
+- **Accepted platform limit: the network extension's schema `net` stays
+  granted to everyone on the hosted project.** On Supabase, the grants on
+  schema `net` (usage to PUBLIC, `anon` and `authenticated`; everything on its
+  tables and functions to PUBLIC) are made by the platform's own role,
+  `supabase_admin`. The migration role (`postgres`) is not a member of it, so
+  the revoke in `20261121083200_followups.sql` runs without error and changes
+  nothing there (seen on the preview on 22 November 2026; locally, where we
+  made the grants, it removes them). What this would allow: a signed-in user,
+  or a visitor, who could run SQL as the API roles could queue web requests
+  from the database and read their answers. Nobody can: the API roles only
+  call our functions over the Data API. Compensating controls, each checked
+  by `supabase/tests/125_followups.sql` wherever it runs: schema `net` must
+  never be added to the Data API's exposed schemas (today `public` only; the
+  suite reads the setting where SQL can see it, and the preview answered
+  `406 Invalid schema: net` on 22 November); no function the API exposes
+  mentions `net`, and no function of ours runs a caller's request through it
+  (the only callers are the workers' wake-ups, `private.*_kick`, with a fixed
+  address and token from Vault, which no API role may execute); our own roles
+  granted nothing on it. Where every grant left was made by a role the
+  migration role cannot act for, the suite reports the full check as a
+  visible "skipped" row instead of failing. What would close it: Supabase
+  support revoking the platform's grants, or a platform setting for them.
 - Sessions end after 90 days in the shop, 30 in the seller centre, 12 hours in
   the console and the field app, and after 30 idle minutes in the console
   (decision 36); Auth's own time-box is not switched on (a Pro-plan setting).

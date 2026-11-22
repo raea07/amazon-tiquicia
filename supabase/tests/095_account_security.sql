@@ -10,6 +10,17 @@ begin;
 -- itself is tested in 020_access and 110_lockdown.
 select pg_temp.allow_inspection();
 
+-- This suite turns second factors on and off itself, starting from demo
+-- accounts that have none, as the seed makes them. On a used database a
+-- person may have enrolled one (the staff journey does, for the
+-- administrator): for this transaction, which rolls back, they have none.
+-- A session here means password only (aal1) unless it says aal2.
+delete from auth.mfa_factors f using auth.users u
+where u.id = f.user_id and u.email like '%@yuntera.example';
+-- Likewise the staff gate starts off, as the seed leaves it (the staff journey
+-- turns it on); the suite turns it on itself further down.
+update public.app_settings set value = 'false' where key = 'require_staff_mfa';
+
 -- A second member of staff (support), with a verified factor and one open
 -- session, for the administrator to recover.
 select pg_temp.remember('colleague', gen_random_uuid()::text);
@@ -34,7 +45,7 @@ values (gen_random_uuid(), current_setting('t.colleague')::uuid, now(), now(), '
 
 -- ── What a session knows about itself ──────────────────────────────────────
 
-select pg_temp.login('comprador@yuntera.example');
+select pg_temp.login('comprador@yuntera.example', 'aal1');
 do $$
 declare s jsonb := public.my_security();
 begin
@@ -57,7 +68,7 @@ reset role;
 
 -- ── The staff gate, setting off ────────────────────────────────────────────
 
-select pg_temp.login('central@yuntera.example');
+select pg_temp.login('central@yuntera.example', 'aal1');
 do $$
 declare s jsonb := public.my_security();
 begin
@@ -76,7 +87,7 @@ insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, c
 select gen_random_uuid(), id, 'Teléfono', 'totp', 'verified', now(), now(), 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
 from auth.users where email = 'central@yuntera.example';
 
-select pg_temp.login('central@yuntera.example');
+select pg_temp.login('central@yuntera.example', 'aal1');
 do $$
 begin
   assert not (public.my_security() ->> 'staff_session_ok')::boolean,
@@ -126,7 +137,7 @@ select pg_temp.remember('shop', (
   select m.seller_id::text from public.seller_members m join auth.users u on u.id = m.user_id
   where u.email = 'vendedor@yuntera.example' order by m.seller_id limit 1));
 
-select pg_temp.login('vendedor@yuntera.example');
+select pg_temp.login('vendedor@yuntera.example', 'aal1');
 do $$
 declare v_rows integer;
 begin
@@ -198,7 +209,7 @@ $$;
 insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret)
 select gen_random_uuid(), id, 'Teléfono', 'totp', 'verified', now(), now(), 'JBSWY3DPEHPK3PXP'
 from auth.users where email = 'comprador3@yuntera.example';
-select pg_temp.login('comprador3@yuntera.example');
+select pg_temp.login('comprador3@yuntera.example', 'aal1');
 do $$
 declare v_path text;
 begin
@@ -242,7 +253,7 @@ select pg_temp.remember('live_session', gen_random_uuid()::text);
 insert into auth.sessions (id, user_id, created_at, updated_at, aal)
 select current_setting('t.live_session')::uuid, id, now(), now(), 'aal1'
 from auth.users where email = 'comprador@yuntera.example';
-select pg_temp.login('comprador@yuntera.example');
+select pg_temp.login('comprador@yuntera.example', 'aal1');
 select set_config('request.jwt.claims',
   (current_setting('request.jwt.claims')::jsonb
    || jsonb_build_object('session_id', current_setting('t.live_session')))::text, true);
@@ -250,7 +261,7 @@ select set_config('request.path', '/rpc/my_orders', true);
 select public.check_request();
 reset role;
 delete from auth.sessions where id = current_setting('t.live_session')::uuid;
-select pg_temp.login('comprador@yuntera.example');
+select pg_temp.login('comprador@yuntera.example', 'aal1');
 select set_config('request.jwt.claims',
   (current_setting('request.jwt.claims')::jsonb
    || jsonb_build_object('session_id', current_setting('t.live_session')))::text, true);
@@ -273,7 +284,7 @@ reset role;
 
 update public.app_settings set value = 'true' where key = 'require_staff_mfa';
 
-select pg_temp.login('central@yuntera.example');
+select pg_temp.login('central@yuntera.example', 'aal1');
 do $$
 declare s jsonb := public.my_security();
 begin
@@ -321,7 +332,7 @@ $$;
 reset role;
 
 -- A shopper's own functions do not depend on the setting.
-select pg_temp.login('comprador@yuntera.example');
+select pg_temp.login('comprador@yuntera.example', 'aal1');
 do $$ begin perform public.my_orders(); end $$;
 reset role;
 
@@ -412,7 +423,7 @@ update public.app_settings set value = 'false' where key = 'require_staff_mfa';
 -- per-account advisory lock serialises the count. A right code takes back
 -- only its own reservation, and only from a session that passed the step.
 
-select pg_temp.login('comprador3@yuntera.example');
+select pg_temp.login('comprador3@yuntera.example', 'aal1');
 do $$
 declare
   s jsonb := public.mfa_attempt_status();
@@ -452,13 +463,13 @@ $$;
 -- An account with a factor cannot give a reservation back from a
 -- password-only session (that would reopen the limit for a guesser).
 select pg_temp.remember('c2_attempt', '');
-select pg_temp.login('comprador2@yuntera.example');
+select pg_temp.login('comprador2@yuntera.example', 'aal1');
 select set_config('t.c2_attempt', public.mfa_reserve_attempt() ->> 'attempt_id', true);
 reset role;
 insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret)
 select gen_random_uuid(), id, 'Teléfono', 'totp', 'verified', now(), now(), 'JBSWY3DPEHPK3PXP'
 from auth.users where email = 'comprador2@yuntera.example';
-select pg_temp.login('comprador2@yuntera.example');
+select pg_temp.login('comprador2@yuntera.example', 'aal1');
 do $$
 begin
   perform public.mfa_attempt_succeeded(current_setting('t.c2_attempt')::bigint);
@@ -474,7 +485,7 @@ delete from private.mfa_failures f using auth.users u
 where u.id = f.user_id and u.email = 'comprador2@yuntera.example';
 
 -- Another account is not affected; a visitor cannot ask.
-select pg_temp.login('comprador2@yuntera.example');
+select pg_temp.login('comprador2@yuntera.example', 'aal1');
 select set_config('t.other_status', public.mfa_attempt_status()::text, true);
 reset role;
 do $$
@@ -493,7 +504,7 @@ $$;
 reset role;
 
 -- The Auth hook: only Auth may call it, and it applies the same limit.
-select pg_temp.login('comprador2@yuntera.example');
+select pg_temp.login('comprador2@yuntera.example', 'aal1');
 do $$
 begin
   perform public.hook_mfa_verification_attempt('{}'::jsonb);
@@ -540,6 +551,39 @@ $$;
 
 -- Every row of every table in the schemas the platform owns that still holds
 -- any of the given pieces of a person, as "schema.table: piece".
+-- On a used database someone else may have typed the same text as one of
+-- the person's details (the journeys type the seed shop owner's ID number as
+-- a shopper's factura receiver; on the preview anyone may). Before the
+-- deletion, others_rows() notes each row that holds a piece and belongs to
+-- another account: it names an existing account's id and not the person's.
+-- leftovers() then leaves exactly those rows out. On a fresh seed no such row
+-- exists (every piece is the person's alone), so the search is as before.
+create temporary table t095_others (relation text, row_hash text) on commit drop;
+create function pg_temp.others_rows(p_needles jsonb, p_person uuid) returns void
+language plpgsql as $$
+declare
+  v_table record;
+  v_needle text;
+begin
+  for v_needle in select jsonb_array_elements_text(p_needles) loop
+    for v_table in
+      select n.nspname, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where c.relkind = 'r' and n.nspname in ('public', 'private', 'auth')
+    loop
+      execute format($q$
+        insert into t095_others
+        select %L, md5(t::text) from %I.%I t
+        where t::text ilike %L and t::text not ilike %L
+          and exists (select 1 from regexp_matches(t::text,
+                        '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', 'g') m
+                      join auth.users u on u.id = m[1]::uuid)$q$,
+        format('%I.%I', v_table.nspname, v_table.relname), v_table.nspname, v_table.relname,
+        '%' || v_needle || '%', '%' || p_person || '%');
+    end loop;
+  end loop;
+end;
+$$;
+
 create function pg_temp.leftovers(p_needles jsonb) returns text
 language plpgsql as $$
 declare
@@ -553,8 +597,10 @@ begin
       select n.nspname, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where c.relkind = 'r' and n.nspname in ('public', 'private', 'auth')
     loop
-      execute format('select count(*) from %I.%I t where t::text ilike %L',
-                     v_table.nspname, v_table.relname, '%' || v_needle || '%')
+      execute format('select count(*) from %I.%I t where t::text ilike %L
+                        and md5(t::text) not in (select row_hash from t095_others where relation = %L)',
+                     v_table.nspname, v_table.relname, '%' || v_needle || '%',
+                     format('%I.%I', v_table.nspname, v_table.relname))
         into v_found;
       if v_found > 0 then
         v_where := v_where || format('%s.%s: %s', v_table.nspname, v_table.relname, v_needle);
@@ -578,7 +624,7 @@ end
 $$;
 reset role;
 
-select pg_temp.login('repartidor@yuntera.example');
+select pg_temp.login('repartidor@yuntera.example', 'aal1');
 do $$
 begin
   perform public.delete_my_account();
@@ -589,7 +635,7 @@ end
 $$;
 reset role;
 
-select pg_temp.login('bodega@yuntera.example');
+select pg_temp.login('bodega@yuntera.example', 'aal1');
 do $$
 begin
   perform public.delete_my_account();
@@ -600,7 +646,7 @@ end
 $$;
 reset role;
 
-select pg_temp.login('vendedor@yuntera.example');
+select pg_temp.login('vendedor@yuntera.example', 'aal1');
 do $$
 declare b jsonb := public.account_deletion_check() -> 'blockers';
 begin
@@ -622,7 +668,7 @@ select pg_temp.remember('returnable', (
   join auth.users u on u.id = o.user_id
   where u.email = 'comprador@yuntera.example' and o.status = 'delivered'
   order by o.placed_at, i.id limit 1));
-select pg_temp.login('comprador@yuntera.example');
+select pg_temp.login('comprador@yuntera.example', 'aal1');
 do $$
 declare b jsonb;
 begin
@@ -660,6 +706,13 @@ reset role;
 select pg_temp.remember('gone', (select id::text from auth.users where email = 'comprador2@yuntera.example'));
 update public.orders set status = 'delivered', delivered_at = now()
 where user_id = current_setting('t.gone')::uuid and status = 'shipped';
+-- A used database may also hold returns and complaints the person opened
+-- (the journeys do): they reach their end too, for this transaction.
+update public.return_requests set status = 'rejected', resolved_at = now(),
+       resolution_note = 'Cerrada por las pruebas de la base de datos.'
+where user_id = current_setting('t.gone')::uuid and status in ('requested', 'approved', 'received');
+update public.complaints set status = 'resolved', resolved_at = now()
+where user_id = current_setting('t.gone')::uuid and status <> 'resolved';
 -- The paid order still to ship is cancelled by the shopper with live
 -- payments: the order is cancelled at once, the money goes back later through
 -- the gateway. Until it has, the account must stay.
@@ -670,7 +723,7 @@ select pg_temp.remember('cancelled', (
 -- Real money (the seed's was simulated, and a simulated payment's refund
 -- completes at once): a payment confirmed by hand, refunded by transfer.
 update public.payments set provider = 'manual' where order_id = current_setting('t.cancelled')::uuid;
-select pg_temp.login('comprador2@yuntera.example');
+select pg_temp.login('comprador2@yuntera.example', 'aal1');
 select public.cancel_order(current_setting('t.cancelled')::uuid);
 do $$
 declare b jsonb := public.account_deletion_check() -> 'blockers';
@@ -686,7 +739,7 @@ reset role;
 update public.app_settings set value = '"sandbox"' where key = 'payments_mode';
 -- Switching back to sandbox does not make the money moved: the refund still
 -- waits for its transfer (083400), and so does the deletion.
-select pg_temp.login('comprador2@yuntera.example');
+select pg_temp.login('comprador2@yuntera.example', 'aal1');
 do $$
 begin
   assert public.account_deletion_check() -> 'blockers' = '["account_has_pending_refund"]'::jsonb,
@@ -715,7 +768,9 @@ values (gen_random_uuid(), current_setting('t.gone')::uuid, 'x', 'totp', 'verifi
 insert into auth.sessions (id, user_id, created_at, updated_at, aal)
 values (gen_random_uuid(), current_setting('t.gone')::uuid, now(), now(), 'aal1');
 insert into auth.one_time_tokens (id, user_id, token_type, token_hash, relates_to)
-values (gen_random_uuid(), current_setting('t.gone')::uuid, 'recovery_token', 'abc', 'comprador2@yuntera.example');
+values (gen_random_uuid(), current_setting('t.gone')::uuid, 'recovery_token', 'abc', 'comprador2@yuntera.example')
+-- (a used database may hold one from a real reset already)
+on conflict (user_id, token_type) do nothing;
 -- The person has had messages (20261121082600_notifications.sql): channel
 -- choices with a WhatsApp number, a commercial consent, a phone registered for
 -- push, messages planned for an event about one of the orders, one of them on
@@ -785,11 +840,11 @@ reset role;
 -- Invitations the person already had (a used preview keeps answered ones).
 select pg_temp.remember('gone_invitations_before', (select count(*)::text from public.seller_invitations i
   where i.invitee_id = current_setting('t.gone')::uuid));
-select pg_temp.login('vendedor@yuntera.example');
+select pg_temp.login('vendedor@yuntera.example', 'aal1');
 select set_config('t.gone_invitation', public.seller_invite_member(
   current_setting('t.gone_shop_a')::uuid, 'comprador2@yuntera.example', 'staff')::text, true);
 reset role;
-select pg_temp.login('sendero@yuntera.example');
+select pg_temp.login('sendero@yuntera.example', 'aal1');
 select public.seller_invite_member(
   current_setting('t.gone_shop_b')::uuid, 'comprador2@yuntera.example', 'staff');
 reset role;
@@ -944,6 +999,7 @@ select pg_temp.remember('orders_before', (
 select pg_temp.remember('reviews_before', (
   select count(*)::text from public.reviews where user_id = current_setting('t.gone')::uuid));
 select pg_temp.remember('deletions_before', (select count(*)::text from private.account_deletions));
+select pg_temp.others_rows(current_setting('t.needles')::jsonb, current_setting('t.gone')::uuid);
 
 -- The account now has a factor, so the deletion needs a session that passed it.
 select pg_temp.login('comprador2@yuntera.example', 'aal2');
@@ -1178,11 +1234,12 @@ select pg_temp.remember('driver_needles', (
   from public.drivers d join auth.users u on u.id = d.user_id
   where u.email = 'repartidor2@yuntera.example'));
 select pg_temp.remember('driver_user', (select id::text from auth.users where email = 'repartidor2@yuntera.example'));
+select pg_temp.others_rows(current_setting('t.driver_needles')::jsonb, current_setting('t.driver_user')::uuid);
 select pg_temp.login('central@yuntera.example', 'aal2');
 select public.ops_set_driver_status(
   (select d.id from public.drivers d where d.user_id = current_setting('t.driver_user')::uuid), 'offboarded');
 reset role;
-select pg_temp.login('repartidor2@yuntera.example');
+select pg_temp.login('repartidor2@yuntera.example', 'aal1');
 do $$
 begin
   assert jsonb_array_length(public.account_deletion_check() -> 'blockers') = 0, 'offboarded: nothing pending';
@@ -1213,16 +1270,18 @@ select pg_temp.remember('bazar_needles', (
                            'bazar@yuntera.example', 'Laura sonriendo en su puesto del bazar',
                            'laura.bazar@correo.example', '+50688112233', 'socia.bazar@correo.example')::text
   from public.seller_private sp where sp.seller_id = current_setting('t.bazar_shop')::uuid));
+select pg_temp.others_rows(current_setting('t.bazar_needles')::jsonb,
+                           (select id from auth.users where email = 'bazar@yuntera.example'));
 -- She also invited a partner to the team and asked to change the shop's
 -- contact to her own address and phone (20261121083000_limits.sql).
-select pg_temp.login('bazar@yuntera.example');
+select pg_temp.login('bazar@yuntera.example', 'aal1');
 select public.seller_invite_member(current_setting('t.bazar_shop')::uuid, 'socia.bazar@correo.example', 'staff');
 select public.seller_request_shop_change(current_setting('t.bazar_shop')::uuid, 'contact',
   p_contact_email => 'laura.bazar@correo.example', p_contact_phone => '+506 8811 2233');
 reset role;
 -- Before that she uploaded a photo for a draft listing, described with her own
 -- name (20261121082700_product_photos.sql): it waits for review.
-select pg_temp.login('bazar@yuntera.example');
+select pg_temp.login('bazar@yuntera.example', 'aal1');
 do $$
 declare
   created jsonb;
@@ -1253,7 +1312,7 @@ begin
     'the photo waits for review';
 end
 $$;
-select pg_temp.login('bazar@yuntera.example');
+select pg_temp.login('bazar@yuntera.example', 'aal1');
 do $$
 begin
   perform public.delete_my_account();
@@ -1267,7 +1326,7 @@ select pg_temp.login('central@yuntera.example', 'aal2');
 select public.ops_set_seller_status(current_setting('t.bazar_shop')::uuid, 'suspended',
                                     'La persona dueña pidió cerrar la tienda.');
 reset role;
-select pg_temp.login('bazar@yuntera.example');
+select pg_temp.login('bazar@yuntera.example', 'aal1');
 do $$ begin perform public.delete_my_account(); end $$;
 reset role;
 select pg_temp.remember('leftovers', coalesce(pg_temp.leftovers(current_setting('t.bazar_needles')::jsonb), ''));
