@@ -12,11 +12,12 @@ production, with the Supabase and Vercel dashboards open.
   `082700` (account security, notifications, product photos), then for
   `082800` to `083100` (the security hardening), and **on 22 November 2026
   for `083200` to `083500`** (the follow-ups, payments, invoicing), with the
-  four apps redeployed each time: the preview has 33 migrations. What was run
-  for the last four is under
+  four apps redeployed each time. What was run for those four is under
   [What was done on the preview, 22 November 2026](#what-was-done-on-the-preview-22-november-2026).
-  Four more (`083510`, `083600`, `083700`, `083900`) are merged and applied
-  nowhere yet: [Migrations 083510 to 083900](#migrations-083510-to-083900).
+  Four more (`083510`, `083600`, `083700`, `083900`) went on **the same
+  evening**, again with the four apps redeployed: the preview has 37
+  migrations
+  ([what was done](#what-was-done-on-the-preview-22-november-2026-evening)).
   Each step says what was actually run and what differed from the local
   build. Places that differed, or still may, are marked ⚠.
 - **It costs money or it does not, depending on step 1.** Decide before
@@ -1048,9 +1049,11 @@ address and with a new one look the same, which the preview cannot show.
 
 ### Migrations 083510 to 083900
 
-Four migrations merged on 22 November 2026 and **applied nowhere yet**, the
-hosted preview included (it has 33). Apply them in filename order, which is
-also the order they need, in one sitting:
+Four migrations merged on 22 November 2026 and applied to the hosted preview
+the same evening (it now has 37; what was done is under
+[What was done on the preview, 22 November 2026, evening](#what-was-done-on-the-preview-22-november-2026-evening)).
+Apply them in filename order, which is also the order they need, in one
+sitting:
 
 1. `20261121083510_invoicing_fixes.sql`: simulated money kept out of
    invoicing, and what the console and the order page say about it.
@@ -1118,52 +1121,247 @@ Do this in order.
    ```sql
    -- every captured payment is decided; on the preview all of them are simulated
    select simulated, count(*) from public.payments
+   where status in ('captured', 'partially_refunded', 'refunded') group by 1; -- no null
+   -- the jobs for simulated money ended without a document
+   select j.status, j.last_error, count(*) from private.outbox_jobs j where j.consumer = 'invoice' group by 1, 2;
+   -- exactly one function of each name, the new form
+   select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+   and p.proname in ('set_my_notification_settings', 'seller_set_notification_settings'); -- two rows, each ending in ", text)"
+   select has_function_privilege('anon', 'public.set_my_notification_settings(boolean, boolean, boolean, boolean, text, boolean, text, bigint, text)', 'execute'); -- false
    ```
-where status in ('captured', 'partially_refunded', 'refunded') group by 1; -- no null
--- the jobs for simulated money ended without a document
-select j.status, j.last_error, count(*) from private.outbox_jobs j where j.consumer = 'invoice' group by 1, 2;
--- exactly one function of each name, the new form
-select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public'
-and p.proname in ('set_my_notification_settings', 'seller_set_notification_settings'); -- two rows, each ending in ", text)"
-select has_function_privilege('anon', 'public.set_my_notification_settings(boolean, boolean, boolean, boolean, text, boolean, text, bigint, text)', 'execute'); -- false
-
-````
 
 4. **Run the suites** with `remote-db.sh test`: all 28 files, among them
-`152_invoicing_fixes.sql`, `155_seller_listings.sql`,
-`160_console_catalogue.sql` and `170_native_accounts.sql`. Each runs in
-one transaction that is rolled back and asserts only on its own rows or
-on differences from a baseline, so the preview's orders, simulated
-payments, reviews, paused offers and waiting changes do not disturb them
-(`supabase/scripts/used-db-check.sh` proves this on a lane made to look
-like the preview). Two rows say `skipped`, as before, and no other:
-`125_followups.sql` `net_grants` (the platform's grants on schema `net`,
-made by `supabase_admin`) and `100_notifications.sql` part 2 (two workers
-at once: it needs no other session on the database and a second
-connection through `dblink`, which the hosted project refuses).
+   `152_invoicing_fixes.sql`, `155_seller_listings.sql`,
+   `160_console_catalogue.sql` and `170_native_accounts.sql`. Each runs in
+   one transaction that is rolled back and asserts only on its own rows or
+   on differences from a baseline, so the preview's orders, simulated
+   payments, reviews, paused offers and waiting changes do not disturb them
+   (`supabase/scripts/used-db-check.sh` proves this on a lane made to look
+   like the preview). Two rows say `skipped`, as before, and no other:
+   `125_followups.sql` `net_grants` (the platform's grants on schema `net`,
+   made by `supabase_admin`) and `100_notifications.sql` part 2 (two workers
+   at once: it needs no other session on the database and a second
+   connection through `dblink`, which the hosted project refuses).
 5. **Redeploy the four web apps together** (step 7): the console reads the
-new `ops_invoicing_state` fields and the catalogue screens, the shop the
-order page's invoicing texts, the brand filter and the category menu, the
-seller centre the listing and shop screens. An app deployed before the
-migrations would call functions that do not exist yet.
+   new `ops_invoicing_state` fields and the catalogue screens, the shop the
+   order page's invoicing texts, the brand filter and the category menu, the
+   seller centre the listing and shop screens. An app deployed before the
+   migrations would call functions that do not exist yet.
 6. **Rebuild the shopper and seller apps after `083900` is applied**, never
-before: they now send `p_source`, which the old functions do not accept.
-Send the store builds from that code only once the preview has all four
-migrations. The drivers' and warehouse apps call neither function.
+   before: they now send `p_source`, which the old functions do not accept.
+   Send the store builds from that code only once the preview has all four
+   migrations. The drivers' and warehouse apps call neither function.
 7. **A smoke test**: in the console's Comprobantes page the simulation
-notice and no "dinero real" while the preview is in `sandbox`; on a paid
-order's page in the shop the sentence for simulated money; the
-notification settings saved once from the shop's account page (the
-consent log row says `web_cuenta`).
+   notice and no "dinero real" while the preview is in `sandbox`; on a paid
+   order's page in the shop the sentence for simulated money; the
+   notification settings saved once from the shop's account page (the
+   consent log row says `web_cuenta`).
 
-**Not verified anywhere but locally:** none of the four has run against the
-hosted project. Auth's rate limits on password checks and reset e-mails
-(the native apps' "Olvidé mi contraseña") are not exercised by the local API
-stand-in; the reset links the apps request go to `<shop website>/auth/confirm`,
-which must be in the hosted project's Auth redirect allow-list (set
-`EXPO_PUBLIC_SHOP_URL` in an app's build if the website's address differs
-from the planned one).
+**Not verified anywhere but locally:** Auth's rate limits on password checks
+and reset e-mails (the native apps' "Olvidé mi contraseña") are not exercised
+by the local API stand-in; the reset links the apps request go to
+`<shop website>/auth/confirm`, which must be in the hosted project's Auth
+redirect allow-list (set `EXPO_PUBLIC_SHOP_URL` in an app's build if the
+website's address differs from the planned one). No native app built after
+`3f251c3` has talked to the preview.
+
+### What was done on the preview, 22 November 2026, evening
+
+All four migrations, `083510` to `083900`, in one sitting (21:59 to 22:45
+UTC), in the order above. Vercel CLI 65.12.1, Playwright in headless
+Chromium, the Management API through the network proxy; worktree at
+`60d7f05`.
+
+1. **Recorded first.** `status`: 33 applied, these four pending, nothing
+   else. Row counts of all 137 tables in `public`, `private`, `auth`,
+   `storage`, `vault`, `net`, `cron` and `supabase_migrations` (8 882 rows).
+   `payments_mode` `"sandbox"`, `invoicing_issuer.ready` false,
+   `invoicing_policy.simulated_payments` false, `require_staff_mfa` false;
+   invoice jobs waiting: 3 `payment.captured` and 1 `fiscal.refund_booked`
+   (all `pending`); 0 table privileges of `anon` or `authenticated` in
+   `public` and `private` (the 42 rows `information_schema` lists for the app
+   roles are the platform's own, in `storage`, `realtime` and `extensions`);
+   the 7 scheduled jobs, every run succeeded; 11 demo accounts, 0 second
+   factors (the other 4 rows of `auth.users` are deleted throwaways,
+   anonymised); `vault.secrets` holds `auth_limit_caller_digest` only; no
+   Edge Function deployed (`GET /v1/projects/<ref>/functions` answers `[]`).
+   Offer order and ratings of the 8 products with most offers or reviews
+   (`audifonos-inalambricos-nimbo-aire`, `camiseta-algodon-sendero`,
+   `cafe-molido-tarrazu-340g` among them). The old apps' 25 pages (visitor,
+   `comprador`, `vendedor`, `central`, `repartidor`, `bodega`) loaded without
+   an error, and the shopper app's client of `3f251c3` answered every read.
+2. **Read-only checks.** No product `rejected` (26 active, 1 waiting for
+   review, 1 archived), so no take-down the new columns would not know about;
+   the 9 content reports are all `dismissed`; no hidden review (21
+   published); no listing edit waiting (2 approved) and no shop change
+   waiting (1 contact change rejected); all 31 offers active,
+   `fee_floor_breaches` empty; no category slug that is reserved, malformed
+   or deeper than three levels, no two siblings with the same folded name;
+   no malformed brand slug and no two brands with the same folded name;
+   payments: 21 `sandbox` and 2 `cash` captured or refunded, all in sandbox
+   (25 changes of the settings are in the audit trail).
+3. **`push`** applied all four at the first try in 2.2 s (22:07:21 to
+   22:07:24); `status` lists 37. No platform difference; no file was edited.
+4. **What they left.** Settings unmoved. Every captured or refunded payment
+   has `simulated` true (23); the 3 capture jobs and the refund job ended
+   `done` / `simulated_money`; 0 electronic invoices, 0 fiscal counters. The
+   guard: 97 tables in `public` and `private` (3 new: `shop_logos`,
+   `category_slug_aliases`, `private.offer_additions`), row-level security on
+   all, 0 table, sequence or column privileges for the app roles (by
+   `has_table_privilege` and by `aclexplode`), 0 write policies (58 read
+   policies: the new staff read policy on `category_slug_aliases`), no
+   definer function without an empty `search_path`, no non-definer function
+   in `public` the app roles may call. A visitor may now call 17 functions
+   (13 before: `cart_alternatives`, `category_redirect`, `get_shop`,
+   `list_brands` added), `authenticated` 228 (181). One function of each
+   notification-settings name, the new form, not executable by `anon`.
+   `search_products` exists only with ten arguments. A token after sign-out
+   still gets `400 session_ended`. The scheduled jobs kept succeeding. The 8
+   products' offer order and ratings were identical. One setting was added
+   (`max_new_offers_per_day_per_seller`).
+5. **Suites**: all 28 pass at the first run (59 s); the only `skipped` rows
+   are `125_followups` `net_grants` and part 2 of `100_notifications`. Row
+   counts before and after the run were identical except for one session of
+   a browser check running at the same time and the scheduler's history. No
+   test or file had to change.
+6. **Redeploy**, one at a time from the repository root with `vercel deploy
+   --prod --yes --token dummy`, 25 to 35 s each: web
+   `dpl_JBesEfvhktdf3RDwDZSNrUTbqSRy` (ready 22:16:50), vende
+   `dpl_4B2XAJxRUCfL2y8zK8pqW2GUowz5`, central
+   `dpl_9smbCZahkLWxYx5Z8sxhzJ8GU8vD`, campo
+   `dpl_4D2v2sRnpGQj9A4rFutfAgDhDxyb` (ready 22:18:33). Without a bypass all
+   12 addresses answer `302` to `vercel.com/sso-api` at `/` and `/ingresar`.
+   **The window** (22:07 to 22:18): the old apps' 25 pages and 7 more
+   (notification settings in the shop and the seller centre, an order page,
+   the console's review queue, Comprobantes and Cobros) loaded against the new
+   database; no action was tried. The old console's listing-edit approval
+   would still have answered: the new `ops_review_listing_edit` takes the old
+   three named arguments (the fourth has a default).
+7. **The Android build of `3f251c3`.** That commit's own API client
+   (`packages/db` with its response schemas), driven with the calls the
+   shopper app makes, as a visitor and as `comprador`, after the push: search
+   with all nine named arguments and with the subsets the home page and the
+   listings send, suggestions, categories, districts, two product pages, the
+   cart's lines and quote, roles, profile, addresses, orders, an order, its
+   payment and its returns. Every call answered and matched the old schemas
+   (the visitor's personal calls are refused `not_authenticated`, as
+   before). The build never calls the notification-settings functions; its
+   settings write is `update_profile` and `set_my_commercial_consent(p_opt_in,
+   p_text_version, p_source)`: both sent with the stored values and
+   answered. `set_my_notification_settings` with the old eight names and the
+   stored values (as the old websites send it) answered too; it raised
+   `comprador`'s settings version from 0 to 1.
+8. **Smoke test** through a bypass made and revoked as before, sent to the
+   four `vercel.app` hosts only, failing on console errors, page errors,
+   failed requests and 5xx; none occurred.
+   - Shop, at 1280 and 390 px, as a visitor and as `comprador`: the 14
+     departments in the menu; search with and without `marca=nimbo`; the
+     headphones' two offers, Sendero's (in stock, cheaper) first and
+     TecnoCasa's below; `/tienda/tecnocasa`, and `404` for an unknown shop;
+     the cart with IVA; checkout with no method chosen and the simulation
+     notice; SINPE Móvil paid by the simulation (YT-101164, 1280 px only),
+     its four-digit code on the shopper's own order page, and "Este pedido
+     se pagó en modo de prueba, sin dinero real, así que no se emite ningún
+     comprobante electrónico."; on YT-100010 (no delivery fee) "Este pedido no
+     tuvo costo de entrega, así que Yuntera no le emite ningún comprobante.";
+     sign-out. The new payment was decided `simulated` at capture and its
+     invoice job ended `simulated_money` within the sweep. The shopper then
+     cancelled it: refunded in the simulation, its refund job ended the same
+     way.
+   - Seller centre as `cafetal`: the catalogue search found Sendero's bottle
+     ("Publicado por Tienda Sendero"); an offer at ₡25 000 with no stock;
+     Productos listed it with "De otra tienda" and "Usted cambia su precio y
+     sus existencias…" visible and no "Editar"; the bottle's page listed the
+     offer below Sendero's; "Dejar de vender este producto" took it out of
+     the list and the page. Cafetal's six listings have one variant each, so
+     no variant can be switched off there (`last_variant`; the screen shows no
+     variants section); Sendero's T-shirt's "Talla S" was switched off (gone
+     from the shop within 17 s) and on again (back at the next look).
+   - **The logo against the real storage service.** The browser uploaded
+     three renditions of a 600 × 600 JPEG (8 953 bytes) with signed upload
+     links to `product-photos-pending/<seller id>/logo/<logo id>/{400,800,1600}.jpg`
+     (5 276, 8 939, 8 939 bytes: no rendition is larger than the original);
+     both buckets take JPEG, PNG and WebP up to 2 MiB per file. While it
+     waited: a visitor got `400 Bucket not found` at the public address and
+     `Object not found` at the private one; a shopper and another shop
+     (`sendero`) got `Object not found`; cafetal read its own files; a list
+     of the folder came back empty for a visitor and for `sendero`; an
+     overwrite by either was refused by row-level security; nothing was in
+     the public bucket. Staff saw it through a signed link. On approval the
+     console wrote the public sizes into `product-photos` (3 835, 6 284,
+     6 284 bytes, `max-age=604800`), removed the waiting files, and the shop
+     page and cafetal's product page showed it at the next look. Cafetal then
+     removed it with "Quitar el logotipo": the logo is `removed`, the shop
+     shows none, and its three public files stay in the bucket, unlinked
+     (nothing in the product deletes them).
+   - Console as `central`, at 1280 and 390 px: the nine catalogue screens
+     (review queue with listing edits, a product, categories, brands, search,
+     reviews, photos, logos, shop changes), none scrolled sideways. The
+     Prueba description and the logo approved and shown on
+     `/tienda/cafetal-los-santos`; a second request with the original text,
+     approved, put the description back. A category "Prueba" under "Hecho en
+     Costa Rica", the carreta filed in it by a staff correction (same
+     commission), listed on `/c/hecho-en-cr`; renamed "Prueba renombrada"
+     (`/c/prueba` answered `308` to `/c/prueba-renombrada`); hidden (out of
+     the department page, its page `404`, the carreta still at its address and
+     in search); the carreta corrected back to Artesanía and the category
+     deleted (both addresses `404`). The header menu lists departments only,
+     so it never showed the sub-category. Brands "Prueba Uno" and "Prueba
+     Dos" created, Uno merged into Dos, Dos taken out of the filter; neither
+     was ever in the shop's filter (no products). The synonym "pruebazeta" →
+     "chorreador" made a search find the chorreador and, removed, nothing.
+     The libreta's review hidden ("No trata del producto") and shown again:
+     the product page went to "Todavía no tiene reseñas" and back to 3 of 5.
+     The carreta taken down (`404`) and put back (`200`). On the hosted cache
+     every one of these showed on the first look after the change, 2 to 4 s
+     later. Comprobantes says "Ningún pago con dinero real espera
+     comprobante." and "Este ambiente simula los pagos… 4 pagos simulados se
+     cerraron sin comprobante." (orders, not jobs: the 3 closed by the
+     migration and YT-101164).
+   - **A catalogue form with JavaScript off** (`javaScriptEnabled: false`):
+     the hosted console streams the page's content into hidden containers its
+     scripts reveal, so without JavaScript the categories page shows only
+     its menu, title and introduction; the create form is in the page but
+     hidden and cannot be used by a person. Submitted natively by the
+     browser anyway ("Prueba sin JavaScript"), the action ran (the category
+     was created; then deleted) and the app answered `200 text/html`, 772 KB
+     of streamed script chunks without an `<html>` or `<main>`: a blank page.
+     Locally the journey blocks only the script files, so the inline scripts
+     that reveal the content still run there.
+   - Field app at 390 and 1280 px: `/bodega` as `bodega` and `/ruta` as
+     `repartidor`, no delivery code, signed out.
+9. **Afterwards.** Vercel since the deployments: no runtime error on the
+   shop or the field app; 27 error lines on the console and 5 on the seller
+   centre, all "The shop did not refresh its catalogue: HTTP 302, redirected
+   to vercel.com" (the known effect of the shop's Vercel login). The
+   scheduled jobs all succeeded. Advisors against the round before: security
+   286 findings (233): `authenticated` may execute 228 definer functions
+   (181), `anon` 17 (13), RLS with no policy on 39 tables (37: `shop_logos`
+   and `private.offer_additions`, reached only through definer functions);
+   performance 99 (92): 85 unindexed foreign keys (76), 14 unused indexes
+   (16). The bypass secrets were revoked; each project lists none and all 12
+   addresses redirect to the login again. Settings, the guard, the digest,
+   the second factors (0), the demo accounts (11) and the absence of any Edge
+   Function were as recorded at the start.
+
+What this round left on the preview: YT-101164 of `comprador`, paid and
+cancelled in the simulation (its refund, ledger rows and jobs); cafetal's
+withdrawn offer on the bottle (`private.offer_additions` counts it against
+the day's cap); three shop-change requests of cafetal (the Prueba
+description and the original, both approved; the earlier rejected one); the
+removed logo's row and its three public files; brands "Prueba Uno" (merged)
+and "Prueba Dos" (out of the filter, no products), visible only in the
+console, since brands cannot be deleted; `comprador`'s notification settings
+at version 1 with the same values; 35 audit entries and 23 outbox events
+(messages only planned, none sent); 36 sessions of demo accounts left to
+expire. Nothing named Prueba is visible to a visitor: categories, brand
+filter, search, shop page and redirects were checked through the API.
+
+**For production**: the same order; the read-only checks of point 2 matter
+only on a database with data. The suites should pass as here. The JavaScript-
+off behaviour of point 8 is the framework's streaming, the same in
+production.
 
 ## 4. Confirm the database is what the migrations say
 
@@ -1176,7 +1374,7 @@ select id, active from public.delivery_zones;      -- gam-core and gam-extended 
 select key, value from public.app_settings;        -- payments_mode "sandbox"
 select jobname, schedule from cron.job;            -- expire-unpaid-orders, refresh-product-signals,
                                                 -- notify-sweep, cron-history-cleanup (082600)
-````
+```
 
 Then, once the project has been up for ten minutes, check that the scheduler
 really runs the jobs:

@@ -13,11 +13,14 @@ synonyms, review moderation, staff corrections and take-downs; migration
 `083700`). And the account screens inside the four native apps (deleting
 the account, the password reset and change, the shopper's second step,
 reporting a listing, message channels, the seller's team, invitations, shop
-changes and notification settings; migration `083900`). **None of the four
-migrations is applied to the hosted preview yet**, which stays at 33; the
-order and the deployment notes are in the
-[runbook](docs/07-deployment/runbook-first-deploy.md#migrations-083510-to-083900)
-and under "Things to know". The shopper app's Android build was sent to
+changes and notification settings; migration `083900`). **On the evening of
+22 November 2026 all four were applied to the hosted preview, which now has
+37 migrations, and its four web apps were redeployed with this code**; the
+suites pass there and the browser checks passed (what was done and what
+differed is in the
+[runbook](docs/07-deployment/runbook-first-deploy.md#what-was-done-on-the-preview-22-november-2026-evening)).
+The preview still simulates payments and no worker is deployed. The shopper
+app's Android build was sent to
 Google Play's internal testing on 22 November 2026 and waits for you to
 release it ("What needs you", item 11). Before them, the payment gateway and
 electronic invoicing were merged on top of both follow-ups: payments through ONVO in two new modes
@@ -27,8 +30,8 @@ finance section in the console (migration `083400`); and the platform's own
 electronic documents for Hacienda, signed and sent by a worker, shown on the
 shopper's order and in the seller's statements (migration `083500`). Both
 work only against local fakes. **On 22 November 2026 all four migrations
-(`083200` to `083500`) were applied to the hosted preview, which now has 33,
-and its four web apps were redeployed with this code.** The preview **still
+(`083200` to `083500`) were applied to the hosted preview, then 33, and its
+four web apps were redeployed with that code.** The preview **still
 simulates payments** (`payments_mode` is `sandbox`), no worker is deployed
 (notifications, payments, invoicing), and nothing is invoiced: the issuer is
 not set up. What was done and what differed is in the runbook, sections
@@ -53,8 +56,9 @@ Everyone can reset a password, confirm their e-mail and delete their account;
 staff and sellers can add a second factor; messages for every step of an order
 are planned and sent, but only to local fake providers. **A hosted preview
 exists.** The database is a Supabase project in your separate free
-organisation, with all 33 migrations applied (the security review's fixes,
-both follow-ups, payments and invoicing included), and the demo data loaded.
+organisation, with all 37 migrations applied (the security review's fixes,
+both follow-ups, payments, invoicing and its fixes, seller listings, the
+console catalogue and the native accounts included), and the demo data loaded.
 Payments there are simulated, and no worker is deployed, so nothing is sent,
 charged or invoiced. Since the review, apps and visitors can reach the database
 only through its functions: no table is readable or writable directly. The
@@ -233,9 +237,10 @@ In the order that unblocks the most.
        exists (the shop's `/ayuda/eliminar-cuenta`) and every web app can
        delete an account. All four native apps now can too, but the store
        builds made so far come from `3f251c3`, before that work; both stores
-       require it in the app at the first public submission. A build with it
-       must wait until the preview has migration `083900` (the apps send an
-       argument the preview's functions do not accept yet).
+       require it in the app at the first public submission. The preview has
+       had migration `083900` since 22 November 2026 (evening), so a build
+       with it can be made now; none has been made or tried against the
+       preview yet.
     5. Decide whether the four apps keep one shared icon, as the brand book
        says today, or get icons that tell them apart in the store.
     6. An Apple Developer Program membership (US$99 a year) for any iOS build on
@@ -250,8 +255,9 @@ In the order that unblocks the most.
        ([store-testing.md](docs/07-deployment/store-testing.md), Part 1,
        steps 6 to 8). No iPhone build exists yet: run the iPhone command in
        Part 2 once, interactively, from commit `3f251c3` (`git checkout
-       3f251c3` after cloning), so both stores carry the same code as the
-       preview until the preview is updated. The team account has used 4 of
+       3f251c3` after cloning), so both stores carry the same code. That
+       build keeps working against the updated preview: every call it makes
+       was tried there after the migrations and answered. The team account has used 4 of
        its 15 Android builds and 2 of its 15 iOS builds in the cycle from
        1 November to 1 December 2026; nothing was billed.
 
@@ -440,6 +446,33 @@ and no write policy is left. On that database the payout suites fail with
 `nothing_to_pay` until the demo payout accounts are approved; with them
 approved, they pass.
 
+On the hosted preview, on 22 November 2026 (21:59 to 22:45 UTC), after
+applying migrations `083510` to `083900` and redeploying the four apps. The
+commands and numbers are in the
+[runbook](docs/07-deployment/runbook-first-deploy.md#what-was-done-on-the-preview-22-november-2026-evening).
+
+| Check              | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before applying    | 33 applied, these four pending. No product rejected, no hidden review, no listing edit or shop change waiting, no offer paused, no category or brand address the new rules would refuse. Payments in sandbox, the issuer not set up, 3 capture jobs and 1 refund job waiting for invoicing                                                                                                                                                                                      |
+| Applying           | All four went in at the first try, in 2.2 seconds; no platform difference, no file changed                                                                                                                                                                                                                                                                                                                                                                                      |
+| One-off changes    | Every captured payment was marked simulated; the 4 waiting invoice jobs ended as "simulated money"; nothing was issued (0 documents)                                                                                                                                                                                                                                                                                                                                            |
+| Guard              | No app role holds any privilege on any of the 97 tables (3 new), sequence or column; no write policy; row-level security on everywhere; every function a definer with an empty search path. Visitors may now call 17 functions (the shop page, the cart's other offer, the brand filter and old category addresses added). One notification-settings function of each name. A token after sign-out is still refused                                                             |
+| Database tests     | All 28 files pass on the platform at the first run. The only "skipped" rows are `125_followups` `net_grants` (the platform's grants on `net`) and part 2 of `100_notifications` (a second connection is refused). The suites left every table as they found it                                                                                                                                                                                                                  |
+| Old apps, new data | For the 11 minutes before the redeploy the old apps' 32 pages loaded; no action was tried                                                                                                                                                                                                                                                                                                                                                                                       |
+| The Android build  | The API client of `3f251c3`, with the calls the shopper app makes, as a visitor and as the demo shopper: search with the nine old arguments, categories, product pages, the cart, orders, an order, the profile and its consent save. Every call answered and matched that build's response schemas                                                                                                                                                                             |
+| Browser checks     | At 1280 and 390 px, with no console error, failed request or server error: the shop (menu, search with a brand filter, two offers in the new order, a shop page, a simulated SINPE Móvil purchase with its code and the invoicing sentences); the seller centre (an offer on another shop's product, withdrawn; a variant off and on; a description and a logo); every console catalogue screen and each of its tools, with the shop following on the first look; the field app |
+| Logo storage       | Verified against the real storage service: the waiting files go to the private bucket, which no visitor, shopper or other shop can read, list or overwrite; staff read them through a signed link; approval writes the public sizes and removes the waiting ones                                                                                                                                                                                                                |
+| Afterwards         | No runtime error on the shop and the field app; on the console and the seller centre only the known "shop did not refresh" (the Vercel login); the scheduled jobs all succeeded; nothing was sent                                                                                                                                                                                                                                                                               |
+
+What this round left on the preview, on purpose: YT-101164 of `comprador`,
+paid and then cancelled in the simulation; cafetal's withdrawn offer on
+Sendero's bottle; cafetal's description put back by a second approved
+request; its test logo removed by the shop (the three public files stay in
+the bucket, unlinked); two brands "Prueba Uno" (merged) and "Prueba Dos" (out
+of the shop's filter), which only the console shows, because brands cannot
+be deleted. Every other Prueba item was deleted. Nothing named Prueba is
+visible to a visitor.
+
 On the hosted preview, on 22 November 2026 (06:00 to 06:40 UTC), after
 applying migrations `083200` to `083500` and redeploying the four apps. The
 commands and numbers are in the runbook, section
@@ -589,10 +622,14 @@ What these checks do **not** cover, stated plainly:
   running during the native journeys). Auth's rate limits on password checks
   and reset e-mails on the hosted project are not exercised locally (the
   local API stand-in does not enforce them; unit tests use stand-ins).
-- **Nothing of the four newest migrations ran against the hosted preview.**
-  `083510`, `083600`, `083700` and `083900` and their suites were run only on
-  local lanes, including one made to look like the preview
-  (`supabase/scripts/used-db-check.sh`).
+- **The four newest migrations on the hosted preview were smoke-tested, not
+  exhaustively.** Not tried there: a hidden department (only a hidden
+  sub-category), a category move, a brand rename, hiding a seller's reply, a
+  report acted on as a take-down, a listing edit that pauses another shop's
+  offer, a listing back to draft, the cart's other-offer swap, a shop
+  closing and handing over its listings, a staff role other than
+  administrator, and any native app built after `3f251c3` (none has been
+  built against the new functions).
 - **No load testing**, no security review by a third party.
 
 ## Not built
@@ -828,9 +865,9 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     invoicing: `invoice_money_documented` treats only the sandbox provider and
     the gateway's test environment as simulated. Nothing is issued while the
     issuer is not set up, but once it is, a new sandbox cash order on the
-    preview would get documents. Fixed by `083510` (below), not yet applied
-    there: apply it before the issuer is set up anywhere with demo cash
-    orders.
+    preview would get documents. Fixed by `083510` (below), applied there on
+    22 November 2026 (evening): apply it before the issuer is set up anywhere
+    with demo cash orders.
   - The console's invoices page says the payments waiting "will be issued in
     order" once the issuer is set up; simulated ones never will. The shopper's
     order page without a delivery fee says both that Yuntera issues no
@@ -856,7 +893,7 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     cannot confirm a pick (`scan_required`): 15 minutes on the preview on
     22 November.
 - **Seller listings and the console catalogue (`083600`, `083700`), merged
-  on 22 November 2026, not yet on the hosted preview:**
+  on 22 November 2026, on the hosted preview since that evening:**
   - One offer order everywhere (in stock first, then the lowest price, then
     the older offer): search, category pages, the product page, the seller's
     "featured" badge and the cart's alternative. It replaced the weighted
@@ -887,8 +924,15 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     on the order page. The reviewer is not messaged, there is no
     reconsideration queue, and a seller who edits a hidden reply keeps it
     hidden until staff show it.
-  - Not verified: the logo upload ran only against the local storage
-    stand-in, not real Supabase Storage. The race of two sessions adding the
+  - The logo upload is verified against the real storage service on the
+    preview (22 November, evening): the browser uploads three sizes with
+    signed links to the private bucket `product-photos-pending`, under
+    `<seller id>/logo/<logo id>/`, JPEG, PNG or WebP up to 2 MiB each; while
+    it waits no visitor, shopper or other shop can read, list or overwrite
+    it, and its shop and staff can read it; approval writes the public sizes
+    to `product-photos` and removes the waiting files. A logo the shop removes
+    stops showing, but its public files stay in the bucket, unlinked: nothing
+    deletes them. Not verified: the race of two sessions adding the
     same variant's offer in `seller_add_offer` was checked by hand with two
     database sessions, not by an automated test (the catalogue's two races,
     the rating and the category depth, have contract tests). No message was
@@ -901,15 +945,19 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     when they never load), does what it says, but the page Next.js sends
     back for it is empty: seen on the console's catalogue forms and on the
     sign-in of the shop and the console alike. Nothing is lost; the next
-    visit shows the outcome.
-  - To put them on the preview: with `083510` before them and `083900`
-    after, in the order of the
-    [runbook](docs/07-deployment/runbook-first-deploy.md#migrations-083510-to-083900),
-    then the suites, and redeploy all four web apps together. Neither needs
-    a worker: messages are only planned until one is deployed, as for every
-    other message.
-- **The invoicing fixes (`083510`), merged on 22 November 2026, not yet on
-  the hosted preview:**
+    visit shows the outcome. On the hosted console with JavaScript switched
+    off in the browser it is worse: the page's content is streamed into
+    hidden containers that only its scripts reveal, so the forms are not
+    visible at all; a form submitted anyway does what it says, and the
+    answer is a blank page (772 KB of script, no page around it).
+  - On the preview, every catalogue change (a category, its address, hiding
+    it, a synonym, a review, a take-down, a description, a logo) showed in the
+    shop at the first look after it, 2 to 4 seconds later.
+  - Brands cannot be deleted: the two test brands of 22 November ("Prueba
+    Uno", merged into "Prueba Dos", which is out of the filter) are visible
+    in the console only.
+- **The invoicing fixes (`083510`), merged on 22 November 2026, on the
+  hosted preview since that evening:**
   - One rule decides whether money is simulated: the sandbox simulation,
     the gateway's test environment, and cash on delivery taken while
     payments are in `sandbox`. Cash collected while payments are in `test`
@@ -921,7 +969,9 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     never gets a document unless `invoicing_policy.simulated_payments` is on
     (local work, a rehearsal), and its invoice jobs end on their own as
     `simulated_money` instead of waiting for the issuer. On the preview the
-    migration ends the 3 waiting capture jobs and the 1 waiting refund job.
+    migration ended the 3 waiting capture jobs and the 1 waiting refund job,
+    and a purchase made afterwards was marked simulated at capture and its
+    job ended the same way within the sweep.
     Real cash collected in `test` mode is documented, and refunded by
     transfer.
   - The console's Comprobantes page and the shopper's order page say what is
@@ -948,22 +998,20 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     `100_notifications` (two workers at once) runs only when no other
     session is connected: with a lane's stack up, and on the hosted project,
     it shows a "skipped" row; in CI any skipped row fails the run.
-  - Expected on the preview after the migrations: `125_followups`
+  - On the preview after the migrations, all 28 suites pass; `125_followups`
     `net_grants` and `100_notifications` part 2 report "skipped", for the
-    reasons above; nothing else skips or fails.
-  - Redeploy the console and the shop after applying it: they read the new
-    functions. No worker is needed.
+    reasons above, and nothing else skips or fails.
 - **The native apps' account screens (`083900`), merged on 22 November 2026,
-  not yet on the hosted preview:**
+  on the hosted preview since that evening:**
   - `set_my_notification_settings` and `seller_set_notification_settings`
     take one more argument, `p_source`: where the consent was given (`web_cuenta`
     or `shop_app`; `seller_cuenta` or `seller_app`). The old forms are
     dropped, so there is one function of each name. The websites send
-    nothing and keep their own value; the apps send theirs. Build the shopper
-    and seller apps only after `083900` is on the preview: the old functions
-    refuse the new argument. The shopper build already in Play's internal
-    testing (`3f251c3`) keeps working after it, its consents logged as given
-    on the website.
+    nothing and keep their own value; the apps send theirs. `083900` is on
+    the preview, so the shopper and seller apps can now be built with it. The
+    shopper build already in Play's internal testing (`3f251c3`) keeps
+    working: it never calls these two functions, and every call it makes
+    answered on the updated preview with that build's own client.
   - The reset e-mail's link opens `<shop website>/auth/confirm`: that address
     must be in the hosted project's Auth redirect allow-list, and an app's
     build needs `EXPO_PUBLIC_SHOP_URL` if the website's address differs from
