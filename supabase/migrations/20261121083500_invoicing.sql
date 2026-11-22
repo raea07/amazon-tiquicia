@@ -79,10 +79,14 @@ insert into public.app_settings (key, value, description) values
      'credit_code_cancel', '01',
      'credit_code_return', '06',
      'answer_window_hours', 3,
-     'retention_years', 10),
+     'retention_years', 10,
+     'simulated_payments', false),
    'Choices the accountant must confirm (research note section 10): who issues the delivery fee''s document '
    '(platform | seller_third_party), fee invoices per order, CABYS codes for the platform''s own services, '
-   'how fees netted from a payout are coded, the reference codes of credit notes, and the retention period.')
+   'how fees netted from a payout are coded, the reference codes of credit notes, and the retention period. '
+   'simulated_payments: whether orders paid with money that was never real (sandbox mode, or the payment '
+   'gateway''s test environment) get documents; false on a real project, true only for local work and a '
+   'rehearsal against Hacienda''s sandbox.')
 on conflict (key) do nothing;
 
 -- ═══ 2. The documents ══════════════════════════════════════════════════════
@@ -500,6 +504,24 @@ as $$
   select coalesce(private.setting('invoicing_policy'), '{}'::jsonb);
 $$;
 
+-- Whether an order's money is documented. Money that was never real (taken
+-- in sandbox mode, or in the payment gateway's test environment, 083400) is
+-- documented only where the policy says so: on the local stack and in a
+-- rehearsal against Hacienda's sandbox. On a real project, the preview's
+-- simulated orders must never become documents sent to Hacienda, even after
+-- the issuer is set up and the jobs that waited are planned.
+create or replace function private.invoice_money_documented(p_order_id uuid) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select coalesce((private.invoice_policy() ->> 'simulated_payments')::boolean, false)
+      or not exists (
+        select 1 from public.payments p
+        where p.order_id = p_order_id
+          and p.status in ('captured', 'partially_refunded', 'refunded')
+          and (p.provider = 'sandbox' or p.environment = 'test'));
+$$;
+
 -- The platform as issuer, from the settings, as the XML writes it. Refuses
 -- until the owner has put the real registration in and set ready = true.
 create or replace function private.invoice_issuer() returns jsonb
@@ -713,6 +735,13 @@ begin
   select * into o from public.orders where id = p_order_id;
   if not found or not exists (select 1 from public.ledger_transactions t
                               where t.order_id = p_order_id and t.kind = 'order_capture') then
+    return null;
+  end if;
+  -- Simulated money: nothing to document (and so nothing to credit later).
+  -- What the shopper typed for a factura is not kept either.
+  if not private.invoice_money_documented(p_order_id) then
+    delete from private.invoice_checkout_receivers r
+    where r.user_id = o.user_id and r.idempotency_key = o.idempotency_key;
     return null;
   end if;
 
@@ -1587,7 +1616,8 @@ begin
         select g.day::date as day,
                (select count(distinct p.order_id) from public.payments p
                 where p.captured_at is not null
-                  and ((p.captured_at at time zone 'UTC') - interval '6 hours')::date = g.day::date) as paid,
+                  and ((p.captured_at at time zone 'UTC') - interval '6 hours')::date = g.day::date
+                  and private.invoice_money_documented(p.order_id)) as paid,
                count(e.id) as docs,
                count(e.id) filter (where e.document_type = '04') as tiquetes,
                count(e.id) filter (where e.document_type = '01') as facturas,
@@ -1725,6 +1755,188 @@ begin
 end;
 $$;
 
+-- ═══ 10b. Account deletion and fiscal documents ════════════════════════════
+-- Replaces the version in 20261121083100_merge.sql, unchanged except for the
+-- two marked steps: it erases what payments (083400) and invoicing (this
+-- migration) hold about the person that may be erased, and says what the law
+-- keeps. The trigger invoice_forget_receiver stays as a second guard for any
+-- other path that stamps deleted_at.
+create or replace function public.delete_my_account() returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_user uuid := (select auth.uid());
+  v_email text;
+  v_blockers text[];
+  v_orders integer;
+  v_reviews integer;
+  v_shop uuid;
+begin
+  if v_user is null then
+    perform private.fail('not_authenticated');
+  end if;
+  -- An account with a second factor is deleted only from a session that passed it.
+  if not private.factor_ok() then
+    perform private.fail('second_factor_required');
+  end if;
+  -- One deletion at a time per account, and none for an account already gone.
+  -- Requests of this account in flight hold this row FOR KEY SHARE (see
+  -- check_request), so the deletion waits for them and they cannot follow it.
+  select u.email into v_email from auth.users u where u.id = v_user and u.deleted_at is null for update;
+  if not found then
+    perform private.fail('not_authenticated');
+  end if;
+
+  v_blockers := private.account_deletion_blockers(v_user);
+  -- The first reason wins; each is spelled out so the client's list of
+  -- messages can be checked against this file.
+  case v_blockers[1]
+    when 'account_is_staff' then perform private.fail('account_is_staff');
+    when 'account_is_driver' then perform private.fail('account_is_driver');
+    when 'account_is_warehouse_staff' then perform private.fail('account_is_warehouse_staff');
+    when 'account_has_open_orders' then perform private.fail('account_has_open_orders');
+    when 'account_has_open_returns' then perform private.fail('account_has_open_returns');
+    when 'account_has_pending_refund' then perform private.fail('account_has_pending_refund');
+    when 'account_has_open_complaints' then perform private.fail('account_has_open_complaints');
+    when 'account_runs_open_shop' then perform private.fail('account_runs_open_shop');
+    when 'account_shop_has_stock' then perform private.fail('account_shop_has_stock');
+    when 'account_shop_has_open_orders' then perform private.fail('account_shop_has_open_orders');
+    when 'account_shop_has_balance' then perform private.fail('account_shop_has_balance');
+    else null; -- nothing in the way
+  end case;
+
+  select count(*) into v_orders from public.orders o where o.user_id = v_user;
+  select count(*) into v_reviews from public.reviews r where r.user_id = v_user;
+
+  -- Personal data the platform holds for the person.
+  update public.profiles
+  set full_name = null, phone = null, phone_verified_at = null,
+      marketing_opt_in = false, locale = 'es-CR'
+  where id = v_user;
+  delete from public.addresses a where a.user_id = v_user;
+  delete from public.consents c where c.user_id = v_user;
+
+  -- Kept records, without the person in them. The district stays (it decided
+  -- the shipping fee); the pin is rounded to about a kilometre.
+  update public.orders o
+  set ship_recipient_name = 'Cuenta eliminada', ship_phone = '', ship_senas = '',
+      ship_lat = round(o.ship_lat::numeric, 2)::double precision,
+      ship_lng = round(o.ship_lng::numeric, 2)::double precision,
+      ship_plus_code = null
+  where o.user_id = v_user;
+  update public.route_stops rs
+  set recipient_name = 'Cuenta eliminada', phone = '', senas = '',
+      lat = round(rs.lat::numeric, 2)::double precision,
+      lng = round(rs.lng::numeric, 2)::double precision,
+      plus_code = null, pod_recipient_name = null,
+      pod_lat = null, pod_lng = null
+  where rs.shipment_id in (
+    select sh.id from public.shipments sh
+    join public.orders o on o.id = sh.order_id
+    where o.user_id = v_user);
+  update public.return_requests r set reason = null where r.user_id = v_user;
+  update public.complaints c
+  set description = 'Texto eliminado junto con la cuenta.'
+  where c.user_id = v_user;
+  update public.content_reports cr set reporter_email = null
+  where cr.reporter_id = v_user;
+  -- [082900] The delivery codes of the person's orders, all closed by now.
+  delete from private.delivery_codes c
+  using public.orders o
+  where o.id = c.order_id and o.user_id = v_user;
+  -- [083000] Invitations sent to the person, to their account or to their address.
+  delete from public.seller_invitations i
+  where i.invitee_id = v_user or (i.invitee_id is null and lower(i.email) = lower(v_email));
+  -- [083000] Their shop-change requests that never took effect keep nothing
+  -- of what was proposed; a waiting one is withdrawn.
+  update public.seller_change_requests r
+  set status = case when r.status = 'pending' then 'withdrawn' else r.status end,
+      decided_at = coalesce(r.decided_at, now()),
+      decided_by = coalesce(r.decided_by, v_user),
+      proposed = '{}'::jsonb,
+      previous = '{}'::jsonb
+  where r.requested_by = v_user and r.status <> 'approved';
+
+  -- Roles that ended earlier: an inactive staff row, a former driver, shops
+  -- left behind with nothing pending (the blockers above guarantee that). The
+  -- audit trail never held a driver's or a shop's personal columns (see
+  -- private.audit), so nothing of them is left there either.
+  delete from public.staff_members s where s.user_id = v_user and not s.active;
+  update public.drivers d
+  set full_name = 'Repartidor retirado', phone = '+50650000000', id_number = '000000000',
+      plate = null, license_class = null, license_expires_on = null,
+      inspection_expires_on = null, insurance_expires_on = null
+  where d.user_id = v_user;
+  -- Shops (already suspended or closed: see account_runs_open_shop) this
+  -- person leaves with nobody in charge.
+  for v_shop in
+    select m.seller_id from public.seller_members m
+    where m.user_id = v_user
+      and not exists (select 1 from public.seller_members o
+                      where o.seller_id = m.seller_id and o.user_id <> v_user
+                        and o.role in ('owner', 'admin'))
+  loop
+    perform private.close_abandoned_shop(v_shop);
+  end loop;
+  delete from public.seller_members m where m.user_id = v_user;
+  -- [083000] What the person sent is no longer valid without their membership.
+  update public.seller_invitations i
+  set status = 'revoked', answered_at = now(), answered_by = v_user
+  where i.invited_by = v_user and i.status = 'pending';
+  delete from private.mfa_failures f where f.user_id = v_user;
+  -- What the notifications add about the person (082600).
+  perform private.notify_forget_person(v_user);
+  -- [083400] Whose account paid a SINPE Móvil transfer: kept on an attempt
+  -- only until the gateway has it, erased here whatever became of it.
+  update private.payment_attempts a
+  set payer_kind = null, payer_number = null, payer_phone = null
+  from public.orders o
+  where o.id = a.order_id and o.user_id = v_user
+    and (a.payer_kind is not null or a.payer_number is not null or a.payer_phone is not null);
+  -- [083500] What the person typed at checkout for a factura that was never
+  -- issued. The documents already issued in their name (a factura's
+  -- receiver: name, identification, e-mail; and its signed XML) stay for the
+  -- retention period, as the law requires (RCE art. 4.1.i, 22; CNPT art.
+  -- 109), like the orders and the ledger. From now on only finance can read
+  -- them: the shopper's own access went with the account (no sign-in, every
+  -- session ended, check_request refuses its tokens).
+  delete from private.invoice_checkout_receivers r where r.user_id = v_user;
+
+  -- The sign-in record: every session ends (and with check_request, every
+  -- access token issued for them stops working at once), no way to sign in
+  -- remains, and the e-mail address is free for a new account. The ban is
+  -- finite, as Auth's own bans are: Auth reads banned_until into a Go time
+  -- value, which has no 'infinity'.
+  delete from auth.sessions s where s.user_id = v_user;
+  delete from auth.mfa_factors f where f.user_id = v_user;
+  delete from auth.one_time_tokens t where t.user_id = v_user;
+  delete from auth.identities i where i.user_id = v_user;
+  update auth.users u
+  set email = v_user::text || '@cuenta-eliminada.invalid',
+      encrypted_password = '',
+      phone = null,
+      email_change = '', phone_change = '',
+      confirmation_token = '', recovery_token = '', email_change_token_new = '',
+      email_change_token_current = '', phone_change_token = '', reauthentication_token = '',
+      raw_user_meta_data = '{}'::jsonb,
+      last_sign_in_at = null,
+      banned_until = now() + interval '100 years',
+      deleted_at = now(),
+      updated_at = now()
+  where u.id = v_user;
+  -- Auth's own log of sign-ins, where the project still keeps one in the database.
+  begin
+    delete from auth.audit_log_entries l where l.payload ->> 'actor_id' = v_user::text;
+  exception when undefined_table then
+    null;
+  end;
+
+  insert into private.account_deletions (orders_kept, reviews_kept) values (v_orders, v_reviews);
+  return jsonb_build_object('orders_kept', v_orders, 'reviews_kept', v_reviews);
+end;
+$$;
+
 -- ═══ 11. Grants ════════════════════════════════════════════════════════════
 
 revoke execute on function
@@ -1734,6 +1946,7 @@ revoke execute on function
   private.invoice_summary(jsonb), private.invoice_consecutivo(integer, integer, text, bigint),
   private.invoice_clave(timestamptz, text, text, text, text), private.invoice_security_code(),
   private.invoice_next_number(text, integer, integer, text), private.invoice_policy(), private.invoice_issuer(),
+  private.invoice_money_documented(uuid),
   private.invoice_id_code(public.identification_type), private.invoice_id_valid(public.identification_type, text),
   private.invoice_seller_receiver(uuid), private.invoice_payment_code(public.payment_method),
   private.invoice_create(text, text, uuid, text, uuid, jsonb, jsonb, text, text, text, jsonb, text, bigint, bigint,

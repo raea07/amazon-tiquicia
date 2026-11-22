@@ -714,5 +714,12 @@ where status = 'active';
 update public.app_settings
 set value = jsonb_set(value, '{ready}', 'true')
 where key = 'invoicing_issuer' and value ->> 'id_number' = '3101123456';
+-- The demo's money is simulated (sandbox mode); locally it is documented all
+-- the same, so the fake of Hacienda has something to receive. A real project
+-- keeps `simulated_payments` false: the preview's orders are never invoiced.
+update public.app_settings
+set value = jsonb_set(value, '{simulated_payments}', 'true')
+where key = 'invoicing_policy'
+  and (select value ->> 'id_number' from public.app_settings where key = 'invoicing_issuer') = '3101123456';
 
 commit;

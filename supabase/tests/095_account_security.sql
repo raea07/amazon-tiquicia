@@ -684,10 +684,32 @@ end
 $$;
 reset role;
 update public.app_settings set value = '"sandbox"' where key = 'payments_mode';
--- The gateway confirms the refund.
-update public.payments set status = 'refunded', refunded_at = now()
-where order_id = current_setting('t.cancelled')::uuid;
-update public.orders set status = 'refunded' where id = current_setting('t.cancelled')::uuid;
+-- Switching back to sandbox does not make the money moved: the refund still
+-- waits for its transfer (083400), and so does the deletion.
+select pg_temp.login('comprador2@yuntera.example');
+do $$
+begin
+  assert public.account_deletion_check() -> 'blockers' = '["account_has_pending_refund"]'::jsonb,
+    'still pending in sandbox mode';
+end
+$$;
+reset role;
+-- Finance pays it back by transfer and records it: the payment and the order
+-- become refunded, and the refund is confirmed, once.
+select pg_temp.remember('cancelled_refund', (
+  select g.id::text from private.gateway_refunds g where g.order_id = current_setting('t.cancelled')::uuid));
+select pg_temp.login('central@yuntera.example', 'aal2');
+select public.ops_record_refund_transfer(current_setting('t.cancelled_refund')::uuid, 'BNCR-095001');
+reset role;
+do $$
+begin
+  assert (select p.status = 'refunded' from public.payments p where p.order_id = current_setting('t.cancelled')::uuid)
+     and (select o.status = 'refunded' from public.orders o where o.id = current_setting('t.cancelled')::uuid),
+    'the transfer settles the payment and the order';
+  assert (select count(*) from private.refund_confirmations c join private.refunds f on f.id = c.refund_id
+          where f.order_id = current_setting('t.cancelled')::uuid) = 1, 'confirmed once';
+end
+$$;
 insert into auth.mfa_factors (id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret)
 values (gen_random_uuid(), current_setting('t.gone')::uuid, 'x', 'totp', 'verified', now(), now(), 'JBSWY3DPEHPK3PXP');
 insert into auth.sessions (id, user_id, created_at, updated_at, aal)
@@ -850,6 +872,57 @@ begin
     'the sign-in limit counted the attempt';
 end
 $$;
+-- And what payments and invoicing added (083400, 083500): the payer's
+-- identification and phone on a SINPE Móvil attempt that ended in an error
+-- (so nothing erased it on the way); a factura request typed at checkout for
+-- an order never placed; and an order with a delivery fee, its factura in
+-- their name (name and e-mail) issued when it was paid, then cancelled, with
+-- the credit note that carries the same receiver.
+insert into private.payment_attempts
+  (payment_id, order_id, provider, environment, method, amount_minor, status, expires_at,
+   payer_kind, payer_number, payer_phone, finished_at)
+select p.id, p.order_id, 'onvo', 'live', 'sinpe_movil', p.amount_minor, 'error', now(),
+       'national', '105550444', '+50687774321', now()
+from public.payments p join public.orders o on o.id = p.order_id
+where o.user_id = current_setting('t.gone')::uuid
+order by o.placed_at limit 1;
+select pg_temp.login('comprador2@yuntera.example', 'aal2');
+select public.set_checkout_invoice_receiver('borrado-sin-pedido', 'fisica', '1-0987-0654',
+  current_setting('t.gone_name'), 'comprador2@yuntera.example');
+reset role;
+select pg_temp.login('comprador2@yuntera.example', 'aal2');
+select public.set_checkout_invoice_receiver('borrado-con-factura', 'fisica', '1-0555-0444',
+  current_setting('t.gone_name'), 'comprador2@yuntera.example');
+reset role;
+select pg_temp.remember('gone_offer', pg_temp.offer('libreta-tapa-dura-a5')::text);
+select pg_temp.remember('gone_address', (select a.id::text from public.addresses a
+  where a.user_id = current_setting('t.gone')::uuid order by a.is_default desc, a.id limit 1));
+select pg_temp.login('comprador2@yuntera.example', 'aal2');
+select set_config('t.gone_factura_order', public.place_order(
+  jsonb_build_array(jsonb_build_object('offer_id', current_setting('t.gone_offer')::uuid, 'quantity', 1)),
+  current_setting('t.gone_address')::uuid, 'card', 'borrado-con-factura') ->> 'order_id', true);
+select public.confirm_sandbox_payment(current_setting('t.gone_factura_order')::uuid);
+reset role;
+-- The invoice planner, as the worker runs it.
+select private.invoice_plan(1000);
+select pg_temp.login('comprador2@yuntera.example', 'aal2');
+select public.cancel_order(current_setting('t.gone_factura_order')::uuid);
+reset role;
+-- The invoice planner, as the worker runs it.
+select private.invoice_plan(1000);
+do $$
+begin
+  assert (select count(*) from public.electronic_invoices e
+          where e.order_id = current_setting('t.gone_factura_order')::uuid
+            and e.document_type in ('01', '03') and e.receiver_kind = 'shopper'
+            and e.receiver ->> 'name' = current_setting('t.gone_name')) = 2,
+    'a factura and its credit note were issued in the person''s name';
+end
+$$;
+-- The cancellation added a refund to the register.
+select pg_temp.remember('gone_refunds', (
+  select count(*) || ':' || sum(f.amount_minor) from private.refunds f
+  join public.orders o on o.id = f.order_id where o.user_id = current_setting('t.gone')::uuid));
 -- What identifies the person, to search for afterwards in every table.
 select pg_temp.remember('needles', (
   select jsonb_build_array(u.email, p.full_name, a.phone, a.senas, a.recipient_name,
@@ -872,7 +945,7 @@ begin
   perform public.mfa_reserve_attempt();
   assert jsonb_array_length(public.account_deletion_check() -> 'blockers') = 0, 'nothing pending';
   r := public.delete_my_account();
-  assert (r ->> 'orders_kept')::int = 5 and (r ->> 'reviews_kept')::int = 6, format('result: %s', r);
+  assert (r ->> 'orders_kept')::int = 6 and (r ->> 'reviews_kept')::int = 6, format('result: %s', r);
   -- The token in hand still identifies the old id for up to an hour; a second
   -- deletion with it finds nothing to delete.
   begin
@@ -962,6 +1035,20 @@ begin
                      where a.address_hash !~ '^[0-9a-f]{64}$' or a.account_hash !~ '^[0-9a-f]{64}$'),
     'the sign-in limit holds nothing but hashes';
 
+  -- What payments and invoicing held (083400, 083500).
+  assert not exists (select 1 from private.payment_attempts a join public.orders o on o.id = a.order_id
+                     where o.user_id = v_user
+                       and (a.payer_kind is not null or a.payer_number is not null or a.payer_phone is not null)),
+    'no payer identification or phone on their payment attempts';
+  assert not exists (select 1 from private.invoice_checkout_receivers where user_id = v_user),
+    'no factura request is left';
+  -- The law keeps the factura issued in their name, receiver included, for
+  -- the retention period; only finance can read it from now on.
+  assert (select count(*) from public.electronic_invoices e
+          where e.order_id = current_setting('t.gone_factura_order')::uuid
+            and e.receiver ->> 'name' = current_setting('t.gone_name')) = 2,
+    'the factura and the credit note issued in their name are kept as issued';
+
   -- Kept records still add up.
   assert (select count(*) || ':' || sum(total_minor) from public.orders where user_id = v_user)
          = current_setting('t.orders_before'), 'order count and totals unchanged';
@@ -983,11 +1070,56 @@ $$;
 
 -- Nothing that identified the person is left anywhere: every row of every
 -- table in the schemas the platform owns, searched for each piece.
+-- One exception, by law, named precisely: the receiver of the fiscal
+-- documents issued in the person's name (their name and e-mail in
+-- public.electronic_invoices.receiver, and in the signed XML of
+-- private.electronic_invoice_files once the worker has signed it). Every row
+-- the search finds in those two tables must be such a document of their own
+-- orders, holding the piece in that place only; nothing else anywhere.
+do $$
+declare
+  v_user uuid := current_setting('t.gone')::uuid;
+  v_needle text;
+  v_stray integer;
+begin
+  for v_needle in select jsonb_array_elements_text(current_setting('t.needles')::jsonb) loop
+    select count(*) into v_stray from public.electronic_invoices e
+    where e::text ilike '%' || v_needle || '%'
+      and not (e.receiver_kind = 'shopper' and e.receiver::text ilike '%' || v_needle || '%'
+               and (to_jsonb(e) - 'receiver')::text not ilike '%' || v_needle || '%'
+               and e.order_id in (select o.id from public.orders o where o.user_id = v_user));
+    assert v_stray = 0, format('a document holds %s outside its receiver', v_needle);
+    select count(*) into v_stray from private.electronic_invoice_files f
+    join public.electronic_invoices e on e.id = f.invoice_id
+    where f::text ilike '%' || v_needle || '%'
+      and not (e.receiver_kind = 'shopper' and e.receiver::text ilike '%' || v_needle || '%'
+               and e.order_id in (select o.id from public.orders o where o.user_id = v_user));
+    assert v_stray = 0, format('a signed file holds %s for another document', v_needle);
+  end loop;
+end
+$$;
 select pg_temp.remember('leftovers', coalesce(pg_temp.leftovers(current_setting('t.needles')::jsonb), ''));
 do $$
+declare
+  v_kept text := (
+    select string_agg(format('%s: %s', t.tbl, v.needle), '; ')
+    from jsonb_array_elements_text(current_setting('t.needles')::jsonb) v (needle)
+    cross join (values ('public.electronic_invoices'), ('private.electronic_invoice_files')) t (tbl)
+    where (t.tbl = 'public.electronic_invoices'
+           and exists (select 1 from public.electronic_invoices e where e::text ilike '%' || v.needle || '%'))
+       or (t.tbl = 'private.electronic_invoice_files'
+           and exists (select 1 from private.electronic_invoice_files f where f::text ilike '%' || v.needle || '%')));
 begin
-  assert current_setting('t.leftovers') = '',
-    format('still holds a piece of the deleted account: %s', current_setting('t.leftovers'));
+  -- Compared as sets: the search lists table by table, per piece.
+  assert (select coalesce(string_agg(x, '; ' order by x), '')
+          from unnest(string_to_array(nullif(current_setting('t.leftovers'), ''), '; ')) x)
+         = (select coalesce(string_agg(x, '; ' order by x), '')
+            from unnest(string_to_array(v_kept, '; ')) x),
+    format('still holds a piece of the deleted account beyond the kept fiscal documents: %s',
+           current_setting('t.leftovers'));
+  assert v_kept like '%public.electronic_invoices: comprador2@yuntera.example%'
+     and v_kept like '%public.electronic_invoices: ' || current_setting('t.gone_name') || '%',
+    format('the kept factura is the exception, and only it: %s', v_kept);
 end
 $$;
 
@@ -1275,8 +1407,9 @@ begin
       'seller_invitations.invited_by', 'seller_invitations.answered_by',
       'seller_change_requests.requested_by', 'seller_change_requests.decided_by',
       'seller_private.payout_approved_by',
-      -- what a shopper typed at checkout for a factura (083500): erased by a
-      -- trigger when the account is deleted, and used up when the document is made
+      -- what a shopper typed at checkout for a factura (083500): erased by
+      -- delete_my_account (and by a trigger on deleted_at as a second guard),
+      -- and used up when the document is made
       'private.invoice_checkout_receivers.user_id');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end

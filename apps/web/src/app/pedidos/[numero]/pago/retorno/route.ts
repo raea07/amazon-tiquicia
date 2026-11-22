@@ -8,7 +8,11 @@ import { sessionApi } from "@/lib/supabase";
  * server may know itself by another name, and the session cookie is the
  * browser's host's).
  */
-const goTo = (path: string) => new Response(null, { status: 303, headers: { location: path } });
+const goTo = (path: string) =>
+  new Response(null, {
+    status: 303,
+    headers: { location: path, "Cache-Control": "private, no-store, max-age=0" },
+  });
 
 /**
  * Where the payment gateway's page sends the shopper back. Only a hint: it

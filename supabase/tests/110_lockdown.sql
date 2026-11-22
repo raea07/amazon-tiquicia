@@ -60,21 +60,17 @@ select unnest(array['reviewer_display_name'])
 -- END internal functions
 ;
 -- Functions in `public` that only a platform role may execute: the
--- notification worker (`service_role`) and the Auth server's hook
--- (`supabase_auth_admin`).
+-- notification, payments and invoice workers (`service_role`, each with its
+-- own key) and the Auth server's hook (`supabase_auth_admin`).
 create temporary table worker_only (role text, fn text) on commit drop;
 insert into worker_only (role, fn)
 -- BEGIN server-side functions
 select 'service_role', unnest(array[
-  'worker_notify_apply_update', 'worker_notify_claim', 'worker_notify_defer', 'worker_notify_fail',
-  'worker_notify_freeze', 'worker_notify_plan', 'worker_notify_sent', 'worker_notify_skip',
-  'worker_payments_claim', 'worker_payments_event', 'worker_payments_hello',
-  'worker_payments_report', 'worker_push_disable', 'worker_push_receipts_due'
-])
-union all
-select 'service_role', unnest(array[
   'worker_invoice_claim', 'worker_invoice_health', 'worker_invoice_hint', 'worker_invoice_plan',
-  'worker_invoice_record', 'worker_invoice_signed'
+  'worker_invoice_record', 'worker_invoice_signed', 'worker_notify_apply_update', 'worker_notify_claim',
+  'worker_notify_defer', 'worker_notify_fail', 'worker_notify_freeze', 'worker_notify_plan',
+  'worker_notify_sent', 'worker_notify_skip', 'worker_payments_claim', 'worker_payments_event',
+  'worker_payments_hello', 'worker_payments_report', 'worker_push_disable', 'worker_push_receipts_due'
 ])
 union all
 select 'supabase_auth_admin', unnest(array['hook_mfa_verification_attempt'])

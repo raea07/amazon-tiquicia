@@ -2757,6 +2757,84 @@ exception when others then
 end
 $$;
 
+-- ═══ 12b. Account deletion waits for the person's money ════════════════════
+-- Replaces the version in 20261121082500_account_security.sql; only the
+-- pending-refund reason changed. Before the gateway, a refund booked was as
+-- good as paid in the register's eyes; now the money goes back later, so the
+-- account (whose details the transfer may need) stays until it has.
+create or replace function private.account_deletion_blockers(p_user uuid) returns text[]
+language sql stable security definer
+set search_path = ''
+as $$
+  with mine as (
+    select m.seller_id from public.seller_members m where m.user_id = p_user
+  )
+  select array_remove(array[
+    case when exists (select 1 from public.staff_members s
+                      where s.user_id = p_user and s.active)
+      then 'account_is_staff' end,
+    case when exists (select 1 from public.drivers d
+                      where d.user_id = p_user and d.status <> 'offboarded')
+      then 'account_is_driver' end,
+    case when exists (select 1 from public.warehouse_staff w where w.user_id = p_user)
+      then 'account_is_warehouse_staff' end,
+    case when exists (select 1 from public.orders o
+                      where o.user_id = p_user
+                        and o.status not in ('delivered', 'completed', 'cancelled', 'refunded'))
+      then 'account_has_open_orders' end,
+    case when exists (select 1 from public.return_requests r
+                      where r.user_id = p_user and r.status in ('requested', 'approved', 'received'))
+      then 'account_has_open_returns' end,
+    -- A cancelled order that was paid is refunded later, through the gateway
+    -- and to the account or phone that paid; that needs the person's details.
+    -- [083400] So is every refund whose money has not gone yet (a return, a
+    -- parcel back, a transfer finance still has to make), and money the
+    -- gateway took for one of their orders that finance has not settled.
+    case when exists (select 1 from public.payments p
+                      join public.orders o on o.id = p.order_id
+                      where o.user_id = p_user
+                        and o.status in ('cancelled', 'refunded')
+                        and p.status in ('authorized', 'captured', 'partially_refunded'))
+           or exists (select 1 from private.gateway_refunds g
+                      join public.orders o on o.id = g.order_id
+                      where o.user_id = p_user and g.status <> 'succeeded')
+           or exists (select 1 from private.payment_reviews r
+                      join public.orders o on o.id = r.order_id
+                      where o.user_id = p_user and r.status in ('open', 'refunding'))
+      then 'account_has_pending_refund' end,
+    case when exists (select 1 from public.complaints c
+                      where c.user_id = p_user and c.status <> 'resolved')
+      then 'account_has_open_complaints' end,
+    -- The last person in charge of a shop that is open or opening: closing it
+    -- is Yuntera's decision (ops_set_seller_status), not a side effect.
+    case when exists (select 1 from public.seller_members m
+                      join public.sellers s on s.id = m.seller_id
+                      where m.user_id = p_user and m.role in ('owner', 'admin')
+                        and s.status in ('pending', 'active')
+                        and not exists (select 1 from public.seller_members o
+                                        where o.seller_id = m.seller_id and o.user_id <> p_user
+                                          and o.role in ('owner', 'admin')))
+      then 'account_runs_open_shop' end,
+    case when exists (select 1 from public.stock_levels sl
+                      where sl.seller_id in (select seller_id from mine) and sl.on_hand > 0)
+      then 'account_shop_has_stock' end,
+    case when exists (select 1 from public.order_items i
+                      join public.orders o on o.id = i.order_id
+                      where i.seller_id in (select seller_id from mine)
+                        and o.status not in ('delivered', 'completed', 'cancelled', 'refunded'))
+      then 'account_shop_has_open_orders' end,
+    case when exists (select 1 from mine
+                      where (select coalesce(sum(e.amount_minor), 0)
+                             from public.ledger_entries e
+                             join public.ledger_accounts a on a.id = e.account_id
+                             where a.seller_id = mine.seller_id) <> 0
+                         or exists (select 1 from public.payouts po
+                                    where po.seller_id = mine.seller_id
+                                      and po.status = 'scheduled'))
+      then 'account_shop_has_balance' end
+  ], null);
+$$;
+
 -- ═══ 12. Grants ════════════════════════════════════════════════════════════
 
 revoke all on function
@@ -2774,6 +2852,7 @@ revoke all on function
   private.confirm_refund(uuid, text),
   private.refund_confirm_when_nothing_moves(),
   private.cancel_order_internal(uuid, text),
+  private.account_deletion_blockers(uuid),
   private.payment_attempts_stop(uuid, uuid),
   private.orders_stop_attempts(),
   private.payments_stop_attempts(),
