@@ -18,6 +18,21 @@ DB_URL="${ADMIN_URL%/*}/${DB_NAME}"
 
 run() { psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 "$@"; }
 
+# `reset` drops the database. It is for a server on this machine (or CI's
+# service container): refuse any other host, so a PG_ADMIN_URL copied from a
+# hosted project can never be wiped by mistake.
+local_only() {
+  local host
+  host="$(node -e 'try { console.log(new URL(process.argv[1]).hostname) } catch { console.log("") }' "$ADMIN_URL")"
+  case "$host" in
+    127.0.0.1 | localhost | "[::1]" | ::1 | "") return 0 ;;
+  esac
+  if [ "${YUNTERA_LOCAL_DB_HOST_OK:-}" = "$host" ]; then return 0; fi
+  echo "Refusing: $host is not this machine. local-db.sh drops and rebuilds databases; it is for a" >&2
+  echo "local server only. For a disposable server elsewhere, set YUNTERA_LOCAL_DB_HOST_OK=$host." >&2
+  exit 1
+}
+
 case "${1:-}" in
   up)
     if pg_isready -q -d "$ADMIN_URL"; then
@@ -32,6 +47,7 @@ case "${1:-}" in
     ;;
 
   reset)
+    local_only
     psql "$ADMIN_URL" -X -q -v ON_ERROR_STOP=1 \
       -c "drop database if exists \"$DB_NAME\" with (force)" \
       -c "create database \"$DB_NAME\""
