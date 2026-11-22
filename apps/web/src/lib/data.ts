@@ -1,5 +1,5 @@
 import "server-only";
-import type { SearchInput } from "@yuntera/db";
+import type { CatalogSearchInput } from "@yuntera/db";
 import { CATALOG_TAG, productPageTags, suggestionTags } from "@yuntera/next-kit/cache-tags";
 import { cacheLife, cacheTag } from "next/cache";
 import { publicApi } from "./supabase";
@@ -8,7 +8,8 @@ import { publicApi } from "./supabase";
  * Catalogue reads, shared by every visitor and therefore cached.
  *
  * Lifetimes are chosen by how wrong a stale answer can be:
- *   - Categories and districts change by deploy or by staff action: hours/days.
+ *   - Categories and districts change by deploy or by staff action: hours/days
+ *     (categories are dropped with the catalogue when staff change them).
  *   - Prices, stock and search results: the `minutes` profile (revalidated every
  *     minute in the background). A shopper can briefly see a price or "in stock"
  *     that just changed; that is safe because checkout re-prices and re-checks
@@ -25,8 +26,18 @@ import { publicApi } from "./supabase";
 export async function getCategories() {
   "use cache";
   cacheLife("hours");
-  cacheTag("categories");
+  // Also the catalogue tag: when staff add, move, rename or hide a category the
+  // console asks the shop to drop it, and the menu follows at once.
+  cacheTag("categories", CATALOG_TAG);
   return publicApi().listCategories();
+}
+
+/** The brands of the listing filter, in a category and below it when one is given. */
+export async function getBrands(categorySlug: string | null) {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag(CATALOG_TAG);
+  return publicApi().listBrands(categorySlug);
 }
 
 export async function getDistricts() {
@@ -36,7 +47,7 @@ export async function getDistricts() {
   return publicApi().listDistricts();
 }
 
-export async function searchCatalog(input: SearchInput) {
+export async function searchCatalog(input: CatalogSearchInput) {
   "use cache";
   cacheLife("minutes");
   cacheTag(CATALOG_TAG);

@@ -417,7 +417,8 @@ function Reviews({ product }: { product: ProductPage }) {
               })}
             </dl>
             <p className="mt-3 text-xs text-ink-muted">
-              Publicamos todas las reseñas de compras verificadas, buenas y malas.
+              Publicamos las reseñas de compras verificadas, buenas y malas. Solo retiramos las que
+              incumplen las reglas, como insultos o datos personales.
             </p>
           </div>
 
