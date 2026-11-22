@@ -514,8 +514,10 @@ begin
     where sh.order_id = p_order and w.kind = 'platform' and sh.status = 'pending'
   loop
     perform public.wms_start_picking(s.id);
-    for t in select id, quantity from public.pick_tasks where shipment_id = s.id loop
-      perform public.wms_confirm_pick(t.id, t.quantity);
+    -- The worker scans each product, as the apps do.
+    for t in select pt.id, pt.quantity, k.code from public.pick_tasks pt
+             join public.skus k on k.id = pt.sku_id where pt.shipment_id = s.id loop
+      perform public.wms_confirm_pick(t.id, t.quantity, null, t.code);
     end loop;
     perform public.wms_pack_shipment(
       s.id,

@@ -413,7 +413,7 @@ begin
   s := public.wms_shipment(v_parcel);
   assert jsonb_array_length(s -> 'tasks') = 1 and (s #>> '{tasks,0,quantity}')::integer = 1,
     format('the pick list asks for one unit: %s', s -> 'tasks');
-  perform public.wms_confirm_pick((s #>> '{tasks,0,task_id}')::uuid, 1);
+  perform public.wms_confirm_pick((s #>> '{tasks,0,task_id}')::uuid, 1, null, s #>> '{tasks,0,sku_code}');
   perform public.wms_pack_shipment(v_parcel, 450, 1::smallint);
 end
 $$;
@@ -446,7 +446,7 @@ declare
 begin
   perform public.wms_start_picking(v_parcel);
   s := public.wms_shipment(v_parcel);
-  perform public.wms_confirm_pick((s #>> '{tasks,0,task_id}')::uuid, 1);
+  perform public.wms_confirm_pick((s #>> '{tasks,0,task_id}')::uuid, 1, null, s #>> '{tasks,0,sku_code}');
   perform public.wms_pack_shipment(v_parcel, 450, 1::smallint);
 end
 $$;

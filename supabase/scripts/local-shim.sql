@@ -343,3 +343,26 @@ begin
 end;
 $$;
 grant execute on function storage.operation() to anon, authenticated, service_role;
+
+-- What the network extension (pg_net) grants on a hosted project, without the
+-- extension itself (it is not installed here, so private.notify_kick still
+-- does nothing locally): its schema `net`, a request function, the response
+-- table, and their use by visitors and signed-in users. It lets
+-- 20261121083200_followups.sql revoke those grants here as on the hosted
+-- project, and 125_followups.sql check that they are gone.
+create schema if not exists net;
+create unlogged table if not exists net._http_response (
+  id bigint, status_code integer, content_type text, headers jsonb, content text,
+  timed_out boolean, error_msg text, created timestamptz not null default now()
+);
+create or replace function net.http_post(
+  url text, body jsonb default '{}'::jsonb, params jsonb default '{}'::jsonb,
+  headers jsonb default '{"Content-Type": "application/json"}'::jsonb,
+  timeout_milliseconds integer default 2000
+) returns bigint
+language sql security definer
+set search_path = ''
+as $$ select 0::bigint $$;
+grant usage on schema net to anon, authenticated, service_role;
+grant all on all tables in schema net to anon, authenticated, service_role;
+grant execute on all functions in schema net to anon, authenticated, service_role;

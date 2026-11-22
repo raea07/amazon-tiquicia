@@ -66,7 +66,7 @@ begin
   select id, quantity into v_task from public.pick_tasks
   where shipment_id = v_shipment order by quantity desc limit 1;
   v_first := v_task.id;
-  perform public.wms_confirm_pick(v_first, v_task.quantity - 1);
+  perform public.wms_confirm_pick(v_first, v_task.quantity - 1, null, (select k.code from public.skus k join public.pick_tasks pt on pt.sku_id = k.id where pt.id = v_first));
   assert (select status from public.pick_tasks where id = v_first) = 'short', 'short pick recorded';
   begin
     perform public.wms_pack_shipment(v_shipment, 1500, 1::smallint);
@@ -77,16 +77,16 @@ begin
 
   -- More than was asked for is refused.
   begin
-    perform public.wms_confirm_pick(v_first, v_task.quantity + 1);
+    perform public.wms_confirm_pick(v_first, v_task.quantity + 1, null, (select k.code from public.skus k join public.pick_tasks pt on pt.sku_id = k.id where pt.id = v_first));
     raise exception 'picked more than ordered';
   exception when others then
     if sqlerrm <> 'invalid_quantity' then raise; end if;
   end;
 
   -- Finding the missing unit completes the task.
-  perform public.wms_confirm_pick(v_first, v_task.quantity);
+  perform public.wms_confirm_pick(v_first, v_task.quantity, null, (select k.code from public.skus k join public.pick_tasks pt on pt.sku_id = k.id where pt.id = v_first));
   for v_task in select id, quantity from public.pick_tasks where shipment_id = v_shipment and status <> 'done' loop
-    perform public.wms_confirm_pick(v_task.id, v_task.quantity);
+    perform public.wms_confirm_pick(v_task.id, v_task.quantity, null, (select k.code from public.skus k join public.pick_tasks pt on pt.sku_id = k.id where pt.id = v_task.id));
   end loop;
 end
 $$;
@@ -145,7 +145,7 @@ begin
   perform set_config('request.jwt.claims', json_build_object(
     'sub', (select id from auth.users where email = 'bodega@yuntera.example'))::text, true);
   begin
-    perform public.wms_confirm_pick(v_task, (select quantity from public.pick_tasks where id = v_task));
+    perform public.wms_confirm_pick(v_task, (select quantity from public.pick_tasks where id = v_task), null, (select k.code from public.skus k join public.pick_tasks pt on pt.sku_id = k.id where pt.id = v_task));
     raise exception 'picked from an empty bin';
   exception when others then
     if sqlerrm <> 'bin_stock_insufficient' then raise; end if;
@@ -507,7 +507,7 @@ begin
     perform public.request_return(v_item, 'withdrawal', 1);
     raise exception 'returned the same unit twice';
   exception when others then
-    if sqlerrm <> 'invalid_quantity' then raise; end if;
+    if sqlerrm <> 'units_already_in_return' then raise; end if;
   end;
 end
 $$;
