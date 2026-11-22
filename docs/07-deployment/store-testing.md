@@ -219,14 +219,14 @@ The build command then asks these questions, in this order (taken from the
 tool's own code, version 27.11; wording may differ slightly in a later
 version):
 
-| Question                                                        | Answer                                                                                         |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Do you want to log in to your Apple account?                    | **Yes**                                                                                        |
-| Apple ID / Password                                             | the owner's Apple ID and its password                                                          |
-| The six-digit code                                              | the code Apple shows on the owner's iPhone or Mac (or by SMS)                                  |
-| Reuse this distribution certificate? (serial `1D30B999…91BA`)   | **Yes**                                                                                        |
-| _(the build starts; the tool says it is ensuring the app exists in App Store Connect and creates it, see below)_ | no question                                     |
-| Reuse this App Store Connect API Key? (Key ID `8A673478NB`)     | **Yes**                                                                                        |
+| Question                                                                                                         | Answer                                                        |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Do you want to log in to your Apple account?                                                                     | **Yes**                                                       |
+| Apple ID / Password                                                                                              | the owner's Apple ID and its password                         |
+| The six-digit code                                                                                               | the code Apple shows on the owner's iPhone or Mac (or by SMS) |
+| Reuse this distribution certificate? (serial `1D30B999…91BA`)                                                    | **Yes**                                                       |
+| _(the build starts; the tool says it is ensuring the app exists in App Store Connect and creates it, see below)_ | no question                                                   |
+| Reuse this App Store Connect API Key? (Key ID `8A673478NB`)                                                      | **Yes**                                                       |
 
 There is no question about the provisioning profile (it is made without
 asking) nor about push notifications (turned off in `eas.json`). The

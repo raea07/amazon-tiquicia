@@ -35,7 +35,7 @@ packages/
 supabase/      migrations, row-level security, seed data, database tests
 tools/
   dev-api/     local stand-in for the Supabase API, for development and tests
-  e2e/         browser journeys for the four apps
+  e2e/         browser journeys for the four web apps
   native-e2e/  browser journeys through the web export of the native apps
 docs/          strategy, product, architecture, data, algorithms, security,
                operations, deployment, brand
@@ -188,10 +188,13 @@ tools/dev/stack.sh native 1
 tools/dev/stack.sh native-e2e 1
 ```
 
-That runs the five native journeys, each on a freshly seeded database: `shop`,
-`seller` (including a seller's second step), `driver` (including a stretch
-without signal), `warehouse` (picking by scan) and `staff` (the right and
-wrong kinds of account for the three staff apps). Name some to run only those,
+That runs the five native journeys, each on a freshly seeded database: `shop`
+(including a return), `seller` (including a price below the fees and a
+seller's second step), `driver` (including a stretch without signal, a
+suspension that hands the route back to Central and a delivery code locked
+and released), `warehouse` (picking by scan, refused receipts and a returned
+parcel) and `staff` (the right and wrong kinds of account for the three staff
+apps). Name some to run only those,
 for example `tools/dev/stack.sh native-e2e 1 driver`. The seller, driver and
 warehouse apps also have unit tests for their own rules
 (`pnpm --filter @yuntera/driver-native test`), which `pnpm test` runs too.
