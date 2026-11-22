@@ -5,9 +5,10 @@
 //     with a factura asked for, a free-delivery order, a cash order not paid
 //     yet; the console says simulated payments get no document, and that
 //     nothing with real money waits;
-//   issuer not set up, real money: cash taken in live mode; the order page
-//     says the document will come once invoicing is set up, the console that
-//     one payment with real money waits for it;
+//   issuer not set up, real money: cash taken in live mode, with and without
+//     a factura asked for; the order page says the factura or the tiquete will
+//     come once invoicing is set up, the console that the payments with real
+//     money wait for it;
 //   issuer set up, real and simulated payments: the tiquete is issued and
 //     shown; the console no longer warns about the set-up and still says the
 //     simulated ones got no document;
@@ -185,7 +186,10 @@ const mode = (value) =>
     const p = await states();
     return p.includes("1 pago simulado se cerró sin comprobante.") ? p : null;
   });
-  check(true, "console: the simulated payment's job ended without a document");
+  check(
+    page.includes("1 pago simulado se cerró sin comprobante."),
+    "console: the simulated payment's job ended without a document",
+  );
   await finance.screenshot({ path: `${SHOTS}/is02-ops-simulation.png`, fullPage: true });
 
   const free = await order("laptop-14-nimbo-libro", "sinpe_movil", false);
@@ -235,6 +239,34 @@ const mode = (value) =>
     page.includes("1 pago con dinero real espera y se emitirá en orden cuando quede configurada."),
     "console: one real payment waits for the set-up",
   );
+
+  // Real cash without a factura asked for: a tiquete, once set up.
+  const tiqueteCash = await order("libreta-tapa-dura-a5", "cash_on_delivery", false);
+  const tiqueteNumber = tiqueteCash.split("/").pop();
+  section = await invoicesOf(tiqueteCash);
+  check(
+    section.includes(
+      "Yuntera todavía no emite comprobantes electrónicos. Cuando pague al recibir el pedido, le emitiremos el tiquete electrónico por la entrega a domicilio",
+    ),
+    "order page, real cash not paid yet, no factura asked for: a tiquete once set up",
+  );
+  check(!section.includes("factura electrónica a su nombre"), "and no factura is promised");
+  sql(`select private.capture_payment(id, 'journey-cash-' || order_number, true)
+       from public.orders where order_number = '${tiqueteNumber}'`);
+  section = await invoicesOf(tiqueteCash);
+  check(
+    section.includes(
+      "Yuntera todavía no emite comprobantes electrónicos. Le emitiremos el tiquete electrónico por la entrega a domicilio en cuanto quede habilitado",
+    ),
+    "order page, real cash paid, no factura: the tiquete comes once invoicing is set up",
+  );
+  page = await states();
+  check(
+    page.includes(
+      "2 pagos con dinero real esperan y se emitirán en orden cuando quede configurada.",
+    ),
+    "console: two real payments wait for the set-up",
+  );
   check(
     page.includes("Los pagos simulados (sin dinero real) nunca reciben comprobante"),
     "console, live mode: simulated payments never get one",
@@ -252,12 +284,23 @@ const mode = (value) =>
     "order page: the factura, in her name",
   );
   check(section.includes(ISSUES), "and now says Yuntera issued it");
+  section = await until("the tiquete for the other real cash to be accepted", async () => {
+    const s = await invoicesOf(tiqueteCash);
+    return s.includes("Aceptado por Hacienda") ? s : null;
+  });
+  check(
+    section.includes("Tiquete electrónico") && !section.includes("Factura electrónica"),
+    "order page: a tiquete, not a factura, where none was asked for",
+  );
   page = await until("the console to count both simulated payments closed", async () => {
     const p = await states();
     return p.includes("2 pagos simulados se cerraron sin comprobante.") ? p : null;
   });
   check(!page.includes("no está configurada"), "console: no set-up warning once it is set up");
-  check(true, "console: both simulated payments (with and without a delivery fee) got none");
+  check(
+    page.includes("2 pagos simulados se cerraron sin comprobante."),
+    "console: both simulated payments (with and without a delivery fee) got none",
+  );
   section = await invoicesOf(simulated);
   check(
     section.includes(SIMULATED_PAID),
