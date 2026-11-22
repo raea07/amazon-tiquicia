@@ -173,7 +173,7 @@ const crDay = (days = 0) =>
   const preview = await text(staff.locator('section[aria-labelledby="revisar"]'));
   log("preview:", preview);
   check(
-    preview.includes("1 distrito pasa") && preview.includes("direcciones guardadas"),
+    preview.includes("1 distrito pasa") && preview.includes("Direcciones guardadas: 0"),
     "the move is not previewed with what it touches",
   );
   await staff.screenshot({ path: SHOTS + "/co3-district-preview.png", fullPage: true });
