@@ -22,13 +22,22 @@ const day = (value: string) => formatDate(value, { day: "numeric", month: "long"
 
 export const INVITATIONS_KEY = ["invitations"];
 
-function InvitationCard({ invitation }: { invitation: MyInvitation }) {
+const DECLINED = "Rechazó la invitación. No se unió a la tienda.";
+
+function InvitationCard({
+  invitation,
+  onDeclined,
+}: {
+  invitation: MyInvitation;
+  /** Said by the list: once declined, the invitation leaves it and this card with it. */
+  onDeclined: () => void;
+}) {
   const api = useApi();
   const { reloadRoles, viewer } = useSession();
   const { choose, setTeamNotice } = useShops();
   const client = useQueryClient();
   const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
-  const [result, setResult] = useState<{ ok?: string; error?: string }>({});
+  const [result, setResult] = useState<{ error?: string }>({});
 
   async function answer(accept: boolean) {
     if (busy) return;
@@ -43,7 +52,7 @@ function InvitationCard({ invitation }: { invitation: MyInvitation }) {
         await choose(shopId);
         await reloadRoles();
       } else {
-        setResult({ ok: "Rechazó la invitación. No se unió a la tienda." });
+        onDeclined();
       }
       await client.invalidateQueries({
         queryKey: ["user", viewer?.id ?? "anonymous", ...INVITATIONS_KEY],
@@ -55,7 +64,6 @@ function InvitationCard({ invitation }: { invitation: MyInvitation }) {
     }
   }
 
-  if (result.ok) return <FormMessage ok={result.ok} testID="invitation-message" />;
   return (
     <Card testID="invitation">
       <Text variant="heading">{invitation.shop.trade_name}</Text>
@@ -107,24 +115,36 @@ export function MyInvitations({ quietWhenEmpty = false }: { quietWhenEmpty?: boo
     personal: true,
     staleTime: 0,
   });
-  if (invitations.isPending) return quietWhenEmpty ? null : <LoadingState />;
+  const [declined, setDeclined] = useState(false);
+  const notice = declined ? <FormMessage ok={DECLINED} testID="invitation-message" /> : null;
+  if (invitations.isPending) return quietWhenEmpty ? notice : <LoadingState />;
   if (invitations.isError) {
     return quietWhenEmpty ? null : (
       <ErrorState error={invitations.error} onRetry={() => void invitations.refetch()} />
     );
   }
   if (invitations.data.length === 0) {
-    return quietWhenEmpty ? null : (
-      <EmptyState title="No tiene invitaciones">
-        Cuando una tienda le invite con su correo, aparece aquí.
-      </EmptyState>
+    return quietWhenEmpty ? (
+      notice
+    ) : (
+      <Stack gap={3}>
+        {notice}
+        <EmptyState title="No tiene invitaciones">
+          Cuando una tienda le invite con su correo, aparece aquí.
+        </EmptyState>
+      </Stack>
     );
   }
   return (
     <Stack gap={3}>
+      {notice}
       {quietWhenEmpty ? <Text variant="heading">Le invitaron a una tienda</Text> : null}
       {invitations.data.map((invitation) => (
-        <InvitationCard key={invitation.id} invitation={invitation} />
+        <InvitationCard
+          key={invitation.id}
+          invitation={invitation}
+          onDeclined={() => setDeclined(true)}
+        />
       ))}
     </Stack>
   );

@@ -140,13 +140,14 @@ async function enrolAuthenticator(email) {
 }
 
 /**
- * A phone-sized page. `expect(pattern)` allows console errors matching it
+ * A phone-sized page, 360 px wide. `expect(pattern)` allows console errors matching it
  * (a refusal the step provokes on purpose: the browser logs every 4xx) until
  * `expect(null)`; everything else fails the journey at the end.
  */
 async function phone(browser, name, errors) {
+  // 360 px: the narrowest phone the native apps are made for.
   const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
+    viewport: { width: 360, height: 780 },
     deviceScaleFactor: 2,
     isMobile: true,
     hasTouch: true,
@@ -180,7 +181,7 @@ async function phone(browser, name, errors) {
     noSideways: async (where) =>
       check(
         (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-        `${where}: no sideways scrolling at 390 px`,
+        `${where}: no sideways scrolling at 360 px`,
       ),
     /** Keys the app keeps in the browser's storage (the web export's secure store and app storage). */
     stored: () => page.evaluate(() => Object.keys(localStorage)),
@@ -231,7 +232,11 @@ async function deleteThroughScreen(p, email, label, password = PASSWORD) {
     .filter({ visible: true, hasText: "La contraseña no coincide" })
     .first()
     .waitFor();
-  check(true, `${label}: a wrong password is refused and nothing is deleted`);
+  check(
+    (await http("POST", "/auth/v1/token?grant_type=password", { data: { email, password } }))
+      .status === 200,
+    `${label}: a wrong password is refused and nothing is deleted`,
+  );
   await p.noSideways(`${label} deletion screen`);
   await p.shot(`${label}-delete-confirm`, true);
   // The database has ended every session of the account before the phone

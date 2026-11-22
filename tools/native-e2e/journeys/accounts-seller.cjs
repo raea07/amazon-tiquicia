@@ -10,6 +10,8 @@
 // 4. The member leaves the shop (the box first), is back on the screen for
 //    an account without a shop, which says so, and deletes the account
 //    there: nothing of it stays on the phone.
+// 4b. The owner removes another member, and a third account declines its
+//    invitation in the app.
 // 5. The owner asks to rename the shop (a name too short first) and
 //    withdraws the request.
 // 6. The owner saves the shop's notification settings.
@@ -166,6 +168,61 @@ const OWNER = "vendedor@yuntera.example";
   await m.on("sign-in-email").waitFor();
   await m.shot("accounts-seller-05-deleted");
   await m.context.close();
+
+  // ── 4b. The owner removes a member; another invitation is declined ─────
+  await o.page.goto(`${BASE}/equipo`, { waitUntil: "networkidle" });
+  await o.on("invite-email").fill(other);
+  await o.on("invite-submit").click();
+  await o.page
+    .getByTestId("team-invitation")
+    .filter({ visible: true, hasText: other })
+    .first()
+    .waitFor();
+  const offered = (await rpcAs(other, "my_invitations")).find((i) => i.shop.id === shop.id);
+  await rpcAs(other, "seller_answer_invitation", {
+    p_invitation_id: offered.id,
+    p_accept: true,
+  });
+  await o.page.reload({ waitUntil: "networkidle" });
+  const otherRow = o.page.getByTestId("team-member").filter({ visible: true, hasText: other });
+  await otherRow.waitFor();
+  await otherRow.getByTestId("member-remove").click();
+  await otherRow.waitFor({ state: "detached" });
+  check(
+    (await rpcAs(OWNER, "seller_team", { p_seller_id: shop.id })).members.every(
+      (person) => person.email !== other,
+    ),
+    "the owner removes a member, who leaves the list and the team",
+  );
+
+  const declines = await throwaway("rechaza", "Rita Rechaza");
+  await o.on("invite-email").fill(declines);
+  await o.on("invite-submit").click();
+  await o.page
+    .getByTestId("team-invitation")
+    .filter({ visible: true, hasText: declines })
+    .first()
+    .waitFor();
+  const d = await phone(browser, "seller-declines", errors);
+  await d.page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  await signIn(d, declines);
+  await d.on("invitation").waitFor();
+  await d.on("invitation-decline").click();
+  await d.page
+    .getByTestId("invitation-message")
+    .filter({ visible: true, hasText: "Rechazó la invitación" })
+    .first()
+    .waitFor();
+  await d.noSideways("invitation declined");
+  await d.shot("accounts-seller-05b-declined");
+  const after = await rpcAs(OWNER, "seller_team", { p_seller_id: shop.id });
+  check(
+    after.members.every((person) => person.email !== declines) &&
+      after.invitations.every((invitation) => invitation.email !== declines) &&
+      (await rpcAs(declines, "my_invitations")).length === 0,
+    "a declined invitation leaves no member and no invitation waiting",
+  );
+  await d.context.close();
 
   // ── 5. A shop change, requested and withdrawn ──────────────────────────
   await o.page.goto(`${BASE}/cuenta`, { waitUntil: "networkidle" });

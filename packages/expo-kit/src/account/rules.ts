@@ -51,8 +51,9 @@ export function passwordProblem(
 /**
  * The answer to a reset request, whether or not the address has an account
  * (anything else would tell a stranger who is registered). The website's
- * answer also mentions a 6-digit code; the apps cannot take one yet (see
- * docs), so theirs speaks of the link only.
+ * answer also mentions a 6-digit code; the apps cannot take one yet (the
+ * hosted project's reset e-mail cannot carry the code without a mail server
+ * of its own), so theirs speaks of the link only.
  */
 export const RESET_SENT =
   "Si esa dirección tiene una cuenta en Yuntera, le acabamos de enviar un correo con un enlace. Si no le llega en unos minutos, revise el correo no deseado.";
