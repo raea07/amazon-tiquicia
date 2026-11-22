@@ -32,6 +32,33 @@ transaction (one counter per document type; no gaps, never reused), signed
 once by the worker, stored, and only then sent. The receiver can download it
 at once, before Hacienda answers (RCE art. 2.11, 18).
 
+Some rules of the planning that matter to finance:
+
+- Each document of a paid order is made on its own: a shop with incomplete
+  fiscal details holds back only its own fee factura, never the shopper's
+  document or the other shops' facturas.
+- An `invoice` job never gives up. A job that fails is tried again on every
+  run (every 30 seconds on Supabase), after the jobs that have not failed,
+  until the cause is fixed; the console lists it with the order and the shop.
+- A refund's credit notes wait until every earlier event of the same order
+  has made its documents, so a refunded order always has its documents
+  credited, whatever order the events were planned in.
+- Free delivery: Yuntera charges the shopper nothing, so it issues the
+  shopper nothing. The checkout does not offer a factura then, and anything
+  typed for one is discarded when the payment is captured.
+- A factura request typed at checkout is kept while its order can still be
+  paid (cash on delivery is paid at the door, days later). It is forgotten
+  two days after it was typed if no order was placed with it, or as soon as
+  its order is cancelled without a payment.
+- What a shopper types (the name, the e-mail) is cleaned and checked at
+  checkout with the same rules the XML writer applies (characters XML cannot
+  carry removed, the annex's e-mail structure), so a document numbered from
+  it can always be written. The XML is validated against the official XSDs
+  only in the unit tests (`packages/invoicing/src/schema.test.ts`); at run
+  time the worker applies its own checks (lengths, patterns, codes, every
+  amount recomputed) before signing, and Hacienda's validator is the final
+  word.
+
 ### Where things live
 
 | What                                                                       | Where                                                                                                                                 |
@@ -57,7 +84,8 @@ largest cost.
 - **Rechazados por Hacienda.** Read Hacienda's reason. Fix the cause first
   (most often the platform's activity code or registration, or a shop's
   legal name or identification: correct the shop's fiscal details through a
-  shop-change request). Then press **Emitir reemplazo**. A rejected document
+  shop-change request). Then press **Emitir reemplazo**; the console opens
+  the new document, with its number. A rejected document
   has no validity and is never corrected or credited (RCE art. 10, 19). For a
   shopper's factura whose identification Hacienda does not recognise, use
   **Reemplazar por un tiquete sin receptor**. A credit note that depends on a
@@ -70,11 +98,23 @@ largest cost.
 - **Sin enviar.** When Hacienda cannot be reached, documents are kept and
   sent when it is back, retrying with back-off up to once an hour (RCE
   art. 21: no paper voucher, no deadline stated). A document held by the
-  worker's own checks (an amount that does not add up) is a bug: report it,
-  and press **Enviar ahora** once it is fixed. A pause banner means Hacienda
-  refused the credentials or the address: fix the configuration.
-- **Pagos sin comprobante.** An event that could not produce its documents,
-  almost always because a shop lacks a legal name or identification.
+  worker's own checks (an amount that does not add up, a field it cannot
+  write) is a bug: report it. If the cause was outside the document (a
+  setting), press **Enviar ahora** once it is fixed. If the cause is in the
+  document itself, press **Emitir reemplazo** (or, for a shopper's factura,
+  **Reemplazar por un tiquete sin receptor**): it was never signed nor sent,
+  so a new document with the next number replaces it without referencing
+  it, and the held one is set aside with its number unused (recorded in the
+  audit log; see the accountant's question 14). **Enviar ahora** does not
+  take a document from a worker that is sending it, and lifts the pause
+  banner only when retrying the document that caused the pause. A pause
+  banner means Hacienda refused the credentials or the address: fix the
+  configuration, then press **Enviar ahora** on that document.
+- **Pagos sin todos sus comprobantes.** Each order (or refund) whose
+  documents could not all be made yet, with the shop and the reason, almost
+  always a shop's legal name or identification. Correct the shop's fiscal
+  details through a shop-change request; the documents are issued by
+  themselves within a minute.
 - **Por día.** Documents against paid orders, to notice a gap.
 - **La llave vence pronto.** The worker reports the certificate's expiry;
   renew the key before it lapses (validity is read from the certificate:
@@ -212,3 +252,8 @@ From the research note, section 10, unresolved:
 13. Under RCE art. 2.13, may a business buyer issue a factura electrónica de
     compra for goods bought from any simplified-regime seller, or only from
     those not registered as "no confirmante"?
+14. A document numbered but never sent (held by the platform's own checks
+    and replaced with the next number) leaves its number unused, and the
+    rules ask for numbering "sin saltos". Is the audit trail enough, or must
+    such a number be reported or handled another way? (No code path should
+    produce one: what is typed is checked at input with the writer's rules.)
