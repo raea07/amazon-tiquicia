@@ -290,6 +290,14 @@ async function rpcAs(email, calls) {
   await page.screenshot({ path: `${SHOTS}/native-warehouse-flow-04b-pick-wrong-small.png` });
   await page.setViewportSize({ width: 390, height: 844 });
 
+  // Every pick sends what was scanned: the database checks it too (083200).
+  const picks = [];
+  const recordPick = (r) => {
+    if (r.url().includes("/rpc/wms_confirm_pick") && r.method() === "POST") {
+      picks.push(r.postDataJSON());
+    }
+  };
+  page.on("request", recordPick);
   for (let i = 0; i < lines; i++) {
     const location = await textOf("pick-location");
     const sku = /^(\S+)/.exec(await textOf("pick-codes"))[1];
@@ -337,6 +345,13 @@ async function rpcAs(email, calls) {
     );
     if (i === 0) await shot("05-pick-line-done");
   }
+  page.off("request", recordPick);
+  log("    picks sent:", JSON.stringify(picks.map((p) => p.p_code)));
+  check(
+    picks.length === lines &&
+      picks.every((p) => typeof p.p_code === "string" && p.p_code.length > 3),
+    "each pick sent the code that was scanned",
+  );
   await byId("pack-submit").waitFor();
   check(
     (await textOf("pick-progress")).startsWith(`${lines} de ${lines}`),

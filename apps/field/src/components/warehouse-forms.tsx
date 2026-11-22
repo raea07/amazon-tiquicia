@@ -12,8 +12,8 @@ type Task = WmsShipment["tasks"][number];
 /**
  * Confirms one line of a pick list. The worker scans (or types) the product's
  * code; a hand scanner types into the focused field like a keyboard. The code
- * is checked on the server against the line, so the wrong product cannot be
- * confirmed by accident.
+ * goes to the database, which compares it with the line's product and refuses
+ * another one, so the wrong product cannot be confirmed by accident.
  */
 export function PickForm({ shipmentId, task }: { shipmentId: string; task: Task }) {
   const [state, action] = useActionState(confirmPick, initial);
@@ -29,8 +29,7 @@ export function PickForm({ shipmentId, task }: { shipmentId: string; task: Task 
           autoComplete="off"
           autoCapitalize="characters"
           defaultValue={state.values?.code}
-          optional
-          hint="Código de barras o el código YT de la etiqueta."
+          hint="Código de barras o el código YT de la etiqueta. Hace falta si tomó alguna unidad."
         />
         <TextField
           label="Tomó"

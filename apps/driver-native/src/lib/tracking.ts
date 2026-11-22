@@ -38,6 +38,8 @@ TaskManager.defineTask<{ locations?: Location.LocationObject[] }>(
       lat: last.coords.latitude,
       lng: last.coords.longitude,
       accuracy: last.coords.accuracy ?? null,
+      // When the phone read it: it may be sent minutes later, after a dead zone.
+      at: last.timestamp,
     });
   },
 );

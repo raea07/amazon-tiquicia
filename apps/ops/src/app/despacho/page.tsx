@@ -45,6 +45,21 @@ function isCalendarDate(value: string): boolean {
 const todayInCostaRica = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "America/Costa_Rica" }).format(new Date());
 
+/**
+ * When a stop was closed without signal, how much later the server heard of
+ * it (the delivery promise and the seller scores use when it happened).
+ */
+function lateBy(stop: { completed_at: string | null; completed_received_at: string | null }) {
+  if (!stop.completed_at || !stop.completed_received_at) return null;
+  const minutes = Math.round(
+    (Date.parse(stop.completed_received_at) - Date.parse(stop.completed_at)) / 60_000,
+  );
+  if (!(minutes >= 10)) return null;
+  const span =
+    minutes < 90 ? `${minutes} min` : `${Math.round(minutes / 6) / 10} h`.replace(".", ",");
+  return `registrada ${span} después, sin señal`;
+}
+
 async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParams">) {
   await requireStaff("/despacho", ["ops"]);
   const asked = (await searchParams).fecha;
@@ -316,6 +331,15 @@ async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParam
                                 {" "}
                                 · {FAILURE_REASON[stop.failure_reason] ?? stop.failure_reason}
                               </span>
+                            ) : null}
+                            {stop.pod_outside_area ? (
+                              <span className="text-danger">
+                                {" "}
+                                · el teléfono dio una ubicación fuera del país: revise esta parada
+                              </span>
+                            ) : null}
+                            {lateBy(stop) ? (
+                              <span className="text-ink-muted"> · {lateBy(stop)}</span>
                             ) : null}
                           </span>
                           <Badge tone={stopStatus?.tone ?? "neutral"}>

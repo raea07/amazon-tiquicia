@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ApiError, type DriverDay } from "@yuntera/db";
+import { ApiError, type PlacedDriverDay as DriverDay } from "@yuntera/db";
 import { createOfflineQueue, type QueueEntry } from "@yuntera/expo-kit/offline";
 import {
   ageLimit,
@@ -92,6 +92,39 @@ describe("sending a queued arrival", () => {
     const { send, refusals } = sender(server.api);
     assert.deepEqual(await send(entry("arrive", { stopId: "s1" })), { result: "offline" });
     assert.deepEqual(refusals, []);
+  });
+});
+
+describe("the time an action happened", () => {
+  it("goes with each queued action: when it was queued, or when the phone read the position", async () => {
+    const seen: Array<[string, string | undefined]> = [];
+    const api: DriverCalls = {
+      driverToday: async () => ({ driver: {}, routes: [] }) as unknown as DriverDay,
+      driverArrive: async (_stopId, at) => {
+        seen.push(["arrive", at instanceof Date ? at.toISOString() : (at ?? undefined)]);
+      },
+      driverFailStop: async (input) => {
+        const at = input.occurredAt;
+        seen.push(["fail", at instanceof Date ? at.toISOString() : (at ?? undefined)]);
+        return { ok: true as const, route_completed: false };
+      },
+      driverReportPosition: async (_lat, _lng, _accuracy, at) => {
+        seen.push(["position", at instanceof Date ? at.toISOString() : (at ?? undefined)]);
+      },
+    };
+    const { send } = sender(api);
+    const queued = Date.UTC(2026, 10, 21, 15, 0, 0);
+    await send({ ...entry("arrive", { stopId: "s1" }), createdAt: queued });
+    await send({ ...failure("nobody_home"), createdAt: queued + 60_000 });
+    await send({
+      ...entry("position", { lat: 9.93, lng: -84.08, accuracy: 10, at: queued - 5_000 }),
+      createdAt: queued,
+    });
+    assert.deepEqual(seen, [
+      ["arrive", "2026-11-21T15:00:00.000Z"],
+      ["fail", "2026-11-21T15:01:00.000Z"],
+      ["position", "2026-11-21T14:59:55.000Z"],
+    ]);
   });
 });
 
@@ -224,7 +257,7 @@ describe("the drivers' queue, end to end with the fake server", () => {
     assert.equal(queue.snapshot().entries.length, 0);
   });
 
-  it("reports a stop action that waited more than a day and a half, never sending it", async () => {
+  it("reports a stop action that waited more than a day, never sending it", async () => {
     const server = fakeServer({ status: "pending" });
     const time = { now: 1_000_000 };
     const queue = createOfflineQueue({
@@ -236,7 +269,7 @@ describe("the drivers' queue, end to end with the fake server", () => {
     });
     await queue.setOwner("carlos");
     await queue.enqueue("arrive", { stopId: "s1" });
-    time.now += 37 * 60 * 60 * 1000;
+    time.now += 25 * 60 * 60 * 1000;
     await queue.flush(sender(server.api).send);
     assert.deepEqual(server.log, []);
     const [left] = queue.snapshot().entries;

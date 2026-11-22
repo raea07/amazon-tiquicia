@@ -49,6 +49,7 @@ export async function startTracking(): Promise<TrackingStart> {
           lat: point.coords.latitude,
           lng: point.coords.longitude,
           accuracy: point.coords.accuracy ?? null,
+          at: point.timestamp,
         });
       },
     );

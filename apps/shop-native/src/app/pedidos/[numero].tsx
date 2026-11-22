@@ -29,6 +29,7 @@ import {
   ReturnForm,
   ReviewForm,
   SimulatePayment,
+  WithdrawReturn,
 } from "@/components/order-actions";
 import { ProductImage } from "@/components/product";
 import { PAYMENT_LABEL, SHIPMENT_STATUS_LABEL } from "@/lib/labels";
@@ -282,6 +283,11 @@ export default function OrderScreen() {
                     <View key={entry.id} style={styles.returnRow}>
                       <Text variant="smallStrong">{returnTitle(entry)}</Text>
                       <Text variant="small">{returnNextStep(entry)}</Text>
+                      {entry.can_withdraw ? (
+                        <Expandable title="¿La abrió por error? Retirar la solicitud">
+                          <WithdrawReturn returnId={entry.id} orderNumber={o.order_number} />
+                        </Expandable>
+                      ) : null}
                     </View>
                   ))}
                 </View>

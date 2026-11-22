@@ -13,5 +13,6 @@ export * from "./promise";
 export * from "./recommendations";
 export * from "./risk";
 export * from "./routing";
+export * from "./scan-codes";
 export * from "./search";
 export * from "./sellers";

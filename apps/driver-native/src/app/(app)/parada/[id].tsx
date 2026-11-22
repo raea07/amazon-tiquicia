@@ -33,6 +33,7 @@ import {
   googleMapsUrl,
   LOCKED_CODE_MESSAGE,
   parcels,
+  placeOf,
   type ShownStop,
   wazeUrl,
   whatsappUrl,
@@ -48,6 +49,16 @@ function openOutside(url: string, fallback?: string) {
 function Directions({ stop }: { stop: ShownStop }) {
   return (
     <Card>
+      {placeOf(stop) ? (
+        <>
+          <Text variant="smallStrong" tint="muted">
+            Distrito
+          </Text>
+          <Text variant="subheading" testID="stop-place">
+            {placeOf(stop)}
+          </Text>
+        </>
+      ) : null}
       <Text variant="smallStrong" tint="muted">
         Señas
       </Text>

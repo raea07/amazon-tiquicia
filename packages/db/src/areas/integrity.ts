@@ -55,6 +55,10 @@ export const myOrderReturn = z.object({
   created_at: timestamp,
   received_at: timestamp.nullable(),
   resolved_at: timestamp.nullable(),
+  /** Set when the shopper withdrew the request (it then reads as closed). Since 083200. */
+  withdrawn_at: timestamp.nullable(),
+  /** Whether the shopper may still withdraw it: it waits for a decision. Since 083200. */
+  can_withdraw: z.boolean(),
 });
 export type MyOrderReturn = z.infer<typeof myOrderReturn>;
 

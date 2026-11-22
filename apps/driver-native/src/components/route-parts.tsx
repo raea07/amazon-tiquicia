@@ -2,7 +2,7 @@ import { colors, radius, space, tone } from "@yuntera/expo-kit/theme";
 import { Badge, formatPrice, Text } from "@yuntera/expo-kit/ui";
 import { Link } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
-import { parcels, type ShownStop, STOP_LABEL } from "@/lib/route";
+import { parcels, placeOf, type ShownStop, STOP_LABEL } from "@/lib/route";
 
 /** The stop's state in words (never colour alone), with "Por enviar" when the phone has not sent it. */
 export function StopBadges({ stop }: { stop: ShownStop }) {
@@ -36,6 +36,11 @@ function StopBody({ stop }: { stop: ShownStop }) {
         </Text>
         <StopBadges stop={stop} />
       </View>
+      {placeOf(stop) ? (
+        <Text variant="smallStrong" testID="stop-row-place">
+          {placeOf(stop)}
+        </Text>
+      ) : null}
       <Text variant="small" tint="muted" numberOfLines={2}>
         {stop.senas}
       </Text>

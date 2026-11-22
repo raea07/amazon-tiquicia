@@ -47,6 +47,12 @@ async function Stop({ params }: Pick<PageProps<"/ruta/[parada]">, "params">) {
           {stop.package_count === 1 ? "bulto" : "bultos"}
         </p>
         <h1 className="text-2xl font-bold">{stop.recipient_name}</h1>
+        {stop.district ? (
+          <p className="mt-1 text-lg font-semibold">
+            {stop.district}
+            {stop.canton ? `, ${stop.canton}` : ""}
+          </p>
+        ) : null}
       </header>
 
       <section className="rounded-lg border border-border bg-surface p-5">
@@ -110,7 +116,7 @@ async function Stop({ params }: Pick<PageProps<"/ruta/[parada]">, "params">) {
             {stop.pin_attempts_left <= 2 ? (
               <p className="mt-1 text-sm font-semibold text-danger">
                 {stop.pin_attempts_left === 0
-                  ? "Código bloqueado por demasiados intentos. Llame a Central."
+                  ? "Código bloqueado por demasiados intentos. No entregue el paquete y llame a Central: si lo desbloquean, el cliente verá un código nuevo en su pedido; si no, márquelo como no entregado."
                   : `Le quedan ${stop.pin_attempts_left} intento(s) de código.`}
               </p>
             ) : null}

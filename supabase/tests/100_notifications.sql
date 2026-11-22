@@ -679,6 +679,7 @@ do $$
 declare
   v_ship uuid;
   v_route uuid;
+  v_before bigint;
 begin
   select s.id into v_ship from public.shipments s where s.status = 'packed' limit 1;
   update public.shipments set status = 'ready_for_dispatch' where id = v_ship;
@@ -687,16 +688,21 @@ begin
   update public.shipments set status = 'out_for_delivery' where id = v_ship;
   assert exists (select 1 from private.outbox_events where topic = 'shipment.out_for_delivery'
                  and payload ->> 'shipment_id' = v_ship::text), 'out for delivery';
+  -- A payment marked refunded is a booking, not proof that the money moved:
+  -- since 20261121083200_followups.sql "refund completed" waits for a recorded
+  -- confirmation (tested in 125_followups.sql).
+  v_before := (select coalesce(max(id), 0) from private.outbox_events);
   update public.payments set status = 'refunded' where order_id = (
     select order_id from public.payments where status = 'captured' limit 1) and status = 'captured';
-  assert exists (select 1 from private.outbox_events where topic = 'refund.completed'), 'refund completed';
+  assert not exists (select 1 from private.outbox_events where topic = 'refund.completed' and id > v_before),
+    'marking a payment refunded announces nothing by itself';
   select id into v_route from public.routes where driver_id is not null limit 1;
   update public.routes set driver_id = (select id from public.drivers where id <> routes.driver_id limit 1)
   where id = v_route;
   assert exists (select 1 from private.outbox_events where topic = 'route.assigned' and payload ->> 'route_id' = v_route::text),
     'route assigned';
   assert exists (select 1 from private.outbox_jobs j join private.outbox_events e on e.id = j.event_id
-                 where e.topic = 'refund.completed' and j.consumer = 'notify' and j.status = 'pending'),
+                 where e.topic = 'route.assigned' and j.consumer = 'notify' and j.status = 'pending'),
     'and they are routed to the notification consumer';
 end
 $$;

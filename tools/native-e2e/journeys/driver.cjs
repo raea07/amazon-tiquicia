@@ -113,6 +113,8 @@ async function newRoute() {
         p_task_id: task.task_id,
         p_quantity: task.quantity,
         p_location_id: task.location_id,
+        // The database checks the scanned code since 083200.
+        p_code: task.sku_code,
       });
     }
     await bodega("wms_pack_shipment", {
@@ -194,9 +196,18 @@ async function newRoute() {
   });
   // How many times the app called each database function.
   const calls = {};
+  // And what it sent the last time (the time a queued action happened, since 083200).
+  const sent = {};
   page.on("request", (r) => {
     const fn = /\/rest\/v1\/rpc\/(\w+)/.exec(r.url())?.[1];
-    if (fn && r.method() === "POST") calls[fn] = (calls[fn] ?? 0) + 1;
+    if (fn && r.method() === "POST") {
+      calls[fn] = (calls[fn] ?? 0) + 1;
+      try {
+        sent[fn] = r.postDataJSON();
+      } catch {
+        sent[fn] = null;
+      }
+    }
   });
   // The stack keeps the screens below the current one in the page, hidden: use the visible one.
   const byId = (id) => page.getByTestId(id).filter({ visible: true }).first();
@@ -275,6 +286,10 @@ async function newRoute() {
     "'Cómo llegar' hands the stop's point to a maps app",
   );
   check(/waze\.com\/ul\?ll=9\.93/.test(opened[1] ?? ""), "'Abrir en Waze' hands it to Waze");
+  // The district and cantón, above the señas (driver_today says them since 083200).
+  const place = await textOf("stop-place");
+  log("    district:", place);
+  check(/^[^,]+, [^,]+$/.test(place), "the stop says its district and cantón");
   await shot("04-stop");
   await byId("stop-arrive").click();
   await byId("stop-arrived").waitFor();
@@ -459,6 +474,21 @@ async function newRoute() {
     "each queued action was sent once",
   );
   check(calls.driver_report_position >= 1, "the waiting position was sent");
+  // Each says when it happened, not when the signal came back.
+  for (const fn of ["driver_arrive", "driver_fail_stop", "driver_report_position"]) {
+    const at = Date.parse(sent[fn]?.p_occurred_at ?? "");
+    check(
+      Number.isFinite(at) && at < Date.now() - 5_000,
+      `${fn} carries the time it happened offline (${sent[fn]?.p_occurred_at})`,
+    );
+    // And the phone's clock at sending, so the database counts only how long
+    // the phone held it: a phone clock that is off does not get it refused.
+    const sentAt = Date.parse(sent[fn]?.p_sent_at ?? "");
+    check(
+      Number.isFinite(sentAt) && sentAt - at >= 5_000,
+      `${fn} carries the phone's clock at sending (${sent[fn]?.p_sent_at})`,
+    );
+  }
   const driver = await as(DRIVER);
   const after = (await driver("driver_today")).routes.find((r) => r.code === B);
   check(

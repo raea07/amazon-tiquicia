@@ -229,7 +229,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                     ) : null}
                     {itemReturns.length > 0 ? (
                       <div className="mt-4 border-t border-border pt-4">
-                        <ReturnStatusList returns={itemReturns} />
+                        <ReturnStatusList returns={itemReturns} orderNumber={order.order_number} />
                       </div>
                     ) : null}
                   </li>

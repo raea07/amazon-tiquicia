@@ -13,6 +13,7 @@
  */
 
 import { clean, colones, fullDate, longDate } from "../format.ts";
+import { FOLLOWUP_TEMPLATES } from "./followups.ts";
 
 export type Vars = Record<string, unknown>;
 
@@ -419,11 +420,13 @@ export const TEMPLATES: Record<string, Template> = {
     return {
       from: "orders",
       subject: `Aprobamos su devolución ${ref}`,
-      preheader: "Le explicamos los siguientes pasos.",
+      preheader: "Pasamos a recoger el producto, sin costo para usted.",
       greeting: hello(name),
       paragraphs: [
         `Aprobamos su devolución ${ref} de ${clean(s(v.return_title), 90)}, del pedido ${number}.`,
-        "Guarde el producto con sus accesorios. Coordinaremos la recolección con usted; cuando lo recibamos, le devolvemos el dinero por el mismo medio con que pagó.",
+        "No tiene que enviarlo ni pagar nada: lo recogemos nosotros. En los próximos días hábiles le escribimos o lo llamamos para acordar el día; ese día un repartidor de Yuntera pasa por su dirección de entrega.",
+        "Tenga el producto listo, completo, con sus accesorios y, si la tiene, en su caja. Entrégueselo al repartidor, que registra que lo recibió.",
+        "Cuando llegue a nuestra bodega le devolvemos el dinero por el mismo medio con que pagó, y le avisamos.",
       ],
       action: { label: "Ver el pedido", url: orderUrl(v, links) },
       note: ORDER_FOOTER,
@@ -695,6 +698,9 @@ export const TEMPLATES: Record<string, Template> = {
     ],
     action: { label: "Ir a Atención", url: `${links.ops}/atencion` },
   }),
+
+  // Messages added with migration 083200 (./followups.ts).
+  ...FOLLOWUP_TEMPLATES,
 };
 
 export const TEMPLATE_NAMES = Object.keys(TEMPLATES).sort();

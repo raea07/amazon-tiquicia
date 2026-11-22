@@ -79,6 +79,17 @@ const realistic: Vars = {
   note: "Datos verificados.",
   route_code: "R-20261125-01",
   stop_count: 12,
+  invitation_role: "staff",
+  invitation_expires_at: "2026-12-05T18:00:00Z",
+  change_kind: "contact",
+  approved: true,
+  decision_note: "Confirmamos el cambio por teléfono.",
+  paid_at: "2026-11-28T15:00:00Z",
+  offer_count: 2,
+  paused_offers: [
+    { title: "Bombillo LED 9 W (4 u.)", variant: "", min_price_minor: 612_345 },
+    { title: "Libreta de tapa dura A5", variant: "Azul", min_price_minor: 455_000 },
+  ],
   ...SECRET,
 };
 
@@ -112,7 +123,8 @@ function allText(rendered: ReturnType<typeof render>): string {
 
 describe("every template on every channel", () => {
   it("has the templates of section 8", () => {
-    expect(TEMPLATE_NAMES).toHaveLength(26);
+    // 26 of section 8, and 9 added with migration 083200 (followups.ts).
+    expect(TEMPLATE_NAMES).toHaveLength(35);
     expect(channelsOf("shipment_out_for_delivery")).toEqual(["email", "push", "whatsapp", "sms"]);
     expect(channelsOf("seller_new_order")).toEqual(["email", "push", "whatsapp"]);
     expect(channelsOf("order_placed")).toContain("whatsapp");

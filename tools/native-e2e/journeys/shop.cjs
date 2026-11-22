@@ -52,6 +52,30 @@ async function deliveredOrder() {
   }
 }
 
+/** Opens a damaged-item claim on a line, through the API, as a shopper would on the website. */
+async function claimAs(email, orderItemId) {
+  const ctx = await request.newContext();
+  try {
+    const token = await ctx.post(`${API}/auth/v1/token?grant_type=password`, {
+      headers: { apikey: KEY },
+      data: { email, password: PASSWORD },
+    });
+    const { access_token } = await token.json();
+    const r = await ctx.post(`${API}/rest/v1/rpc/request_return`, {
+      headers: { apikey: KEY, authorization: `Bearer ${access_token}` },
+      data: {
+        p_order_item_id: orderItemId,
+        p_kind: "damaged",
+        p_quantity: 1,
+        p_reason: "Llegó con la caja rota.",
+      },
+    });
+    if (r.status() >= 400) throw new Error(`request_return: ${r.status()} ${await r.text()}`);
+  } finally {
+    await ctx.dispose();
+  }
+}
+
 (async () => {
   const browser = await chromium.launch();
   const context = await browser.newContext({
@@ -296,6 +320,35 @@ async function deliveredOrder() {
   );
   check((await overflow()) <= 0, "the order with a return has no sideways scrolling");
   await shot("10b-return");
+
+  // 10c. A claim opened by mistake on another line is withdrawn while it
+  // waits for a decision (083200); the order then says it was withdrawn.
+  const other = delivered.items.find((item, index) => index > 0 && item.returned_quantity === 0);
+  if (other) {
+    await claimAs(SHOPPER, other.id);
+    await page.goto(`${BASE}/pedidos/${delivered.order_number}`, { waitUntil: "networkidle" });
+    await page
+      .getByText("¿La abrió por error? Retirar la solicitud")
+      .filter({ visible: true })
+      .first()
+      .click();
+    await shot("10c-withdraw");
+    await page
+      .getByText("Retirar la solicitud", { exact: true })
+      .filter({ visible: true })
+      .first()
+      .click();
+    await page
+      .getByText("Retirada: usted retiró esta solicitud.")
+      .filter({ visible: true })
+      .first()
+      .waitFor({ timeout: 15_000 });
+    check(true, "a claim waiting for a decision is withdrawn from the app");
+    check((await overflow()) <= 0, "the order after withdrawing has no sideways scrolling");
+    await shot("10c-withdrawn");
+  } else {
+    check(false, "the delivered order has a second line to claim");
+  }
   await page.goto(`${BASE}/cuenta`, { waitUntil: "networkidle" });
 
   // 11. Sign out

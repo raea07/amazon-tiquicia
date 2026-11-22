@@ -176,12 +176,18 @@ async function pack(shipment: string) {
     return;
   }
   await as(STAFF, "select public.wms_start_picking($1) as r", [shipment]);
-  const { rows } = await pool.query<{ id: string; quantity: number }>(
-    "select id, quantity from public.pick_tasks where shipment_id = $1",
+  const { rows } = await pool.query<{ id: string; quantity: number; code: string }>(
+    `select t.id, t.quantity, k.code from public.pick_tasks t
+     join public.skus k on k.id = t.sku_id where t.shipment_id = $1`,
     [shipment],
   );
   for (const task of rows) {
-    await as(STAFF, "select public.wms_confirm_pick($1, $2) as r", [task.id, task.quantity]);
+    // The scanned code goes with the pick, as from the apps.
+    await as(STAFF, "select public.wms_confirm_pick($1, $2, null, $3) as r", [
+      task.id,
+      task.quantity,
+      task.code,
+    ]);
   }
   await as(STAFF, "select public.wms_pack_shipment($1, 900, 1::smallint) as r", [shipment]);
 }
@@ -287,7 +293,7 @@ describe.skipIf(!shared)("integrity under concurrency (two sessions at once)", (
     const second = codeOf(one(b, sql, [line]));
     expect(await blocked(b.pid)).toBe(true);
     await end(a, "commit");
-    expect(await second).toBe("invalid_quantity");
+    expect(await second).toBe("units_already_in_return");
     await end(b, "rollback");
 
     expect(

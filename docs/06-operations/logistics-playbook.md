@@ -77,7 +77,11 @@ to shoppers only after putaway is confirmed.
 1. Orders confirmed before the cutoff appear as pick tasks. The cutoff for the
    GAM core is 14:00 (`SERVICE_PRESETS` in `packages/core/src/promise.ts`).
 2. Pick one order at a time in the pilot: walk to the location shown, scan the
-   location, scan the unit. A mismatch blocks the pick.
+   location, scan the unit. A mismatch blocks the pick: the apps check the
+   code, and the database checks it again against the product's stock code
+   and barcode (any usual spelling of it), so a unit never leaves the shelf
+   against another product's code. A line left short (0 or fewer units)
+   needs no scan.
 3. If a unit is missing or damaged, record the shortage in the app. Do not
    substitute. Operations contacts the shopper
    ([personas and journeys](../01-product/personas-and-journeys.md)).
@@ -124,7 +128,11 @@ below about 20 stops a day, a carrier is cheaper than an own driver.
    alerted.
 4. If someone else receives the parcel, they must have the PIN. The driver
    records their name.
-5. The app records the time and position of the delivery.
+5. The app records the time and position of the delivery. A position the
+   phone puts outside Costa Rica is kept but flagged for staff; an action
+   sent later from a dead zone (arrival, failed delivery) keeps the time it
+   happened, if within the last day. Each stop shows its district and cantón
+   above the señas.
 
 Photo proof without a PIN (leaving a parcel in a safe place) is not offered in
 the pilot. If introduced later it is by the shopper's prior choice, never the

@@ -153,7 +153,7 @@ begin
   for s in select id from public.shipments where order_id = v_order loop
     perform public.wms_start_picking(s.id);
     for t in select id, quantity from public.pick_tasks where shipment_id = s.id loop
-      perform public.wms_confirm_pick(t.id, t.quantity);
+      perform public.wms_confirm_pick(t.id, t.quantity, null, (select k.code from public.skus k join public.pick_tasks pt on pt.sku_id = k.id where pt.id = t.id));
     end loop;
     perform public.wms_pack_shipment(
       s.id,

@@ -46,7 +46,8 @@ export const outbox = createOfflineQueue({
   // overwrites the last one.
   repeatable: () => true,
   // A position goes stale in minutes and is then dropped; an arrival or a
-  // failure waits a day and a half, and is then reported, not dropped.
+  // failure waits a day (as long as the database takes the time it happened),
+  // and is then reported, not dropped.
   maxAgeMs: ageLimit,
   expiredMessage,
   failedMessage:

@@ -10,8 +10,11 @@ import { describe, expect, it } from "vitest";
 import { channelsOf, TEMPLATE_NAMES } from "./templates/catalog.ts";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
+// Every migration, in order: the planner is the last definition of
+// private.notify_plan_event (082600 wrote it, 083200 replaced it).
 const migration = readdirSync(`${root}supabase/migrations`)
-  .filter((file) => file.endsWith("_notifications.sql"))
+  .filter((file) => file.endsWith(".sql"))
+  .sort()
   .map((file) => readFileSync(`${root}supabase/migrations/${file}`, "utf8"))
   .join("\n");
 const doc = readFileSync(`${root}docs/06-operations/notifications.md`, "utf8");
@@ -19,7 +22,7 @@ const doc = readFileSync(`${root}docs/06-operations/notifications.md`, "utf8");
 type Row = string; // "topic|template|channel,channel"
 
 function fromSql(): Row[] {
-  const start = migration.indexOf("create or replace function private.notify_plan_event");
+  const start = migration.lastIndexOf("create or replace function private.notify_plan_event");
   const body = migration.slice(start, migration.indexOf("$$;", start));
   const rows: Row[] = [];
   const segments = body.split(/\n\s+when '([a-z_.]+)' then/).slice(1);

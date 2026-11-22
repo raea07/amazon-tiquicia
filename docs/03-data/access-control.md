@@ -212,13 +212,13 @@ closed, but that rule of the two functions is not yet changed.
 
 ### Shopper (any signed-in user)
 
-| Can                                                                                   | Cannot                                                                                    |
-| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Read and edit their own profile (name, phone, locale, marketing choice)               | Mark their own phone as verified                                                          |
-| Add, edit and soft-delete their own addresses                                         | See anyone else's                                                                         |
-| Place, pay (in sandbox), cancel and read their own orders, including the delivery PIN | Read another person's order — it answers "not found", the same as one that does not exist |
-| Review a product they received; request a return; file a complaint                    | Review something they did not buy, or twice                                               |
-| Record and withdraw their own consents, dated by the database                         | Back-date a consent, change one, or undo a withdrawal                                     |
+| Can                                                                                                               | Cannot                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Read and edit their own profile (name, phone, locale, marketing choice)                                           | Mark their own phone as verified                                                          |
+| Add, edit and soft-delete their own addresses                                                                     | See anyone else's                                                                         |
+| Place, pay (in sandbox), cancel and read their own orders, including the delivery PIN                             | Read another person's order — it answers "not found", the same as one that does not exist |
+| Review a product they received; request a return; withdraw a claim still waiting for a decision; file a complaint | Review something they did not buy, or twice; withdraw a return staff already decided      |
+| Record and withdraw their own consents, dated by the database                                                     | Back-date a consent, change one, or undo a withdrawal                                     |
 
 ### Seller member
 
@@ -254,13 +254,13 @@ Admin implies every role below. "Reach" is what the `ops_*` and other staff
 functions return to that role; the read policies name the same roles, but only
 as the second lock.
 
-| Role      | Reach                                                                                                                                                                                                                     |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, the dispatch board, routes, settlements, returns; approve or suspend sellers; zones and calendar have no function yet                        |
-| `support` | Orders and timelines (with the shopper's contact and address), sellers' private details, returns, complaints, content reports; cancel an order for a shopper; see which messages an order produced and resend a stuck one |
-| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs                                                              |
-| `catalog` | All listings; approve or reject a listing, a listing edit and its photos; take down any photo; resolve content reports. Categories, brands, synonyms and review moderation have no function yet                           |
-| `admin`   | All of the above, plus staff membership, the audit log and resetting a colleague's second factor (never their own); settings have no function yet                                                                         |
+| Role      | Reach                                                                                                                                                                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, the dispatch board, routes, settlements, returns; approve or suspend sellers; zones and calendar have no function yet                                       |
+| `support` | Orders and timelines (with the shopper's contact and address), sellers' private details, returns, complaints, content reports; cancel an order for a shopper; see which messages an order produced and resend a stuck one                |
+| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs; sees offers a fee change paused (`ops_fee_floor_breaches`, also `catalog`) |
+| `catalog` | All listings; approve or reject a listing, a listing edit and its photos; take down any photo; resolve content reports. Categories, brands, synonyms and review moderation have no function yet                                          |
+| `admin`   | All of the above, plus staff membership, the audit log and resetting a colleague's second factor (never their own); settings have no function yet                                                                                        |
 
 Sensitive changes by staff — to staff membership, seller status and private
 details, drivers, warehouse assignments, settings, fees, payouts — are written
@@ -383,6 +383,40 @@ These functions are the most powerful code in the system. The rules they follow:
    user.
 6. **Granted explicitly.** `EXECUTE` is revoked from `public` and granted only
    to the role that should call it.
+
+**The network extension's schema.** `pg_net` (enabled by 082600) grants
+visitors and signed-in users the use of its schema `net`. Migration 083200
+revokes it from both (schema, tables, sequences, functions); only
+`private.notify_kick`, running as our functions' owner, calls it.
+`125_followups.sql` fails while either role can still use `net`. On a hosted
+project the grants may have been made by the platform's own role, which
+`postgres` cannot revoke: the migration then prints a notice, and the test
+shows it.
+
+What to check on the hosted project, after applying 083200 and again after
+any upgrade, disable or re-enable of `pg_net` (Supabase's documentation does
+not say whether the platform re-grants on those; its open-source images do
+so with an event trigger, `extensions.grant_pg_net_access`, so assume it
+may):
+
+```sql
+-- all four must be false
+select has_schema_privilege('anon', 'net', 'usage'),
+       has_schema_privilege('authenticated', 'net', 'usage'),
+       has_function_privilege('authenticated', 'net.http_post(text, jsonb, jsonb, jsonb, integer)', 'execute')
+         and has_schema_privilege('authenticated', 'net', 'usage'),
+       has_table_privilege('authenticated', 'net._http_response', 'select');
+-- no row for anon or authenticated
+select p.proname, a.grantee::regrole, a.privilege_type
+from pg_proc p, aclexplode(p.proacl) a
+where p.pronamespace = 'net'::regnamespace and a.grantee in ('anon'::regrole, 'authenticated'::regrole);
+select 1 from pg_event_trigger where evtname = 'issue_pg_net_access';  -- if present, it re-grants on a re-create
+```
+
+The `net_grants` block of `supabase/tests/125_followups.sql` runs the same
+checks and can be run against the hosted database as it is. If a check
+fails, run section 8 of 083200 again (it is idempotent), and confirm that the
+notification worker still wakes (`private.notify_kick` sends one request).
 
 The `private` schema is not exposed by the Data API at all (a hosted project
 exposes `public` and `graphql_public` only). `anon` and `authenticated` have
@@ -572,7 +606,9 @@ visible and what must not.
   open and bound what a visitor can send; nothing counts calls per minute, and
   sign-in attempts are limited only by the platform. Supabase Auth counts the
   app server's address, not the visitor's, because sign-in runs on the
-  server. A request body size limit at the API gateway is also not set here.
+  server. A request body size limit at the API gateway cannot be set from
+  here: no documented setting exists for the hosted Data API (an accepted
+  limit, see the security programme).
 - **Row-level security is enabled, not forced.** Table owners acting directly
   in the database are not subject to it. API roles are, which is what matters
   for requests; it means SQL run by an administrator in the dashboard sees

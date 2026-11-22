@@ -134,7 +134,7 @@ begin
     perform pg_temp.act('central@yuntera.example');
     perform public.wms_start_picking(p_shipment);
     for t in select id, quantity from public.pick_tasks where shipment_id = p_shipment loop
-      perform public.wms_confirm_pick(t.id, t.quantity);
+      perform public.wms_confirm_pick(t.id, t.quantity, null, (select k.code from public.skus k join public.pick_tasks pt on pt.sku_id = k.id where pt.id = t.id));
     end loop;
     perform public.wms_pack_shipment(p_shipment, 900, 1::smallint);
   else
@@ -411,9 +411,10 @@ select pg_temp.deliver(current_setting('t.int1b')::uuid);
 select pg_temp.remember('int1b_item', pg_temp.item(current_setting('t.int1b')::uuid, 'libreta-tapa-dura-a5')::text);
 select pg_temp.login('integridad1@yuntera.example');
 select pg_temp.remember('int1b_ret', public.request_return(current_setting('t.int1b_item')::uuid, 'withdrawal', 2)::text);
--- Two returns of the same two units: the second is refused.
+-- Two returns of the same two units: the second is refused, with its own
+-- code since 20261121083200_followups.sql.
 select pg_temp.refused(format('select public.request_return(%L, ''withdrawal'', 1)', current_setting('t.int1b_item')),
-                       'invalid_quantity');
+                       'units_already_in_return');
 reset role;
 select pg_temp.receive(current_setting('t.int1b_ret')::uuid);
 select pg_temp.login('central@yuntera.example');
@@ -551,12 +552,12 @@ select pg_temp.remember('fa2_item', pg_temp.item(current_setting('t.fa2')::uuid,
 select pg_temp.login('integridad1@yuntera.example');
 select public.request_return(current_setting('t.fa2_item')::uuid, 'withdrawal', 1) is not null as fa2_first;
 select pg_temp.refused(format('select public.request_return(%L, ''withdrawal'', 1)', current_setting('t.fa2_item')),
-                       'invalid_quantity');
+                       'units_already_in_return');
 reset role;
 select pg_temp.refused(format(
   'insert into public.return_requests (order_item_id, user_id, kind, quantity, status) '
   'select %L, user_id, ''withdrawal'', 1, ''approved'' from public.orders where id = %L',
-  current_setting('t.fa2_item'), current_setting('t.fa2')), 'invalid_quantity');
+  current_setting('t.fa2_item'), current_setting('t.fa2')), 'units_already_in_return');
 select pg_temp.check_invariants('FA-2 / INT-3');
 
 -- ═══ FA-3: unpaid orders reserving all stock ═══════════════════════════════
@@ -781,7 +782,7 @@ begin
   where warehouse_id = v_task.warehouse_id and sku_id = v_task.sku_id and seller_id = v_task.seller_id;
   perform pg_temp.act('central@yuntera.example');
   perform public.wms_start_picking(v_ship);
-  perform public.wms_confirm_pick(v_task.id, 2);
+  perform public.wms_confirm_pick(v_task.id, 2, null, (select k.code from public.skus k join public.pick_tasks pt on pt.sku_id = k.id where pt.id = v_task.id));
   perform public.cancel_order(current_setting('t.int8b')::uuid, 'El cliente llamó para cancelar');
   perform pg_temp.logout();
   assert (select quantity from public.bin_stock
@@ -894,9 +895,9 @@ select pg_temp.check_invariants('INT-9 / FA-10');
 
 -- The second parcel of the order above failed and goes back to the seller,
 -- who checks it in: their unit is back in their stock and the shopper gets
--- back what they paid for it. The order, whose other parcel arrived, keeps the
--- status it had: an order is "delivered" only as a whole (seller payouts
--- already start their hold from the last parcel, see seller_order_settled_at).
+-- back what they paid for it. The order, whose other parcel arrived, is then
+-- delivered: every parcel has ended (20261121083200_followups.sql; before,
+-- it stayed "shipped" for ever). It is not cancelled.
 do $$
 declare
   v_order uuid := current_setting('t.int9')::uuid;
@@ -928,7 +929,7 @@ begin
     'INT-12: back in stock';
   assert (v_result ->> 'refund_minor')::bigint = (select unit_price_minor from public.order_items where id = v_item),
     format('INT-12: the unit is refunded: %s', v_result);
-  assert v_result ->> 'order_status' = 'shipped', format('INT-12: the order is not cancelled: %s', v_result);
+  assert v_result ->> 'order_status' = 'delivered', format('INT-12: the order is not cancelled: %s', v_result);
   assert (select status from public.payments where order_id = v_order) = 'partially_refunded',
     'INT-12: the payment is partly refunded';
   perform pg_temp.act('vendedor@yuntera.example');

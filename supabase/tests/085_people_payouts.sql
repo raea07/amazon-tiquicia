@@ -1082,8 +1082,10 @@ begin
   update public.shipments set status = 'delivered', delivered_at = now() - interval '20 days'
   where id = v_first;
   perform private.sync_order_status(v_order);
-  assert (select delivered_at is null and status <> 'delivered' from public.orders where id = v_order),
-    'the order as a whole is not delivered';
+  -- Since 20261121083200_followups.sql such an order is delivered (nothing
+  -- more can happen to it); its payouts are still decided per seller below.
+  assert (select status = 'delivered' from public.orders where id = v_order),
+    'one parcel delivered and the other back: the order has ended';
 end
 $$;
 do $$

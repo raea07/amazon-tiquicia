@@ -322,8 +322,29 @@ evidence are in [access control](../03-data/access-control.md),
 
 **Known gaps in what is built**
 
-- No limit on calls per minute or on request size beyond platform defaults;
-  the database's own limits are per account and per target.
+- No limit on calls per minute beyond platform defaults; the database's own
+  limits are per account and per target.
+- **Accepted limit: no request-size limit of our own on the hosted Data API.**
+  The database refuses an oversized cart, order or search before it does any
+  work (`max_lines_per_order`, the search text bounds), but the API in front
+  of it still receives and parses a large request body first. Checked against
+  Supabase's documentation on 22 November 2026: neither the Data API's
+  settings (exposed schemas, extra search path, maximum rows), nor the
+  pre-request hook, nor anything a migration can set offers a maximum body
+  size, and PostgREST itself has no such setting (it leaves it to the proxy in
+  front, which on a hosted project is the platform's, with its own default
+  that is not documented). The exposure is real: the publishable key is
+  public by design, and the four native apps call the Data API straight from
+  phones, so anyone can send a large body directly to it, past the web apps'
+  own servers and their body limit. Why we accept it for now: the platform's
+  gateway in front of the API bounds what it forwards with a limit we cannot
+  see or set, the database bounds each input before it locks or prices
+  anything (so a large body costs parsing time, not data or money), and the
+  platform's own rate limiting and the edge firewall to be configured before
+  launch are what limit how often it can be done. What would close it: a
+  proxy or edge function of our own in front of the Data API with a body
+  limit, or Supabase documenting a setting (ask support before launch).
+  Recheck the documentation when the platform's API gateway settings change.
 - The hardening of 21 November 2026 (migrations `082800` to `083100`) is
   verified on a local PostgreSQL only and is not applied to the hosted
   preview yet.
