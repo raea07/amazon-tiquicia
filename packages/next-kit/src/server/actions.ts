@@ -1,6 +1,8 @@
 import "server-only";
 import { ApiError, authErrorMessage } from "@yuntera/db";
+import { cookies } from "next/headers";
 import { isEmail, passwordProblem } from "../auth-rules";
+import { PER_PERSON_COOKIES } from "../guard";
 import { safeReturnPath } from "../paths";
 import type { ActionState } from "../types";
 import { confirmUrl } from "./account";
@@ -205,5 +207,14 @@ export const signUpSent = (email: string) =>
 export async function endSession(to = "/"): Promise<never> {
   const supabase = await sessionClient();
   await supabase.auth.signOut({ scope: "local" });
+  await forgetPersonalCookies();
   redirectTo(to);
+}
+
+/** Removes what one person's work left in this browser (a search typed in the console). */
+export async function forgetPersonalCookies(): Promise<void> {
+  const store = await cookies();
+  // Always, not only when this request carried them: a cookie for another
+  // path (/pedidos) does not come with a request for this one.
+  for (const { name, path } of PER_PERSON_COOKIES) store.delete({ name, path });
 }

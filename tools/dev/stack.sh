@@ -191,6 +191,9 @@ case "$COMMAND" in
         # Nothing stands in front of the apps here, so the journeys may say who the
         # visitor is in X-Forwarded-For; a deployment trusts only its own proxy.
         echo "AUTH_CLIENT_IP_HEADER=x-forwarded-for"
+        # A production build on this machine: the readable keys above are accepted
+        # only because this says it is a local run (guard.ts, isLocalRun).
+        echo "YUNTERA_LOCAL_RUN=1"
       } > "$ROOT/apps/$app/.env.local"
     done
     echo "lane $LANE: building the apps (log: $STATE/build.log)"

@@ -4,16 +4,18 @@ import {
   ACTIVITY_COOKIE,
   activityValue,
   addressHash,
+  callerProof,
   clientAddress,
   ENDED_COOKIE,
   guardKey,
+  PER_PERSON_COOKIES,
   readActivity,
   type SessionVerdict,
   sessionPolicy,
   sessionVerdict,
   signedInAt,
 } from "../guard";
-import { limitedAuthFetch } from "./refresh-limit";
+import { keepCookiesIfLimited, refreshLimiter } from "./refresh-limit";
 
 /**
  * Keeps a signed-in person's session fresh, and ends it when it has lived too
@@ -76,10 +78,15 @@ export async function refreshSession(request: NextRequest) {
   // which would undo a removal and show the token to scripts.
   const jar = new Map(request.cookies.getAll().map((cookie) => [cookie.name, cookie.value]));
 
+  // A refresh the limit refused leaves the cookies exactly as they came.
+  const limiter = refreshLimiter(
+    guard.ok && address ? addressHash(guard.value, address) : null,
+    guard.ok ? callerProof(guard.value) : null,
+  );
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll: () => [...jar].map(([name, value]) => ({ name, value })),
-      setAll: (list) => {
+      setAll: keepCookiesIfLimited(limiter, (list) => {
         for (const { name, value, options } of list) {
           if (value) jar.set(name, value);
           else jar.delete(name);
@@ -97,10 +104,10 @@ export async function refreshSession(request: NextRequest) {
             },
           });
         }
-      },
+      }),
     },
     global: {
-      fetch: limitedAuthFetch(guard.ok && address ? addressHash(guard.value, address) : null),
+      fetch: limiter.fetch,
     },
   });
 
@@ -139,6 +146,11 @@ export async function refreshSession(request: NextRequest) {
       if (!cookie.name.startsWith("sb-") && cookie.name !== ACTIVITY_COOKIE) continue;
       jar.delete(cookie.name);
       outgoing.set(cookie.name, { value: "", options: { path: "/", maxAge: 0 } });
+    }
+    // What this person left in the browser goes with the session.
+    for (const { name, path } of PER_PERSON_COOKIES) {
+      jar.delete(name);
+      outgoing.set(name, { value: "", options: { path, maxAge: 0 } });
     }
     outgoing.set(ENDED_COOKIE, {
       value: verdict,

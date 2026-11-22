@@ -907,28 +907,54 @@ are not accepted. The apps hold no secret key, by design (decision 2).
   of every call to Auth a visitor can repeat: sign-in, sign-up, reset and
   confirmation e-mails, e-mailed codes, the current password asked again, and
   the proxy's token refreshes. Counted before the call, under a lock, so a
-  burst cannot outrun it; a right password or code gives its attempt back.
+  burst cannot outrun it; a right password or code, and a refresh Auth
+  accepted, give their attempt back.
 
-  | What                           | Per visitor address | Per account | Window     |
-  | ------------------------------ | ------------------- | ----------- | ---------- |
-  | Wrong passwords                | 20                  | 5           | 15 minutes |
-  | Sign-ups                       | 10                  | 3           | 1 hour     |
-  | Reset and confirmation e-mails | 10                  | 5           | 1 hour     |
-  | Wrong e-mailed codes           | 20                  | 5           | 15 minutes |
-  | Current password asked again   | 20                  | 5           | 15 minutes |
-  | Token refreshes                | 120                 | —           | 10 minutes |
+  Three buckets per action: the visitor address; the account from that one
+  address (the strict limit a single guesser meets); and the account from all
+  addresses together (a higher ceiling against a guesser with many addresses).
+
+  | What                           | Per address | Per account, one address | Per account, all | Window     |
+  | ------------------------------ | ----------- | ------------------------ | ---------------- | ---------- |
+  | Wrong passwords                | 20          | 5                        | 50               | 15 minutes |
+  | Sign-ups                       | 10          | 3                        | 10               | 1 hour     |
+  | Reset and confirmation e-mails | 10          | 5                        | 20               | 1 hour     |
+  | Wrong e-mailed codes           | 20          | 5                        | 30               | 15 minutes |
+  | Current password asked again   | 20          | —                        | 5 (signed in)    | 15 minutes |
+  | Refused token refreshes        | 120         | —                        | —                | 10 minutes |
+
+  Without a trusted visitor address, "per account, one address" becomes the
+  account alone at the strict limit.
 
 - **Only keyed hashes are stored**, for two hours: HMAC-SHA-256 of the
   address and of the e-mail typed, with `AUTH_GUARD_KEY`, a server-only key
   the database never sees. A caller without the key cannot compute anyone
   else's hash, so calling the functions directly (they are open to visitors,
   since sign-in comes before a session) cannot count against a real person.
+- **Only the apps may add attempts, once the project says so.** Every
+  reservation carries `p_caller`, an HMAC of a fixed text with
+  `AUTH_GUARD_KEY`. When the project keeps that value's SHA-256 in Vault as
+  `auth_limit_caller_digest`, a caller without it is refused
+  (`auth_limit_caller`) and adds nothing; without the secret (local runs, CI, a
+  project not yet set up) any caller is accepted. The runbook step is
+  `select vault.create_secret('<digest>', 'auth_limit_caller_digest')`, with
+  `<digest>` from
+  `printf %s "$(printf %s auth-limit-caller | openssl dgst -sha256 -hmac "$AUTH_GUARD_KEY" -r | cut -d' ' -f1)" | sha256sum | cut -d' ' -f1`;
+  set it after the apps run with the new key, and again whenever the key changes.
 - **Nothing looks the account up**: an address with no account is counted and
   answered word for word like one with an account.
-- **An honest person is not locked out for long**: the account limit lasts 15
-  minutes; it is skipped for a browser that signed in to that account before
-  (a signed `yt-dispositivo` cookie, at most three accounts); the per-address
-  limit still applies there; and a reset code always gets the person in.
+- **A stranger cannot keep an honest person out.** One guesser fills only
+  its own "one address" share: the owner, from any other address, signs in,
+  asks for a reset e-mail and types the right code as usual. A browser that
+  signed in to the account before (a signed `yt-dispositivo` cookie, at most
+  three accounts) skips both account buckets, for passwords, codes, e-mails and
+  sign-ups; the per-address limit still applies there. Only a guesser with
+  many addresses (10 for passwords, 6 for codes, 4 for e-mails) can fill the
+  account's total, for one window at a time; the owner's usual browser is not
+  held even then, and the link in any reset e-mail already sent (including the
+  ones the guesser triggered) counts per address only, so it still gets them
+  in. The e-mail limit's message does not tell the reader they asked for the
+  e-mails, and points to the latest one.
 - **Which header says who the visitor is.** On Vercel, `x-vercel-forwarded-for`
   (which Vercel writes and a proxy in front cannot replace), then `x-real-ip`;
   Vercel overwrites both. Elsewhere only what the operator names in
@@ -941,6 +967,19 @@ are not accepted. The apps hold no secret key, by design (decision 2).
   generic message rather than letting attempts through uncounted. The one
   exception is a refresh, which goes ahead if the limit cannot be asked: a
   fault in the limit must not sign everybody out.
+- **A refused refresh never signs anyone out.** Only refreshes Auth refused
+  count (made-up or revoked tokens), so people behind one shared address (a
+  mobile carrier's CGNAT, an office) are not counted for their own refreshes.
+  If someone sharing their address fills the bucket, the refresh does not go
+  to Auth and the cookie writers in the proxy and the session client keep the
+  browser's cookies untouched: that person is treated as signed out for that
+  request only, and the next request after the wait renews the token.
+- **What counts as a local run.** Not on Vercel, the API and site on
+  loopback, and either not a production build (`next dev`, tests) or
+  `YUNTERA_LOCAL_RUN=1`, which `tools/dev/stack.sh` and CI set. A self-hosted
+  production server whose API happens to be on loopback is therefore treated as
+  deployed: the published local guard key and example refresh keys are
+  refused there. Never set `YUNTERA_LOCAL_RUN` on a deployment.
 - **The human check is wired in and off.** Cloudflare Turnstile, which Auth
   verifies once its CAPTCHA protection is on: the widget appears on the
   sign-in, sign-up, reset, resend, password-change and deletion forms when
@@ -954,12 +993,15 @@ can, because the apps' server reads it from a header the host guarantees.
 
 **Consequences.**
 
-- Someone with many addresses still gets 5 wrong passwords per account per 15
-  minutes, about 480 a day per account, against passwords that must pass the
-  rules in `auth-rules.ts`. The edge (Vercel's firewall) is the next layer.
-- Calling `auth_limit_reserve` directly can add rows with made-up hashes; they
-  touch nobody and are gone within two hours, but nothing caps their number
-  except the platform's request limits.
+- Someone with many addresses gets 50 wrong passwords per account per 15
+  minutes, about 4 800 a day per account, against passwords that must pass the
+  rules in `auth-rules.ts`; and 30 wrong codes per account per 15 minutes
+  against a 6-digit code that expires within the hour (about 1 in 8 000 per
+  code's life). That is the price of not letting one stranger lock the owner
+  out. The edge (Vercel's firewall) and the human check are the next layers.
+- Until `auth_limit_caller_digest` is set in Vault, calling
+  `auth_limit_reserve` directly with the public key can add rows with made-up
+  hashes; they touch nobody and are gone within two hours.
 - Auth's own limits still apply behind ours, per server address. Ours are set
   below them per visitor, so a single visitor can no longer exhaust them;
   enough honest traffic from one server address still could (no different from
@@ -1005,3 +1047,7 @@ session cookies also carry the app's lifetime as their `Max-Age`.
   active. A page that polls would count as activity; none does today.
 - Sessions of the native apps are not covered (they keep the session in the
   phone's secure store, decision 18).
+- What one person's work leaves in the browser (today the console's order
+  search, `PER_PERSON_COOKIES` in guard.ts) is removed when a session begins,
+  when the person signs out and when the proxy ends a session, so the next
+  person at a shared desk does not see it.

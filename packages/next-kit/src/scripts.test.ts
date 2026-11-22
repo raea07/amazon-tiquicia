@@ -42,11 +42,16 @@ describe("WEB-7: demo data reaches a hosted project only through the guarded see
     }
   });
 
-  it("the seed itself refuses a database without the local shim, unless given the hash", () => {
+  it("the seed's guard is marked so the contract tests can run it on its own", () => {
+    // packages/db/src/contract.web-followups.test.ts runs this block against a
+    // database with the local shim's schema hidden and expects the refusal.
     const seed = readFileSync(join(root, "supabase/seed.sql"), "utf8");
-    const guard = seed.slice(0, seed.indexOf("-- ── Helpers"));
+    const guard = seed.slice(
+      seed.indexOf("-- seed-guard:begin"),
+      seed.indexOf("-- seed-guard:end"),
+    );
     expect(guard).toContain("nspname = 'dev_standin'");
-    expect(guard).toContain("current_setting('app.seed_password_hash', true)");
+    expect(seed.indexOf("-- seed-guard:begin")).toBeLessThan(seed.indexOf("pg_temp.seed_user"));
   });
 
   it("auth-config.sh applies the preview settings only to a project named twice", () => {
@@ -58,6 +63,32 @@ describe("WEB-7: demo data reaches a hosted project only through the guarded see
   it("local-db.sh reset refuses a database server that is not this machine", () => {
     const run = script("local-db.sh", ["reset"], {
       PG_ADMIN_URL: "postgres://postgres:secret@db.abcdefghij.supabase.co:5432/postgres",
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("is not this machine");
+  });
+
+  it("WEB-7: local-db.sh reset refuses a remote host it cannot read from the URL's host part", () => {
+    // Review of 22 November: these passed the old guard, and psql went on to
+    // connect to the remote server to drop the database.
+    for (const [url, message] of [
+      [
+        "postgres:///postgres?host=192.0.2.1&connect_timeout=2&user=postgres",
+        "is not this machine",
+      ],
+      ["postgres:///postgres?hostaddr=192.0.2.1", "is not this machine"],
+      ["host=db.abcdefghij.supabase.co user=postgres", "must be a postgres:// URL"],
+    ] as const) {
+      const run = script("local-db.sh", ["reset"], { PG_ADMIN_URL: url, PG_DB_NAME: "zz_never" });
+      expect(run.status, url).toBe(1);
+      expect(run.stderr, url).toContain(message);
+      expect(run.stderr, url).not.toContain("connection to server");
+    }
+    // No host in the URL: psql would use PGHOST, so that is checked too.
+    const run = script("local-db.sh", ["reset"], {
+      PG_ADMIN_URL: "postgres:///postgres",
+      PG_DB_NAME: "zz_never",
+      PGHOST: "192.0.2.1",
     });
     expect(run.status).toBe(1);
     expect(run.stderr).toContain("is not this machine");

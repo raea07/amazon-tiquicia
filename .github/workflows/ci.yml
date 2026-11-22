@@ -35,6 +35,9 @@ env:
   # Nothing stands in front of the apps here, so the journeys may say who the
   # visitor is (the sign-in limit per address); see tools/dev/stack.sh.
   AUTH_CLIENT_IP_HEADER: x-forwarded-for
+  # These production builds run against the local stand-in: the readable local
+  # keys are accepted only with this said explicitly (guard.ts, isLocalRun).
+  YUNTERA_LOCAL_RUN: "1"
 
 jobs:
   checks:

@@ -31,13 +31,19 @@ function hostOf(url: string | undefined): string | null {
 }
 
 /**
- * True only on a developer's machine or in CI: not on Vercel, and talking to an
- * API on this machine (a deployment never does), with this site, when it says
- * where it is, also on this machine. Anything uncertain counts as deployed, so
- * a missing setting makes the checks stricter, never looser.
+ * True only on a developer's machine, in CI or in a lane of tools/dev/stack.sh:
+ * not on Vercel, talking to an API on this machine, with this site, when it
+ * says where it is, also on this machine, and either not a production build
+ * (`next dev`, the tests) or explicitly marked local with
+ * `YUNTERA_LOCAL_RUN=1` (which stack.sh and CI set for their production
+ * builds). A self-hosted deployment whose API happens to be on the same
+ * machine is therefore NOT local unless its operator says so, and gets the
+ * strict checks. Anything uncertain counts as deployed, so a missing setting
+ * makes the checks stricter, never looser.
  */
 export function isLocalRun(env: Env): boolean {
   if (env.VERCEL) return false;
+  if (env.NODE_ENV === "production" && env.YUNTERA_LOCAL_RUN !== "1") return false;
   const api = hostOf(env.NEXT_PUBLIC_SUPABASE_URL);
   if (!api || !LOOPBACK.has(api)) return false;
   const site = env.NEXT_PUBLIC_SITE_URL;
@@ -181,6 +187,13 @@ export const accountHash = (key: string, email: string) =>
 /** For a signed-in person asked for their password again: their account id. */
 export const userHash = (key: string, userId: string) => hmac(key, `user:${userId}`);
 
+/**
+ * The apps' proof, sent with every reservation, that the caller holds the key.
+ * The database compares its SHA-256 with `auth_limit_caller_digest` in Vault,
+ * once that is set (docs/07-deployment): `printf %s "$(callerProof)" | sha256sum`.
+ */
+export const callerProof = (key: string) => hmac(key, "auth-limit-caller");
+
 // ── "This browser signed in to this account before" ─────────────────────────
 
 export const KNOWN_DEVICE_COOKIE = "yt-dispositivo";
@@ -240,7 +253,7 @@ export function limitMessage(action: LimitedAction, retryAfterSeconds: number): 
     case "sign_up":
       return `Hubo demasiados intentos de crear una cuenta. Por seguridad, espere ${wait} y vuelva a intentarlo.`;
     case "email":
-      return `Ya pidió varios correos. Por seguridad, espere ${wait} antes de pedir otro, y revise también el correo no deseado.`;
+      return `Hubo varios pedidos de correo hace poco. Por seguridad, espere ${wait} antes de pedir otro. Si le llegó alguno, use el enlace del más reciente; revise también el correo no deseado.`;
     case "code":
       return `Hubo demasiados códigos equivocados. Por seguridad, espere ${wait} y vuelva a intentarlo, o pida un correo nuevo.`;
     case "reauth":
@@ -294,6 +307,18 @@ export function signedInAt(claims: { amr?: unknown }): number | null {
 }
 
 export const ACTIVITY_COOKIE = "yt-actividad";
+
+/**
+ * Cookies that hold something of one person's work, removed whenever a
+ * session ends or begins in this browser (sign-in, sign-out, the proxy ending
+ * it), so the next person at a shared desk does not see it.
+ */
+/** The console's order search (apps/ops/src/app/order-search-actions.ts, WEB-4). */
+export const ORDER_SEARCH_COOKIE = "yt-busqueda-pedidos";
+
+export const PER_PERSON_COOKIES: readonly { name: string; path: string }[] = [
+  { name: ORDER_SEARCH_COOKIE, path: "/pedidos" },
+];
 /** Set when the proxy ended a session, so sign-in can say why. */
 export const ENDED_COOKIE = "yt-sesion";
 

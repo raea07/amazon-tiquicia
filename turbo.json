@@ -19,7 +19,8 @@
         "SHOP_REFRESH_KEY",
         "AUTH_GUARD_KEY",
         "AUTH_CLIENT_IP_HEADER",
-        "AUTH_CLIENT_IP_HOPS"
+        "AUTH_CLIENT_IP_HOPS",
+        "YUNTERA_LOCAL_RUN"
       ]
     },
     "typecheck": {

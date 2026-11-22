@@ -20,10 +20,30 @@
 -- Nothing here looks the account up: an e-mail address with no account is
 -- counted and answered exactly like one with an account.
 --
--- An honest person whose e-mail someone else is guessing is not locked out for
--- long: the account limit is short (15 minutes), it is skipped for a browser
--- that signed in to that account before (`p_known_device`, a signed cookie the
--- apps check), and a reset code always works.
+-- Three buckets per action, so that a stranger who knows someone's e-mail
+-- cannot keep them out (review of the follow-ups, 22 November 2026):
+--
+--   * the visitor address alone (one visitor, many accounts);
+--   * the account from one address (one visitor, one account): the strict
+--     limit, which is what a single guesser meets;
+--   * the account from every address together, much higher, against a guesser
+--     with many addresses.
+--
+-- So one visitor guessing the owner's password, code or e-mail fills only its
+-- own pair, and the owner, from any other address, is not held. Only a guesser
+-- with many addresses can fill the account's total, for at most the window;
+-- even then the owner's usual browser is not held (`p_known_device`, a signed
+-- cookie the apps check, skips both account buckets), and the link in a reset
+-- or confirmation e-mail counts per address only, so it always works.
+--
+-- Without a trustworthy visitor address (no header the host guarantees), the
+-- pair bucket falls back to the account alone, at the strict limit.
+--
+-- The apps prove they are the caller with `p_caller`, a value derived from
+-- their key. The database checks it against a digest kept in Vault
+-- (`auth_limit_caller_digest`) when one is configured, so the public key alone
+-- cannot add rows; a database without one (local runs, CI, a project not yet
+-- configured) accepts any caller, as before.
 
 -- ── The attempts ────────────────────────────────────────────────────────────
 
@@ -55,13 +75,15 @@ comment on table private.auth_attempts is
   'counted per keyed hash of the visitor address and of the account e-mail. Kept two hours.';
 
 -- The limits. Each action has a window; within it, at most `per_address`
--- attempts from one visitor address and `per_account` for one account. A
+-- attempts from one visitor address, `per_pair` for one account from one
+-- address, and `per_account` for one account from all addresses together. A
 -- releasable attempt is given back when it succeeds, so only failures count
--- (a right password, a right code); the others count every request, because
--- each one makes Auth send an e-mail or spend its own limit.
+-- (a wrong password, a wrong code, a refresh Auth refused); the others count
+-- every request, because each one makes Auth send an e-mail.
 create or replace function private.auth_limit_rule(
   p_action text,
   out per_address integer,
+  out per_pair integer,
   out per_account integer,
   out window_seconds integer,
   out releasable boolean
@@ -69,27 +91,36 @@ create or replace function private.auth_limit_rule(
 language sql immutable
 set search_path = ''
 as $$
-  select r.per_address, r.per_account, r.window_seconds, r.releasable
+  select r.per_address, r.per_pair, r.per_account, r.window_seconds, r.releasable
   from (values
-    -- Wrong passwords: 5 per account and 20 per address in 15 minutes.
-    ('sign_in', 20, 5, 900, true),
-    -- New accounts: 10 per address and 3 for one e-mail address an hour.
-    ('sign_up', 10, 3, 3600, false),
-    -- Reset and confirmation e-mails: 10 per address and 5 per account an hour
-    -- (Auth itself also waits a minute between two e-mails to one person).
-    ('email', 10, 5, 3600, false),
-    -- Wrong e-mailed codes: 5 per account and 20 per address in 15 minutes.
-    ('code', 20, 5, 900, true),
-    -- The current password asked again (password change, account deletion).
-    ('reauth', 20, 5, 900, true),
-    -- Session refreshes: per address only, generous for offices and shared networks.
-    ('refresh', 120, null, 600, false)
-  ) as r (action, per_address, per_account, window_seconds, releasable)
+    -- Wrong passwords in 15 minutes: 20 per address, 5 per account from one
+    -- address, 50 per account in all.
+    ('sign_in', 20, 5, 50, 900, true),
+    -- New accounts in an hour: 10 per address, 3 for one e-mail from one
+    -- address, 10 for one e-mail in all.
+    ('sign_up', 10, 3, 10, 3600, false),
+    -- Reset and confirmation e-mails in an hour: 10 per address, 5 per account
+    -- from one address, 20 per account in all (Auth also waits a minute
+    -- between two e-mails to one person).
+    ('email', 10, 5, 20, 3600, false),
+    -- Wrong e-mailed codes in 15 minutes: 20 per address, 5 per account from
+    -- one address, 30 per account in all (a code has a million values and
+    -- expires within the hour).
+    ('code', 20, 5, 30, 900, true),
+    -- The current password asked again (password change, account deletion):
+    -- counted by the signed-in account, which only its own sessions can fill.
+    ('reauth', 20, null, 5, 900, true),
+    -- Session refreshes that Auth refused, per address only: a right refresh
+    -- token gives its attempt back, so honest people behind one shared
+    -- address (a mobile carrier's, an office's) are not counted at all.
+    ('refresh', 120, null, null, 600, true)
+  ) as r (action, per_address, per_pair, per_account, window_seconds, releasable)
   where r.action = p_action;
 $$;
 
--- Seconds until one bucket (an address or an account) is below its limit
--- again, or 0 when it already is.
+-- Seconds until one bucket is below its limit again, or 0 when it already is.
+-- The bucket is the address (account null), the account in all (address
+-- null), or the account from one address (both given).
 create or replace function private.auth_bucket_wait(
   p_action text,
   p_address_hash text,
@@ -106,35 +137,59 @@ as $$
     from private.auth_attempts a
     where a.action = p_action
       and a.attempted_at > now() - make_interval(secs => p_window_seconds)
-      and (case
-             when p_address_hash is not null then a.address_hash = p_address_hash
-             else a.account_hash = p_account_hash and a.counts_for_account
-           end)
+      and (p_address_hash is null or a.address_hash = p_address_hash)
+      and (p_account_hash is null or (a.account_hash = p_account_hash and a.counts_for_account))
     order by a.attempted_at desc
     offset greatest(p_limit, 1) - 1
     limit 1), 0);
 $$;
 
+-- Whether the caller is one of the apps: `p_caller` must hash to the digest
+-- in Vault, when one is configured there.
+create or replace function private.auth_limit_caller_ok(p_caller text) returns boolean
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  v_digest text;
+begin
+  if not exists (select 1 from pg_namespace where nspname = 'vault') then
+    return true;
+  end if;
+  execute $q$select decrypted_secret from vault.decrypted_secrets
+             where name = 'auth_limit_caller_digest' limit 1$q$
+    into v_digest;
+  if nullif(trim(v_digest), '') is null then
+    return true;
+  end if;
+  return p_caller is not null
+    and encode(extensions.digest(p_caller, 'sha256'), 'hex') = lower(trim(v_digest));
+end;
+$$;
+
 revoke all on function private.auth_limit_rule(text) from public, anon, authenticated;
 revoke all on function private.auth_bucket_wait(text, text, text, integer, integer)
   from public, anon, authenticated;
+revoke all on function private.auth_limit_caller_ok(text) from public, anon, authenticated;
 
 -- ── The two functions the apps call ─────────────────────────────────────────
 
 -- Called by the apps' servers before every call to Auth that the limit covers.
 -- Counts the attempt straight away, under a lock per key, so a burst of
 -- parallel requests cannot outrun the limit. Answers `attempt_id` null and how
--- many seconds to wait when either bucket is full; otherwise the id to give
--- back with `auth_limit_release` if the attempt succeeds.
+-- many seconds to wait when any bucket is full; otherwise the id to give back
+-- with `auth_limit_release` if the attempt succeeds.
 --
--- Open to visitors on purpose: sign-in comes before any session. Who may call
--- it is not the check, because a caller can count only against the hashes it
--- can compute (see the header); the check is that the request is well formed.
+-- Open to visitors on purpose: sign-in comes before any session. The check is
+-- that the caller is one of the apps (`p_caller`, see the header) and that the
+-- request is well formed; a caller can count only against the hashes it can
+-- compute.
 create or replace function public.auth_limit_reserve(
   p_action text,
   p_address_hash text default null,
   p_account_hash text default null,
-  p_known_device boolean default false
+  p_known_device boolean default false,
+  p_caller text default null
 ) returns jsonb
 language plpgsql security definer
 set search_path = ''
@@ -145,6 +200,9 @@ declare
   v_wait integer := 0;
   v_id uuid;
 begin
+  if not private.auth_limit_caller_ok(p_caller) then
+    perform private.fail('auth_limit_caller');
+  end if;
   select * into v_rule from private.auth_limit_rule(p_action);
   if v_rule.window_seconds is null
      or (p_address_hash is not null and p_address_hash !~ '^[0-9a-f]{64}$')
@@ -153,7 +211,7 @@ begin
      or p_known_device is null then
     perform private.fail('invalid_limit_request');
   end if;
-  if v_rule.per_account is null then
+  if v_rule.per_account is null and v_rule.per_pair is null then
     v_account := null;
   end if;
   if p_address_hash is null and v_account is null then
@@ -182,8 +240,16 @@ begin
       p_action, p_address_hash, null, v_rule.per_address, v_rule.window_seconds);
   end if;
   if v_account is not null and not p_known_device then
-    v_wait := greatest(v_wait, private.auth_bucket_wait(
-      p_action, null, v_account, v_rule.per_account, v_rule.window_seconds));
+    -- The account from this address; without an address, the account alone
+    -- at the same strict limit.
+    if v_rule.per_pair is not null then
+      v_wait := greatest(v_wait, private.auth_bucket_wait(
+        p_action, p_address_hash, v_account, v_rule.per_pair, v_rule.window_seconds));
+    end if;
+    if v_rule.per_account is not null then
+      v_wait := greatest(v_wait, private.auth_bucket_wait(
+        p_action, null, v_account, v_rule.per_account, v_rule.window_seconds));
+    end if;
   end if;
   if v_wait > 0 then
     return jsonb_build_object('attempt_id', null, 'retry_after_seconds', v_wait);
@@ -196,9 +262,9 @@ begin
 end;
 $$;
 
--- The attempt succeeded (a right password or code): it is not a failure.
--- Only an attempt of an action that counts failures, made in the last five
--- minutes; e-mails sent, sign-ups and refreshes stay counted. The id is a
+-- The attempt succeeded (a right password or code, a refresh Auth accepted):
+-- it is not a failure. Only an attempt of an action that counts failures,
+-- made in the last five minutes; e-mails sent and sign-ups stay counted. The id is a
 -- random value only the server that reserved it has seen.
 create or replace function public.auth_limit_release(p_attempt_id uuid) returns void
 language plpgsql security definer
@@ -215,9 +281,9 @@ begin
 end;
 $$;
 
-revoke all on function public.auth_limit_reserve(text, text, text, boolean) from public;
+revoke all on function public.auth_limit_reserve(text, text, text, boolean, text) from public;
 revoke all on function public.auth_limit_release(uuid) from public;
-grant execute on function public.auth_limit_reserve(text, text, text, boolean) to anon, authenticated;
+grant execute on function public.auth_limit_reserve(text, text, text, boolean, text) to anon, authenticated;
 grant execute on function public.auth_limit_release(uuid) to anon, authenticated;
 
 -- Old rows go even when nobody signs in for a while.

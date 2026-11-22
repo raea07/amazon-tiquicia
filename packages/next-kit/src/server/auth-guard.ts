@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import {
   accountHash,
   addressHash,
+  callerProof,
   clientAddress,
   ENDED_COOKIE,
   endedSessionMessage,
@@ -11,6 +12,7 @@ import {
   KNOWN_DEVICE_COOKIE,
   type LimitedAction,
   limitMessage,
+  PER_PERSON_COOKIES,
   rememberDevice,
   userHash,
 } from "../guard";
@@ -79,8 +81,11 @@ export async function reserveAttempt(
   // Nothing to count by (a link, where no visitor address can be trusted):
   // there is no bucket that would not be everybody's.
   if (!account && !address) return { attemptId: "", succeeded: async () => undefined };
+  // A browser that signed in to this account before skips the account's own
+  // limits, for passwords, codes, e-mails and sign-ups alike: someone guessing
+  // elsewhere cannot keep the owner out of the browser they use.
   const knownDevice =
-    action === "sign_in" && account !== null
+    who.email && account !== null
       ? isKnownDevice(key.value, (await cookies()).get(KNOWN_DEVICE_COOKIE)?.value, account)
       : false;
 
@@ -91,6 +96,7 @@ export async function reserveAttempt(
       addressHash: address,
       accountHash: account,
       knownDevice,
+      caller: callerProof(key.value),
     });
   } catch (error) {
     console.error("Sign-in limit could not be asked", error);
@@ -122,8 +128,10 @@ async function rememberThisDevice(key: string, account: string): Promise<void> {
       maxAge: 180 * 24 * 3600,
     },
   );
-  // The note "your session ended" has done its job.
+  // The note "your session ended" has done its job; what the previous person
+  // at this browser left behind goes too.
   store.delete(ENDED_COOKIE);
+  for (const { name, path } of PER_PERSON_COOKIES) store.delete({ name, path });
 }
 
 /**

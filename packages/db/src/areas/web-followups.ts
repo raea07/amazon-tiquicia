@@ -33,14 +33,23 @@ export interface AuthLimitRequest {
   addressHash: string | null;
   /** Keyed hash of the account (the e-mail typed), or null for a refresh. */
   accountHash: string | null;
-  /** This browser signed in to that account before: the account's own limit is skipped. */
+  /** This browser signed in to that account before: the account's own limits are skipped. */
   knownDevice?: boolean;
+  /**
+   * The apps' proof that they are the caller (a keyed hash only the apps can
+   * compute). Checked once the project keeps its digest in Vault.
+   */
+  caller?: string | null;
 }
 
 export const webFollowupsErrors = {
   invalid_limit_request: {
     "es-CR": "No pudimos procesar ese intento de ingreso. Recargue la página e inténtelo de nuevo.",
     en: "We could not process that sign-in attempt. Reload the page and try again.",
+  },
+  auth_limit_caller: {
+    "es-CR": "No pudimos procesar ese intento de ingreso. Inténtelo de nuevo en un momento.",
+    en: "We could not process that sign-in attempt. Try again in a moment.",
   },
 } as const satisfies Messages;
 
@@ -49,6 +58,7 @@ export const webFollowupsApi = ({ call, run }: Caller) => ({
   authLimitReserve: (input: AuthLimitRequest) => {
     digest.nullable().parse(input.addressHash);
     digest.nullable().parse(input.accountHash);
+    digest.nullish().parse(input.caller);
     return call(
       "auth_limit_reserve",
       {
@@ -56,10 +66,11 @@ export const webFollowupsApi = ({ call, run }: Caller) => ({
         p_address_hash: input.addressHash ?? undefined,
         p_account_hash: input.accountHash ?? undefined,
         p_known_device: input.knownDevice ?? false,
+        p_caller: input.caller ?? undefined,
       },
       authLimitReservation,
     );
   },
-  /** The attempt succeeded (right password or code): it does not count as a failure. */
+  /** The attempt succeeded (right password or code, accepted refresh): it does not count as a failure. */
   authLimitRelease: (attemptId: string) => run("auth_limit_release", { p_attempt_id: attemptId }),
 });

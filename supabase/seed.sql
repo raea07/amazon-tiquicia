@@ -23,21 +23,24 @@
 
 begin;
 
+-- seed-guard:begin (supabase/tests/130_web_followups.sql runs this block on its own)
 do $$
 begin
   if private.setting('payments_mode') is distinct from '"sandbox"'::jsonb then
     raise exception 'Seed data is for sandbox environments only';
-  end if;
-  if exists (select 1 from public.sellers) then
-    raise exception 'Seed data already present; reset the database first';
   end if;
   -- Only the local shim creates this schema; a hosted project never has it.
   if not exists (select 1 from pg_namespace where nspname = 'dev_standin')
      and nullif(current_setting('app.seed_password_hash', true), '') is null then
     raise exception 'Refusing to seed a hosted database with the local password: use remote-db.sh seed (preview projects only)';
   end if;
+  if exists (select 1 from public.sellers) then
+    raise exception 'Seed data already present; reset the database first';
+  end if;
 end
-$$;
+$$
+-- seed-guard:end
+;
 
 -- ── Helpers (session-local) ────────────────────────────────────────────────
 

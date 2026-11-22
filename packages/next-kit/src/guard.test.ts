@@ -4,6 +4,7 @@ import {
   accountHash,
   activityValue,
   addressHash,
+  callerProof,
   checkSecret,
   clientAddress,
   endedSessionMessage,
@@ -13,6 +14,8 @@ import {
   LOCAL_GUARD_KEY,
   limitMessage,
   normaliseAddress,
+  ORDER_SEARCH_COOKIE,
+  PER_PERSON_COOKIES,
   readActivity,
   rememberDevice,
   SESSION_POLICIES,
@@ -108,6 +111,22 @@ describe("WEB-2: only keyed hashes are stored", () => {
   });
 });
 
+describe("WEB-2: the apps prove they are the caller", () => {
+  it("derives a fixed proof from the key, which a stranger without the key cannot", () => {
+    expect(callerProof("k")).toMatch(/^[0-9a-f]{64}$/);
+    expect(callerProof("k")).toBe(callerProof("k"));
+    expect(callerProof("k")).not.toBe(callerProof("other"));
+    // Not the same value as any hash that is stored.
+    expect(callerProof("k")).not.toBe(addressHash("k", "auth-limit-caller"));
+  });
+});
+
+describe("WEB-4: what one person leaves in a shared browser", () => {
+  it("lists the console's order search among the cookies removed when a session ends or begins", () => {
+    expect(PER_PERSON_COOKIES).toContainEqual({ name: ORDER_SEARCH_COOKIE, path: "/pedidos" });
+  });
+});
+
 describe("WEB-2: what the person is told", () => {
   it("says when to try again, in Spanish, and points to the reset", () => {
     const text = limitMessage("sign_in", 840);
@@ -115,6 +134,14 @@ describe("WEB-2: what the person is told", () => {
     expect(text).toContain("Olvidé mi contraseña");
     expect(limitMessage("code", 45)).toContain("45 segundos");
     expect(limitMessage("sign_up", 3600)).toContain("60 minutos");
+  });
+
+  it("does not tell the owner they asked for e-mails a stranger asked for, and points to the latest one", () => {
+    // Review of 22 November: "Ya pidió varios correos" blamed the reader.
+    const text = limitMessage("email", 3600);
+    expect(text).not.toMatch(/pidió/);
+    expect(text).toContain("60 minutos");
+    expect(text).toContain("el enlace del más reciente");
   });
 
   it("never says whether the account exists or which limit was reached", () => {
@@ -133,6 +160,27 @@ describe("WEB-8: server-only keys", () => {
     expect(isLocalRun({ ...LOCAL, VERCEL: "1" })).toBe(false);
     expect(isLocalRun({ ...LOCAL, NEXT_PUBLIC_SITE_URL: "https://www.yuntera.cr" })).toBe(false);
     expect(isLocalRun({})).toBe(false);
+  });
+
+  it("does not count a self-hosted production server as local because its API is on loopback", () => {
+    // Review of 22 November: this counted as local, so the published guard key
+    // and the example refresh keys were accepted on a real deployment.
+    const selfHosted = {
+      NODE_ENV: "production",
+      NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:8000",
+    };
+    expect(isLocalRun(selfHosted)).toBe(false);
+    expect(guardKey(selfHosted).ok).toBe(false);
+    expect(guardKey({ ...selfHosted, AUTH_GUARD_KEY: LOCAL_GUARD_KEY }).ok).toBe(false);
+    expect(checkSecret("SHOP_REFRESH_KEY", "local-development-only", selfHosted).ok).toBe(false);
+    // The lanes and CI say so explicitly for their production builds.
+    expect(isLocalRun({ ...selfHosted, YUNTERA_LOCAL_RUN: "1" })).toBe(true);
+    expect(isLocalRun({ ...selfHosted, YUNTERA_LOCAL_RUN: "1", VERCEL: "1" })).toBe(false);
+    expect(
+      isLocalRun({ ...selfHosted, YUNTERA_LOCAL_RUN: "1", NEXT_PUBLIC_SITE_URL: "https://x.cr" }),
+    ).toBe(false);
+    // `next dev` and the tests are local as before.
+    expect(isLocalRun({ ...selfHosted, NODE_ENV: "development" })).toBe(true);
   });
 
   it("refuses the example values and short keys when deployed", () => {

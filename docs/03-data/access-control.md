@@ -578,16 +578,21 @@ Auth sees the server's address for everybody. The apps therefore keep their
 own limit in front of each call, in the database
 ([decision 30](../02-architecture/decisions.md#30-the-web-apps-own-sign-in-limit-per-visitor-and-per-account)):
 
-- `auth_limit_reserve(action, address hash, account hash, known device)`
-  counts one attempt before the call to Auth, or answers how many seconds to
-  wait; `auth_limit_release(attempt)` gives back an attempt that succeeded (a
-  right password or code). Both are open to visitors, because sign-in comes
-  before any session.
-- The numbers: 5 wrong passwords per account and 20 per visitor address in 15
-  minutes; 3 sign-ups per e-mail address and 10 per visitor an hour; 5 account
-  e-mails per account and 10 per visitor an hour; 5 wrong e-mailed codes per
-  account and 20 per visitor in 15 minutes; the same for the current password
-  asked again; 120 token refreshes per visitor in 10 minutes.
+- `auth_limit_reserve(action, address hash, account hash, known device,
+caller)` counts one attempt before the call to Auth, or answers how many
+  seconds to wait; `auth_limit_release(attempt)` gives back an attempt that
+  succeeded (a right password or code, a refresh Auth accepted). Both are open
+  to visitors, because sign-in comes before any session. Once the project keeps
+  `auth_limit_caller_digest` in Vault, `auth_limit_reserve` refuses
+  (`auth_limit_caller`) a caller that does not send the apps' proof, so the
+  public key alone cannot add rows.
+- The numbers, per visitor address / per account from one address / per
+  account from all addresses: wrong passwords 20 / 5 / 50 in 15 minutes;
+  sign-ups 10 / 3 / 10 an hour; account e-mails 10 / 5 / 20 an hour; wrong
+  e-mailed codes 20 / 5 / 30 in 15 minutes; the current password asked again 5
+  per signed-in account and 20 per address in 15 minutes; refused token
+  refreshes 120 per address in 10 minutes (an accepted refresh is given back,
+  and a refusal by the limit keeps the browser's cookies).
 - Stored in `private.auth_attempts`, which no API role can read: only
   HMAC-SHA-256 hashes made with `AUTH_GUARD_KEY`, a server-only key of the
   apps that the database never sees, the action and the time; nothing older
@@ -596,10 +601,12 @@ own limit in front of each call, in the database
   count against a real person.
 - Nothing looks the account up, and the answer is the same whether the e-mail
   has an account or not, and whichever limit was reached.
-- A browser that signed in to an account before (a signed cookie) is not held
-  by that account's limit, only by its own address's, so guessing someone's
-  password cannot lock them out of the browser they use; and a reset code
-  always works.
+- One stranger guessing someone's password or code, or asking for their
+  e-mails, fills only its own share: the owner at any other address is not
+  held. A browser that signed in to an account before (a signed cookie) is not
+  held by that account's limits at all, only by its own address's. Only a
+  guesser with many addresses can fill an account's total, for one window; the
+  link in a reset e-mail counts per address only and still works then.
 - The visitor's address comes from `x-vercel-forwarded-for` (then
   `x-real-ip`) on Vercel, and elsewhere only from the header the operator names
   in `AUTH_CLIENT_IP_HEADER`. Without one, only the per-account limits apply.

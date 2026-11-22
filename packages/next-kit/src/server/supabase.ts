@@ -4,8 +4,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { type Api, createApi, type RpcTransport } from "@yuntera/db";
 import { cookies, headers } from "next/headers";
 import { connection } from "next/server";
-import { addressHash, clientAddress, guardKey, sessionPolicy } from "../guard";
-import { limitedAuthFetch } from "./refresh-limit";
+import { addressHash, callerProof, clientAddress, guardKey, sessionPolicy } from "../guard";
+import { keepCookiesIfLimited, refreshLimiter } from "./refresh-limit";
 
 /**
  * Two ways to reach the API, with a deliberate difference:
@@ -79,13 +79,16 @@ export async function sessionClient(): Promise<SupabaseClient> {
   const { url, key } = apiEnv();
   const guard = guardKey(process.env);
   const address = clientAddress(await headers(), process.env);
+  // A refresh the limit refused leaves the cookies exactly as they came.
+  const limiter = refreshLimiter(
+    guard.ok && address ? addressHash(guard.value, address) : null,
+    guard.ok ? callerProof(guard.value) : null,
+  );
   return createServerClient(url, key, {
-    global: {
-      fetch: limitedAuthFetch(guard.ok && address ? addressHash(guard.value, address) : null),
-    },
+    global: { fetch: limiter.fetch },
     cookies: {
       getAll: () => store.getAll(),
-      setAll: (list) => {
+      setAll: keepCookiesIfLimited(limiter, (list) => {
         try {
           for (const { name, value, options } of list) {
             store.set(name, value, {
@@ -98,7 +101,7 @@ export async function sessionClient(): Promise<SupabaseClient> {
           // Server Components cannot set cookies. The proxy refreshes the
           // session on every request, so a skipped write here is harmless.
         }
-      },
+      }),
     },
   });
 }

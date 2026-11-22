@@ -6,6 +6,8 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { contractDatabase } from "./contract.helpers";
 import { ApiError } from "./errors";
@@ -39,12 +41,22 @@ describe.skipIf(!db.enabled)("web follow-ups contract (against a seeded database
     }
     const refused = await visitor.authLimitReserve({
       action: "sign_in",
-      addressHash: digest(),
+      addressHash: address,
       accountHash: account,
     });
     expect(refused.attempt_id).toBeNull();
     expect(refused.retry_after_seconds).toBeGreaterThan(800);
     expect(refused.retry_after_seconds).toBeLessThanOrEqual(900);
+
+    // The owner at another address is not held by that visitor's guesses.
+    const owner = await visitor.authLimitReserve({
+      action: "sign_in",
+      addressHash: digest(),
+      accountHash: account,
+      caller: digest(),
+    });
+    expect(owner.attempt_id).not.toBeNull();
+    made.push(owner.attempt_id ?? "");
 
     // The same account from a browser that signed in to it before.
     const known = await visitor.authLimitReserve({
@@ -87,5 +99,40 @@ describe.skipIf(!db.enabled)("web follow-ups contract (against a seeded database
         .as()
         .authLimitReserve({ action: "sign_in", addressHash: "203.0.113.7", accountHash: null }),
     ).toThrow();
+  });
+
+  it("WEB-7: the seed refuses a database that the local shim did not build", async () => {
+    // The guard at the top of supabase/seed.sql, run on its own in a
+    // transaction that hides the shim's schema and is then rolled back.
+    const seed = readFileSync(new URL("../../../supabase/seed.sql", import.meta.url), "utf8");
+    const guard = seed.slice(
+      seed.indexOf("-- seed-guard:begin"),
+      seed.indexOf("-- seed-guard:end"),
+    );
+    expect(guard).toContain("do $$");
+    const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    const outcome = () =>
+      client.query(guard).then(
+        () => "ran",
+        (error: Error) => error.message,
+      );
+    try {
+      await client.query("begin");
+      await client.query("alter schema dev_standin rename to dev_standin_hidden");
+      await client.query("savepoint guard");
+      expect(await outcome()).toBe(
+        "Refusing to seed a hosted database with the local password: use remote-db.sh seed (preview projects only)",
+      );
+      await client.query("rollback to savepoint guard");
+      // With the hash `remote-db.sh seed` sends, it goes on to its next check.
+      await client.query("select set_config('app.seed_password_hash', $1, true)", [
+        `$2a$10$${"a".repeat(53)}`,
+      ]);
+      expect(await outcome()).toBe("Seed data already present; reset the database first");
+    } finally {
+      await client.query("rollback").catch(() => undefined);
+      await client.end();
+    }
   });
 });

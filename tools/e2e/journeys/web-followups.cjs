@@ -2,9 +2,12 @@
 //
 //   1. Sign-in limit (WEB-2): wrong passwords for one account until the limit,
 //      the message with the wait, the same answer for an address without an
-//      account, the owner's own browser still let in, one visitor guessing
-//      many accounts stopped while another visitor signs in, and after the wait
-//      the account works again.
+//      account, the owner still let in (their usual browser, and a new one
+//      elsewhere), a guesser with many addresses holding only new browsers,
+//      and then the owner still getting back in through the reset e-mail and
+//      its code although the guesser asked for e-mails and typed wrong codes;
+//      one visitor guessing many accounts stopped while another visitor signs
+//      in, and after the wait the account works again.
 //   2. Sign-up (WEB-M1), with e-mail confirmation on: an address that has an
 //      account gets exactly the screen a new address gets.
 //   3. Session lifetime (WEB-5): the console's session cookie lasts no more
@@ -17,6 +20,11 @@
 //      1280 px and at 390 px, with the keyboard.
 //   6. Delivery zone: while the product page still shows the date and price
 //      of the old zone, it says an update is coming.
+//   7. Caches (WEB-6): a product staff take down after a report is gone from
+//      the shop on the next request, not when the cache expires.
+//
+// Also (review of 22 November): the order search does not survive signing
+// out, so the next person at the desk does not see it.
 //
 // The visitor's address is given in X-Forwarded-For, which the lane's apps are
 // told to trust (tools/dev/stack.sh); a deployment trusts only its own proxy.
@@ -39,6 +47,7 @@ const DATABASE_URL =
   process.env.DATABASE_URL || "postgres://postgres:postgres@127.0.0.1:5432/yuntera_local";
 // The apps' key for signed cookies: the lane's, or the local default (packages/next-kit/src/guard.ts).
 const GUARD_KEY = process.env.AUTH_GUARD_KEY || "local-development-only-auth-guard";
+const REFRESH_KEY = process.env.SHOP_REFRESH_KEY || "local-development-only";
 
 const log = (...a) => console.log(...a);
 const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
@@ -182,12 +191,98 @@ const overflow = (page) =>
     "the owner's usual browser still signs in during the attack",
   );
   await signOut(owner.page);
-  // A new browser of the owner's waits, like the attacker: the limit is the account's.
+  // Nor is a new browser of the owner's at another address: one guesser fills
+  // only its own share of the account's limit.
   const newPhone = await visitor("198.51.100.41");
   check(
-    /demasiados intentos/i.test((await tryPassword(newPhone.page, WEB, comprador, PASSWORD)) ?? ""),
-    "a browser that never signed in to the account waits too",
+    (await tryPassword(newPhone.page, WEB, comprador, PASSWORD)) === null,
+    "a browser that never signed in, elsewhere, still signs in during the attack",
   );
+  await signOut(newPhone.page);
+
+  // A guesser with many addresses (fifty wrong passwords from fifty addresses,
+  // written straight into the limit's table as the apps would have counted them).
+  const hmac = (value) => createHmac("sha256", GUARD_KEY).update(value).digest("hex");
+  sql(
+    `insert into private.auth_attempts (action, address_hash, account_hash)
+     select 'sign_in', encode(extensions.digest('guesser-' || n, 'sha256'), 'hex'), '${hmac(`account:${comprador}`)}'
+     from generate_series(1, 50) n`,
+  );
+  const thirdPhone = await visitor("198.51.100.42");
+  check(
+    /demasiados intentos/i.test(
+      (await tryPassword(thirdPhone.page, WEB, comprador, PASSWORD)) ?? "",
+    ),
+    "against many addresses, a browser that never signed in waits",
+  );
+  check(
+    (await tryPassword(owner.page, WEB, comprador, PASSWORD)) === null,
+    "while the owner's usual browser still signs in",
+  );
+  await signOut(owner.page);
+
+  // The way back on that new browser: the reset e-mail and its code, although
+  // the guesser asks for e-mails and types wrong codes for the same account.
+  const askReset = async (page) => {
+    await go(page, `${WEB}/recuperar`);
+    await page.fill('main:visible input[name="email"]', comprador);
+    await page.click('main:visible button:has-text("Enviarme un enlace")');
+    const answer = page
+      .locator('main:visible [role="status"], main:visible [role="alert"]')
+      .first();
+    await answer.waitFor();
+    return text(answer);
+  };
+  // One code; answers the alert shown, or null when it led to the new-password page.
+  // Waits for the action's own answer: the alert of the previous try looks the same.
+  const tryCode = async (page, code) => {
+    await page.fill('main:visible input[name="code"]', code);
+    const answered = page.waitForResponse(
+      (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/recuperar",
+    );
+    await page.click('main:visible button:has-text("Continuar con el código")');
+    const response = await answered;
+    if (response.headers()["x-action-redirect"]) {
+      await page.waitForURL((u) => new URL(u).pathname === "/recuperar/nueva");
+      return null;
+    }
+    await page.waitForFunction(
+      () => !document.querySelector("main button[disabled], main button[aria-busy='true']"),
+    );
+    return text(page.locator('main:visible [role="alert"]').first());
+  };
+  check(
+    /Revise su correo/.test(await askReset(attacker.page)),
+    "the guesser asks for a reset e-mail",
+  );
+  for (let n = 1; n <= 5; n++) {
+    check(
+      /código/i.test((await tryCode(attacker.page, "000000")) ?? ""),
+      `the guesser's wrong code ${n} is refused`,
+    );
+  }
+  const codesHeld = await tryCode(attacker.page, "000000");
+  check(/demasiados códigos/i.test(codesHeld ?? ""), "and its sixth code waits");
+  for (let n = 2; n <= 5; n++) await askReset(attacker.page);
+  const mailsHeld = await askReset(attacker.page);
+  log("   e-mail limit message:", mailsHeld);
+  check(/varios pedidos de correo/.test(mailsHeld), "the guesser's sixth e-mail request waits");
+  check(!/pidió/.test(mailsHeld), "without telling the reader that they asked for them");
+  check(
+    /Revise su correo/.test(await askReset(thirdPhone.page)),
+    "the owner, on the new browser, still gets the reset e-mail",
+  );
+  const { body: letter } = await api(
+    "GET",
+    `/dev/mail?to=${encodeURIComponent(comprador)}&kind=recovery`,
+  );
+  check(/^\d{6}$/.test(letter?.token ?? ""), "the reset e-mail carries its code");
+  check(
+    (await tryCode(thirdPhone.page, letter.token)) === null,
+    "and the owner's right code gets them back in despite the guesser's wrong ones",
+  );
+  await thirdPhone.page.screenshot({ path: `${SHOTS}/wf11-owner-back-in.png`, fullPage: true });
+  await thirdPhone.context.clearCookies();
 
   // One visitor guessing many accounts is stopped after 20 wrong passwords…
   const sprayer = await visitor("203.0.113.20");
@@ -214,8 +309,8 @@ const overflow = (page) =>
     "and never an address itself",
   );
 
-  // The wait: fifteen minutes pass.
-  sql("update private.auth_attempts set attempted_at = attempted_at - interval '16 minutes'");
+  // The wait: the windows pass (an hour covers the e-mail limit too).
+  sql("update private.auth_attempts set attempted_at = attempted_at - interval '61 minutes'");
   check(
     (await tryPassword(newPhone.page, WEB, comprador, PASSWORD)) === null,
     "after the wait the account signs in again",
@@ -361,6 +456,19 @@ const overflow = (page) =>
   check(reached.size === sections, "1280 px: Tab reaches every section");
   await staff.page.screenshot({ path: `${SHOTS}/wf06-console-nav-1280.png` });
 
+  // A search left in place goes when the person signs out.
+  await go(staff.page, `${OPS}/pedidos`);
+  await staff.page.fill("main:visible #q", "Andrés");
+  await staff.page.click('main:visible button:has-text("Buscar pedidos")');
+  await staff.page.locator("main:visible >> text=Quitar la búsqueda").waitFor();
+  const searchCookie = async () =>
+    // All cookies, not by address: this one is Secure, and the lane runs on http.
+    (await staff.context.cookies()).find((c) => c.name === "yt-busqueda-pedidos");
+  check(Boolean(await searchCookie()), "the search is kept for the orders page");
+  await staff.page.click('header button:has-text("Salir")');
+  await staff.page.waitForURL((u) => new URL(u).pathname === "/ingresar");
+  check(!(await searchCookie()), "signing out removes the search from the browser");
+
   const phone = await browser.newContext({
     viewport: { width: 390, height: 844 },
     isMobile: true,
@@ -461,6 +569,56 @@ const overflow = (page) =>
   await stale.waitFor({ state: "detached", timeout: 15000 });
   check(true, "and gives up waiting after a while rather than for ever");
   await shopper.page.screenshot({ path: `${SHOTS}/wf09-zone-updated.png`, fullPage: true });
+
+  // ── 7. A take-down leaves the shop at once ──────────────────────────────
+  log("7. take-down refreshes the shop");
+  const target = sql(
+    `select p.id || '|' || p.slug || '|' || p.title from public.products p
+     where p.status = 'active' and exists (
+       select 1 from public.offers o join public.skus k on k.id = o.sku_id
+       where k.product_id = p.id and o.status = 'active')
+     order by p.slug desc limit 1`,
+  ).split("|");
+  const [productId, productSlug, productTitle] = target;
+  const shopStatus = async () => {
+    const ctx = await request.newContext();
+    const r = await ctx.get(`${WEB}/p/${productSlug}`, { maxRedirects: 0 });
+    await ctx.dispose();
+    return r.status();
+  };
+  check((await shopStatus()) === 200, "the product shows in the shop (and is now cached)");
+  check((await shopStatus()) === 200, "and keeps showing from the cache");
+  const reported = await api("POST", "/rest/v1/rpc/report_content", {
+    p_target_type: "product",
+    p_target_id: productId,
+    p_reason: "counterfeit",
+    p_details: "Parece una imitación.",
+    // A visitor without an account leaves an address to be answered at.
+    p_email: "visitante@correo.example",
+  });
+  check(reported.status < 300, "a visitor reports the product");
+  await go(small, `${OPS}/atencion`);
+  const card = small.locator("main:visible li", { hasText: productTitle }).filter({
+    hasText: "Parece una imitación.",
+  });
+  await card.locator('textarea[name="note"]').fill("Producto falsificado: se retira.");
+  await card.locator('button:has-text("Retirar el contenido")').click();
+  // The page behind is drawn again, and the report leaves the queue.
+  await card.waitFor({ state: "detached" });
+  check(
+    sql(`select status from public.products where id = '${productId}'`) === "rejected",
+    "staff take the product down",
+  );
+  check((await shopStatus()) === 404, "the shop no longer shows it on the very next request");
+  // Back as it was, for the journeys that follow.
+  sql(
+    `update public.products set status = 'active', rejection_reason = null where id = '${productId}'`,
+  );
+  await fetch(`${WEB}/api/catalogo/refrescar`, {
+    method: "POST",
+    headers: { "x-refresh-key": REFRESH_KEY },
+  });
+  check((await shopStatus()) === 200, "restored for the journeys that follow");
 
   await browser.close();
   if (errors.length > 0) {
