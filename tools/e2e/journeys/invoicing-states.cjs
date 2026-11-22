@@ -19,12 +19,11 @@
 // Fails on any browser error or 5xx.
 
 const { spawnSync } = require("node:child_process");
-const { chromium, request } = require("playwright");
+const { chromium } = require("playwright");
 
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
 const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
-const FAKE = process.env.HACIENDA_FAKE_URL || "http://127.0.0.1:54325";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const DATABASE_URL =
   process.env.DATABASE_URL || "postgres://postgres:postgres@127.0.0.1:5432/yuntera_local";
@@ -61,8 +60,6 @@ const mode = (value) =>
   sql(`update public.app_settings set value = '"${value}"' where key = 'payments_mode'`);
 
 (async () => {
-  const fake = await request.newContext();
-  const documents = async () => (await fake.get(`${FAKE}/_fake/documents`)).json();
   const browser = await chromium.launch();
   const errors = [];
   const watch = (page) => {
@@ -96,13 +93,15 @@ const mode = (value) =>
     return page;
   }
 
-  // Waits for the seed's own documents, which the worker makes when the stack starts.
+  // Until the worker has nothing left to plan or send (the seed's documents
+  // when the stack starts, and on a database that keeps data, earlier ones).
   await until(
-    "the seed's documents to be answered",
-    async () => {
-      const docs = await documents();
-      return docs.length > 0 && docs.every((d) => ["aceptado", "rechazado"].includes(d.state));
-    },
+    "the worker to have planned and sent everything waiting",
+    async () =>
+      sql(`select not exists (select 1 from private.outbox_jobs where consumer = 'invoice' and status = 'pending')
+              and not exists (select 1 from public.electronic_invoices
+                              where status in ('pending', 'sent') and held_reason is null)`) ===
+      "t",
     120,
   );
 
