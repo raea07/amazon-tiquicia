@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
 // packages/next-kit/config.mjs. The shop asks for location (to mark a
 // delivery address) and never for the camera.
 const nextConfig: NextConfig = {
-  ...baseConfig({ geolocation: true }),
+  ...baseConfig({ app: "web", geolocation: true }),
 };
 
 export default nextConfig;

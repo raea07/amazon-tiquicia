@@ -11,7 +11,16 @@
  * @typedef {object} AppSecurity
  * @property {boolean} [camera]       The app scans barcodes with the camera.
  * @property {boolean} [geolocation]  The app asks for the device's position.
+ * @property {boolean} [photoUpload]  The browser uploads product photos to the
+ *   signed upload addresses of the project's storage (the seller centre).
  */
+
+/**
+ * The optional human check on the sign-in forms (Cloudflare Turnstile, which
+ * Supabase Auth verifies once CAPTCHA protection is switched on there). Off
+ * unless its public site key is set when the app is built.
+ */
+export const CAPTCHA_ORIGIN = "https://challenges.cloudflare.com";
 
 /**
  * Security headers applied to every response.
@@ -28,16 +37,22 @@ export function securityHeaders(options = {}) {
   const apiOrigin = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "http://127.0.0.1:54321")
     .origin;
   const isDev = process.env.NODE_ENV !== "production";
+  const captcha = process.env.NEXT_PUBLIC_AUTH_CAPTCHA_SITE_KEY ? ` ${CAPTCHA_ORIGIN}` : "";
 
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}${captcha}`,
     "style-src 'self' 'unsafe-inline'",
     // Pictures: the app itself (icons, placeholder drawings), previews of a
     // photo being chosen (blob:), and the project's own storage, nothing else.
     `img-src 'self' data: blob: ${apiOrigin}/storage/v1/object/`,
     "font-src 'self'",
-    `connect-src 'self' ${apiOrigin}${isDev ? " ws: http://127.0.0.1:* http://localhost:*" : ""}`,
+    // Only the app itself (WEB-9): every API call is made on the server. The
+    // one exception is the seller centre's photo upload, which sends the
+    // resized files straight to storage, to a signed address only (useless
+    // without the token in it). The development server adds its reload socket.
+    `connect-src 'self'${options.photoUpload ? ` ${apiOrigin}/storage/v1/object/upload/sign/` : ""}${isDev ? " ws: http://127.0.0.1:* http://localhost:*" : ""}${captcha}`,
+    `frame-src ${captcha ? CAPTCHA_ORIGIN : "'none'"}`,
     "frame-ancestors 'none'",
     "form-action 'self'",
     "base-uri 'self'",
@@ -66,14 +81,17 @@ export function securityHeaders(options = {}) {
 /**
  * The base configuration. Apps spread it and add what is theirs.
  *
- * @param {AppSecurity & { internal?: boolean }} [options]
+ * @param {AppSecurity & { internal?: boolean, app: "web" | "seller" | "ops" | "field" }} options
  *   `internal` marks a staff-only app: search engines are told to stay out.
+ *   `app` says which app this is, for its session lifetime (guard.ts).
  * @returns {import("next").NextConfig}
  */
-export function baseConfig(options = {}) {
+export function baseConfig(options) {
   const headers = securityHeaders(options);
   if (options.internal) headers.push({ key: "X-Robots-Tag", value: "noindex, nofollow" });
   return {
+    // Inlined at build time into the server code and the proxy alike.
+    env: { YUNTERA_APP: options.app },
     cacheComponents: true,
     partialPrefetching: true,
     typedRoutes: true,

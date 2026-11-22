@@ -17,6 +17,8 @@
     "./listing-changes": "./src/listing-changes.tsx",
     "./account": "./src/account/pages.tsx",
     "./auth-rules": "./src/auth-rules.ts",
+    "./cache-tags": "./src/cache-tags.ts",
+    "./guard": "./src/guard.ts",
     "./product-image": "./src/product-image.tsx"
   },
   "scripts": {

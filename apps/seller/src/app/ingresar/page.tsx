@@ -1,5 +1,10 @@
 import { SignInForm } from "@yuntera/next-kit/client";
-import { getViewer, redirectTo, safeReturnPath } from "@yuntera/next-kit/server";
+import {
+  endedSessionNotice,
+  getViewer,
+  redirectTo,
+  safeReturnPath,
+} from "@yuntera/next-kit/server";
 import { Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -31,7 +36,7 @@ async function Access({ searchParams }: Pick<PageProps<"/ingresar">, "searchPara
       <p className="mt-1 mb-5 text-sm text-ink-muted">
         Con el mismo correo y contraseña que usa para comprar en Yuntera.
       </p>
-      <SignInForm action={signIn} returnTo={returnTo} />
+      <SignInForm action={signIn} returnTo={returnTo} notice={await endedSessionNotice()} />
       <p className="mt-5 border-t border-border pt-4 text-sm">
         ¿Todavía no vende en Yuntera?{" "}
         <Link href="/registro" className="font-semibold text-link underline">

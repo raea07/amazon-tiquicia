@@ -4,6 +4,7 @@ import { isEmail, passwordProblem } from "../auth-rules";
 import { safeReturnPath } from "../paths";
 import type { ActionState } from "../types";
 import { confirmUrl } from "./account";
+import { captchaToken, reserveAttempt } from "./auth-guard";
 import { redirectTo } from "./session";
 import { sessionApi, sessionClient } from "./supabase";
 
@@ -74,16 +75,30 @@ export async function passwordSignIn(formData: FormData): Promise<ActionState> {
     return { error: "La contraseña debe tener al menos 8 caracteres.", values };
   }
 
+  // Counted before the password goes to Auth, per visitor and per account
+  // (auth-guard.ts); a right password gives the attempt back below.
+  const attempt = await reserveAttempt("sign_in", { email });
+  if ("error" in attempt) return { error: attempt.error, values };
+
   const supabase = await sessionClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+    options: { captchaToken: captchaToken(formData) },
+  });
   if (error?.code === "email_not_confirmed") {
     // Auth says this only once the password was right, so it tells nothing to
     // someone who does not know the password.
+    await attempt.succeeded();
     return { error: authErrorMessage(error), values, step: "confirm-email" };
+  }
+  if (error && AUTH_BUSY.has(error.code ?? "")) {
+    return { error: authErrorMessage(error), values };
   }
   // One message for "no such account" and "wrong password": saying which would
   // tell a stranger whether an e-mail address has an account here.
   if (error) return { error: "El correo o la contraseña no coinciden.", values };
+  await attempt.succeeded();
 
   const next = safeReturnPath(String(formData.get("siguiente") ?? "/"));
   // The account's factors come with the session just created: no extra request.
@@ -93,6 +108,13 @@ export async function passwordSignIn(formData: FormData): Promise<ActionState> {
   }
   redirectTo(next);
 }
+
+/**
+ * Auth's own refusals that are about the request, not the account: its limit
+ * or the human check. Said as such (the same for every address), rather than
+ * as a wrong password.
+ */
+const AUTH_BUSY = new Set(["over_request_rate_limit", "captcha_failed"]);
 
 /** The version of the terms and privacy policy a new account agrees to. */
 export const POLICY_VERSION = "2026-11";
@@ -128,6 +150,9 @@ export async function passwordSignUp(formData: FormData): Promise<ActionState> {
   }
 
   const next = safeReturnPath(String(formData.get("siguiente") ?? "/"));
+  const attempt = await reserveAttempt("sign_up", { email });
+  if ("error" in attempt) return { error: attempt.error, values };
+
   const supabase = await sessionClient();
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -135,26 +160,26 @@ export async function passwordSignUp(formData: FormData): Promise<ActionState> {
     options: {
       data: { full_name: fullName, consent_version: POLICY_VERSION, return_to: next },
       emailRedirectTo: confirmUrl(),
+      captchaToken: captchaToken(formData),
     },
   });
+  // An address that already has an account (WEB-M1). With e-mail confirmation
+  // on, Auth answers as for a new address and sends nothing, so the screen is
+  // the same. With it off, Auth says `user_already_exists`; the screen is still
+  // the one a new address gets with confirmation on, but a new address is then
+  // signed in at once, which a stranger can see (docs/03-data/access-control.md).
+  if (!data.session && (!error || error.code === "user_already_exists")) {
+    return { ok: signUpSent(email), values: { email }, step: "confirm-email" };
+  }
   if (error) {
     return {
       error:
-        error.code === "user_already_exists"
-          ? "Ya existe una cuenta con ese correo. Inicie sesión o recupere su contraseña."
-          : error.code === "weak_password" || error.code === "over_email_send_rate_limit"
-            ? authErrorMessage(error)
-            : "No pudimos crear la cuenta. Revise los datos e inténtelo de nuevo.",
+        error.code === "weak_password" ||
+        error.code === "over_email_send_rate_limit" ||
+        AUTH_BUSY.has(error.code ?? "")
+          ? authErrorMessage(error)
+          : "No pudimos crear la cuenta. Revise los datos e inténtelo de nuevo.",
       values,
-    };
-  }
-  if (!data.session) {
-    // Also the answer for an address that already has a confirmed account
-    // (Auth then sends nothing): the screen must not tell the two apart.
-    return {
-      ok: `Le enviamos un correo a ${email} con un enlace y un código de 6 dígitos.`,
-      values: { email },
-      step: "confirm-email",
     };
   }
 
@@ -168,6 +193,10 @@ export async function passwordSignUp(formData: FormData): Promise<ActionState> {
   }
   redirectTo(next);
 }
+
+/** What every sign-up that waits for its e-mail is told, whether or not the address was new. */
+export const signUpSent = (email: string) =>
+  `Le enviamos un correo a ${email} con un enlace y un código de 6 dígitos para confirmar la cuenta.`;
 
 /**
  * Signs out of this browser only. (Auth's default would end every session of

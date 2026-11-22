@@ -19,6 +19,7 @@ export {
   SignUpForm,
   SubmitButton,
 } from "./forms";
+export { HumanCheck } from "./human-check";
 export { type NavItem, NavLinks } from "./nav";
 export {
   NotificationSettingsForm,

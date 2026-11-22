@@ -74,12 +74,20 @@ export async function secondStepPath(
  * throwaway client with no cookies, then ends that extra session at once.
  * Used before changing the password and before deleting the account.
  */
-export async function passwordIsCorrect(email: string, password: string): Promise<boolean> {
+export async function passwordIsCorrect(
+  email: string,
+  password: string,
+  captchaToken?: string,
+): Promise<boolean> {
   const { url, key } = apiEnv();
   const probe: SupabaseClient = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
-  const { data, error } = await probe.auth.signInWithPassword({ email, password });
+  const { data, error } = await probe.auth.signInWithPassword({
+    email,
+    password,
+    options: { captchaToken },
+  });
   if (error || !data.session) return false;
   await probe.auth.signOut({ scope: "local" });
   return true;
