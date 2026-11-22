@@ -776,6 +776,12 @@ Do this in order.
           has_function_privilege('authenticated', 'public.worker_invoice_plan(integer)', 'execute');  -- false, false
    ```
 
+   Refunds booked before `083400` keep their amount in `refunds_payable`
+   (what is owed to shoppers): nothing recorded their money leaving, because
+   nothing moved it then. From `083400` on, that account equals the refunds
+   not yet completed plus that older amount; finance may clear the older
+   amount with an adjustment once the accountant agrees.
+
    Then watch `cron.job_run_details` for a few minutes: both sweeps must
    succeed (without the Vault secrets `payments_worker_token` and
    `invoice_worker_token` they wake nobody; that is expected).
