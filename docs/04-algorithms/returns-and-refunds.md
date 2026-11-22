@@ -65,6 +65,16 @@ window at delivery, so a shopper who could not cancel any more loses nothing
 by waiting for the parcel.
 
 A **claim** waits for staff to approve or refuse it, with a written reason.
+While it waits, the shopper may **withdraw** it (`withdraw_return_request`,
+from the order page in the shop and the app): it closes like a refusal, its
+units are free again, and the order says "Retirada" instead of a reason.
+Once staff decided, or for a withdrawal of the purchase (approved at once),
+withdrawing is refused (`return_not_withdrawable`); support stops those.
+
+Asking again for units already in a return is refused with its own message
+(`units_already_in_return`), and asking for more than were received with
+another (`return_more_than_received`); both used to answer the cart's
+`invalid_quantity`.
 
 ## The steps of a return
 
@@ -167,13 +177,16 @@ payout is refused when refunds since it was scheduled leave less than it.
 
 ## Known limits
 
-- An order with one parcel delivered and another returned stays "shipped" as a
-  whole, as before; the shopper can still return the delivered units, and the
-  seller's hold starts from the last parcel (see `seller_order_settled_at`).
-  Its withdrawal window is the one set at purchase, not extended at delivery.
+- An order with one parcel delivered and the others returned is **delivered**
+  once its last parcel ends (migration 083200, decision 32); the shopper can
+  return the delivered units, and each seller's hold still starts when that
+  seller's own parcels ended (`seller_order_settled_at`), so no payout changed.
 - Nothing moves the money itself: refunds are booked and announced. The
-  gateway integration that sends them is not built. Nothing sends the shopper a
-  message when a return is approved yet: support contacts them from the queue.
+  gateway integration that sends them is not built. "Refund completed" is
+  announced only on a recorded confirmation (`private.confirm_refund`; at
+  commit in sandbox mode), which the gateway work must call in live mode
+  (decision 34). The shopper is told when a return is approved (with how the
+  product is collected) and when its goods are back.
 - Staff cannot cancel once a parcel is packed. Stopping such an order means
   letting the parcel come back through the check-in.
 - A cash order whose first delivered parcel collects the whole amount, and

@@ -77,10 +77,19 @@ When each event happens:
 - `shipment.scheduled` when a parcel is put on a route (the evening before,
   per the logistics playbook); `shipment.out_for_delivery` when the driver
   starts the route; `shipment.delivered` / `shipment.delivery_failed` at the
-  door; `route.assigned` when a route gets its driver. These four, and
-  `refund.completed` (a payment marked refunded: at once in sandbox mode, on
-  the gateway's confirmation later), are emitted by triggers added by this
-  migration.
+  door; `route.assigned` when a route gets its driver. These four are emitted
+  by triggers added by this migration.
+- `refund.completed` when a refund's confirmation is recorded
+  (`private.confirm_refund`, migration 083200): in sandbox mode when the
+  refund's transaction commits, after its `refund.requested`; in live mode
+  only when the payment gateway work calls it with the gateway's or bank's
+  reference. Marking a payment refunded no longer announces anything.
+- `return.received`, `delivery_code.locked`, `delivery_code.released`,
+  `seller.member_invited` (only for an account that had the address when it
+  was invited, and planned only to that account's confirmed address),
+  `seller.change_decided`, `payout_details.decided`, `payout.paid` and
+  `fees.offers_paused` come from the functions of those steps (migration
+  083200 added their messages).
 - The rest come from the care, catalogue and seller-verification screens.
 - `invoice.requested` is for electronic invoicing and sends nothing here.
 
@@ -410,8 +419,9 @@ clock), `packages/db/src/contract.notifications.test.ts`, and the
 - No automatic clean-up of old delivery rows yet; the request body is cleared
   as soon as a message reaches a final state, so old rows hold ids and status
   only. A retention period belongs in the privacy document.
-- A return refunded by staff emits `refund.requested`, not `refund.completed`:
-  nothing records when that money actually reaches the shopper yet.
+- In live payments mode nothing calls `private.confirm_refund` yet: until the
+  gateway integration does, a live refund is announced as started and never
+  as completed.
 - No checkout wording about which channels will be used; the settings page
   explains it.
 - The native apps that would register push tokens do not exist yet.

@@ -36,6 +36,11 @@ its own entry, not something that happens by drift.
 | 27  | [Limits are per account and per target, never per address](#27-limits-are-per-account-and-per-target-never-per-address)                             | Built; not on the preview yet            |
 | 28  | [A driver's offline day in ordinary app storage, kept small and short](#28-a-drivers-offline-day-in-ordinary-app-storage-kept-small-and-short)      | Built; unverified on a device            |
 | 29  | [The staff apps ask for the second factor themselves](#29-the-staff-apps-ask-for-the-second-factor-themselves)                                      | Built; hosted project untested           |
+| 30  | [A driver's far-away position: refused live, flagged at a door](#30-a-drivers-far-away-position-refused-live-flagged-at-a-door)                     | Built; not on the preview yet            |
+| 31  | [Offline driver actions keep when they happened, within a day](#31-offline-driver-actions-keep-when-they-happened-within-a-day)                     | Built; not on the preview yet            |
+| 32  | [Delivered and returned parcels end an order as delivered](#32-delivered-and-returned-parcels-end-an-order-as-delivered)                            | Built; not on the preview yet            |
+| 33  | [A fee change pauses offers below the price floor](#33-a-fee-change-pauses-offers-below-the-price-floor)                                            | Built; not on the preview yet            |
+| 34  | ["Refund completed" waits for a recorded confirmation](#34-refund-completed-waits-for-a-recorded-confirmation)                                      | Built; gateway not built                 |
 
 ---
 
@@ -840,8 +845,9 @@ as briefly as the feature needs (`apps/driver-native/src/lib/driver.tsx`,
   account opens the app, and once it is a day old, whether or not anyone is
   signed in and even with the app left open. The queue drops positions at
   sign-out, everything of an account when it loses access or another account
-  signs in, positions after 5 minutes and other entries after 36 hours (they
-  are then shown as not sent).
+  signs in, positions after 5 minutes and other entries after 24 hours, as
+  long as the database accepts the time they happened (they are then shown
+  as not sent; decision 31).
 - The drivers' app is kept out of Android's cloud backup
   (`android:allowBackup="false"`) and AsyncStorage is excluded from iOS
   backups in every app (`RCTAsyncStorageExcludeFromBackup`, its default,
@@ -884,3 +890,118 @@ accounts to the website until it gets the same screen.
 - Enrolling or removing an authenticator stays on the website.
 - Checked against the local stand-in for Auth (the seller journey); the hosted
   project's Auth was not tried from the apps.
+
+## 30. A driver's far-away position: refused live, flagged at a door
+
+**Context.** The drivers' phones send a position every so often, and one with
+each delivery and failed delivery. The database accepted any number: a
+position report outside Costa Rica failed on the table's own check with a raw
+error, and a stop took anything, `NaN` included.
+
+**Decision.** Every position is checked first: half of one, a value that is
+not finite (`NaN`, infinity) or off the globe is refused (`invalid_position`).
+A real place outside the service area (the Costa Rica box of
+`CR_BOUNDS`) is treated by what it is for:
+
+- **A live position report is refused** (`position_outside_area`) and not
+  stored. It only feeds the dispatch map of drivers in Costa Rica; a reading
+  from Madrid or from 0,0 is a fault or a fake, and the next report replaces
+  it anyway. Storing it would put the driver in the wrong place on Central's
+  map.
+- **A delivery or a failure is recorded, with the position kept and flagged**
+  (`route_stops.pod_outside_area`). The delivery is proven by the shopper's
+  code, not by the position; refusing it would leave a parcel delivered in
+  fact but not in the system. Keeping the odd position is the evidence staff
+  need if it ever matters (a failure claimed far from the door).
+
+**Consequences.**
+
+- The apps get a code they can explain, never a database error.
+- The flag is in the database only: no console screen shows it yet.
+
+## 31. Offline driver actions keep when they happened, within a day
+
+**Context.** The drivers' app queues arrivals, failed deliveries and positions
+without signal and sends them later; the database stamped them with the time
+they arrived, which moved failures and arrivals hours later than they
+happened.
+
+**Decision.** `driver_arrive`, `driver_fail_stop` and `driver_report_position`
+take `p_occurred_at`. It is accepted up to two minutes ahead of the
+database's clock (a phone a little fast counts as now), refused further ahead
+(`action_time_in_future`) or more than a day back (`action_time_too_old`), and
+never earlier than what it follows (the route's start, the arrival). The
+stop's `arrived_at` and `completed_at` and the shopper's timeline hold when it
+happened, which every reader (driver app, dispatch board, promise and seller
+metrics) uses; the time received is kept beside it (`arrived_received_at`,
+`completed_received_at`, `driver_positions.received_at`). An older position
+never overwrites a newer one. The app sends the time the action was queued,
+or for a position the time the phone read it, and keeps stop actions a day.
+
+**Consequences.**
+
+- A phone with a clock far ahead cannot record an action until the clock is
+  fixed; the app shows the refusal.
+- A delivery against the code still needs signal and is stamped by the
+  database.
+
+## 32. Delivered and returned parcels end an order as delivered
+
+**Context.** An order with one parcel delivered and another back at the
+warehouse stayed "shipped" for ever: it counted as open, so the shopper (and
+the last person running its shop) could not delete their account.
+
+**Decision.** An order whose parcels have all ended, at least one delivered
+and the rest returned, is **delivered**. Seller payouts already treated such
+an order as settled when each seller's parcels ended; to change no payout,
+`seller_order_settled_at` keeps deciding per seller for an order that has a
+returned parcel. Existing orders in that state were moved by the migration,
+dated when their last parcel ended. `orderStatusFromShipments` says the same.
+
+**Consequences.**
+
+- Its withdrawal and warranty windows count from when the last parcel ended,
+  never shorter than before.
+- An order none of whose parcels was delivered is still cancelled.
+
+## 33. A fee change pauses offers below the price floor
+
+**Context.** The price floor (a sale must not book more fees than the seller
+is paid) was enforced when a price, package, category or status changed, but
+not when a new fee schedule was switched on.
+
+**Decision.** Switching a schedule on, or changing the active one's payment
+or warehouse fees or a category's commission, rechecks every offer on sale.
+Those below the floor are **paused**, recorded
+(`private.fee_floor_breaches`), listed for finance and catalogue staff (the
+console's "Ofertas en pausa") and their shops are told with the minimum price.
+They are paused rather than left on sale because each sale at a loss leaves
+the seller owing Yuntera money that nothing collects, while a paused offer is
+back on sale the moment its seller sets a price that covers the new fees (the
+floor is checked then, as always).
+
+**Consequences.**
+
+- Shoppers stop seeing those offers until the seller acts.
+- Orders placed before the change are unaffected; a capture after it books
+  the new fees, as before.
+
+## 34. "Refund completed" waits for a recorded confirmation
+
+**Context.** "Refund completed" was announced when a payment was marked
+refunded, which in live mode happens when the refund is booked, before any
+money moves.
+
+**Decision.** A refund is confirmed by a row of its own
+(`private.refund_confirmations`, written once), and only that announces
+`refund.completed`. In sandbox mode, where nothing moves, a refund confirms
+itself when its transaction commits (after its `refund.requested`); one
+settled at the door is confirmed silently; in live mode the payment gateway
+work calls `private.confirm_refund(refund_id, reference)` from its server-side
+handler when the gateway or the bank says the money went out.
+
+**Consequences.**
+
+- Staff-approved return refunds now get a "refund completed" message too.
+- Until the gateway work exists, live-mode refunds are never announced as
+  completed.
