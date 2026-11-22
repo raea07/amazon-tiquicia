@@ -917,7 +917,7 @@ A real place outside the service area (the Costa Rica box of
 **Consequences.**
 
 - The apps get a code they can explain, never a database error.
-- The flag is in the database only: no console screen shows it yet.
+- The flag shows on the console's dispatch board, next to the stop.
 
 ## 31. Offline driver actions keep when they happened, within a day
 
@@ -927,8 +927,13 @@ they arrived, which moved failures and arrivals hours later than they
 happened.
 
 **Decision.** `driver_arrive`, `driver_fail_stop` and `driver_report_position`
-take `p_occurred_at`. It is accepted up to two minutes ahead of the
-database's clock (a phone a little fast counts as now), refused further ahead
+take `p_occurred_at` and `p_sent_at` (the phone's clock when it sends). With
+both, the database records its own now minus the difference, so only how
+long the phone held the action counts and a phone clock that is off by
+minutes or hours does not matter; an action after its own sending is refused
+(`action_time_in_future`). Without `p_sent_at` the time is taken as given: it
+is accepted up to two minutes ahead of the database's clock (a phone a little
+fast counts as now), refused further ahead
 (`action_time_in_future`) or more than a day back (`action_time_too_old`), and
 never earlier than what it follows (the route's start, the arrival). The
 stop's `arrived_at` and `completed_at` and the shopper's timeline hold when it
@@ -936,12 +941,17 @@ happened, which every reader (driver app, dispatch board, promise and seller
 metrics) uses; the time received is kept beside it (`arrived_received_at`,
 `completed_received_at`, `driver_positions.received_at`). An older position
 never overwrites a newer one. The app sends the time the action was queued,
-or for a position the time the phone read it, and keeps stop actions a day.
+or for a position the time the phone read it, and the client adds the
+phone's clock at sending to every such call; it keeps stop actions a day.
+The dispatch board shows when a closing reached the server ten minutes or
+more after it happened, and flags a delivery whose door position lay outside
+the service area (decision 30).
 
 **Consequences.**
 
-- A phone with a clock far ahead cannot record an action until the clock is
-  fixed; the app shows the refusal.
+- A phone's wrong clock does not block its queue. The one thing the phone's
+  clock can still distort is a jump while an action waits (the clock
+  corrected by the network in between); the bounds still apply then.
 - A delivery against the code still needs signal and is stamped by the
   database.
 
@@ -970,11 +980,15 @@ dated when their last parcel ended. `orderStatusFromShipments` says the same.
 is paid) was enforced when a price, package, category or status changed, but
 not when a new fee schedule was switched on.
 
-**Decision.** Switching a schedule on, or changing the active one's payment
-or warehouse fees or a category's commission, rechecks every offer on sale.
+**Decision.** Switching a schedule on, or changing the active one's own
+amounts (default commission, minimum commission per unit, tax on the fees),
+its payment or warehouse fees or a category's commission, rechecks every
+offer on sale.
 Those below the floor are **paused**, recorded
 (`private.fee_floor_breaches`), listed for finance and catalogue staff (the
-console's "Ofertas en pausa") and their shops are told with the minimum price.
+console's "Ofertas en pausa") and their shops are told with the minimum price,
+once per shop and change however many fee tables it touches (the message
+lists the shop's paused offers when it is written).
 They are paused rather than left on sale because each sale at a loss leaves
 the seller owing Yuntera money that nothing collects, while a paused offer is
 back on sale the moment its seller sets a price that covers the new fees (the

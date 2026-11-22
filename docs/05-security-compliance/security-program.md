@@ -333,10 +333,15 @@ evidence are in [access control](../03-data/access-control.md),
   pre-request hook, nor anything a migration can set offers a maximum body
   size, and PostgREST itself has no such setting (it leaves it to the proxy in
   front, which on a hosted project is the platform's, with its own default
-  that is not documented). Why we accept it for now: every call needs the
-  publishable key, the database bounds each input before it locks or prices
-  anything, and the apps' own servers (Vercel functions, with their own body
-  limit) make the calls a shopper's browser triggers. What would close it: a
+  that is not documented). The exposure is real: the publishable key is
+  public by design, and the four native apps call the Data API straight from
+  phones, so anyone can send a large body directly to it, past the web apps'
+  own servers and their body limit. Why we accept it for now: the platform's
+  gateway in front of the API bounds what it forwards with a limit we cannot
+  see or set, the database bounds each input before it locks or prices
+  anything (so a large body costs parsing time, not data or money), and the
+  platform's own rate limiting and the edge firewall to be configured before
+  launch are what limit how often it can be done. What would close it: a
   proxy or edge function of our own in front of the Data API with a body
   limit, or Supabase documenting a setting (ask support before launch).
   Recheck the documentation when the platform's API gateway settings change.

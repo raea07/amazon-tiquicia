@@ -393,6 +393,31 @@ project the grants may have been made by the platform's own role, which
 `postgres` cannot revoke: the migration then prints a notice, and the test
 shows it.
 
+What to check on the hosted project, after applying 083200 and again after
+any upgrade, disable or re-enable of `pg_net` (Supabase's documentation does
+not say whether the platform re-grants on those; its open-source images do
+so with an event trigger, `extensions.grant_pg_net_access`, so assume it
+may):
+
+```sql
+-- all four must be false
+select has_schema_privilege('anon', 'net', 'usage'),
+       has_schema_privilege('authenticated', 'net', 'usage'),
+       has_function_privilege('authenticated', 'net.http_post(text, jsonb, jsonb, jsonb, integer)', 'execute')
+         and has_schema_privilege('authenticated', 'net', 'usage'),
+       has_table_privilege('authenticated', 'net._http_response', 'select');
+-- no row for anon or authenticated
+select p.proname, a.grantee::regrole, a.privilege_type
+from pg_proc p, aclexplode(p.proacl) a
+where p.pronamespace = 'net'::regnamespace and a.grantee in ('anon'::regrole, 'authenticated'::regrole);
+select 1 from pg_event_trigger where evtname = 'issue_pg_net_access';  -- if present, it re-grants on a re-create
+```
+
+The `net_grants` block of `supabase/tests/125_followups.sql` runs the same
+checks and can be run against the hosted database as it is. If a check
+fails, run section 8 of 083200 again (it is idempotent), and confirm that the
+notification worker still wakes (`private.notify_kick` sends one request).
+
 The `private` schema is not exposed by the Data API at all (a hosted project
 exposes `public` and `graphql_public` only). `anon` and `authenticated` have
 `USAGE` on it only so that row-level-security policies can call the yes-or-no

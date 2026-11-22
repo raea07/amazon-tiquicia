@@ -90,6 +90,17 @@ When each event happens:
   `seller.change_decided`, `payout_details.decided`, `payout.paid` and
   `fees.offers_paused` come from the functions of those steps (migration
   083200 added their messages).
+- An invitation is mailed at most once per shop and invited account in 14
+  days (an invitation's life): renewing it, or revoking and sending it again,
+  emits the event each time but plans no second message, so a shop cannot use
+  our sender to flood an account. The invitation still shows in the invited
+  account's seller centre.
+- `fees.offers_paused` is emitted once per shop for one fee change, however
+  many fee tables it touches; the message lists and counts the shop's paused
+  offers when it is written.
+- A message whose variables cannot be worked out is set aside as a dead
+  letter (`render_failed`, "no se pudo preparar el mensaje") instead of
+  stopping the worker's whole batch.
 - The rest come from the care, catalogue and seller-verification screens.
 - `invoice.requested` is for electronic invoicing and sends nothing here.
 
