@@ -1,4 +1,4 @@
-import type { InvoiceRow, InvoiceStatus, OpsInvoices } from "@yuntera/db";
+import type { InvoiceRow, InvoiceStatus, OpsInvoices, OpsInvoicingState } from "@yuntera/db";
 import { ActionForm } from "@yuntera/next-kit/client";
 import {
   INVOICE_KIND,
@@ -66,6 +66,51 @@ export default function InvoicesPage({ searchParams }: PageProps<"/comprobantes"
   );
 }
 
+const payments = (n: number) => (n === 1 ? "1 pago" : `${n} pagos`);
+
+/**
+ * Whether documents are issued here, and what happens to the payments that
+ * wait: one true sentence per state. Simulated money never gets a document
+ * on a real project, so it is never said to wait for one.
+ */
+function InvoicingState({ state }: { state: OpsInvoicingState }) {
+  const simulatedEnds = !state.simulated_documented;
+  const closed = state.closed_simulated;
+  const closing = state.waiting_simulated;
+  return (
+    <>
+      {!state.issuer_ready ? (
+        <Alert tone="warning" title="La facturación electrónica no está configurada">
+          Faltan los datos de inscripción de la empresa en Hacienda. Mientras tanto no se emite
+          ningún comprobante.{" "}
+          {state.waiting_real > 0
+            ? `${payments(state.waiting_real)} con dinero real ${state.waiting_real === 1 ? "espera y se emitirá" : "esperan y se emitirán"} en orden cuando quede configurada.`
+            : "Ningún pago con dinero real espera comprobante."}
+        </Alert>
+      ) : null}
+      {simulatedEnds && (state.payments_mode === "sandbox" || closed + closing > 0) ? (
+        <Alert tone="info" title="Los pagos simulados no reciben comprobante">
+          {state.payments_mode === "sandbox"
+            ? "Este ambiente simula los pagos: ningún pedido pagado aquí es dinero real, así que nunca recibe comprobante ni se envía a Hacienda."
+            : "Los pagos simulados (sin dinero real) nunca reciben comprobante ni se envían a Hacienda."}{" "}
+          {closed > 0
+            ? `${payments(closed)} simulado${closed === 1 ? " se cerró" : "s se cerraron"} sin comprobante.`
+            : null}{" "}
+          {closing > 0
+            ? `${payments(closing)} simulado${closing === 1 ? " se cerrará" : "s se cerrarán"} sin comprobante en la próxima revisión.`
+            : null}
+        </Alert>
+      ) : null}
+      {state.simulated_documented ? (
+        <Alert tone="info" title="Ensayo: los pagos simulados también reciben comprobante">
+          Este ambiente emite comprobantes también para pagos sin dinero real, para ensayar con el
+          ambiente de pruebas de Hacienda. En un proyecto real esta opción debe estar apagada.
+        </Alert>
+      ) : null}
+    </>
+  );
+}
+
 function Row({ row, children }: { row: InvoiceRow; children?: ReactNode }) {
   return (
     <li className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 text-sm">
@@ -94,7 +139,11 @@ async function Invoices({ searchParams }: Pick<PageProps<"/comprobantes">, "sear
   await requireStaff("/comprobantes", ["finance"]);
   const query = await searchParams;
   const status = STATUSES.find((candidate) => candidate === one(query.estado)) ?? null;
-  const data: OpsInvoices = await (await sessionApi()).opsInvoices(status, 50);
+  const api = await sessionApi();
+  const [data, state]: [OpsInvoices, OpsInvoicingState] = await Promise.all([
+    api.opsInvoices(status, 50),
+    api.opsInvoicingState(),
+  ]);
   const certificateDays = data.worker?.certificate_not_after
     ? Math.floor((new Date(data.worker.certificate_not_after).getTime() - Date.now()) / 86_400_000)
     : null;
@@ -102,12 +151,7 @@ async function Invoices({ searchParams }: Pick<PageProps<"/comprobantes">, "sear
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-2">
-        {!data.issuer_ready ? (
-          <Alert tone="warning" title="La facturación electrónica no está configurada">
-            Faltan los datos de inscripción de la empresa en Hacienda. Mientras tanto no se emite
-            ningún comprobante: los pagos esperan y se emitirán en orden cuando quede configurada.
-          </Alert>
-        ) : null}
+        <InvoicingState state={state} />
         {data.paused_until ? (
           <Alert tone="danger" title="Envíos a Hacienda en pausa">
             Hacienda rechazó la configuración o las credenciales del API. No se envía nada hasta las{" "}

@@ -1,9 +1,40 @@
-import type { InvoiceRow } from "@yuntera/db";
+import type { InvoiceRow, OrderInvoicing } from "@yuntera/db";
 import { INVOICE_KIND, InvoiceStatusBadge, invoiceTitle } from "@yuntera/next-kit/fiscal-document";
 import { formatDateTime, formatPrice } from "@yuntera/ui";
 import type { Route } from "next";
 import Link from "next/link";
 import { sessionApi } from "@/lib/supabase";
+
+/**
+ * Why an order shows no document of Yuntera's yet, in one true sentence:
+ * nothing of Yuntera's to document, money that was never real, the issuer not
+ * set up yet, or the document on its way (a factura when the shopper asked for
+ * one, a tiquete otherwise).
+ */
+function whyNoDocument(facts: OrderInvoicing, shippingMinor: number): string {
+  if (shippingMinor === 0) {
+    return "Este pedido no tuvo costo de entrega, así que Yuntera no le emite ningún comprobante.";
+  }
+  if (!facts.delivery_by_platform) {
+    return "El comprobante por la entrega a domicilio lo emite el vendedor, no Yuntera.";
+  }
+  if (!facts.documented) {
+    return facts.paid
+      ? "Este pedido se pagó en modo de prueba, sin dinero real, así que no se emite ningún comprobante electrónico."
+      : "Este pedido es de prueba: se paga sin dinero real, así que no se emite ningún comprobante electrónico.";
+  }
+  const document = facts.factura_requested
+    ? "la factura electrónica a su nombre"
+    : "el tiquete electrónico";
+  if (!facts.issuer_ready) {
+    return facts.paid
+      ? `Yuntera todavía no emite comprobantes electrónicos. Le emitiremos ${document} por la entrega a domicilio en cuanto quede habilitado, y aparecerá aquí.`
+      : `Yuntera todavía no emite comprobantes electrónicos. Cuando pague al recibir el pedido, le emitiremos ${document} por la entrega a domicilio en cuanto quede habilitado, y aparecerá aquí.`;
+  }
+  return facts.paid
+    ? `${document.charAt(0).toUpperCase()}${document.slice(1)} por la entrega a domicilio estará aquí en unos minutos.`
+    : `Le emitiremos ${document} por la entrega a domicilio cuando pague al recibir el pedido. Aparecerá aquí.`;
+}
 
 /**
  * The electronic documents Yuntera issued to the shopper for an order: the
@@ -23,7 +54,11 @@ export async function OrderInvoices({
   payOnDelivery: boolean;
   shippingMinor: number;
 }) {
-  const invoices: InvoiceRow[] = await (await sessionApi()).myOrderInvoices(orderNumber);
+  const api = await sessionApi();
+  const [invoices, facts]: [InvoiceRow[], OrderInvoicing] = await Promise.all([
+    api.myOrderInvoices(orderNumber),
+    api.myOrderInvoicing(orderNumber),
+  ]);
   if (invoices.length === 0 && !paid && !(payOnDelivery && shippingMinor > 0)) return null;
 
   return (
@@ -32,13 +67,7 @@ export async function OrderInvoices({
         Comprobantes electrónicos
       </h2>
       {invoices.length === 0 ? (
-        <p className="mt-2 text-sm text-ink-muted">
-          {shippingMinor === 0
-            ? "Este pedido no tuvo costo de entrega, así que Yuntera no le emite comprobante."
-            : paid
-              ? "Su comprobante por la entrega a domicilio estará aquí en unos minutos."
-              : "Le emitiremos el comprobante por la entrega a domicilio cuando pague al recibir el pedido. Aparecerá aquí."}
-        </p>
+        <p className="mt-2 text-sm text-ink-muted">{whyNoDocument(facts, shippingMinor)}</p>
       ) : (
         <ul className="mt-3 flex flex-col gap-3">
           {invoices.map((invoice) => (
@@ -78,8 +107,8 @@ export async function OrderInvoices({
         </ul>
       )}
       <p className="mt-3 text-xs text-ink-muted">
-        Yuntera le emite el comprobante por la entrega. Los productos los factura cada vendedor con
-        su propio sistema de facturación electrónica.
+        {invoices.length > 0 ? "Yuntera le emite el comprobante por la entrega. " : ""}
+        Los productos los factura cada vendedor con su propio sistema de facturación electrónica.
       </p>
     </section>
   );
