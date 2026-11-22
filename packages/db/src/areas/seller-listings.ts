@@ -264,6 +264,7 @@ export const publicShop = z.object({
       in_stock_price_minor: money.nullable(),
       price_minor: money,
       in_stock: z.boolean(),
+      fulfilled_by_platform: z.boolean(),
       rating_sum: z.number().int(),
       rating_count: z.number().int(),
     }),

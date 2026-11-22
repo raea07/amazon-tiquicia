@@ -1868,6 +1868,10 @@ as $$
                min(o.price_minor) filter (where o.available_quantity > 0) as in_stock_price_minor,
                min(o.price_minor) as price_minor,
                bool_or(o.available_quantity > 0) as in_stock,
+               -- Whether the offer shown (in stock first) ships from a Yuntera warehouse.
+               (array_agg(o.fulfillment = 'platform'
+                          order by (o.available_quantity > 0) desc, o.price_minor))[1]
+                 as fulfilled_by_platform,
                p.rating_sum, p.rating_count
         from public.offers o
         join public.skus k on k.id = o.sku_id and k.active
