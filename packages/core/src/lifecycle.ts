@@ -103,11 +103,14 @@ export function orderStatusFromShipments(
   if (live.length === 0) return current;
 
   const delivered = live.filter((s) => s === "delivered").length;
+  // Every parcel has ended: delivered, or back at the warehouse undelivered.
+  // With at least one delivered, nothing more can happen to the order.
+  const ended = live.filter((s) => s === "delivered" || s === "returned").length;
   const dispatched = live.filter((s) =>
     ["out_for_delivery", "delivered", "delivery_failed", "returning", "returned"].includes(s),
   ).length;
 
-  if (delivered === live.length) return "delivered";
+  if (delivered > 0 && ended === live.length) return "delivered";
   if (dispatched === live.length) return "shipped";
   if (dispatched > 0) return "partially_shipped";
   if (live.some((s) => s !== "pending")) return "processing";

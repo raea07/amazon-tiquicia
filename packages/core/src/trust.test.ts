@@ -317,6 +317,15 @@ describe("order lifecycle", () => {
     );
     expect(orderStatusFromShipments("shipped", ["delivered", "delivered"])).toBe("delivered");
     expect(orderStatusFromShipments("shipped", ["delivered", "cancelled"])).toBe("delivered");
+    // One parcel delivered, the other back at the warehouse: the order has ended
+    // (supabase/migrations/20261121083200_followups.sql, private.sync_order_status).
+    expect(orderStatusFromShipments("shipped", ["delivered", "returned"])).toBe("delivered");
+    expect(orderStatusFromShipments("partially_shipped", ["returned", "delivered"])).toBe(
+      "delivered",
+    );
+    // Nothing delivered yet, or a parcel still on its way: not over.
+    expect(orderStatusFromShipments("shipped", ["returned", "returned"])).toBe("shipped");
+    expect(orderStatusFromShipments("shipped", ["delivered", "returning"])).toBe("shipped");
   });
 
   it("never overrides payment-owned or final statuses", () => {

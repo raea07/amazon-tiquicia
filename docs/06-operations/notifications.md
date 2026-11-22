@@ -28,34 +28,44 @@ mailbox, not to each person.
 
 <!-- BEGIN notification-table -->
 
-| Event                       | Template                    | Who                    | Channels                           |
-| --------------------------- | --------------------------- | ---------------------- | ---------------------------------- |
-| `order.placed`              | `order_placed`              | shopper                | `email`, `push`, `whatsapp`        |
-| `order.placed`              | `staff_payment_to_confirm`  | finance team           | `email`                            |
-| `payment.captured`          | `payment_received`          | shopper                | `email`, `push`                    |
-| `order.released`            | `seller_new_order`          | each shop in the order | `email`, `whatsapp`, `push`        |
-| `order.cancelled`           | `order_cancelled`           | shopper                | `email`, `push`                    |
-| `order.cancelled`           | `seller_order_cancelled`    | each shop in the order | `email`, `push`                    |
-| `refund.requested`          | `refund_initiated`          | shopper                | `email`                            |
-| `refund.completed`          | `refund_completed`          | shopper                | `email`, `push`                    |
-| `shipment.scheduled`        | `shipment_scheduled`        | shopper                | `email`, `push`                    |
-| `shipment.out_for_delivery` | `shipment_out_for_delivery` | shopper                | `push`, `whatsapp`, `email`, `sms` |
-| `shipment.delivered`        | `shipment_delivered`        | shopper                | `email`, `push`                    |
-| `shipment.delivery_failed`  | `shipment_delivery_failed`  | shopper                | `push`, `whatsapp`, `email`, `sms` |
-| `shipment.delivery_failed`  | `staff_delivery_failed`     | operations team        | `email`                            |
-| `return.requested`          | `return_received`           | shopper                | `email`                            |
-| `return.requested`          | `staff_return_requested`    | care team              | `email`                            |
-| `return.decided`            | `return_approved`           | shopper                | `email`, `push`                    |
-| `return.decided`            | `return_rejected`           | shopper                | `email`, `push`                    |
-| `complaint.filed`           | `complaint_received`        | shopper                | `email`                            |
-| `complaint.filed`           | `staff_complaint_filed`     | care team              | `email`                            |
-| `complaint.answered`        | `complaint_answered`        | shopper                | `email`                            |
-| `content.reported`          | `staff_content_reported`    | trust team             | `email`                            |
-| `report.resolved`           | `report_resolved`           | whoever reported it    | `email`                            |
-| `product.reviewed`          | `seller_listing_approved`   | the listing's shop     | `email`, `push`                    |
-| `product.reviewed`          | `seller_listing_rejected`   | the listing's shop     | `email`, `push`                    |
-| `seller.status_changed`     | `seller_account_status`     | the shop               | `email`                            |
-| `route.assigned`            | `driver_route_assigned`     | the driver             | `push`                             |
+| Event                       | Template                        | Who                    | Channels                           |
+| --------------------------- | ------------------------------- | ---------------------- | ---------------------------------- |
+| `order.placed`              | `order_placed`                  | shopper                | `email`, `push`, `whatsapp`        |
+| `order.placed`              | `staff_payment_to_confirm`      | finance team           | `email`                            |
+| `payment.captured`          | `payment_received`              | shopper                | `email`, `push`                    |
+| `order.released`            | `seller_new_order`              | each shop in the order | `email`, `whatsapp`, `push`        |
+| `order.cancelled`           | `order_cancelled`               | shopper                | `email`, `push`                    |
+| `order.cancelled`           | `seller_order_cancelled`        | each shop in the order | `email`, `push`                    |
+| `refund.requested`          | `refund_initiated`              | shopper                | `email`                            |
+| `refund.completed`          | `refund_completed`              | shopper                | `email`, `push`                    |
+| `shipment.scheduled`        | `shipment_scheduled`            | shopper                | `email`, `push`                    |
+| `shipment.out_for_delivery` | `shipment_out_for_delivery`     | shopper                | `push`, `whatsapp`, `email`, `sms` |
+| `shipment.delivered`        | `shipment_delivered`            | shopper                | `email`, `push`                    |
+| `shipment.delivery_failed`  | `shipment_delivery_failed`      | shopper                | `push`, `whatsapp`, `email`, `sms` |
+| `shipment.delivery_failed`  | `staff_delivery_failed`         | operations team        | `email`                            |
+| `return.requested`          | `return_received`               | shopper                | `email`                            |
+| `return.requested`          | `return_approved`               | shopper                | `email`                            |
+| `return.requested`          | `staff_return_requested`        | care team              | `email`                            |
+| `return.decided`            | `return_approved`               | shopper                | `email`, `push`                    |
+| `return.decided`            | `return_rejected`               | shopper                | `email`, `push`                    |
+| `return.received`           | `return_goods_received`         | shopper                | `email`, `push`                    |
+| `delivery_code.locked`      | `delivery_code_locked`          | shopper                | `email`, `push`                    |
+| `delivery_code.locked`      | `staff_delivery_code_locked`    | care team              | `email`                            |
+| `delivery_code.released`    | `delivery_code_released`        | shopper                | `email`, `push`                    |
+| `complaint.filed`           | `complaint_received`            | shopper                | `email`                            |
+| `complaint.filed`           | `staff_complaint_filed`         | care team              | `email`                            |
+| `complaint.answered`        | `complaint_answered`            | shopper                | `email`                            |
+| `content.reported`          | `staff_content_reported`        | trust team             | `email`                            |
+| `report.resolved`           | `report_resolved`               | whoever reported it    | `email`                            |
+| `product.reviewed`          | `seller_listing_approved`       | the listing's shop     | `email`, `push`                    |
+| `product.reviewed`          | `seller_listing_rejected`       | the listing's shop     | `email`, `push`                    |
+| `seller.status_changed`     | `seller_account_status`         | the shop               | `email`                            |
+| `seller.member_invited`     | `seller_invitation`             | the invited account    | `email`, `push`                    |
+| `seller.change_decided`     | `seller_change_decided`         | the shop               | `email`, `push`                    |
+| `payout_details.decided`    | `seller_payout_account_decided` | the shop               | `email`, `push`                    |
+| `payout.paid`               | `seller_payout_paid`            | the shop               | `email`, `push`                    |
+| `fees.offers_paused`        | `seller_offers_paused_fees`     | the shop               | `email`, `push`                    |
+| `route.assigned`            | `driver_route_assigned`         | the driver             | `push`                             |
 
 <!-- END notification-table -->
 

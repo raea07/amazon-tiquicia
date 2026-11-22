@@ -13,6 +13,7 @@
  */
 
 import * as account from "./account";
+import { followupsApi, followupsErrors } from "./followups";
 import { integrityApi, integrityErrors } from "./integrity";
 import { limitsApi, limitsErrors } from "./limits";
 import { listingsApi, listingsErrors } from "./listings";
@@ -21,7 +22,7 @@ import * as peoplePayouts from "./people-payouts";
 import { photosApi, photosErrors } from "./photos";
 import type { Caller, Messages } from "./types";
 
-// The listings, integrity and limits areas name their exports uniquely, so
+// The listings, integrity, limits and followups areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
 // would clash with each other, so their schemas and types are re-exported by
 // name.
@@ -48,6 +49,7 @@ export {
   staffSecurityRow,
   waitText,
 } from "./account";
+export * from "./followups";
 export * from "./integrity";
 export * from "./limits";
 export * from "./listings";
@@ -88,6 +90,7 @@ export const areaErrors = {
   ...photosErrors,
   ...integrityErrors,
   ...limitsErrors,
+  ...followupsErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -98,4 +101,6 @@ export const areaApi = (caller: Caller) => ({
   ...photosApi(caller),
   ...integrityApi(caller),
   ...limitsApi(caller),
+  // Last: some of its methods replace core ones (see followups.ts).
+  ...followupsApi(caller),
 });
