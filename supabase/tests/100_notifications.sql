@@ -172,6 +172,25 @@ $$;
 
 select pg_temp.login_worker();
 select set_config('t.planned', public.worker_notify_plan(1000)::text, true);
+reset role;
+-- An event that cannot be planned stays pending with its error, to be tried
+-- again (five times, then dead). None of the seed's may be among them; on a
+-- used database another may be (one whose subject a test deleted), and the
+-- second run tries only those again.
+create temporary table failed_once on commit drop as
+select j.event_id, e.topic, j.last_error from private.outbox_jobs j
+join private.outbox_events e on e.id = j.event_id
+where j.consumer = 'notify' and j.status = 'pending';
+do $$
+declare
+  r record;
+begin
+  for r in select * from failed_once loop
+    raise notice 'event % (%) could not be planned: %', r.event_id, r.topic, r.last_error;
+  end loop;
+end
+$$;
+select pg_temp.login_worker();
 select set_config('t.planned_again', public.worker_notify_plan(1000)::text, true);
 reset role;
 
@@ -181,8 +200,13 @@ declare
   e private.outbox_events;
 begin
   assert current_setting('t.planned')::integer > 50, 'first run plans the pending events';
-  assert current_setting('t.planned_again')::integer = 0, 'second run finds nothing';
-  assert not exists (select 1 from private.outbox_jobs where consumer = 'notify' and status <> 'done'),
+  assert not exists (select 1 from failed_once f join seed_events s on s.id = f.event_id),
+    'every seed event is planned';
+  assert not exists (select 1 from failed_once where last_error is null), 'a job left pending says why';
+  assert current_setting('t.planned_again')::integer = (select count(*) from failed_once),
+    'second run finds nothing new: it only tries again what failed';
+  assert not exists (select 1 from private.outbox_jobs j where j.consumer = 'notify' and j.status <> 'done'
+                     and j.event_id not in (select event_id from failed_once)),
     'every job is done';
   assert v_rows > 50, format('deliveries: %s', v_rows);
   -- Planning the same event again, by any route, adds nothing.
@@ -821,7 +845,10 @@ $$;
 reset role;
 do $$
 begin
-  assert (select actor_id from private.commercial_consent_log where seller_id = current_setting('t.tecnocasa')::uuid)
+  -- The log is never erased: only the row this suite wrote counts.
+  assert (select actor_id from private.commercial_consent_log
+          where seller_id = current_setting('t.tecnocasa')::uuid
+            and id > current_setting('t.consent_log_last')::bigint)
          = (select id from auth.users where email = 'vendedor@yuntera.example'), 'who gave it for the shop';
 end
 $$;
@@ -1277,6 +1304,9 @@ begin
     -- Messages already waiting (a used database's) would hold the suite's
     -- behind them, in their order: set aside until the copies put them back.
     update private.notification_deliveries set status = 'skipped' where status in ('pending', 'sending');
+    -- So would events already waiting to be planned (one that keeps failing
+    -- is tried again by every run): set aside too, put back the same way.
+    update private.outbox_jobs set status = 'done' where consumer = 'notify' and status = 'pending';
     -- And the demo accounts' message choices as the seed leaves them (none),
     -- also put back at the end.
     create table private.t100_preferences as select * from private.notification_preferences;
@@ -1334,9 +1364,14 @@ begin
   -- A batch of ten, of which those that turn out to have no way to reach
   -- anyone (a team without a mailbox, on a used database's choices) are
   -- skipped instead of handed out; on a fresh seed all ten are handed out.
+  -- Fewer than ten only when the claim skipped as many of the suite's own.
   assert (select count(*) from claims where worker = 'a') = 10
       or ((select count(*) from claims where worker = 'a') between 1 and 9
-          and (select n from dblink('admin', $q$select count(*) from private.t100_deliveries$q$) as t (n bigint)) > 0),
+          and (select count(*) from claims where worker = 'a')
+              + (select n from dblink('admin', $q$select count(*) from private.notification_deliveries d
+                                            join private.outbox_events e on e.id = d.event_id
+                                            where e.payload ? 't100' and d.status = 'skipped'$q$) as t (n bigint))
+              >= 10),
     'first worker claimed a batch';
   assert (select count(*) from claims where worker = 'b') > 0, 'second worker claimed another batch while the first held its own';
   assert not exists (select id from claims where worker = 'a' intersect select id from claims where worker = 'b'),

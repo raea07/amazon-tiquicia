@@ -15,7 +15,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { type Claims, callRpc } from "@yuntera/dev-api/rpc";
 import pg from "pg";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { type Api, createApi } from "./api";
 
 const shared = process.env.DATABASE_URL;
@@ -196,6 +196,14 @@ async function succeeded(orderId: string, eventId: string) {
 }
 
 const EVENT = "select public.worker_payments_event($1::jsonb) as r";
+
+/**
+ * Each race opens two sessions, waits up to five seconds for the second to be
+ * blocked (`blocked`) and does its own setup through the API: on a loaded
+ * 4-CPU machine that takes longer than vitest's 5 s default. The timeout only
+ * lets a slow machine finish; what each test proves is unchanged.
+ */
+vi.setConfig({ testTimeout: 60_000 });
 
 describe.skipIf(!shared)("payments: payloads and races", () => {
   beforeAll(async () => {

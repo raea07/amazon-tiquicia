@@ -4,7 +4,7 @@
 # return orders, file reports and delete accounts, and which was seeded
 # before invoicing existed. Runs on a lane's own local database only.
 #
-#   used-db-check.sh <lane> [prepare|imitate|check|all|quick]   (default: all)
+#   used-db-check.sh <lane> [prepare|imitate|check|all|quick|cleanup]   (default: all)
 #
 #   prepare  tools/dev/stack.sh up <lane> (which resets the lane's database),
 #            the browser journeys against it WITHOUT a reset between them
@@ -26,6 +26,15 @@
 #            in a copy, and requires the run to fail.
 #   quick    a fresh seed instead of the journeys (local-db.sh reset), then
 #            imitate and check: what CI runs, in a minute, without the apps.
+#   cleanup  undoes imitate's cluster-wide part: the role below is dropped.
+#
+# imitate creates a role on the whole PostgreSQL server, not only in the
+# lane's database: yuntera_lane<N>_platform. `all` and `quick` remove it when
+# they end, passed, failed or interrupted (cleanup): the grants it made on
+# schema net are taken back, what it owns goes back to the role this script
+# connects as, and the role is dropped, so the lane's database is as the
+# migrations left it there and nothing stays on the server. `imitate` alone
+# keeps it for a later `check`; run `cleanup` after that.
 #
 # Lanes 1 to 19 only (database yuntera_lane<N>, from tools/dev/stack.sh);
 # lane 0, any other database name and any server not on this machine are
@@ -36,10 +45,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LANE="${1:-}"
 STEP="${2:-all}"
 [[ "$LANE" =~ ^(1[0-9]|[1-9])$ ]] || {
-  echo "Refusing: give a lane from 1 to 19 (never 0): $0 <lane> [prepare|imitate|check|all|quick]" >&2
+  echo "Refusing: give a lane from 1 to 19 (never 0): $0 <lane> [prepare|imitate|check|all|quick|cleanup]" >&2
   exit 2
 }
-case "$STEP" in prepare | imitate | check | all | quick) ;; *) echo "Unknown step: $STEP" >&2; exit 2 ;; esac
+case "$STEP" in prepare | imitate | check | all | quick | cleanup) ;; *) echo "Unknown step: $STEP" >&2; exit 2 ;; esac
 
 eval "$("$ROOT/tools/dev/stack.sh" env "$LANE")"
 EXPECTED="yuntera_lane${LANE}"
@@ -112,6 +121,49 @@ SQL
   echo "used-db: made to look like the preview (seeded before invoicing, issuer not set up, net granted by $PLATFORM_ROLE)"
 }
 
+# Takes back what imitate did on the server: the platform role's grants on
+# schema net (so the suites' full net check holds again on this database),
+# its ownership (back to the role this script connects as, which created
+# those objects through the shim), then the role itself. A role that still
+# owns something in another database is reported and kept, never forced.
+cleanup() {
+  local exists
+  exists="$(sql -t -A -c "select 1 from pg_roles where rolname = '$PLATFORM_ROLE'")"
+  [ -n "$exists" ] || return 0
+  if sql <<SQL
+begin;
+do \$\$
+begin
+  if exists (select 1 from pg_namespace where nspname = 'net'
+             and nspowner = (select oid from pg_roles where rolname = '$PLATFORM_ROLE')) then
+    set local role $PLATFORM_ROLE;
+    revoke usage on schema net from public, anon, authenticated;
+    revoke all on all tables in schema net from public;
+    reset role;
+  end if;
+end
+\$\$;
+reassign owned by $PLATFORM_ROLE to current_user;
+drop owned by $PLATFORM_ROLE;
+drop role $PLATFORM_ROLE;
+commit;
+SQL
+  then
+    echo "used-db: removed $PLATFORM_ROLE from the server; schema net is owned and granted as the migrations left it"
+  else
+    echo "used-db: could not remove $PLATFORM_ROLE (it may own objects in another database); remove it by hand" >&2
+    return 1
+  fi
+}
+
+# On the way out of `all` and `quick`, whatever happened: the role goes, and
+# a failure to remove it fails the run.
+finish() {
+  local status=$?
+  cleanup || status=1
+  exit "$status"
+}
+
 # Every table's row count, one "schema.table count" line each.
 counts() {
   sql -t -A -F ' ' -c "
@@ -177,8 +229,10 @@ case "$STEP" in
   prepare) prepare ;;
   imitate) imitate ;;
   check) check ;;
-  all) prepare; imitate; check ;;
-  quick) bash "$ROOT/supabase/scripts/local-db.sh" reset > "$STATE/reset.log" 2>&1 || {
+  cleanup) cleanup ;;
+  all) trap finish EXIT; prepare; imitate; check ;;
+  quick) trap finish EXIT
+         bash "$ROOT/supabase/scripts/local-db.sh" reset > "$STATE/reset.log" 2>&1 || {
            cat "$STATE/reset.log" >&2; exit 1; }
          imitate; check ;;
 esac

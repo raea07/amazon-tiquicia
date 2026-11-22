@@ -101,6 +101,22 @@ select pg_temp.remember('central', (select id::text from auth.users where email 
 select pg_temp.remember('tecnocasa', (select id::text from public.sellers where slug = 'tecnocasa'));
 select pg_temp.remember('licuadora', (select id::text from public.products where slug = 'licuadora-volcan-600w'));
 select pg_temp.remember('hamaca', (select id::text from public.products where slug = 'hamaca-algodon-doble'));
+-- The sections below rename, hide and take down the hamaca's category and the
+-- hamaca itself, starting from the seed's state: on sale. On a used database
+-- staff may have taken it down since; for this transaction, which rolls back,
+-- it is on sale again as it was reviewed.
+update public.products
+set status = 'active', rejection_reason = null, taken_down_at = null, taken_down_by = null,
+    taken_down_fingerprint = null
+where id = current_setting('t.hamaca')::uuid and status <> 'active';
+-- Every category shows, as in the seed: the sections below hide and show
+-- some, and the console journey hides one and shows it again, which a run
+-- stopped half-way may not have done.
+update public.categories set active = true where not active;
+do $$ begin
+  assert (select status = 'active' and min_price_minor is not null from public.products
+          where id = current_setting('t.hamaca')::uuid), 'fixture: the hamaca is on sale';
+end $$;
 select pg_temp.remember('molido', (select id::text from public.products where slug = 'cafe-molido-tarrazu-340g'));
 select pg_temp.remember('review', (
   select r.id::text from public.reviews r
