@@ -551,6 +551,39 @@ $$;
 
 -- Every row of every table in the schemas the platform owns that still holds
 -- any of the given pieces of a person, as "schema.table: piece".
+-- On a used database someone else may have typed the same text as one of
+-- the person's details (the journeys type the seed shop owner's ID number as
+-- a shopper's factura receiver; on the preview anyone may). Before the
+-- deletion, others_rows() notes each row that holds a piece and belongs to
+-- another account: it names an existing account's id and not the person's.
+-- leftovers() then leaves exactly those rows out. On a fresh seed no such row
+-- exists (every piece is the person's alone), so the search is as before.
+create temporary table t095_others (relation text, row_hash text) on commit drop;
+create function pg_temp.others_rows(p_needles jsonb, p_person uuid) returns void
+language plpgsql as $$
+declare
+  v_table record;
+  v_needle text;
+begin
+  for v_needle in select jsonb_array_elements_text(p_needles) loop
+    for v_table in
+      select n.nspname, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where c.relkind = 'r' and n.nspname in ('public', 'private', 'auth')
+    loop
+      execute format($q$
+        insert into t095_others
+        select %L, md5(t::text) from %I.%I t
+        where t::text ilike %L and t::text not ilike %L
+          and exists (select 1 from regexp_matches(t::text,
+                        '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', 'g') m
+                      join auth.users u on u.id = m[1]::uuid)$q$,
+        format('%I.%I', v_table.nspname, v_table.relname), v_table.nspname, v_table.relname,
+        '%' || v_needle || '%', '%' || p_person || '%');
+    end loop;
+  end loop;
+end;
+$$;
+
 create function pg_temp.leftovers(p_needles jsonb) returns text
 language plpgsql as $$
 declare
@@ -564,8 +597,10 @@ begin
       select n.nspname, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where c.relkind = 'r' and n.nspname in ('public', 'private', 'auth')
     loop
-      execute format('select count(*) from %I.%I t where t::text ilike %L',
-                     v_table.nspname, v_table.relname, '%' || v_needle || '%')
+      execute format('select count(*) from %I.%I t where t::text ilike %L
+                        and md5(t::text) not in (select row_hash from t095_others where relation = %L)',
+                     v_table.nspname, v_table.relname, '%' || v_needle || '%',
+                     format('%I.%I', v_table.nspname, v_table.relname))
         into v_found;
       if v_found > 0 then
         v_where := v_where || format('%s.%s: %s', v_table.nspname, v_table.relname, v_needle);
@@ -964,6 +999,7 @@ select pg_temp.remember('orders_before', (
 select pg_temp.remember('reviews_before', (
   select count(*)::text from public.reviews where user_id = current_setting('t.gone')::uuid));
 select pg_temp.remember('deletions_before', (select count(*)::text from private.account_deletions));
+select pg_temp.others_rows(current_setting('t.needles')::jsonb, current_setting('t.gone')::uuid);
 
 -- The account now has a factor, so the deletion needs a session that passed it.
 select pg_temp.login('comprador2@yuntera.example', 'aal2');
@@ -1198,6 +1234,7 @@ select pg_temp.remember('driver_needles', (
   from public.drivers d join auth.users u on u.id = d.user_id
   where u.email = 'repartidor2@yuntera.example'));
 select pg_temp.remember('driver_user', (select id::text from auth.users where email = 'repartidor2@yuntera.example'));
+select pg_temp.others_rows(current_setting('t.driver_needles')::jsonb, current_setting('t.driver_user')::uuid);
 select pg_temp.login('central@yuntera.example', 'aal2');
 select public.ops_set_driver_status(
   (select d.id from public.drivers d where d.user_id = current_setting('t.driver_user')::uuid), 'offboarded');
@@ -1233,6 +1270,8 @@ select pg_temp.remember('bazar_needles', (
                            'bazar@yuntera.example', 'Laura sonriendo en su puesto del bazar',
                            'laura.bazar@correo.example', '+50688112233', 'socia.bazar@correo.example')::text
   from public.seller_private sp where sp.seller_id = current_setting('t.bazar_shop')::uuid));
+select pg_temp.others_rows(current_setting('t.bazar_needles')::jsonb,
+                           (select id from auth.users where email = 'bazar@yuntera.example'));
 -- She also invited a partner to the team and asked to change the shop's
 -- contact to her own address and phone (20261121083000_limits.sql).
 select pg_temp.login('bazar@yuntera.example', 'aal1');

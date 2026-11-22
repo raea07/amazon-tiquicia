@@ -344,7 +344,10 @@ begin
   assert not exists (select 1 from new_docs e join public.seller_private p on p.seller_id = e.receiver_seller_id
                      where e.kind = 'fees' and (e.receiver ->> 'id_number' <> p.id_number
                        or e.receiver ->> 'id_type' <> private.invoice_id_code(p.id_type)
-                       or e.receiver ->> 'name' <> p.legal_name)), 'the seller''s registered identification';
+                       -- the legal name as the writer takes it: control characters out, at most
+                       -- 100 characters (a shop may register up to 160; the journeys do)
+                       or e.receiver ->> 'name' <> private.invoice_clean_text(p.legal_name, 100))),
+    'the seller''s registered identification';
   assert not exists (select 1 from new_docs where document_type = '04' and receiver is not null),
     'a tiquete to an anonymous final consumer has no receiver';
 end
