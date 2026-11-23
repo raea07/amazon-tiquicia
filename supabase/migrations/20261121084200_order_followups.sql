@@ -402,7 +402,7 @@ begin
   insert into public.order_events (order_id, shipment_id, kind, note, actor_id)
   values (v_order.id, p_shipment_id, 'note',
           case when v_ship.recalled_at is not null and private.shipment_never_left(p_shipment_id)
-               then 'Su paquete volvió a nuestros estantes sin salir de la bodega'
+               then 'Su paquete no llegó a salir de nuestra bodega'
                else 'Su paquete regresó a nuestra bodega sin entregarse' end
           || case when v_refund is null then ''
                   else '; le devolvemos lo que pagó por él: '

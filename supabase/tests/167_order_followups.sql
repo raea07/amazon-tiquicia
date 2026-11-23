@@ -461,9 +461,12 @@ begin
                               || ': no llegamos a intentar la entrega'),
     'fee: the order page says the fee comes back';
   assert exists (select 1 from public.order_events e where e.order_id = o.id and e.visible_to_customer
-                 and e.note = 'Su paquete volvió a nuestros estantes sin salir de la bodega; le devolvemos lo que pagó por él: '
+                 and e.note = 'Su paquete no llegó a salir de nuestra bodega; le devolvemos lo que pagó por él: '
                               || private.colones(o.items_total_minor)),
     'fee: and the goods'' amount, for a parcel that never left';
+  -- Its units went to the returns area, not back to the shelves.
+  assert not exists (select 1 from public.order_events e where e.order_id = o.id and e.note ilike '%estante%'),
+    'fee: the note does not say the units went back to the shelves';
   assert exists (select 1 from private.outbox_events e where e.id > current_setting('t.events_from')::bigint
                  and e.topic = 'order.cancelled' and e.payload ->> 'order_id' = o.id::text
                  and (e.payload ->> 'amount_minor')::bigint = o.total_minor),
@@ -644,7 +647,7 @@ begin
   assert exists (select 1 from public.order_events e where e.order_id = s.order_id and e.visible_to_customer
                  and e.note like 'Su paquete regresó a nuestra bodega sin entregarse%')
          and not exists (select 1 from public.order_events e where e.order_id = s.order_id
-                         and e.note like '%sin salir de la bodega%'),
+                         and e.note like '%no llegó a salir%'),
     'fee: K''s note does not say it never left';
 end
 $$;
