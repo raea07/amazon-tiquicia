@@ -1302,6 +1302,27 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     before and after the first fix round; the race is older than wave 7). The second release now waits for the first on the shop's
     stock row and counts its task; a two-session contract test proves the
     wait. Not measured again over many rounds.
+  - That wait gave a payment confirmation two new partners for a deadlock,
+    found by a third review: the unpaid-order sweep (every five minutes; a
+    review measured 67 deadlocks in 100 rounds, the confirmation always the
+    loser) and packing an order that holds one product from two shops (10 in
+    100). Both took stock rows in another order. The sweep now takes the
+    stock rows of every order it cancels first, and packing and
+    cancellations sort by product, shop and warehouse, as checkout and the
+    release do (in 084300). `contract.stock-lock-order-races` makes each
+    race happen with a third session and fails without the fix. The same
+    change ends the older, rarer deadlock of the sweep against a checkout.
+    Checkout, packing, cancellations and receipts of a product now wait for
+    an open payment confirmation of it (milliseconds); reads and picks do
+    not.
+  - The release relies on READ COMMITTED, the level every caller runs in. A
+    caller in REPEATABLE READ would wait and still name the same location
+    for both tasks; nothing sets that level today.
+  - When no shelf, returns or receiving location can fill a task, a
+    switched-off shelf (even one whose units are all promised) still comes
+    before a switched-on damaged, packing or dispatch area that could fill
+    it: the pick comes up short and staff move the units. Decided, not
+    changed (decision 44, `169_returned_stock` X5).
   - A move or count made on a screen left open while someone moved the
     product away or counted it to zero is refused, and the screen (field app
     and warehouse app) says at the top that nothing was saved and the product

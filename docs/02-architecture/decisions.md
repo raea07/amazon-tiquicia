@@ -1579,19 +1579,30 @@ had no screen and few checks.
   the task, such as units that came back into the returns area. Among
   locations that cannot fill it, switched-on ones come before switched-off
   ones; the damaged, packing and dispatch areas only when no other location
-  holds the product, switched on or off. Two releases of the same product
-  wait for each other on the shop's stock row, so two payments confirmed at
-  the same moment never send both tasks to a shelf that fills only one.
+  holds the product, switched on or off, even when that location cannot fill
+  the task: a certain short pick, which staff resolve by moving units onto a
+  shelf, is preferred to sending a picker to units that may be damaged or
+  already set aside at a packing or dispatch station. Two releases of the
+  same product wait for each other on the shop's stock row, so two payments
+  confirmed at the same moment never send both tasks to a shelf that fills
+  only one. That wait works in READ COMMITTED, the level every caller runs
+  in; a caller in REPEATABLE READ would wait and still count from its
+  snapshot, so no function may set another level for a release.
 - **Lock order.** Moves and corrections take the warehouse row
   `FOR NO KEY UPDATE` first, then the locations, then (a correction) the
   shop's stock row before the shelf's row, the order receipts and returned
-  parcels take them in. Proved with two real sessions in
+  parcels take them in. Every function that writes the stock rows of
+  several products, or of one product from several shops, in one
+  transaction takes them by product, shop and warehouse, as checkout does:
+  a release to picking, packing, a cancellation, and the unpaid-order sweep,
+  which takes the rows of every order it cancels first. Proved in
+  `contract.stock-lock-order-races.test.ts`. Proved with two real sessions in
   `contract.warehouse-stock-races.test.ts` and
   `contract.returned-stock-races.test.ts` (100 rounds each against a
   returned parcel's check-in).
 
 **Consequences.** A cancellation still takes a shelf's row before the shop's
-stock row (`private.cancel_order_internal`, unchanged here), so a
+stock row (`private.cancel_order_internal`, whose only change here is the order it sorts by), so a
 cancellation racing a count of the same product on the same shelf can end
 with a deadlock for one of the two; the loser is told nothing was saved and
 to try again. A count cannot add a product that has no record on that

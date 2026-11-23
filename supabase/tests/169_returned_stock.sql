@@ -396,6 +396,34 @@ do $$ begin
        join public.warehouse_locations wl on wl.id = t.location_id
        where s.order_id = current_setting('t.order_x4b')::uuid));
 end $$;
+-- X5: the switched-off shelf holds 3, all promised to an open task; the
+-- switched-on damaged area holds 3 free. A task of 3 still names the shelf
+-- (a certain short pick, which staff resolve by moving units onto a shelf)
+-- rather than the damaged area: those areas only when no shelf, returns or
+-- receiving location holds the product (decision 44).
+update public.bin_stock set quantity = 0
+where location_id = current_setting('t.dev')::uuid and sku_id = current_setting('t.sku')::uuid
+  and seller_id = current_setting('t.seller')::uuid;
+update public.bin_stock set quantity = 3
+where location_id in (current_setting('t.off_shelf')::uuid, current_setting('t.damaged')::uuid)
+  and sku_id = current_setting('t.sku')::uuid and seller_id = current_setting('t.seller')::uuid;
+update public.pick_tasks t set location_id = current_setting('t.off_shelf')::uuid
+from public.shipments s
+where s.id = t.shipment_id and s.order_id = current_setting('t.order_x4b')::uuid;
+select pg_temp.remember('order_x5', pg_temp.place('devuelto169@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:3'), 'card', 'dev-169-x5')::text);
+select pg_temp.pay(current_setting('t.order_x5')::uuid);
+do $$ begin
+  assert private.location_promised(current_setting('t.off_shelf')::uuid, current_setting('t.sku')::uuid,
+           current_setting('t.seller')::uuid) = 6,
+    'X5: the switched-off shelf now has 6 promised against 3 on it';
+  assert (select t.location_id from public.pick_tasks t join public.shipments s on s.id = t.shipment_id
+          where s.order_id = current_setting('t.order_x5')::uuid) = current_setting('t.off_shelf')::uuid,
+    format('X5: the switched-off shelf comes before the damaged area even when it cannot fill the task, not %s',
+      (select wl.code from public.pick_tasks t join public.shipments s on s.id = t.shipment_id
+       join public.warehouse_locations wl on wl.id = t.location_id
+       where s.order_id = current_setting('t.order_x5')::uuid));
+end $$;
 rollback to savepoint no_location_fills;
 
 select 'ok' as returned_stock;

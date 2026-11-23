@@ -99,12 +99,30 @@ Units already picked have left the shelf and are shown apart.
   when no location can fill it alone, the pick comes up short and staff
   move or recount first. The damaged, packing and dispatch areas only when
   no storage, picking, returns or receiving location holds the product,
-  switched on or off. The shop's stock rows of the order are locked
-  `FOR NO KEY UPDATE` first, so two releases of the same product (two
+  switched on or off, even when that location cannot fill the task (a
+  certain short pick, resolved by moving units onto a shelf, is preferred to
+  sending a picker to units that may be damaged or set aside at a station).
+  The shop's stock rows of the order are locked `FOR NO KEY UPDATE` first,
+  by product, shop and warehouse, so two releases of the same product (two
   payments confirmed at the same moment) run one after the other and the
   second counts the first's task as promised; then the candidate shelves
   are locked `FOR KEY SHARE`, so a move or a count at that moment is waited
-  for.
+  for. Checkout, packing, a cancellation and a receipt of the same product
+  wait for an open payment confirmation of it; reads and picks do not. This
+  relies on READ COMMITTED, the level every caller runs in: under
+  REPEATABLE READ the second release would wait and still count from its
+  snapshot.
+- **One order for stock rows.** Every function that writes the stock rows of
+  several products, or of one product from several shops, in one
+  transaction takes them by product, shop and warehouse: checkout, a release
+  to picking, packing (`private.consume_shipment_stock`), a cancellation
+  (`private.cancel_order_internal`) and the unpaid-order sweep
+  (`private.expire_unpaid_orders`), which cancels many orders in one
+  transaction and so takes the stock rows of all of them first, in one
+  statement. Without it a payment confirmation racing the sweep, or packing
+  an order that holds one product from two shops, ended in a deadlock for
+  one of the two (`contract.stock-lock-order-races.test.ts` makes each race
+  happen and fails without the fixed order).
 - **Stock adds up**: a shop's on-hand units in a warehouse equal the units on
   all its locations plus those picked into parcels still being picked, after
   moves, counts, recalls and check-ins (`169_returned_stock.sql`, and the two
