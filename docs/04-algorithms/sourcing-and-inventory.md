@@ -84,11 +84,17 @@ Units already picked have left the shelf and are shown apart.
   switched-on returns location (by code); while none is switched on, the
   check-in is refused (`returns_location_missing`), so no unit ends on no
   location.
-- **Which shelf a new pick task names.** A switched-on location that really
-  has free units first; among those, storage and picking shelves before the
-  returns and receiving areas; then the most free units, the most units, the
-  code. A shelf whose units are all promised never wins over units that came
-  back into the returns area. The damaged, packing and dispatch areas only
+- **Which shelf a new pick task names.** First a switched-on storage,
+  picking, returns or receiving location whose free units fill the whole
+  task; then one with some free units; then the rest. Within each group,
+  switched-on locations first, storage and picking shelves before the
+  returns and receiving areas, then the most free units, the most units, the
+  code. A task is never sent to a shelf with too few free units while
+  another location can fill it (an order of 3 with 1 free on the shelf and 6
+  back in the returns area is picked from the returns area), and a shelf
+  whose units are all promised never wins over units that came back into the
+  returns area. One task names one location: when no location can fill it
+  alone, the pick comes up short and staff move or recount first. The damaged, packing and dispatch areas only
   when nothing else holds the product. The candidate shelves are locked
   `FOR KEY SHARE` first, so a move or a count at that moment is waited for.
 - **Stock adds up**: a shop's on-hand units in a warehouse equal the units on

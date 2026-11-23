@@ -889,7 +889,8 @@ ones worth knowing about:
 - **Warehouse stock** ([decision 44](docs/02-architecture/decisions.md#44-warehouse-stock-what-is-free-moves-that-the-shop-never-sees-counts-only-onto-shelves)):
   a move never changes the shop's stock and the shop does not see it;
   counted units can be added only on shelves (storage, picking, returns,
-  receiving); picks prefer shelves that really have free units.
+  receiving); picks go first to a location whose free units fill the whole
+  task, shelves before the returns area.
 - **Your decision of 23 November 2026 on Android builds**
   ([decision 45](docs/02-architecture/decisions.md#45-android-builds-of-the-shopper-app-go-to-the-internal-testers-without-a-click)):
   from your first Android release of the shopper app on, each new build goes
@@ -1270,7 +1271,9 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   - A returned parcel's resellable units land on the warehouse's first
     switched-on returns location (DEV-01 in the seed); with none switched on,
     the check-in is refused. The next pick of the product goes there when no
-    shelf has free units.
+    shelf has enough free units for it. A parcel stopped before it left tells
+    the warehouse to put its units in the returns area (both warehouse apps
+    and the console now say so; they said "back to the shelves" before).
   - Locks found when the streams were merged: starting a pick and packing now
     take the order's lock before the parcel's, as stopping a parcel does (a
     stop at the moment of packing deadlocked one caller before). Still open:
@@ -1282,8 +1285,22 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     of "something went wrong"; the local API stand-in passes the code
     through as the hosted Data API does.
   - A pick task names one location; the picker may pick from another, which
-    can take units another task waits for there, and a line larger than the
-    chosen location's free units still comes up short there.
+    can take units another task waits for there. A task goes first to a
+    location whose free units fill it (a review found 084300 sending an order
+    of 3 to a shelf with 1 free while the returns area held 6; fixed and
+    tested in `169_returned_stock`). A task is never split: when no single
+    location can fill it, it still comes up short there.
+  - A move or count made on a screen left open while someone moved the
+    product away or counted it to zero is refused, and the screen (field app
+    and warehouse app) says at the top that nothing was saved and the product
+    is no longer there. Before this fix the refusal disappeared with the
+    product's row.
+  - The database suites expect a freshly seeded database with nothing
+    consuming its jobs: `140_invoicing` fails if the lane's invoice worker
+    (started by `tools/dev/stack.sh up`) runs while the suites run, because
+    the worker takes the seed's invoice jobs first. Run `pnpm db:local:reset`
+    and `pnpm db:local:test` with the lane's stack down
+    (`tools/dev/stack.sh down <lane>`).
   - No journey opens a single closed day (no function can create one; it is
     covered by the database and contract tests), and the console's district
     move form was not driven in a browser.

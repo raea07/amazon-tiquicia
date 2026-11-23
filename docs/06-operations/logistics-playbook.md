@@ -107,14 +107,20 @@ saved at once). Open a location by scanning or typing its code.
   to another shelf; the console then lets operations switch it off.
 - **Correct a count** ("Corregir cantidad"): type what you counted and a
   reason of at least 5 letters ("faltan 2, caja rota"); the screen shows the
-  difference. If the shelf changed while you counted, count again. A count
+  difference. If the shelf changed while you counted, count again. If
+  someone moved the product away or counted it to zero meanwhile, the screen
+  says at the top that nothing was saved and the product is no longer listed
+  there: look at the location again before doing anything. A count
   never goes below what open picks wait for or what shoppers bought; if it
   would, tell operations, who resolve the order first. Units can be counted
   in only on storage, picking, returns and receiving locations. The shop sees
   each correction and its reason in its stock history.
 - **Returned units** land on the returns location (DEV-01 in SJO1) when a
-  parcel is checked in; put them on a shelf with "Mover" when convenient. The
-  next pick of that product is sent there if no shelf has free units. Keep a
+  parcel is checked in; put them on a shelf with "Mover" when convenient. A
+  parcel staff stopped before it left reads "recíbalo y guarde las unidades
+  en la zona de devoluciones": put its units in the returns area, not back
+  on a shelf, because that is where the system books them. The next pick of
+  that product is sent there when no shelf has enough free units for it. Keep a
   returns location switched on: without one, returned parcels cannot be
   checked in.
 - Operations sees every move and correction, with who made it, in the

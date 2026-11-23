@@ -110,7 +110,9 @@ shopper to contact the seller: Yuntera does that.
   (staff took the parcel off a route, or stopped it before it left);
   kept after a real attempt at the door or when another parcel was
   delivered. The shopper then gets two refund messages, one for the goods and
-  one for the fee.
+  one for the fee. When the fee is kept, the shopper's order page (web and
+  app) says so: "El envío (₡1 500) no se devuelve porque fuimos a entregarlo
+  a su dirección."
 - **What the shopper reads meanwhile.** While every parcel left is coming
   back, the order says "Se está cancelando" with no date and no delivery
   code; while every parcel left waits in the warehouse to go out again, it

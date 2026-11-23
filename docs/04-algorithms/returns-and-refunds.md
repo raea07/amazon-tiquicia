@@ -280,7 +280,7 @@ payout is refused when refunds since it was scheduled leave less than it.
 - Staff cannot cancel once a parcel is packed. Since 084200 they **stop**
   it instead (`ops_recall_shipment`, from the staff order page): a packed
   parcel of a Yuntera warehouse, or one on a route that has not started,
-  goes back to the shelves with a reason; its stop is removed; the order
+  goes back to the returns area with a reason; its stop is removed; the order
   keeps its status and reads "Se está cancelando" to the shopper; the
   warehouse then checks it in as a returned parcel, which refunds the goods
   (and the delivery fee, by the rule above) and cancels the order. A

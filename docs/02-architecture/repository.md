@@ -184,7 +184,9 @@ expects `postgres://postgres:postgres@127.0.0.1:5432/postgres`; set
    pnpm db:local:reset
    ```
 
-4. Check it.
+4. Check it, with nothing else using that database (`140_invoicing` fails if
+   an invoice worker, such as the one `tools/dev/stack.sh up` starts, takes
+   the seed's jobs first).
 
    ```bash
    pnpm db:local:test

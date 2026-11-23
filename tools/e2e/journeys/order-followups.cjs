@@ -564,7 +564,10 @@ async function packedOrder(method = "sinpe_movil") {
     (received.delivery_fee_refund_minor ?? 0) === 0,
     "fixture: no delivery-fee refund after a real attempt",
   );
-  await shop.goto(`${WEB}/pedidos/${againStop.orderNumber}`, { waitUntil: "networkidle" });
+  // "load", not "networkidle": the page may keep asking for its credit note
+  // while the invoice worker is busy.
+  await shop.goto(`${WEB}/pedidos/${againStop.orderNumber}`, { waitUntil: "load" });
+  await shop.locator('[data-testid="fee-kept"]').waitFor();
   const keptAfter = await text(shop.locator('[data-testid="fee-kept"]'));
   log("page cancelled after an attempt:", keptAfter);
   check(keptAfter === feeLine, "after the check-in the page still says why the fee stays");

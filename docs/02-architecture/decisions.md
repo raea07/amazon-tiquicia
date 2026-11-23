@@ -1566,11 +1566,12 @@ had no screen and few checks.
   screen showed it, when it would take units open picks wait for or that
   shoppers already bought, and below zero. Every correction is booked as a
   count, never as damage, and the shop sees it with the warehouse's reason.
-- **Picks prefer shelves.** A new pick task names a switched-on location that
-  really has free units first, storage and picking shelves before the
-  returns and receiving areas, then the most free units; a shelf whose units
-  are all promised never wins over units that came back into the returns
-  area; the damaged, packing and dispatch areas only when nothing else holds
+- **Picks prefer shelves.** A new pick task names a switched-on location
+  whose free units fill the whole task first, then one with some free
+  units; within that, storage and picking shelves before the returns and
+  receiving areas, then the most free units; a shelf with too few free units
+  never wins over a location that can fill the task, such as units that came
+  back into the returns area; the damaged, packing and dispatch areas only when nothing else holds
   the product.
 - **Lock order.** Moves and corrections take the warehouse row
   `FOR NO KEY UPDATE` first, then the locations, then (a correction) the
