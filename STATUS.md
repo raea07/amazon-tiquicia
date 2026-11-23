@@ -1126,7 +1126,7 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   - The journeys that take stops off a route build their own route from new
     orders of the third demo shopper, so the seed's route R-1003 and waiting
     orders stay as the database suites expect. `020_access`,
-    `050_fulfillment` and `095_account_security` now also hold when other
+    `050_fulfillment`, `070_api` and `095_account_security` now also hold when other
     journeys drove R-1003 to the end or the warehouse took a shopper's order
     further (`used-db-check.sh all` failed on them before).
   - Not verified: real PostgREST passing the new functions' array and JSON
