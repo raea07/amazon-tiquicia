@@ -404,6 +404,10 @@ describe.skipIf(!db.enabled)("order follow-ups (against a seeded database)", () 
       const detail = await shopper.getOrder(order.orderNumber);
       const stopped = detail.shipments.find((s) => s.id === order.platform);
       expect(stopped).toMatchObject({ status: "returning", recalled: true, can_recall: false });
+      expect(stopped?.units).toHaveLength(1);
+      // Money is held, and no code is given while every parcel comes back.
+      expect(row?.paid).toBe(true);
+      expect(detail.delivery_pin).toBeNull();
       // The fee will come back: nobody went to the door (packages/core says the same).
       expect(deliveryFeeComesBack(row?.shipments ?? [])).toBe(true);
     }

@@ -7,6 +7,9 @@ import {
   isOrderBeingStopped,
   isRescheduledOrder,
   isStoppedShipment,
+  ORDER_PROGRESS,
+  orderComingBack,
+  orderStatusFromShipments,
 } from "./lifecycle";
 
 // The SQL side of these rules, read as text (no database needed).
@@ -92,6 +95,66 @@ describe("the delivery fee when nobody went to the door", () => {
     // delivered, nothing still on its way).
     expect(followups).toContain(
       "if v_cancelled and not private.order_had_door_attempt(v_order.id) then",
+    );
+  });
+});
+
+describe("an order whose parcels are all on their way back", () => {
+  const stopped = { status: "returning" as const, recalled: true };
+  const sentBack = { status: "returning" as const, recalled: false };
+  const delivered = { status: "delivered" as const, recalled: false };
+  const back = { status: "returned" as const, recalled: false };
+
+  it("is being cancelled when nothing was delivered, stopped or sent back after a route", () => {
+    expect(orderComingBack("processing", [stopped])).toEqual({ cancels: true, stopped: true });
+    // Taken off a route and sent back: the preview's YT-101282 and YT-101283.
+    expect(orderComingBack("shipped", [sentBack])).toEqual({ cancels: true, stopped: false });
+    expect(orderComingBack("shipped", [back, sentBack])).toEqual({ cancels: true, stopped: false });
+  });
+
+  it("only gives back a parcel's goods when another was delivered", () => {
+    expect(orderComingBack("shipped", [delivered, sentBack])).toEqual({
+      cancels: false,
+      stopped: false,
+    });
+  });
+
+  it("is not when a parcel may still reach the shopper, or the order has ended", () => {
+    expect(orderComingBack("shipped", [sentBack, { status: "out_for_delivery" }])).toBeNull();
+    expect(orderComingBack("shipped", [sentBack, { status: "delivery_failed" }])).toBeNull();
+    expect(orderComingBack("processing", [stopped, { status: "packed" }])).toBeNull();
+    expect(orderComingBack("cancelled", [back])).toBeNull();
+    expect(orderComingBack("delivered", [delivered, back])).toBeNull();
+    expect(orderComingBack("processing", [])).toBeNull();
+  });
+
+  it("agrees with the database, which hides the delivery code then", () => {
+    expect(followups).toContain(
+      "and s.status in ('pending', 'picking', 'packed', 'ready_for_dispatch',\n                                                        'out_for_delivery', 'delivery_failed'))",
+    );
+  });
+});
+
+describe("an order never moves back a status", () => {
+  it("stays on its way when a re-planned parcel is taken off its route", () => {
+    expect(orderStatusFromShipments("shipped", ["packed"])).toBe("shipped");
+    expect(orderStatusFromShipments("shipped", ["packed", "delivered"])).toBe("shipped");
+    expect(orderStatusFromShipments("partially_shipped", ["packed", "pending"])).toBe(
+      "partially_shipped",
+    );
+    // Forward as before.
+    expect(orderStatusFromShipments("processing", ["out_for_delivery"])).toBe("shipped");
+  });
+
+  it("uses the order the database uses", () => {
+    const sql = followups.match(
+      /-- BEGIN order_progress\s+v_progress constant text\[\] := array\[([^\]]+)\];\s+-- END order_progress/,
+    );
+    expect(sql?.[1]?.split(",").map((s) => s.trim().replace(/'/g, ""))).toEqual([
+      ...ORDER_PROGRESS,
+    ]);
+    expect(followups).toContain(
+      "if array_position(v_progress, v_target::text) < array_position(v_progress, v_current::text) then\n    return;",
     );
   });
 });

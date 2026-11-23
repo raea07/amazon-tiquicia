@@ -44,6 +44,11 @@ export type OrderListShipment = z.infer<typeof orderListShipment>;
 /** One order of the shopper's list, with its parcels (since 084200). */
 export const orderSummaryWithShipments = orderSummary.extend({
   shipments: z.array(orderListShipment).default([]),
+  /**
+   * Money is held for the shopper: a payment captured and not all refunded.
+   * Null from a database without the field: the list then promises nothing.
+   */
+  paid: z.boolean().nullable().default(null),
 });
 export type OrderSummaryWithShipments = z.infer<typeof orderSummaryWithShipments>;
 
@@ -52,6 +57,10 @@ const orderDetailShipment = orderDetail.shape.shipments.element.extend({
   recalled: z.boolean().default(false),
   /** Operations staff can still stop it (ops_recall_shipment); always false for the shopper. */
   can_recall: z.boolean().default(false),
+  /** How many of each order line travel in this parcel (a line can be split). */
+  units: z
+    .array(z.object({ order_item_id: id, quantity: z.number().int().positive() }))
+    .default([]),
 });
 
 /** One order in full, each parcel saying whether it was stopped (since 084200). */
@@ -124,8 +133,8 @@ export const RECALL_REASON_MIN_LETTERS = 5;
 export const orderFollowupsErrors = {
   shipment_not_recallable: {
     "es-CR":
-      "Ese paquete ya no se puede detener desde aquí: va en camino, ya se entregó o ya viene de regreso. Si falló una entrega, devuélvalo a la bodega desde Despacho.",
-    en: "That parcel can no longer be stopped here: it is on its way, delivered or already coming back. If a delivery failed, send it back to the warehouse from Dispatch.",
+      "Ese paquete ya no se puede detener desde aquí: va en camino, ya se entregó o ya viene de regreso. Recargue la página para ver dónde está. Si falló una entrega, devuélvalo a la bodega desde Despacho.",
+    en: "That parcel can no longer be stopped here: it is on its way, delivered or already coming back. Reload the page to see where it is. If a delivery failed, send it back to the warehouse from Dispatch.",
   },
   shipment_on_started_route: {
     "es-CR":

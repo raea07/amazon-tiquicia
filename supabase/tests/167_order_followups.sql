@@ -328,6 +328,18 @@ begin
   assert exists (select 1 from private.audit_log a where a.id > current_setting('t.audit_from')::bigint
                  and a.action = 'stop_removed' and a.row_key = rs.id::text),
     'recall: the stop removal is audited as ever';
+  -- The recall's own entry says what the parcel was when staff acted, not
+  -- the packed step the stop removal passes it through.
+  assert exists (select 1 from private.audit_log a where a.id > current_setting('t.audit_from')::bigint
+                 and a.action = 'shipment_recalled' and a.row_key = current_setting('t.ship_b')
+                 and a.old_row ->> 'status' = 'ready_for_dispatch'),
+    'recall: B was ready for dispatch when it was stopped';
+  -- Its staff note says why it left the route, not that it waits for another.
+  assert exists (select 1 from public.order_events e where e.shipment_id = current_setting('t.ship_b')::uuid
+                 and not e.visible_to_customer and e.note like 'Central quitó el paquete % para detenerlo.')
+         and not exists (select 1 from public.order_events e where e.shipment_id = current_setting('t.ship_b')::uuid
+                         and e.note like '%Vuelve a esperar ruta%'),
+    'recall: B''s removal note says it was stopped';
 end
 $$;
 select pg_temp.remember('code_a', pg_temp.code(current_setting('t.order_a')::uuid));
@@ -359,6 +371,55 @@ do $$ begin
     'recall: the driver sees B skipped';
 end $$;
 reset role;
+
+-- A seller's own packed parcel is at the seller's: refused, with why.
+select pg_temp.remember('order_l', pg_temp.packed_order('seguimiento2@yuntera.example',
+  pg_temp.items('bombillo-led-9w-4u:1'), 'card', 'seg-167-l')::text);
+select pg_temp.remember('ship_l', pg_temp.shipment(current_setting('t.order_l')::uuid, 'seller')::text);
+-- A parcel still ready on a route that has started. Starting a route sends
+-- its parcels out (driver_start_route), so this state is forced here to
+-- prove the guard holds if it ever happens.
+select pg_temp.remember('order_m', pg_temp.packed_order('seguimiento2@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'seg-167-m')::text);
+select pg_temp.remember('ship_m', pg_temp.shipment(current_setting('t.order_m')::uuid, 'platform')::text);
+select pg_temp.act('central@yuntera.example');
+select pg_temp.remember('route_m', public.ops_create_route(
+  private.cr_today(), current_setting('t.platform')::uuid,
+  jsonb_build_array(jsonb_build_object('shipment_id', current_setting('t.ship_m'))),
+  (select d.id from public.drivers d join auth.users u on u.id = d.user_id
+   where u.email = 'repartidor@yuntera.example'))::text);
+select pg_temp.logout();
+update public.routes set status = 'in_progress', started_at = now() where id = current_setting('t.route_m')::uuid;
+select pg_temp.login('comprador3@yuntera.example');
+do $$ begin
+  assert (select status from public.shipments where id = current_setting('t.ship_l')::uuid) = 'packed',
+    'fixture: L''s seller parcel is packed';
+  assert pg_temp.refused_detail(format($q$select public.ops_recall_shipment(%L, 'El cliente llamó')$q$,
+           current_setting('t.ship_l')), 'shipment_not_recallable') = 'seller_parcel',
+    'recall: a seller''s own parcel is refused';
+  assert not (public.get_order((select order_number from public.orders where id = current_setting('t.order_l')::uuid))
+              -> 'shipments' -> 0 ->> 'can_recall')::boolean,
+    'recall: and the console is not offered it';
+  assert (select status from public.shipments where id = current_setting('t.ship_m')::uuid) = 'ready_for_dispatch',
+    'fixture: M is ready on its route';
+  assert pg_temp.refused_detail(format($q$select public.ops_recall_shipment(%L, 'El cliente llamó')$q$,
+           current_setting('t.ship_m')), 'shipment_on_started_route')
+         = (select code from public.routes where id = current_setting('t.route_m')::uuid),
+    'recall: a parcel on a route that has started is refused, with the route';
+  assert not (public.get_order((select order_number from public.orders where id = current_setting('t.order_m')::uuid))
+              -> 'shipments' -> 0 ->> 'can_recall')::boolean,
+    'recall: and the console is not offered it';
+end $$;
+reset role;
+update public.routes set status = 'assigned', started_at = null where id = current_setting('t.route_m')::uuid;
+do $$ begin
+  assert (select status from public.shipments where id = current_setting('t.ship_l')::uuid) = 'packed'
+         and (select status from public.shipments where id = current_setting('t.ship_m')::uuid) = 'ready_for_dispatch'
+         and not exists (select 1 from private.audit_log a where a.id > current_setting('t.audit_from')::bigint
+                         and a.action = 'shipment_recalled'
+                         and a.row_key in (current_setting('t.ship_l'), current_setting('t.ship_m'))),
+    'recall: nothing changed for the refused parcels';
+end $$;
 
 -- ═══ 3. The delivery fee ═══════════════════════════════════════════════════
 
@@ -467,6 +528,25 @@ select public.ops_remove_route_stop(pg_temp.stop(current_setting('t.route_two'):
                                     'El camión se varó');
 select public.ops_return_shipment(current_setting('t.ship_c')::uuid);
 reset role;
+-- While it waits at the dock (the preview's YT-101282 and YT-101283): the
+-- order still reads "shipped", its parcel says it is coming back, and the
+-- shopper's delivery code is not given, since nobody will ask for it.
+select pg_temp.login('seguimiento1@yuntera.example');
+do $$
+declare
+  r record;
+  v jsonb;
+  v_number text := (select order_number from public.orders where id = current_setting('t.order_c')::uuid);
+begin
+  select * into r from public.my_orders(50, 0) m where m.order_number = v_number;
+  assert r.status = 'shipped' and r.paid
+         and r.shipments = jsonb_build_array(jsonb_build_object('status', 'returning', 'attempt_count', 0, 'recalled', false)),
+    format('list: C is coming back %s %s', r.status, r.shipments);
+  v := public.get_order(v_number);
+  assert v ->> 'delivery_pin' is null, format('page: no delivery code while C comes back %s', v ->> 'delivery_pin');
+end
+$$;
+reset role;
 do $$
 declare
   v jsonb;
@@ -511,6 +591,85 @@ begin
 end
 $$;
 
+-- K: the driver found nobody home, dispatch planned it again on a route not
+-- started, and then staff stop it. Taking it off that route makes it packed,
+-- which must not walk the order ("shipped") back to "processing"; the fee
+-- stays charged (an attempt was made), and it is not called "never left".
+select pg_temp.remember('order_k', pg_temp.packed_order('seguimiento1@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'seg-167-k')::text);
+select pg_temp.remember('ship_k', pg_temp.shipment(current_setting('t.order_k')::uuid, 'platform')::text);
+select pg_temp.remember('route_k', pg_temp.route(current_setting('t.ship_k')::uuid)::text);
+select pg_temp.act('repartidor@yuntera.example');
+select public.driver_fail_stop(pg_temp.stop(current_setting('t.route_k')::uuid, current_setting('t.ship_k')::uuid), 'nobody_home');
+select pg_temp.act('central@yuntera.example');
+select pg_temp.remember('route_k2', public.ops_create_route(
+  private.cr_today(), current_setting('t.platform')::uuid,
+  jsonb_build_array(jsonb_build_object('shipment_id', current_setting('t.ship_k'))),
+  (select d.id from public.drivers d join auth.users u on u.id = d.user_id
+   where u.email = 'repartidor2@yuntera.example'))::text);
+select pg_temp.logout();
+do $$
+declare
+  v jsonb;
+  s public.shipments%rowtype;
+begin
+  select * into s from public.shipments where id = current_setting('t.ship_k')::uuid;
+  assert s.status = 'ready_for_dispatch' and s.attempt_count = 1
+         and (select status from public.orders where id = s.order_id) = 'shipped',
+    format('fixture: K re-planned after one attempt %s', s);
+  perform pg_temp.act('comprador3@yuntera.example');
+  assert (public.get_order((select order_number from public.orders where id = s.order_id))
+          -> 'shipments' -> 0 ->> 'can_recall')::boolean,
+    'recall: the console offers to stop K';
+  v := public.ops_recall_shipment(s.id, 'El cliente ya no lo quiere');
+  perform pg_temp.logout();
+  assert v ->> 'status' = 'returning'
+         and v ->> 'route_code' = (select code from public.routes where id = current_setting('t.route_k2')::uuid),
+    format('recall: K stopped off its new route %s', v);
+  assert (select status from public.orders where id = s.order_id) = 'shipped',
+    'recall: K''s order does not move back';
+  assert exists (select 1 from private.audit_log a where a.id > current_setting('t.audit_from')::bigint
+                 and a.action = 'shipment_recalled' and a.row_key = s.id::text
+                 and a.old_row ->> 'status' = 'ready_for_dispatch'),
+    'recall: K''s audit says it was ready';
+  perform pg_temp.act('bodega@yuntera.example');
+  assert exists (select 1 from jsonb_array_elements(public.wms_returning_shipments(current_setting('t.platform')::uuid)) e
+                 where e ->> 'shipment_id' = s.id::text and not (e ->> 'never_left')::boolean
+                   and (e ->> 'attempt_count')::integer = 1),
+    'warehouse: K went to the door once, so it is not "never left"';
+  v := public.wms_receive_returned_shipment(s.id, true, null);
+  perform pg_temp.logout();
+  assert (v ->> 'delivery_fee_refund_minor')::bigint = 0 and v ->> 'order_status' = 'cancelled',
+    format('fee: K, after an attempt, keeps the fee %s', v);
+  assert exists (select 1 from public.order_events e where e.order_id = s.order_id and e.visible_to_customer
+                 and e.note like 'Su paquete regresó a nuestra bodega sin entregarse%')
+         and not exists (select 1 from public.order_events e where e.order_id = s.order_id
+                         and e.note like '%sin salir de la bodega%'),
+    'fee: K''s note does not say it never left';
+end
+$$;
+-- Taking a re-planned parcel off its route on its own leaves the order too.
+select pg_temp.remember('order_k3', pg_temp.packed_order('seguimiento1@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'seg-167-k3')::text);
+select pg_temp.remember('ship_k3', pg_temp.shipment(current_setting('t.order_k3')::uuid, 'platform')::text);
+select pg_temp.remember('route_k3', pg_temp.route(current_setting('t.ship_k3')::uuid)::text);
+select pg_temp.act('repartidor@yuntera.example');
+select public.driver_fail_stop(pg_temp.stop(current_setting('t.route_k3')::uuid, current_setting('t.ship_k3')::uuid), 'nobody_home');
+select pg_temp.act('central@yuntera.example');
+select pg_temp.remember('route_k4', public.ops_create_route(
+  private.cr_today(), current_setting('t.platform')::uuid,
+  jsonb_build_array(jsonb_build_object('shipment_id', current_setting('t.ship_k3'))),
+  (select d.id from public.drivers d join auth.users u on u.id = d.user_id
+   where u.email = 'repartidor2@yuntera.example'))::text);
+select public.ops_remove_route_stop(pg_temp.stop(current_setting('t.route_k4')::uuid, current_setting('t.ship_k3')::uuid),
+                                    'Ruta equivocada');
+select pg_temp.logout();
+do $$ begin
+  assert (select status from public.shipments where id = current_setting('t.ship_k3')::uuid) = 'packed'
+         and (select status from public.orders where id = current_setting('t.order_k3')::uuid) = 'shipped',
+    'orders: a re-planned parcel taken off its route leaves the order "shipped"';
+end $$;
+
 -- F: the seller's parcel delivered, the warehouse's stopped and received: the
 -- order is delivered, not cancelled, and the fee stays.
 do $$ begin
@@ -518,6 +677,13 @@ do $$ begin
                        pg_temp.code(current_setting('t.order_f')::uuid)) ->> 'ok')::boolean,
     'fixture: F''s seller parcel delivered';
 end $$;
+select pg_temp.login('comprador3@yuntera.example');
+do $$ begin
+  assert pg_temp.refused_detail(format($q$select public.ops_recall_shipment(%L, 'El cliente llamó')$q$,
+           current_setting('t.ship_f2')), 'shipment_not_recallable') = 'delivered',
+    'recall: a delivered parcel is refused';
+end $$;
+reset role;
 do $$
 declare
   v jsonb;
@@ -540,6 +706,15 @@ declare
 begin
   select * into o from public.orders where id = current_setting('t.order_e')::uuid;
   perform pg_temp.recall(current_setting('t.ship_e')::uuid, 'El cliente ya no lo quiere');
+  -- Nothing was paid: nothing is promised.
+  assert exists (select 1 from public.order_events e where e.order_id = o.id and e.visible_to_customer
+                 and e.note like 'Detuvimos el envío del paquete %: no saldrá de nuestra bodega. No se le cobró nada por él')
+         and not exists (select 1 from public.order_events e where e.order_id = o.id and e.note like '%le devolvemos%'),
+    'fee: E''s shopper is not promised a refund';
+  perform pg_temp.act('seguimiento2@yuntera.example');
+  assert (select not m.paid from public.my_orders(50, 0) m where m.order_number = o.order_number),
+    'list: E holds no money';
+  perform pg_temp.logout();
   v := pg_temp.check_in(current_setting('t.ship_e')::uuid);
   assert (v ->> 'refund_minor')::bigint = 0 and (v ->> 'delivery_fee_refund_minor')::bigint = 0
          and v ->> 'order_status' = 'cancelled',
@@ -555,6 +730,33 @@ begin
 end
 $$;
 select pg_temp.check_money('fee: after every case');
+
+-- The fee refund never takes more than is left of the payment: with only
+-- ₡1 of it left, ₡1 comes back. (Forced in a block that is rolled back.)
+select pg_temp.remember('order_n', pg_temp.packed_order('seguimiento2@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'seg-167-n')::text);
+do $$
+declare
+  v_order uuid := current_setting('t.order_n')::uuid;
+  v_tx uuid;
+  v jsonb;
+begin
+  begin
+    assert (select shipping_minor from public.orders where id = v_order) > 100, 'fixture: N pays a fee';
+    insert into public.ledger_transactions (kind, order_id, memo) values ('adjustment', v_order, 'prueba')
+    returning id into v_tx;
+    insert into private.refunds (order_id, reason, source_id, amount_minor, ledger_transaction_id)
+    values (v_order, 'return', gen_random_uuid(), private.order_collected_minor(v_order) - 100, v_tx);
+    v := private.refund_delivery_fee(v_order);
+    assert (v ->> 'refund_minor')::bigint = 100, format('fee: capped at what is left %s', v);
+    assert private.refunded_minor(v_order) = private.order_collected_minor(v_order), 'fee: all of it, no more';
+    assert private.refund_delivery_fee(v_order) is null, 'fee: and nothing again';
+    raise exception 'cap_checked';
+  exception when others then
+    if sqlerrm <> 'cap_checked' then raise; end if;
+  end;
+end
+$$;
 
 -- Two parcels of one order sent back (the warehouse's stopped on the shelf,
 -- the seller's taken off a driven route): the fee comes back once, with the
@@ -627,7 +829,7 @@ do $$ begin
   assert pg_get_function_result('public.my_orders(integer, integer)'::regprocedure)
          = 'TABLE(order_number text, status order_status, placed_at timestamp with time zone, total_minor bigint, '
            'payment_method payment_method, promise_earliest date, promise_latest date, delivered_at timestamp with time zone, '
-           'item_count bigint, first_title text, first_image_path text, shipments jsonb)',
+           'item_count bigint, first_title text, first_image_path text, shipments jsonb, paid boolean)',
     format('list: the columns %s', pg_get_function_result('public.my_orders(integer, integer)'::regprocedure));
 end $$;
 -- An order whose parcel is stopped and waits at the dock.
@@ -635,6 +837,7 @@ select pg_temp.remember('order_h', pg_temp.packed_order('seguimiento2@yuntera.ex
   pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'seg-167-h')::text);
 select pg_temp.recall(pg_temp.shipment(current_setting('t.order_h')::uuid, 'platform'));
 select pg_temp.remember('code_h', pg_temp.code(current_setting('t.order_h')::uuid));
+select pg_temp.remember('code_l', pg_temp.code(current_setting('t.order_l')::uuid));
 select pg_temp.login('seguimiento2@yuntera.example');
 do $$
 declare
@@ -643,7 +846,7 @@ declare
 begin
   select * into r from public.my_orders(50, 0) m
   where m.order_number = (select order_number from public.orders where id = current_setting('t.order_h')::uuid);
-  assert r.status = 'processing' and r.shipments = jsonb_build_array(jsonb_build_object(
+  assert r.status = 'processing' and r.paid and r.shipments = jsonb_build_array(jsonb_build_object(
            'status', 'returning', 'attempt_count', 0, 'recalled', true)),
     format('list: H says its parcel is stopped %s', r.shipments);
   select * into r from public.my_orders(50, 0) m
@@ -654,11 +857,19 @@ begin
   assert not exists (select 1 from public.my_orders(50, 0) m
                      where m.order_number = (select order_number from public.orders where id = current_setting('t.order_a')::uuid)),
     'list: another shopper''s order is not listed';
-  -- The order page: the parcel is marked stopped; the shopper cannot stop it; the code is theirs.
+  -- The order page: the parcel is marked stopped; the shopper cannot stop
+  -- it; no delivery code, since nothing is left to hand over.
   v := public.get_order((select order_number from public.orders where id = current_setting('t.order_h')::uuid));
   assert (v -> 'shipments' -> 0 ->> 'recalled')::boolean and not (v -> 'shipments' -> 0 ->> 'can_recall')::boolean
-         and v ->> 'delivery_pin' = current_setting('t.code_h'),
+         and v ->> 'delivery_pin' is null
+         and v -> 'shipments' -> 0 -> 'units' = jsonb_build_array(jsonb_build_object(
+               'order_item_id', (select id from public.order_items where order_id = current_setting('t.order_h')::uuid),
+               'quantity', 1)),
     format('page: H for its shopper %s', v -> 'shipments');
+  -- With a parcel still to hand over, the code is the shopper's as ever.
+  assert public.get_order((select order_number from public.orders where id = current_setting('t.order_l')::uuid))
+         ->> 'delivery_pin' = current_setting('t.code_l'),
+    'page: L''s shopper still has the code';
   assert exists (select 1 from jsonb_array_elements(v -> 'timeline') e where e ->> 'note' like 'Detuvimos el envío%')
          and not exists (select 1 from jsonb_array_elements(v -> 'timeline') e where e ->> 'note' like 'Central detuvo%'),
     'page: the shopper reads their note, not staff''s';

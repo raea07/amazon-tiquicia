@@ -46,6 +46,13 @@
 --      cleared once, here, with an audit entry each.
 --   6. Indexes for the "who" columns 084000 added, and staff can remove a
 --      single closed day that belongs to no period (made before 084000).
+--   7. An order never moves back a status (private.sync_order_status): a
+--      parcel re-planned after a failed attempt and then taken off its route
+--      made the target "processing" for an order already "shipped", and the
+--      removal failed. The shopper's delivery code is not given while every
+--      parcel left to deliver is on its way back to the warehouse, and the
+--      order list says whether money is held (`paid`), so a cash order being
+--      cancelled is not promised a refund.
 
 -- ═══ 1. Tables and columns ═════════════════════════════════════════════════
 
@@ -130,6 +137,102 @@ as $$
       and (s.attempt_count > 0
            or exists (select 1 from public.route_stops rs
                       where rs.shipment_id = s.id and rs.status = 'failed')));
+$$;
+
+-- True when the parcel never went out on a route: no step of it ever reached
+-- `out_for_delivery` (every status change is written to order_events by
+-- private.enforce_shipment_transition). A parcel stopped after a failed
+-- attempt, or after staff took it off a route being driven, did leave.
+create or replace function private.shipment_never_left(p_shipment_id uuid) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select not exists (
+    select 1 from public.order_events e
+    where e.shipment_id = p_shipment_id and e.kind = 'shipment_status'
+      and e.to_status = 'out_for_delivery');
+$$;
+
+-- Replaces the version in 20261121083200_followups.sql
+-- (orderStatusFromShipments in packages/core/src/lifecycle.ts says the same).
+-- What changed: an order never moves back. Its parcels can go back a step
+-- (a parcel re-planned after a failed attempt is ready_for_dispatch again,
+-- and taking it off that route makes it packed), which made the target
+-- "processing" for an order that reads "shipped"; the loop below walked
+-- forward through "delivered" to get there, and the order transition
+-- trigger refused it, so ops_remove_route_stop failed for such a parcel.
+-- Now a target behind the current status leaves the order where it is.
+create or replace function private.sync_order_status(p_order_id uuid) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_current public.order_status;
+  v_live integer;
+  v_delivered integer;
+  v_ended integer;
+  v_dispatched integer;
+  v_started integer;
+  v_target public.order_status;
+  -- BEGIN order_progress
+  v_progress constant text[] := array['confirmed', 'processing', 'partially_shipped', 'shipped', 'delivered'];
+  -- END order_progress
+begin
+  select status into v_current from public.orders where id = p_order_id for update;
+  if v_current in ('pending_payment', 'payment_review', 'cancelled', 'refunded', 'completed') then
+    return;
+  end if;
+
+  select count(*) filter (where status <> 'cancelled'),
+         count(*) filter (where status = 'delivered'),
+         count(*) filter (where status in ('delivered', 'returned')),
+         count(*) filter (where status in
+           ('out_for_delivery', 'delivered', 'delivery_failed', 'returning', 'returned')),
+         count(*) filter (where status not in ('pending', 'cancelled'))
+  into v_live, v_delivered, v_ended, v_dispatched, v_started
+  from public.shipments where order_id = p_order_id;
+
+  if v_live = 0 then
+    return;
+  end if;
+
+  v_target := case
+    when v_delivered > 0 and v_ended = v_live then 'delivered'
+    when v_dispatched = v_live then 'shipped'
+    when v_dispatched > 0 then 'partially_shipped'
+    when v_started > 0 then 'processing'
+    else v_current
+  end;
+  -- Never back: an order that went out stays "on its way" until it ends.
+  if array_position(v_progress, v_target::text) < array_position(v_progress, v_current::text) then
+    return;
+  end if;
+
+  while v_current is distinct from v_target loop
+    v_current := case
+      when v_current = 'confirmed' then 'processing'
+      when v_current = 'processing' and v_target = 'partially_shipped' then 'partially_shipped'
+      when v_current = 'processing' then 'shipped'
+      when v_current = 'partially_shipped' and v_target = 'delivered' then 'delivered'
+      when v_current = 'partially_shipped' then 'shipped'
+      when v_current = 'shipped' then 'delivered'
+      else v_target
+    end;
+    update public.orders
+    set status = v_current,
+        delivered_at = case when v_current = 'delivered' then now() else delivered_at end,
+        warranty_until = case
+          when v_current = 'delivered' then private.add_business_days(private.cr_local(now())::date, 30)
+          else warranty_until
+        end,
+        withdrawal_deadline = case
+          when v_current = 'delivered'
+            then greatest(withdrawal_deadline, private.add_business_days(private.cr_local(now())::date, 8))
+          else withdrawal_deadline
+        end
+    where id = p_order_id;
+  end loop;
+end;
 $$;
 
 -- Refunds an order's delivery fee through the register (see the header,
@@ -282,7 +385,8 @@ begin
 
   insert into public.order_events (order_id, shipment_id, kind, note, actor_id)
   values (v_order.id, p_shipment_id, 'note',
-          case when v_ship.recalled_at is not null then 'Su paquete volvió a nuestros estantes sin salir de la bodega'
+          case when v_ship.recalled_at is not null and private.shipment_never_left(p_shipment_id)
+               then 'Su paquete volvió a nuestros estantes sin salir de la bodega'
                else 'Su paquete regresó a nuestra bodega sin entregarse' end
           || case when v_refund is null then ''
                   else '; le devolvemos lo que pagó por él: '
@@ -454,6 +558,8 @@ declare
   v_kind public.warehouse_kind;
   v_stop record;
   v_removed jsonb;
+  v_before public.shipment_status;
+  v_paid boolean;
 begin
   if not private.has_staff_role('ops') then
     perform private.fail('forbidden');
@@ -473,6 +579,8 @@ begin
   if v_ship.status not in ('packed', 'ready_for_dispatch') then
     perform private.fail('shipment_not_recallable', v_ship.status::text);
   end if;
+  -- What it was when staff acted (removing its stop passes it through packed).
+  v_before := v_ship.status;
   select w.kind into v_kind from public.warehouses w where w.id = v_ship.origin_warehouse_id;
   if v_kind is distinct from 'platform' then
     -- A seller's own parcel is at the seller's, not on our shelves.
@@ -493,7 +601,17 @@ begin
     end if;
     v_removed := public.ops_remove_route_stop(v_stop.id, v_reason);
     select * into v_ship from public.shipments where id = p_shipment_id;
+    -- Its note says the parcel waits for another route: not when it is stopped.
+    update public.order_events e
+    set note = 'Central quitó el paquete ' || v_ship.tracking_code || ' de la ruta ' || v_stop.code
+               || ' para detenerlo.'
+    where e.id = (select max(e2.id) from public.order_events e2
+                  where e2.shipment_id = v_ship.id and e2.kind = 'note' and not e2.visible_to_customer
+                    and e2.note like 'Central quitó el paquete %');
   end if;
+  -- Money to give back only when something was paid (a cash order is not, yet).
+  v_paid := exists (select 1 from public.payments p
+                    where p.order_id = v_order.id and p.status in ('captured', 'partially_refunded'));
 
   update public.shipments
   set status = 'returning', recalled_at = now(), recalled_by = (select auth.uid()),
@@ -507,18 +625,19 @@ begin
   insert into public.order_events (order_id, shipment_id, kind, note, visible_to_customer, actor_id)
   values
     (v_order.id, v_ship.id, 'note',
-     'Detuvimos el envío del paquete ' || v_ship.tracking_code
-       || ': no saldrá de nuestra bodega. Cuando la bodega lo confirme, le devolvemos lo que pagó por él',
+     'Detuvimos el envío del paquete ' || v_ship.tracking_code || ': no saldrá de nuestra bodega'
+       || case when v_paid then '. Cuando la bodega lo confirme, le devolvemos lo que pagó por él'
+               else '. No se le cobró nada por él' end,
      true, (select auth.uid())),
     (v_order.id, v_ship.id, 'note',
-     'Central detuvo el paquete ' || v_ship.tracking_code || ' antes de que saliera: ' || v_reason,
+     'Central detuvo el paquete ' || v_ship.tracking_code || ' en la bodega: ' || v_reason,
      false, (select auth.uid()));
 
   -- Cash planned for this parcel's goods is worked out again without them.
   perform private.replan_cod(v_order.id);
 
   perform private.operations_audit('shipment_recalled', 'shipments', v_ship.id::text,
-    jsonb_build_object('tracking_code', v_ship.tracking_code, 'status', v_ship.status,
+    jsonb_build_object('tracking_code', v_ship.tracking_code, 'status', v_before,
                        'route', v_stop.code),
     jsonb_build_object('tracking_code', v_ship.tracking_code, 'status', 'returning'));
   return jsonb_build_object(
@@ -548,7 +667,7 @@ begin
       'units', (select coalesce(sum(si.quantity), 0) from public.shipment_items si
                 where si.shipment_id = s.id),
       'lines', (select count(*) from public.shipment_items si where si.shipment_id = s.id),
-      'never_left', s.recalled_at is not null,
+      'never_left', s.recalled_at is not null and private.shipment_never_left(s.id),
       'recalled_at', s.recalled_at
     ) order by s.tracking_code)
     from public.shipments s
@@ -600,8 +719,15 @@ begin
     -- to the shopper. It is their proof against a parcel being marked
     -- delivered without them, so nobody on the platform's side may read it:
     -- not the driver, and not staff looking at the order.
+    -- Since 084200, also not while every parcel left to deliver is on its way
+    -- back to the warehouse (returning): nobody will ask for it.
     'delivery_pin', case when v_is_owner
                           and o.status in ('confirmed', 'processing', 'partially_shipped', 'shipped')
+                          and (exists (select 1 from public.shipments s where s.order_id = o.id
+                                       and s.status in ('pending', 'picking', 'packed', 'ready_for_dispatch',
+                                                        'out_for_delivery', 'delivery_failed'))
+                               or not exists (select 1 from public.shipments s where s.order_id = o.id
+                                              and s.status <> 'cancelled'))
                          then (select c.code from private.delivery_codes c where c.order_id = o.id) end,
     'can_cancel', v_is_staff and o.status in ('pending_payment', 'payment_review', 'confirmed', 'processing')
                   and not exists (select 1 from public.shipments s where s.order_id = o.id
@@ -641,6 +767,11 @@ begin
         'promise_latest', s.promise_latest, 'delivered_at', s.delivered_at,
         'item_ids', (select jsonb_agg(si.order_item_id) from public.shipment_items si
                      where si.shipment_id = s.id),
+        -- How many of each line travel in it (a line can be split over parcels).
+        'units', (select coalesce(jsonb_agg(jsonb_build_object('order_item_id', si.order_item_id,
+                                                               'quantity', si.quantity)
+                                            order by si.order_item_id), '[]'::jsonb)
+                  from public.shipment_items si where si.shipment_id = s.id),
         -- While a parcel is on the road the shopper sees who is bringing it:
         -- a first name, nothing more.
         'driver_first_name', (
@@ -683,7 +814,7 @@ create function public.my_orders(p_limit integer default 20, p_offset integer de
 returns table (order_number text, status public.order_status, placed_at timestamptz,
                total_minor bigint, payment_method public.payment_method, promise_earliest date,
                promise_latest date, delivered_at timestamptz, item_count bigint, first_title text,
-               first_image_path text, shipments jsonb)
+               first_image_path text, shipments jsonb, paid boolean)
 language plpgsql
 stable
 security definer
@@ -702,7 +833,10 @@ begin
          coalesce((select jsonb_agg(jsonb_build_object(
                     'status', s.status, 'attempt_count', s.attempt_count,
                     'recalled', s.recalled_at is not null) order by s.created_at, s.id)
-                   from public.shipments s where s.order_id = o.id), '[]'::jsonb)
+                   from public.shipments s where s.order_id = o.id), '[]'::jsonb),
+         -- Money is held for the shopper (so a cancellation gives some back).
+         exists (select 1 from public.payments p where p.order_id = o.id
+                 and p.status in ('captured', 'partially_refunded'))
   from public.orders o
   left join lateral (
     select i.title, i.image_path from public.order_items i
@@ -979,6 +1113,7 @@ $$;
 
 revoke all on function
   private.colones(bigint),
+  private.shipment_never_left(uuid),
   private.order_had_door_attempt(uuid),
   private.refund_delivery_fee(uuid)
 from public, anon, authenticated;
