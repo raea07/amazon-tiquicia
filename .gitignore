@@ -65,3 +65,6 @@ apps/*-native/android/
 
 # Git worktrees created for parallel work
 .claude/worktrees/
+
+# Race harness output (tools/races/run-all.sh)
+tools/races/results/
