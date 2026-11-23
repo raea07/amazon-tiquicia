@@ -42,7 +42,10 @@
 --     units, a new task could be sent there and come up short. It now names
 --     the switched-on location with the most free units first (then the most
 --     units, then the code, as before), storage and picking shelves before
---     any other kind of location. It also takes the candidate shelves
+--     any other kind of location, and any shelf or returns or receiving area
+--     with free units before one whose units are all promised (units that
+--     came back from a parcel into the returns area are picked before a
+--     shelf that cannot fill the task). It also takes the candidate shelves
 --     FOR KEY SHARE before choosing, which waits for a move or a count that
 --     holds one (FOR UPDATE) and is not blocked by picks, receipts or
 --     cancellations (their updates take FOR NO KEY UPDATE): a move and a
@@ -300,12 +303,15 @@ $$;
 
 -- Replaces the version in 20261121081000_checkout.sql. What changed: the
 -- shelves it may choose from are taken FOR KEY SHARE first (so a move or a
--- count holding one is waited for, and seen), and the location named is the
--- switched-on one with the most free units (on the shelf minus what open
--- tasks already wait for), then the most units, then the code. Storage and
--- picking shelves come first, then the returns and receiving areas; the
--- damaged, packing and dispatch areas only when nothing else holds the
--- product (their units still count as sellable, see section 4).
+-- count holding one is waited for, and seen), and the location named is
+-- one that really has free units (on the shelf minus what open tasks
+-- already wait for): a switched-on storage, picking, returns or receiving
+-- location with free units first, storage and picking shelves before the
+-- returns and receiving areas, then the most free units, the most units,
+-- the code. A shelf whose units are all promised never wins over units
+-- that came back into the returns area. The damaged, packing and dispatch
+-- areas only when nothing else holds the product (their units still count
+-- as sellable, see section 4).
 create or replace function private.release_order_to_fulfillment(p_order_id uuid) returns void
 language plpgsql security definer
 set search_path = ''
@@ -332,7 +338,10 @@ begin
           join public.warehouse_locations wl on wl.id = b.location_id
           where wl.warehouse_id = s.origin_warehouse_id
             and b.sku_id = i.sku_id and b.seller_id = i.seller_id and b.quantity > 0
-          order by case when wl.kind in ('storage', 'pick') then 0
+          order by case when wl.active and wl.kind in ('storage', 'pick', 'returns', 'receiving')
+                             and b.quantity > private.location_promised(b.location_id, b.sku_id, b.seller_id)
+                        then 0 else 1 end,
+                   case when wl.kind in ('storage', 'pick') then 0
                         when wl.kind in ('returns', 'receiving') then 1
                         else 2 end,
                    wl.active desc,

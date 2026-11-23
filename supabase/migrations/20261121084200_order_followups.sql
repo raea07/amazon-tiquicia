@@ -53,6 +53,13 @@
 --      parcel left to deliver is on its way back to the warehouse, and the
 --      order list says whether money is held (`paid`), so a cash order being
 --      cancelled is not promised a refund.
+--   8. Found when this migration was merged with 084300 (warehouse stock):
+--      the warehouse starts picking and packs a parcel with the order's lock
+--      first (wms_start_picking, wms_pack_shipment), as staff stopping it
+--      does, so a stop at the moment of packing no longer deadlocks; and a
+--      returned parcel is not checked in while its Yuntera warehouse has no
+--      returns location switched on, so its units always land on a location
+--      (`returns_location_missing`).
 
 -- ═══ 1. Tables and columns ═════════════════════════════════════════════════
 
@@ -301,7 +308,10 @@ $$;
 
 -- Replaces the version in 20261121082900_integrity.sql. What changed: when
 -- the order ends cancelled and no parcel of it had a real attempt at the
--- door, the delivery fee is refunded too (private.refund_delivery_fee); the
+-- door, the delivery fee is refunded too (private.refund_delivery_fee); a
+-- resellable parcel of a Yuntera warehouse that has no returns location
+-- switched on is refused (`returns_location_missing`) instead of adding stock
+-- that sits on no shelf; the
 -- shopper's notes say the amounts given back, and a parcel staff stopped
 -- before it left is described as such. `order.cancelled` now carries what
 -- was really refunded (`amount_minor`), which the shopper's message states.
@@ -343,6 +353,12 @@ begin
     select wl.id into v_location from public.warehouse_locations wl
     where wl.warehouse_id = v_ship.origin_warehouse_id and wl.kind = 'returns' and wl.active
     order by wl.code limit 1;
+    -- Units put back into a Yuntera warehouse always land on a location the
+    -- location screens list and picking can name; without one they would
+    -- count in the shop's stock and sit on no shelf.
+    if v_location is null and coalesce(p_resellable, true) then
+      perform private.fail('returns_location_missing');
+    end if;
   end if;
 
   for r in
@@ -646,6 +662,87 @@ begin
     'order_number', v_order.order_number,
     'status', 'returning',
     'route_code', v_stop.code);
+end;
+$$;
+
+-- The warehouse starts and finishes a parcel with the order's lock first,
+-- then the parcel's, as ops_recall_shipment, wms_receive_returned_shipment
+-- and every function that moves an order's money do. Replace the versions in
+-- 20261121081100_fulfillment.sql, which took the parcel first and the order
+-- last (in private.sync_order_status): a stop of a parcel at the moment it
+-- was packed then ended with a deadlock for one of the two callers (proved
+-- in packages/db/src/contract.returned-stock-races.test.ts, iv). Nothing
+-- else changed.
+create or replace function public.wms_start_picking(p_shipment_id uuid) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_ship public.shipments%rowtype;
+begin
+  select * into v_ship from public.shipments where id = p_shipment_id;
+  if not found then
+    perform private.fail('shipment_not_found');
+  end if;
+  if not (private.works_at(v_ship.origin_warehouse_id) or private.has_staff_role('ops')) then
+    perform private.fail('forbidden');
+  end if;
+  perform 1 from public.orders where id = v_ship.order_id for update;
+  select * into v_ship from public.shipments where id = p_shipment_id for update;
+  if v_ship.status <> 'pending' then
+    perform private.fail('invalid_shipment_state', v_ship.status::text);
+  end if;
+  if not private.order_is_payable_for_fulfilment(v_ship.order_id) then
+    perform private.fail('order_not_ready');
+  end if;
+
+  update public.shipments set status = 'picking' where id = p_shipment_id;
+  update public.pick_tasks set status = 'in_progress'
+  where shipment_id = p_shipment_id and status = 'open';
+  perform private.sync_order_status(v_ship.order_id);
+end;
+$$;
+
+create or replace function public.wms_pack_shipment(
+  p_shipment_id uuid,
+  p_weight_grams integer,
+  p_package_count smallint default 1
+) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_ship public.shipments%rowtype;
+begin
+  select * into v_ship from public.shipments where id = p_shipment_id;
+  if not found then
+    perform private.fail('shipment_not_found');
+  end if;
+  if not (private.works_at(v_ship.origin_warehouse_id) or private.has_staff_role('ops')) then
+    perform private.fail('forbidden');
+  end if;
+  perform 1 from public.orders where id = v_ship.order_id for update;
+  select * into v_ship from public.shipments where id = p_shipment_id for update;
+  if v_ship.status <> 'picking' then
+    perform private.fail('invalid_shipment_state', v_ship.status::text);
+  end if;
+  if exists (
+    select 1 from public.pick_tasks t
+    where t.shipment_id = p_shipment_id and t.status in ('open', 'in_progress', 'short')
+  ) then
+    perform private.fail('picking_incomplete');
+  end if;
+  if p_weight_grams is null or p_weight_grams <= 0 or p_package_count < 1 then
+    perform private.fail('invalid_package');
+  end if;
+
+  perform private.consume_shipment_stock(p_shipment_id);
+
+  update public.shipments
+  set status = 'packed', packed_at = now(), weight_grams = p_weight_grams,
+      package_count = p_package_count
+  where id = p_shipment_id;
+  perform private.sync_order_status(v_ship.order_id);
 end;
 $$;
 

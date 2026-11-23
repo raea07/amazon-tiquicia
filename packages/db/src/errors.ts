@@ -12,7 +12,7 @@
 
 export type Locale = "es-CR" | "en";
 
-import { areaErrors } from "./areas";
+import { areaErrors, lockConflictCode } from "./areas";
 import type { Messages } from "./areas/types";
 
 const CORE_MESSAGES = {
@@ -466,13 +466,20 @@ export interface TransportError {
 /**
  * Converts a transport error into an ApiError. Application errors arrive as
  * SQLSTATE P0001 with our code in `message`; a denied privilege (42501) means
- * the caller is not signed in or not allowed. Anything else is reported as
+ * the caller is not signed in or not allowed; a deadlock (40P01) or a
+ * serialisation failure (40001) means nothing was changed and the call can
+ * be made again (areas/lock-conflicts.ts). Anything else is reported as
  * unknown, and its raw text is kept out of the user-facing message.
  */
 export function toApiError(error: TransportError, status: number | null = null): ApiError {
   const message = error.message ?? "";
   if (error.code === "P0001" && isErrorCode(message)) {
     return new ApiError(message, { detail: error.details || null, status, cause: error });
+  }
+  // A deadlock or serialisation failure: the database rolled the call back.
+  const conflict = lockConflictCode(error.code);
+  if (conflict) {
+    return new ApiError(conflict, { detail: error.code ?? null, status, cause: error });
   }
   if (error.code === "42501" || status === 401 || status === 403) {
     return new ApiError(status === 401 ? "not_authenticated" : "forbidden", {

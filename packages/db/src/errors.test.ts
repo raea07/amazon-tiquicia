@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createApi, type RpcTransport } from "./api";
+import { LOCK_CONFLICT_SQLSTATES } from "./areas/lock-conflicts";
 import { ApiError, ERROR_MESSAGES, isErrorCode, messageFor, toApiError } from "./errors";
 
 const migrationsDir = fileURLToPath(new URL("../../../supabase/migrations/", import.meta.url));
@@ -21,6 +22,8 @@ function codesRaisedBySql(): string[] {
   ]) {
     for (const match of sql.matchAll(pattern)) if (match[1]) found.add(match[1]);
   }
+  // Codes the client gives PostgreSQL's own lock-conflict SQLSTATEs.
+  for (const code of Object.values(LOCK_CONFLICT_SQLSTATES)) found.add(code);
   return [...found].sort();
 }
 

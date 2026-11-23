@@ -131,6 +131,11 @@ export type RemovedClosureDay = z.infer<typeof removedClosureDay>;
 export const RECALL_REASON_MIN_LETTERS = 5;
 
 export const orderFollowupsErrors = {
+  returns_location_missing: {
+    "es-CR":
+      "La bodega no tiene una zona de devoluciones activa, así que no se recibió el paquete. Pida a operaciones que active una ubicación de devoluciones y vuelva a intentarlo.",
+    en: "The warehouse has no returns area switched on, so the parcel was not received. Ask operations to switch on a returns location and try again.",
+  },
   shipment_not_recallable: {
     "es-CR":
       "Ese paquete ya no se puede detener desde aquí: va en camino, ya se entregó o ya viene de regreso. Recargue la página para ver dónde está. Si falló una entrega, devuélvalo a la bodega desde Despacho.",

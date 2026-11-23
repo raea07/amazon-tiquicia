@@ -267,6 +267,27 @@ async function rpcAs(email, calls) {
     header.includes("0 de 1 entregadas · 2 omitidas"),
     `the driver's header counts the removed stops: ${header.slice(0, 160)}`,
   );
+  // Once the route has started, the stop removed BEFORE the start still says
+  // not to collect its parcel (the driver never had it); the one removed
+  // after says to bring it back.
+  const beforeStart = await text(
+    section.locator("ol > li").filter({ hasText: route.stops[0].tracking }).first(),
+  );
+  const afterStart = await text(
+    section.locator("ol > li").filter({ hasText: route.stops[1].tracking }).first(),
+  );
+  log("removed before the start, once started:", beforeStart.slice(0, 200));
+  log("removed after the start:", afterStart.slice(0, 200));
+  check(
+    beforeStart.includes("No recoja este paquete: volvió a Despacho") &&
+      !beforeStart.includes("devuélvalo"),
+    `after the start, the stop removed before it tells the driver to bring back a parcel never collected: ${beforeStart.slice(0, 200)}`,
+  );
+  check(
+    afterStart.includes("Si lleva el paquete, devuélvalo a la bodega") &&
+      !afterStart.includes("No recoja"),
+    `the stop removed after the start does not ask for the parcel back: ${afterStart.slice(0, 200)}`,
+  );
   check((await overflow(driver)) <= 0, "the driver's route scrolls sideways on a phone");
   await driver.screenshot({ path: SHOTS + "/cf3-driver-header.png", fullPage: true });
 

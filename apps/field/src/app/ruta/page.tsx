@@ -1,3 +1,4 @@
+import { skippedStopNote } from "@yuntera/core";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { Alert, Badge, EmptyState, formatPrice, Skeleton, type Tone } from "@yuntera/ui";
@@ -156,10 +157,8 @@ async function Day({ searchParams }: Pick<PageProps<"/ruta">, "searchParams">) {
                     ) : null}
                     <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{stop.senas}</p>
                     {stop.status === "skipped" ? (
-                      <p className="mt-1 text-sm font-medium">
-                        {route.status === "assigned"
-                          ? "Central quitó esta parada de la ruta. No recoja este paquete: volvió a Despacho."
-                          : "Central quitó esta parada de la ruta. Si lleva el paquete, devuélvalo a la bodega."}
+                      <p className="mt-1 text-sm font-medium" data-testid="skipped-note">
+                        {skippedStopNote(route, stop)}
                       </p>
                     ) : null}
                     <p className="mt-2 flex flex-wrap gap-2 text-xs">

@@ -21,6 +21,7 @@ import { invoicingApi, invoicingErrors } from "./invoicing";
 import { invoicingFixesApi, invoicingFixesErrors } from "./invoicing-fixes";
 import { limitsApi, limitsErrors } from "./limits";
 import { listingsApi, listingsErrors } from "./listings";
+import { lockConflictErrors } from "./lock-conflicts";
 import { nativeAccountsApi, nativeAccountsErrors } from "./native-accounts";
 import * as notifications from "./notifications";
 import { operationsApi, operationsErrors } from "./operations";
@@ -33,7 +34,7 @@ import type { Caller, Messages } from "./types";
 import { warehouseStockApi, warehouseStockErrors } from "./warehouse-stock";
 import { webFollowupsApi, webFollowupsErrors } from "./web-followups";
 
-// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts, operations, order-followups and warehouse-stock areas name their exports uniquely, so
+// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts, operations, order-followups, warehouse-stock and lock-conflicts areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
 // would clash with each other, so their schemas and types are re-exported by
 // name.
@@ -68,6 +69,7 @@ export * from "./invoicing";
 export * from "./invoicing-fixes";
 export * from "./limits";
 export * from "./listings";
+export * from "./lock-conflicts";
 export * from "./native-accounts";
 export {
   type ChannelChoicesInput,
@@ -124,6 +126,7 @@ export const areaErrors = {
   ...operationsErrors,
   ...orderFollowupsErrors,
   ...warehouseStockErrors,
+  ...lockConflictErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({

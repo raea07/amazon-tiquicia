@@ -29,6 +29,15 @@ describe("messageOf", () => {
     expect(messageOf(new TypeError("Network request failed"))).toMatch(/conexión/);
   });
 
+  it("says nothing was saved and to try again when the database rolled a call back for a lock conflict", () => {
+    for (const sqlstate of ["40P01", "40001"]) {
+      const text = messageOf(toApiError({ code: sqlstate, message: "deadlock detected" }, 500));
+      expect(text).toBe(ERROR_MESSAGES.try_again["es-CR"]);
+      expect(text).toMatch(/no se guardó nada/);
+      expect(text).not.toMatch(/deadlock|40P01|40001/);
+    }
+  });
+
   it("hides the text of anything unexpected", () => {
     expect(messageOf(new Error("relation public.orders does not exist"))).toBe(GENERIC_ERROR);
     expect(messageOf("boom")).toBe(GENERIC_ERROR);

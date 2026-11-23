@@ -108,3 +108,15 @@ describe("WEB-2: the apps' own limit in front of Auth", () => {
     expect(reserveAttempt).toHaveBeenCalledWith("sign_up", { email: "nueva@correo.example" });
   });
 });
+
+describe("a lock conflict reaches the form as 'nothing was saved, try again'", () => {
+  it("maps deadlock (40P01) and serialisation failure (40001) to one plain sentence", async () => {
+    const { messageOf } = await import("./actions");
+    const { ERROR_MESSAGES, toApiError } = await import("@yuntera/db");
+    for (const sqlstate of ["40P01", "40001"]) {
+      const text = messageOf(toApiError({ code: sqlstate, message: "deadlock detected" }, 500));
+      expect(text).toBe(ERROR_MESSAGES.try_again["es-CR"]);
+      expect(text).not.toMatch(/deadlock|40P01|40001/);
+    }
+  });
+});

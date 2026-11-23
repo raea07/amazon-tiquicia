@@ -115,13 +115,24 @@ async function preRequestFunction(client: PoolClient): Promise<string | null> {
   return `"${match[1]}"."${match[2]}"`;
 }
 
-/** HTTP status for a database error, following PostgREST's mapping. */
-function statusFor(sqlState: string, isAnonymous: boolean): number {
+/**
+ * HTTP status for a database error, following PostgREST's table (mirrored in
+ * Supabase's "Error Codes" page of the Data API). The SQLSTATE itself always
+ * travels in the error's `code`, as the hosted Data API sends it: a deadlock
+ * (40P01) or a serialisation failure (40001) reaches the client as such,
+ * with 500.
+ */
+export function statusFor(sqlState: string, isAnonymous: boolean): number {
   if (sqlState === "42501") return isAnonymous ? 401 : 403;
   if (sqlState === "23505" || sqlState === "23503") return 409;
-  if (sqlState === "P0001" || sqlState.startsWith("22") || sqlState.startsWith("23")) return 400;
-  if (sqlState === "42883") return 404;
-  return 500;
+  if (sqlState === "P0001") return 400;
+  if (sqlState === "42883" || sqlState === "42P01") return 404;
+  if (sqlState === "25006") return 405;
+  if (sqlState === "53400" || sqlState === "42P17") return 500;
+  if (/^(08|53)/.test(sqlState)) return 503;
+  if (/^(0L|0P|28)/.test(sqlState)) return 403;
+  if (/^(09|25|2D|38|39|3B|40|54|55|57|58|F0|HV|P0|XX)/.test(sqlState)) return 500;
+  return 400;
 }
 
 export async function callRpc(

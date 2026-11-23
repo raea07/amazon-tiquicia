@@ -13,6 +13,7 @@ export * from "./photos";
 export * from "./promise";
 export * from "./recommendations";
 export * from "./risk";
+export * from "./route-stops";
 export * from "./routing";
 export * from "./scan-codes";
 export * from "./search";
