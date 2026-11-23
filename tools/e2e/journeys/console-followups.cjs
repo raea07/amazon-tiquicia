@@ -144,7 +144,9 @@ async function rpcAs(email, calls) {
   await go("/operacion/distritos?canton=115");
   await staff.locator('button:has-text("Revisar el cambio")').click();
   await staff.waitForLoadState("networkidle");
-  let alert = await text(staff.locator('main [role="alert"]').first());
+  let alert = await text(
+    staff.locator('main [role="status"], main [role="alert"]').filter({ hasText: "Elija" }).first(),
+  );
   log("nothing chosen:", alert);
   check(
     alert.includes("Elija al menos un distrito y a qué zona pasan"),
@@ -153,7 +155,9 @@ async function rpcAs(email, calls) {
   await staff.locator('li[data-district="11503"] input[type="checkbox"]').check();
   await staff.locator('button:has-text("Revisar el cambio")').click();
   await staff.waitForLoadState("networkidle");
-  alert = await text(staff.locator('main [role="alert"]').first());
+  alert = await text(
+    staff.locator('main [role="status"], main [role="alert"]').filter({ hasText: "Elija" }).first(),
+  );
   log("no destination:", alert);
   check(alert.includes("Elija a qué zona pasan"), `no destination gives no message: ${alert}`);
   check(

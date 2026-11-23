@@ -124,7 +124,8 @@ async function Districts({
             {canton.name}, {canton.province} (
             {plural(canton.districts.length, "distrito", "distritos")})
           </h2>
-          <form method="get" className="mt-3 flex flex-col gap-4">
+          {/* Our own message says what is missing (below), in Spanish, for any browser. */}
+          <form method="get" noValidate className="mt-3 flex flex-col gap-4">
             <input type="hidden" name="canton" value={canton.code} />
             <input type="hidden" name="revisar" value="1" />
             <fieldset>

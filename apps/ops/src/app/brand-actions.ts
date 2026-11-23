@@ -60,9 +60,9 @@ export async function deleteBrand(
       throw error;
     }
   });
-  // The list changed under the form either way: a refusal means someone gave
-  // the brand a product meanwhile, and the page should show it.
-  refresh();
+  // On a refusal the page is not redrawn: the form stays, with the refusal
+  // under it (a redraw would take the form, and its message, away).
   if (explained) return { error: explained };
+  if (state.ok) refresh();
   return state;
 }
