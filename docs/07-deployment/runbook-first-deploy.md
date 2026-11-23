@@ -1696,6 +1696,129 @@ district list at once. The read-only checks of point 2 matter only on a
 database with data. Record and compare the delivery promises within one Costa
 Rica day.
 
+### Migrations 084200 and 084300
+
+Two migrations of wave 7, merged on 23 November 2026 at `717048f`. Apply them
+in filename order, in one sitting, then redeploy the four web apps together:
+
+1. `20261121084200_order_followups.sql` (19 functions): the delivery fee is
+   refunded as its own refund row (reason `delivery_fee`) when receiving a
+   returned parcel cancels the order and no parcel of it had a real attempt at
+   the door; staff stop a packed parcel, or one ready on a route that has not
+   started (`ops_recall_shipment`, the columns `shipments.recalled_at`,
+   `recalled_by` and `recall_reason`, two new transitions to `returning`);
+   `my_orders` is dropped and recreated with two more columns (`shipments`,
+   `paid`; 13 in all); `get_order` gives no delivery code while every parcel
+   left to deliver is on its way back; an order never moves back a status
+   (`private.sync_order_status`); `wms_start_picking` and `wms_pack_shipment`
+   take the order's lock first; `wms_receive_returned_shipment` refuses
+   (`returns_location_missing`) while the parcel's Yuntera warehouse has no
+   returns location switched on; `ops_remove_zone_closure_day`; five indexes
+   (four for the "who" foreign keys of `084000`, one for `recalled_by`).
+2. `20261121084300_warehouse_stock.sql` (14 functions): the warehouse opens a
+   location (`wms_stock_locations`, `wms_location_stock`), moves free units
+   to a shelf (`wms_move_stock`) and corrects a count (`wms_adjust_stock`:
+   the five-argument function is dropped and recreated with an optional sixth
+   argument `p_expected`, and new refusals); `seller_stock_history`,
+   `ops_stock_changes`; `wms_find_sku` and
+   `private.release_order_to_fulfillment` redefined; and three older private
+   functions redefined so every stock writer takes stock rows by product,
+   shop and warehouse: `private.expire_unpaid_orders` (the unpaid-order
+   sweep), `private.consume_shipment_stock` (packing) and
+   `private.cancel_order_internal` (every cancellation; these two differ from
+   before only in their sort lines). Three partial indexes.
+
+What they change in a database that already has data, once: districts whose
+own zone equals their canton's zone are cleared, with one `district_zone`
+audit entry each (nothing changes for any delivery: the zone is the same).
+Nothing else is rewritten: the new shipment columns stay null, the refund
+register only learns a new reason, existing refunds, payments, ledger rows,
+stock and pick tasks are not touched, and the new fee rule does not apply to
+orders already closed. From then on a returned parcel of a Yuntera warehouse
+with no returns location switched on is refused until staff switch one on
+(Operación → Ubicaciones). No new secret, setting or environment variable.
+The new lock design needs `READ COMMITTED`, the default: check it first.
+
+Do this in order.
+
+1. **Check the starting point**: `remote-db.sh status` lists 39 applied files
+   and these two pending, and nothing else pending. Record what point 4
+   compares against (settings, zones, districts with a zone of their own,
+   holidays, closures, locations and their stock, open pick tasks, orders,
+   shipments, refunds, payments, the ledger, the four private functions'
+   definitions and rights, the sweep's scheduled job).
+2. **Read-only checks**:
+
+   ```sql
+   -- districts that will be cleared (each gets an audit entry)
+   select d.postal_code, d.zone_id from public.districts d
+   join public.cantons c on c.code = d.canton_code
+   where d.zone_id is not null and d.zone_id = c.zone_id;
+   -- every Yuntera warehouse has a returns location switched on (no row expected)
+   select w.code from public.warehouses w where w.kind = 'platform'
+     and not exists (select 1 from public.warehouse_locations l
+                     where l.warehouse_id = w.id and l.kind = 'returns' and l.active);
+   -- the isolation level of the database and of the API's roles (read committed)
+   show default_transaction_isolation;
+   select rolname, rolconfig from pg_roles
+   where rolname in ('authenticator', 'authenticated', 'anon', 'postgres');
+   -- what depends on the two functions that are dropped (nothing expected
+   -- besides their own grants)
+   select classid::regclass, objid, deptype from pg_depend
+   where refobjid in ('public.my_orders(integer, integer)'::regprocedure,
+                      'public.wms_adjust_stock(uuid, uuid, uuid, integer, text)'::regprocedure);
+   ```
+
+3. **Apply the two** with `remote-db.sh push`; `status` then lists 41 files.
+   Straight after, call `my_orders` and `get_order` through the public API as
+   a shopper: the API must have picked up the recreated `my_orders` (it
+   reloads its schema cache on the migration's DDL; a "function not found"
+   answer means it has not yet).
+4. **Check what they left**:
+
+   ```sql
+   select count(*) from public.districts d join public.cantons c on c.code = d.canton_code
+   where d.zone_id is not null and d.zone_id = c.zone_id;                          -- 0
+   select count(*) from public.shipments
+   where recalled_at is not null or recalled_by is not null or recall_reason is not null; -- 0
+   select count(*) from pg_proc where proname = 'wms_adjust_stock';                -- 1
+   select pg_get_function_identity_arguments('public.wms_adjust_stock'::regproc);  -- six arguments
+   select has_function_privilege('anon', 'public.my_orders(integer, integer)', 'execute');          -- false
+   select has_function_privilege('authenticated', 'public.my_orders(integer, integer)', 'execute'); -- true
+   select count(*) from pg_indexes where indexname in ('route_stops_removed_by_idx',
+     'routes_closed_by_idx', 'zone_closure_periods_created_by_idx',
+     'zone_closure_periods_ended_early_by_idx', 'shipments_recalled_by_idx');      -- 5
+   select private.shipment_transition_allowed('packed', 'returning');             -- true
+   ```
+
+   And: settings, zones, holidays, closures, orders and shipments by status,
+   refunds, payments, the ledger, stock per shelf and the open pick tasks as
+   in point 1; the four private functions with a new definition, the same
+   owner, `security definer`, an empty search path and no app role allowed to
+   run them; the list of functions a visitor may call unchanged; the sweep's
+   first run after the push succeeded.
+5. **Run the suites** with `remote-db.sh test`: all 33 files, among them the
+   new `167_order_followups.sql`, `168_warehouse_stock.sql` and
+   `169_returned_stock.sql`; the same two `skipped` rows as before and no
+   other. Never run the contract race tests against a hosted database.
+6. **Redeploy the four web apps together** (step 7). Until then the old shop
+   reads `my_orders` with its old schema (the two new columns are ignored)
+   and the old field app has no stock screens.
+7. **The shopper app in the stores' test tracks (`3f251c3`) keeps working**:
+   `my_orders` keeps its first eleven columns, `get_order` only gains fields
+   and answers no delivery code for an order whose parcels are all coming
+   back. It shows a stopped parcel as its old build reads `returning`.
+8. **A smoke test**: a paid order stopped before it left (goods and delivery
+   fee refunded as two rows), a cash order stopped (nothing refunded), a real
+   attempt at the door (fee kept), a district moved and moved back (its own
+   zone empty again), and a location's move and count corrections, each
+   undone.
+
+**Verified only locally before the preview:** the lock order under parallel
+sessions (the race tests in `packages/db`, which never run against a hosted
+database), and the deadlock message every app shows ("nothing was saved, try
+again"), which needs two sessions colliding on purpose.
+
 ## 4. Confirm the database is what the migrations say
 
 Write these to a file and run it with `remote-db.sh sql <project-reference>
