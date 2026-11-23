@@ -41,6 +41,11 @@ export function MoveForm({
   targets: Shelf[];
 }) {
   const [state, action] = useActionState(moveStock, initial);
+  // A shelf kept from a refused try is chosen again only while it is still
+  // offered: one switched off meanwhile leaves the choice empty, never
+  // another shelf the worker did not choose.
+  const kept = state.values?.toLocationId ?? "";
+  const chosen = targets.some((target) => target.id === kept) ? kept : "";
   if (targets.length === 0) {
     return (
       <p className="text-sm text-ink-muted">
@@ -67,12 +72,12 @@ export function MoveForm({
           label="Mover a"
           aria-label={`Mover ${label(item)} a`}
           name="toLocationId"
-          defaultValue={state.values?.toLocationId ?? ""}
-          key={state.values?.toLocationId ?? "none"}
+          defaultValue={chosen}
+          key={`${chosen}:${targets.map((target) => target.id).join(",")}`}
         >
-          <option value="" disabled>
-            Elija el estante…
-          </option>
+          {/* Not disabled: when the chosen shelf leaves the list, the browser
+              falls back to this empty choice rather than the first shelf. */}
+          <option value="">Elija el estante…</option>
           {targets.map((target) => (
             <option key={target.id} value={target.id}>
               {target.code}

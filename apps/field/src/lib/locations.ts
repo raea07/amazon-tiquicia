@@ -17,3 +17,9 @@ export const locationHref = (code: string) =>
   `/bodega/ubicacion?codigo=${encodeURIComponent(code)}` as Route;
 
 export const units = (n: number) => `${n} ${n === 1 ? "unidad" : "unidades"}`;
+
+/** What a move did, in the words the location's page shows after it. */
+export const movedText = (quantity: number, to: string) =>
+  quantity === 1
+    ? `Se movió 1 unidad a ${to}. Guárdela allí ahora.`
+    : `Se movieron ${units(quantity)} a ${to}. Guárdelas allí ahora.`;

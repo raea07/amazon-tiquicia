@@ -49,7 +49,10 @@ function MoveForm({
   onRefused: () => void;
 }) {
   const [quantity, setQuantity] = useState("");
-  const [target, setTarget] = useState<string | null>(null);
+  const [picked, setTarget] = useState<string | null>(null);
+  // A shelf chosen before it was switched off (the list is read again after
+  // a refusal) is no longer offered: nothing stays chosen.
+  const target = picked && targets.some((shelf) => shelf.id === picked) ? picked : null;
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const move = useApiMutation(
@@ -403,6 +406,8 @@ export default function LocationScreen() {
               targets={targets}
               onDone={setDone}
               onRefused={() => {
+                // An earlier move's or count's answer is not left next to this refusal.
+                setDone(null);
                 void location.refetch();
                 void all.refetch();
               }}

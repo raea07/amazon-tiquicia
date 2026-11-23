@@ -1,7 +1,7 @@
 // Runs with Node's own test runner (`pnpm test` here), as floor.test.ts.
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { differenceText, parseCount, parseMove } from "./stock";
+import { differenceText, movedText, parseCount, parseMove } from "./stock";
 
 describe("a move", () => {
   it("needs a target and a whole number of free units", () => {
@@ -45,5 +45,15 @@ describe("a count", () => {
     assert.equal(differenceText("7", 7), "Coincide con lo registrado: no hay nada que corregir.");
     assert.equal(differenceText("5", 7), "Diferencia: −2 unidades (faltan). Quedarán 5 unidades.");
     assert.equal(differenceText("8", 7), "Diferencia: +1 unidad (sobran). Quedarán 8 unidades.");
+  });
+});
+
+describe("the answer after a move", () => {
+  it("agrees with the number of units", () => {
+    assert.equal(movedText(1, "B-01-02-A"), "Se movió 1 unidad a B-01-02-A. Guárdela allí ahora.");
+    assert.equal(
+      movedText(3, "B-01-02-A"),
+      "Se movieron 3 unidades a B-01-02-A. Guárdelas allí ahora.",
+    );
   });
 });

@@ -8,12 +8,13 @@
  * made from a number the shelf no longer has.
  *
  * On success the location's page is loaded again with what was done (the
- * product may have left the shelf, and its form with it). On a refusal the
- * page behind is drawn again too, so its numbers are the database's, and the
- * form keeps what was typed.
+ * product may have left the shelf, and its form with it); the page shows it
+ * once and takes it out of the address. On any refusal the page behind is
+ * drawn again too, so its numbers are the database's and no earlier
+ * confirmation stays next to it, and the form keeps what was typed.
  */
 
-import { ApiError, reasonLetters, STOCK_LIMITS } from "@yuntera/db";
+import { reasonLetters, STOCK_LIMITS } from "@yuntera/db";
 import {
   type ActionState,
   GENERIC_ERROR,
@@ -50,6 +51,16 @@ function productOf(formData: FormData) {
 const back = (code: string, outcome: Record<string, string>) =>
   safeReturnPath(`/bodega/ubicacion?${new URLSearchParams({ codigo: code, ...outcome })}`);
 
+/**
+ * A refusal. The page behind is drawn again, so its numbers are the
+ * database's and the confirmation of an earlier move or count (already taken
+ * out of the address) is not left next to this refusal.
+ */
+function refuse(error: string, values: ActionState["values"]): ActionState {
+  refresh();
+  return { error, values };
+}
+
 async function api(code: string) {
   if (!(await getViewer())) redirectTo(signInPath(back(code, {})));
   return sessionApi();
@@ -58,17 +69,17 @@ async function api(code: string) {
 export async function moveStock(_previous: ActionState, formData: FormData): Promise<ActionState> {
   const values = typed(formData, "quantity", "toLocationId", "note");
   const ids = productOf(formData);
-  if (!ids.success) return { error: GENERIC_ERROR, values };
+  if (!ids.success) return refuse(GENERIC_ERROR, values);
   const target = z.uuid().safeParse(values.toLocationId);
-  if (!target.success) return { error: "Elija a qué estante lo mueve.", values };
+  if (!target.success) return refuse("Elija a qué estante lo mueve.", values);
   const [least, most] = STOCK_LIMITS.moveQuantity;
   const quantity = z.number().int().min(least).max(most).safeParse(whole(values.quantity));
   if (!quantity.success) {
-    return { error: "Escriba cuántas unidades mueve: un número entero desde 1.", values };
+    return refuse("Escriba cuántas unidades mueve: un número entero desde 1.", values);
   }
   const note = (values.note ?? "").trim();
   if (note.length > STOCK_LIMITS.moveNoteLength) {
-    return { error: "La nota es demasiado larga: use menos de 200 caracteres.", values };
+    return refuse("La nota es demasiado larga: use menos de 200 caracteres.", values);
   }
 
   const client = await api(ids.data.locationCode);
@@ -85,8 +96,7 @@ export async function moveStock(_previous: ActionState, formData: FormData): Pro
   } catch (error) {
     if (isRedirect(error)) throw error;
     // The shelf changed or the target was switched off meanwhile: show its numbers now.
-    if (error instanceof ApiError) refresh();
-    return { error: messageOf(error), values };
+    return refuse(messageOf(error), values);
   }
   redirectTo(
     back(ids.data.locationCode, { movidas: String(moved.quantity), destino: moved.to.code }),
@@ -100,27 +110,27 @@ export async function correctCount(
   const values = typed(formData, "counted", "note");
   const ids = productOf(formData);
   const expected = z.coerce.number().int().min(0).safeParse(formData.get("expected"));
-  if (!ids.success || !expected.success) return { error: GENERIC_ERROR, values };
+  if (!ids.success || !expected.success) return refuse(GENERIC_ERROR, values);
   const counted = z.number().int().min(0).max(100_000).safeParse(whole(values.counted));
   if (!counted.success) {
-    return { error: "Escriba cuántas unidades contó: un número entero desde 0.", values };
+    return refuse("Escriba cuántas unidades contó: un número entero desde 0.", values);
   }
   const delta = counted.data - expected.data;
   if (delta === 0) {
-    return { error: "Contó lo mismo que está registrado: no hay nada que corregir.", values };
+    return refuse("Contó lo mismo que está registrado: no hay nada que corregir.", values);
   }
   if (Math.abs(delta) > STOCK_LIMITS.adjustDelta) {
-    return {
-      error: "Una corrección no puede cambiar más de 10 000 unidades. Avise a operaciones.",
+    return refuse(
+      "Una corrección no puede cambiar más de 10 000 unidades. Avise a operaciones.",
       values,
-    };
+    );
   }
   const note = (values.note ?? "").trim();
   if (reasonLetters(note) < STOCK_LIMITS.reasonLetters || note.length > STOCK_LIMITS.reasonLength) {
-    return {
-      error: "Escriba el motivo con al menos 5 letras, por ejemplo «faltan 2, caja rota».",
+    return refuse(
+      "Escriba el motivo con al menos 5 letras, por ejemplo «faltan 2, caja rota».",
       values,
-    };
+    );
   }
 
   const client = await api(ids.data.locationCode);
@@ -135,8 +145,7 @@ export async function correctCount(
     });
   } catch (error) {
     if (isRedirect(error)) throw error;
-    if (error instanceof ApiError) refresh();
-    return { error: messageOf(error), values };
+    return refuse(messageOf(error), values);
   }
   redirectTo(
     back(ids.data.locationCode, { contadas: String(counted.data), diferencia: String(delta) }),

@@ -6,14 +6,18 @@
 // refused; meanwhile operations corrects the same shelf, so the count made
 // from the old number is refused by the database ("count again"), the screen
 // reads the shelf again with the typed count kept, shows the new difference,
-// and the count is confirmed. The product's lookup lists both shelves. Then
-// the shop's stock and its history (what the seller centre reads) show the
-// correction with its reason and never the move, and the staff list (what the
+// and the count is confirmed; then two more are found (a count upwards). One
+// unit is moved back, first to a shelf operations switch off while the form
+// is open (refused by the database, and that shelf is no longer chosen), then
+// to its first shelf. The product's lookup lists both shelves. Then the shop's
+// stock and its history (what the seller centre reads) show both corrections
+// with their reasons and never the moves, and the staff list (what the
 // console reads) shows both with who. Every screen at 390 px with no sideways
 // scroll, photographed; the screen says moves and counts need signal.
 //
 // Fails on any console error, uncaught exception or 5xx (the database's
-// refusal of the stale count is a 400 the browser logs, expected once).
+// refusals of the stale count and of the switched-off shelf are 400s the
+// browser logs, expected there).
 
 const { chromium, request } = require("playwright");
 
@@ -23,6 +27,7 @@ const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const TARGET = "Y-92-01-A";
+const SWITCHED_OFF = "Y-92-02-A";
 const log = (...args) => console.log(...args);
 const squash = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -66,10 +71,14 @@ async function rpcAs(email, calls) {
     ["wms_find_sku", { p_warehouse_id: notebook.warehouse_id, p_code: notebook.sku_code }],
   ]);
   const source = sku.bins[0];
-  const [target] = await rpcAs("central@yuntera.example", [
+  const [target, other] = await rpcAs("central@yuntera.example", [
     [
       "ops_create_location",
       { p_warehouse_id: notebook.warehouse_id, p_code: TARGET, p_kind: "storage" },
+    ],
+    [
+      "ops_create_location",
+      { p_warehouse_id: notebook.warehouse_id, p_code: SWITCHED_OFF, p_kind: "storage" },
     ],
   ]);
   log(`notebook ${notebook.sku_code}: ${source.quantity} on ${source.location_code}`);
@@ -236,6 +245,69 @@ async function rpcAs(email, calls) {
   await noSideways("count");
   await shot("05-counted");
 
+  // ── Two more found: a count upwards ──
+  if ((await inItem("count-quantity").count()) === 0) await inItem("open-count").click();
+  await inItem("count-quantity").fill("4");
+  check(
+    squash(await inItem("count-difference").innerText()) ===
+      "Diferencia: +2 unidades (sobran). Quedarán 4 unidades.",
+    "the difference upwards is shown before confirming",
+  );
+  await inItem("count-note").fill("Dos libretas detrás de una caja");
+  await inItem("count-submit").click();
+  await page
+    .getByText(/ahora hay 4 unidades \(\+2\)/)
+    .first()
+    .waitFor();
+  check(true, "the count upwards is confirmed");
+  check(await itemSays("En el estante 4"), "the shelf shows four");
+
+  // ── One back: to a shelf switched off meanwhile (refused), then to its first shelf ──
+  if ((await inItem("move-quantity").count()) === 0) await inItem("open-move").click();
+  await inItem("move-quantity").fill("1");
+  await item().getByTestId(`move-target-${other.id}`).first().click();
+  await rpcAs("central@yuntera.example", [
+    ["ops_set_location_active", { p_location_id: other.id, p_active: false }],
+  ]);
+  expectRefusal = true;
+  await inItem("move-submit").click();
+  await item()
+    .getByText(/está desactivada/)
+    .first()
+    .waitFor();
+  check(true, "a move to a shelf switched off meanwhile is refused by the database");
+  check(
+    (await page.getByTestId("stock-result").count()) === 0,
+    "the earlier confirmation is not shown next to the refusal",
+  );
+  const deadline = Date.now() + 15000;
+  while (
+    Date.now() < deadline &&
+    (await item().getByTestId(`move-target-${other.id}`).count()) > 0
+  ) {
+    await page.waitForTimeout(200);
+  }
+  check(
+    (await item().getByTestId(`move-target-${other.id}`).count()) === 0 &&
+      (await inItem("move-quantity").inputValue()) === "1",
+    "the switched-off shelf leaves the choices, the quantity is kept",
+  );
+  expectRefusal = false;
+  await inItem("move-submit").click();
+  check(
+    (await textOf("move-error")).includes("Elija a qué estante lo mueve"),
+    "nothing stays chosen: a second press moves nothing",
+  );
+  await shot("05b-move-refused-switched-off");
+  await item().getByTestId(`move-target-${source.location_id}`).first().click();
+  await inItem("move-submit").click();
+  await page
+    .getByText(`Se movió 1 unidad a ${source.location_code}. Guárdela allí ahora.`)
+    .first()
+    .waitFor();
+  check(true, "one unit: the confirmation agrees with the number");
+  check(await itemSays("En el estante 3"), "the shelf shows three");
+
   // ── The product's locations ──
   await page.goto(`${BASE}/buscar`, { waitUntil: "networkidle" });
   await byId("lookup-input").fill(notebook.sku_code);
@@ -258,9 +330,12 @@ async function rpcAs(email, calls) {
   ]);
   check(
     history[0].kind === "warehouse_count" &&
-      history[0].change === -2 &&
-      history[0].note === "Una libreta con la tapa rota",
-    "the shop's history shows the correction with its reason",
+      history[0].change === 2 &&
+      history[0].note === "Dos libretas detrás de una caja" &&
+      history[1].kind === "warehouse_count" &&
+      history[1].change === -2 &&
+      history[1].note === "Una libreta con la tapa rota",
+    "the shop's history shows both corrections with their reasons",
   );
   check(
     history.every((entry) => entry.change !== 0) && !/Kattia|bodega@/.test(JSON.stringify(history)),
@@ -269,7 +344,7 @@ async function rpcAs(email, calls) {
   const after = stockAfter.find(
     (row) => row.sku_id === notebook.sku_id && row.warehouse_kind === "platform",
   );
-  check(after.on_hand === notebook.on_hand - 1, "the shop holds one unit fewer (+1 −2)");
+  check(after.on_hand === notebook.on_hand + 1, "the shop holds one unit more (+1 −2 +2)");
   const [changes] = await rpcAs("central@yuntera.example", [
     ["ops_stock_changes", { p_limit: 10 }],
   ]);

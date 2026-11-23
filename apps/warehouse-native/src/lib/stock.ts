@@ -73,4 +73,6 @@ export const countedText = (counted: number, delta: number) =>
 
 /** The answer after a move, as on the web. */
 export const movedText = (quantity: number, to: string) =>
-  `Se movieron ${plural(quantity, "unidad", "unidades")} a ${to}. Guárdelas allí ahora.`;
+  quantity === 1
+    ? `Se movió 1 unidad a ${to}. Guárdela allí ahora.`
+    : `Se movieron ${plural(quantity, "unidad", "unidades")} a ${to}. Guárdelas allí ahora.`;

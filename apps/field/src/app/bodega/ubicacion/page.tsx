@@ -5,8 +5,9 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { CountForm, MoveForm } from "@/components/stock-forms";
+import { StockOutcome } from "@/components/stock-outcome";
 import { requireWarehouse } from "@/lib/access";
-import { LOCATION_KIND, locationHref, units } from "@/lib/locations";
+import { LOCATION_KIND, locationHref, movedText, units } from "@/lib/locations";
 
 export const metadata: Metadata = { title: "Ubicación" };
 
@@ -33,25 +34,20 @@ const count = (value: string | string[] | undefined) => {
   return /^-?\d{1,6}$/.test(text) ? Number(text) : null;
 };
 
-/** What the last move or correction did, as the action reported it in the address. */
+/** What the last move or correction did, as the action reported it in the address (shown once). */
 function Outcome({ params }: { params: Record<string, string | string[] | undefined> }) {
   const moved = count(params.movidas);
   const target = one(params.destino) ?? "";
   if (moved !== null && moved > 0 && /^[A-Z0-9-]{1,20}$/.test(target)) {
-    return (
-      <Alert tone="success" title="Unidades movidas">
-        Se movieron {units(moved)} a {target}. Guárdelas allí ahora.
-      </Alert>
-    );
+    return <StockOutcome title="Unidades movidas">{movedText(moved, target)}</StockOutcome>;
   }
   const counted = count(params.contadas);
   const delta = count(params.diferencia);
   if (counted !== null && counted >= 0 && delta) {
     return (
-      <Alert tone="success" title="Cantidad corregida">
-        Ahora hay {units(counted)} ({delta > 0 ? "+" : "−"}
-        {Math.abs(delta)}). La tienda ve la corrección y su motivo en su inventario.
-      </Alert>
+      <StockOutcome title="Cantidad corregida">
+        {`Ahora hay ${units(counted)} (${delta > 0 ? "+" : "−"}${Math.abs(delta)}). La tienda ve la corrección y su motivo en su inventario.`}
+      </StockOutcome>
     );
   }
   return null;

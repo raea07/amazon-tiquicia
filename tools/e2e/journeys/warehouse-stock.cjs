@@ -1,11 +1,15 @@
 // Warehouse stock journey, on a phone: the warehouse lead opens the list of
 // locations, opens the notebook's shelf by typing its code, tries to move more
 // units than are free (refused, what was typed kept), moves three to a new
-// shelf, opens that shelf from the list, counts it with a reason too short
-// (refused, kept), sees the difference before confirming and corrects it; the
-// product's own page lists both shelves. The shop (seller centre) sees the
-// correction with its reason in its stock history and one unit fewer in the
-// warehouse, never the move. In the console, the staff list shows the move and
+// shelf, tries to move one more to a shelf operations switched off meanwhile
+// (refused, the choice of shelf goes back to empty, the earlier confirmation
+// is gone) and moves it to the new shelf instead; opens that shelf from the
+// list, counts it with a reason too short (refused, kept), sees the
+// difference before confirming and corrects it down by one, then counts two
+// more found behind a box; the product's own page lists both shelves. The
+// shop (seller centre) sees both corrections with their reasons in its stock
+// history and one unit more in the warehouse on the product's own row, never
+// the move. In the console, the staff list shows the move and
 // the correction with who did them; a shelf holding stock cannot be switched
 // off and the refusal says how to empty it; once the warehouse moved its units
 // back, it is switched off. Every screen is checked at 390 px (no sideways
@@ -24,6 +28,7 @@ const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const TARGET = "Y-93-01-A";
+const SWITCHED_OFF = "Y-93-02-A";
 const log = (...a) => console.log(...a);
 const squash = (t) => t.replace(/\s+/g, " ").trim();
 const text = async (loc) => squash(await loc.innerText());
@@ -132,13 +137,30 @@ async function rpcAs(email, calls) {
   const source = sku.bins[0];
   log("notebook:", notebook.sku_code, "on", source.location_code, "x", source.quantity);
   // A new shelf to move to, made by operations.
-  const [created] = await rpcAs("central@yuntera.example", [
+  const [created, other] = await rpcAs("central@yuntera.example", [
     [
       "ops_create_location",
       { p_warehouse_id: notebook.warehouse_id, p_code: TARGET, p_kind: "storage" },
     ],
+    [
+      "ops_create_location",
+      { p_warehouse_id: notebook.warehouse_id, p_code: SWITCHED_OFF, p_kind: "storage" },
+    ],
   ]);
-  check(created?.code === TARGET, "operations created the new shelf");
+  check(
+    created?.code === TARGET && other?.code === SWITCHED_OFF,
+    "operations created the new shelves",
+  );
+  /** The confirmation of a move or a count saying `wanted`, shown once and then taken out of the address. */
+  const outcome = async (wanted) => {
+    const banner = field.locator('main [role="status"]', { hasText: wanted });
+    await banner.waitFor();
+    await field.waitForFunction(
+      () => !/[?&](movidas|destino|contadas|diferencia)=/.test(window.location.search),
+    );
+    await field.waitForLoadState("networkidle");
+    return text(banner);
+  };
 
   // ── 1. The warehouse: the list, a location by its code ─────────────────────
   const field = await phone();
@@ -188,39 +210,96 @@ async function rpcAs(email, calls) {
   await layout(field, "move-refused");
   await item().locator('input[name="quantity"]').fill("3");
   await item().locator('button:has-text("Mover las unidades")').click();
-  await field.waitForURL((u) => new URL(u).searchParams.get("movidas") === "3");
-  await field.waitForLoadState("networkidle");
-  const moved = await text(field.locator('main [role="status"]').first());
+  const moved = await outcome("Se movieron 3 unidades");
   log("moved:", moved);
-  check(moved.includes(`Se movieron 3 unidades a ${TARGET}`), "the move is confirmed");
+  check(
+    moved.includes(`Se movieron 3 unidades a ${TARGET}. Guárdelas allí ahora.`),
+    "the move is confirmed",
+  );
   check(
     (await text(item().locator("dl"))).includes(`En el estante ${source.quantity - 3}`),
     "the source shelf shows three fewer",
   );
 
+  // One more, to a shelf that operations switch off while the form is open:
+  // refused, and the choice of shelf goes back to empty, never to another one.
+  if (!(await item().locator("details:has(select[name='toLocationId'])").getAttribute("open"))) {
+    await item().locator("summary", { hasText: "Mover" }).click();
+  }
+  await item().locator('input[name="quantity"]').fill("1");
+  await item().locator('select[name="toLocationId"]').selectOption({ label: SWITCHED_OFF });
+  const [switched] = await rpcAs("central@yuntera.example", [
+    ["ops_set_location_active", { p_location_id: other.id, p_active: false }],
+  ]);
+  check(switched?.active === false, "operations switched the shelf off");
+  await item().locator('button:has-text("Mover las unidades")').click();
+  await item().locator('[role="alert"]').waitFor();
+  await field.waitForLoadState("networkidle");
+  const offRefusal = await text(item().locator('[role="alert"]'));
+  log("refused (switched off):", offRefusal);
+  check(offRefusal.includes("está desactivada"), "a move to a switched-off shelf is refused");
+  const kept = await item()
+    .locator('select[name="toLocationId"]')
+    .evaluate((el) => ({ value: el.value, options: [...el.options].map((o) => o.text) }));
+  log("after the refusal, the select:", JSON.stringify(kept));
+  check(
+    kept.value === "" && !kept.options.includes(SWITCHED_OFF),
+    "the switched-off shelf leaves the choice and nothing else is chosen",
+  );
+  check(
+    (await item().locator('input[name="quantity"]').inputValue()) === "1",
+    "the refused move keeps the quantity",
+  );
+  check(
+    (await field.locator('main [role="status"]', { hasText: "Unidades movidas" }).count()) === 0 &&
+      !/[?&]movidas=/.test(new URL(field.url()).search),
+    "the earlier confirmation is not shown next to the refusal",
+  );
+  await layout(field, "move-refused-switched-off");
+  // Pressed again without choosing: the browser asks for a shelf, nothing moves.
+  await item().locator('button:has-text("Mover las unidades")').click();
+  await field.waitForTimeout(500);
+  check(
+    (await item()
+      .locator('select[name="toLocationId"]')
+      .evaluate((el) => el.validity.valueMissing)) &&
+      (await text(item().locator("dl"))).includes(`En el estante ${source.quantity - 3}`),
+    "with no shelf chosen, the form asks for one and nothing is moved",
+  );
+  await item().locator('select[name="toLocationId"]').selectOption({ label: TARGET });
+  await item().locator('button:has-text("Mover las unidades")').click();
+  const movedOne = await outcome("Se movió 1 unidad");
+  log("moved one:", movedOne);
+  check(
+    movedOne.includes(`Se movió 1 unidad a ${TARGET}. Guárdela allí ahora.`),
+    "one unit: the confirmation agrees with the number",
+  );
+  await field.reload({ waitUntil: "networkidle" });
+  check(
+    (await field.locator('main [role="status"]', { hasText: "Unidades movidas" }).count()) === 0,
+    "a reload does not show the confirmation again",
+  );
+
   // ── 3. The new shelf, from the list: a count ───────────────────────────────
   await field.goto(FIELD + "/bodega/ubicaciones", { waitUntil: "networkidle" });
   check(
-    (await text(field.locator(`a[data-location="${TARGET}"]`))).includes("3 unidades"),
-    "the list shows the new shelf holding three",
+    (await text(field.locator(`a[data-location="${TARGET}"]`))).includes("4 unidades"),
+    "the list shows the new shelf holding four",
   );
   await field.click(`a[data-location="${TARGET}"]`);
   await field.waitForURL((u) => new URL(u).searchParams.get("codigo") === TARGET);
   await item().waitFor();
-  check(
-    (await text(item().locator("dl"))).includes("En el estante 3"),
-    "the new shelf holds three",
-  );
+  check((await text(item().locator("dl"))).includes("En el estante 4"), "the new shelf holds four");
   await item().locator("summary", { hasText: "Corregir cantidad" }).click();
-  await item().locator('input[name="counted"]').fill("2");
+  await item().locator('input[name="counted"]').fill("3");
   const difference = await text(item().locator('[data-testid="count-difference"]'));
   log("before confirming:", difference);
   check(
-    difference.includes("Diferencia: −1 unidad (faltan). Quedarán 2 unidades."),
+    difference.includes("Diferencia: −1 unidad (faltan). Quedarán 3 unidades."),
     "the difference is shown before confirming",
   );
   check(
-    (await text(item().locator('button:has-text("Corregir a")'))) === "Corregir a 2 unidades",
+    (await text(item().locator('button:has-text("Corregir a")'))) === "Corregir a 3 unidades",
     "the button says what it will do",
   );
   await item().locator('details[open] input[name="note"]').fill("rota");
@@ -231,19 +310,34 @@ async function rpcAs(email, calls) {
     "a reason too short is refused",
   );
   check(
-    (await item().locator('input[name="counted"]').inputValue()) === "2" &&
+    (await item().locator('input[name="counted"]').inputValue()) === "3" &&
       (await item().locator('details[open] input[name="note"]').inputValue()) === "rota",
     "the refused count keeps what was typed",
   );
   await layout(field, "count-refused");
   await item().locator('details[open] input[name="note"]').fill("Una libreta con la tapa rota");
   await item().locator('button:has-text("Corregir a")').click();
-  await field.waitForURL((u) => new URL(u).searchParams.get("contadas") === "2");
-  await field.waitForLoadState("networkidle");
-  const corrected = await text(field.locator('main [role="status"]').first());
+  const corrected = await outcome("Ahora hay 3 unidades");
   log("corrected:", corrected);
-  check(corrected.includes("Ahora hay 2 unidades (−1)"), "the correction is confirmed");
-  check((await text(item().locator("dl"))).includes("En el estante 2"), "the shelf shows two");
+  check(corrected.includes("Ahora hay 3 unidades (−1)"), "the correction is confirmed");
+  check((await text(item().locator("dl"))).includes("En el estante 3"), "the shelf shows three");
+  // Two more found behind a box: a correction upwards.
+  if (!(await item().locator("details:has(input[name='counted'])").getAttribute("open"))) {
+    await item().locator("summary", { hasText: "Corregir cantidad" }).click();
+  }
+  await item().locator('input[name="counted"]').fill("5");
+  check(
+    (await text(item().locator('[data-testid="count-difference"]'))).includes(
+      "Diferencia: +2 unidades (sobran). Quedarán 5 unidades.",
+    ),
+    "the difference upwards is shown before confirming",
+  );
+  await item().locator('details[open] input[name="note"]').fill("Dos libretas detrás de una caja");
+  await item().locator('button:has-text("Corregir a")').click();
+  const raised = await outcome("Ahora hay 5 unidades");
+  log("corrected up:", raised);
+  check(raised.includes("Ahora hay 5 unidades (+2)"), "the correction upwards is confirmed");
+  check((await text(item().locator("dl"))).includes("En el estante 5"), "the shelf shows five");
   await layout(field, "location");
 
   // ── 4. The product's locations ─────────────────────────────────────────────
@@ -256,7 +350,7 @@ async function rpcAs(email, calls) {
   check(
     bins.includes(`${source.location_code}`) &&
       bins.includes(`${TARGET}`) &&
-      bins.includes("Total en bodega: 56 unidades".replace("56", String(source.quantity - 1))),
+      bins.includes(`Total en bodega: ${source.quantity + 1} unidades`),
     "the product lists both shelves",
   );
   await layout(field, "product");
@@ -268,12 +362,19 @@ async function rpcAs(email, calls) {
   await seller.waitForSelector("#historial");
   const history = seller.locator('section[aria-labelledby="historial"] li');
   const first = await text(history.first());
-  log("the shop's history:", first);
+  const second = await text(history.nth(1));
+  log("the shop's history:", first, "|", second);
   check(
     first.includes("Corrección de conteo de la bodega") &&
-      first.includes("−1") &&
-      first.includes("Motivo: Una libreta con la tapa rota"),
-    "the shop sees the correction and its reason",
+      first.includes("+2") &&
+      first.includes("Motivo: Dos libretas detrás de una caja"),
+    "the shop sees the correction upwards and its reason",
+  );
+  check(
+    second.includes("Corrección de conteo de la bodega") &&
+      second.includes("−1") &&
+      second.includes("Motivo: Una libreta con la tapa rota"),
+    "the shop sees the correction downwards and its reason",
   );
   const allHistory = await text(seller.locator('section[aria-labelledby="historial"]'));
   check(!/Kattia|bodega@|Y-93-01-A/.test(allHistory), "the shop never sees who, nor the shelves");
@@ -290,9 +391,16 @@ async function rpcAs(email, calls) {
   const after = stockAfter.find(
     (row) => row.sku_id === notebook.sku_id && row.warehouse_kind === "platform",
   );
-  check(after.on_hand === notebook.on_hand - 1, "the shop holds exactly one unit fewer");
-  const hosted = await text(seller.locator('section[aria-labelledby="bodega"]'));
-  check(hosted.includes(String(after.on_hand)), "the seller centre shows the new total");
+  check(after.on_hand === notebook.on_hand + 1, "the shop holds exactly one unit more");
+  const row = seller
+    .locator('section[aria-labelledby="bodega"] tr')
+    .filter({ hasText: notebook.sku_code });
+  const cells = await row.first().locator("td").allInnerTexts();
+  log("the shop's row:", JSON.stringify(cells));
+  check(
+    cells[2]?.trim() === String(after.on_hand) && cells[4]?.trim() === String(after.available),
+    "the seller centre shows the new total on the product's own row",
+  );
   await layout(seller, "seller");
 
   // ── 6. The console: the staff list; a shelf with stock is emptied first ───
@@ -300,8 +408,12 @@ async function rpcAs(email, calls) {
   await signIn(ops, OPS, "central@yuntera.example");
   await ops.goto(OPS + "/operacion/ubicaciones", { waitUntil: "networkidle" });
   const changes = ops.locator("section[aria-labelledby='movimientos'] li");
-  const move = await text(changes.filter({ hasText: "Movimiento" }).first());
-  const correction = await text(changes.filter({ hasText: "Corrección" }).first());
+  const move = await text(
+    changes.filter({ hasText: `3 unidades de ${source.location_code} a ${TARGET}` }).first(),
+  );
+  const correction = await text(
+    changes.filter({ hasText: "Corrección" }).filter({ hasText: "−1 unidad" }).first(),
+  );
   log("staff list:", move, "|", correction);
   check(
     move.includes(`3 unidades de ${source.location_code} a ${TARGET}`) &&
@@ -330,15 +442,14 @@ async function rpcAs(email, calls) {
   );
   await layout(ops, "console");
 
-  // The warehouse moves the two units back; then the shelf is switched off.
+  // The warehouse moves the five units back; then the shelf is switched off.
   await field.goto(`${FIELD}/bodega/ubicacion?codigo=${TARGET}`, { waitUntil: "networkidle" });
   await item().locator("summary", { hasText: "Mover" }).click();
-  await item().locator('input[name="quantity"]').fill("2");
+  await item().locator('input[name="quantity"]').fill("5");
   await item().locator('select[name="toLocationId"]').selectOption({ label: source.location_code });
   await item().locator('details[open] input[name="note"]').fill("Para vaciar el estante");
   await item().locator('button:has-text("Mover las unidades")').click();
-  await field.waitForURL((u) => new URL(u).searchParams.get("movidas") === "2");
-  await field.waitForLoadState("networkidle");
+  await outcome("Se movieron 5 unidades");
   check(
     (await text(field.locator('[data-testid="location-summary"]'))).includes("Está vacía"),
     "the new shelf is empty again",
