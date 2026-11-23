@@ -704,6 +704,10 @@ reset role;
 -- history remains. A consent, an MFA failure, a factor, a session and a
 -- pending token are added so each can be seen to go.
 select pg_temp.remember('gone', (select id::text from auth.users where email = 'comprador2@yuntera.example'));
+-- (On a used database the warehouse may also be preparing one: that one too,
+-- through the order's own steps.)
+update public.orders set status = 'shipped'
+where user_id = current_setting('t.gone')::uuid and status = 'processing';
 update public.orders set status = 'delivered', delivered_at = now()
 where user_id = current_setting('t.gone')::uuid and status = 'shipped';
 -- A used database may also hold returns and complaints the person opened
@@ -713,6 +717,31 @@ update public.return_requests set status = 'rejected', resolved_at = now(),
 where user_id = current_setting('t.gone')::uuid and status in ('requested', 'approved', 'received');
 update public.complaints set status = 'resolved', resolved_at = now()
 where user_id = current_setting('t.gone')::uuid and status <> 'resolved';
+-- On a used database the warehouse may already have taken that order
+-- further (it can no longer be cancelled): the shopper then places and pays
+-- the same kind of order again, for this transaction only.
+do $$
+declare
+  v_order jsonb;
+begin
+  if not exists (select 1 from public.orders
+                 where user_id = current_setting('t.gone')::uuid and status = 'confirmed') then
+    perform set_config('request.jwt.claims', json_build_object(
+      'sub', current_setting('t.gone'), 'role', 'authenticated', 'aal', 'aal1')::text, true);
+    v_order := public.place_order(
+      jsonb_build_array(jsonb_build_object(
+        'offer_id', (select o.id from public.offers o join public.skus k on k.id = o.sku_id
+                     join public.products p on p.id = k.product_id
+                     where p.slug = 'libreta-tapa-dura-a5' and o.status = 'active' limit 1),
+        'quantity', 1)),
+      (select a.id from public.addresses a
+       where a.user_id = current_setting('t.gone')::uuid and a.is_default and a.deleted_at is null),
+      'sinpe_movil', 'test-095-cancel');
+    perform public.confirm_sandbox_payment((v_order ->> 'order_id')::uuid);
+    perform set_config('request.jwt.claims', '', true);
+  end if;
+end
+$$;
 -- The paid order still to ship is cancelled by the shopper with live
 -- payments: the order is cancelled at once, the money goes back later through
 -- the gateway. Until it has, the account must stay.
