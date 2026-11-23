@@ -156,7 +156,13 @@ describe.skipIf(!db.enabled)("warehouse stock contract (against a seeded databas
     });
     // The screen's number is stale: refused, typed.
     await expect(
-      worker().wmsAdjustStock({ locationId: first.id, ...product, delta: -1, note: NOTE, expected: 9 }),
+      worker().wmsAdjustStock({
+        locationId: first.id,
+        ...product,
+        delta: -1,
+        note: NOTE,
+        expected: 9,
+      }),
     ).rejects.toMatchObject({ code: "count_changed", detail: "3" });
 
     const moved = await worker().wmsMoveStock({

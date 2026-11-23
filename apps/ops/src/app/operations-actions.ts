@@ -487,7 +487,7 @@ export async function setLocationActive(
     undefined,
     (error) => {
       if (error.code === "location_has_stock") {
-        return `Esta ubicación tiene ${plural(count(error.detail), "unidad", "unidades")}. Se puede desactivar cuando quede vacía, cuando esas unidades salgan en pedidos: todavía no hay una pantalla para pasar mercadería de una ubicación a otra.`;
+        return `Esta ubicación tiene ${plural(count(error.detail), "unidad", "unidades")}. Para desactivarla, vacíela primero: en la app de bodega abra la ubicación (Bodega, Ubicaciones) y mueva cada producto a otro estante con «Mover». Las unidades que esperan a pedidos salen cuando esos pedidos se alistan.`;
       }
       if (error.code === "location_has_picked_units") {
         return `Hay ${plural(count(error.detail), "unidad sacada", "unidades sacadas")} de esta ubicación en paquetes que todavía se están alistando; si se cancela el pedido, vuelven aquí. Desactívela cuando esos paquetes estén empacados.`;

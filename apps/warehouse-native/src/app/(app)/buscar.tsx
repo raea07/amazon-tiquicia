@@ -2,9 +2,10 @@ import type { Api } from "@yuntera/db";
 import { useApi } from "@yuntera/expo-kit/api";
 import { BarcodeScanner, findByForms, type ScanFeedback } from "@yuntera/expo-kit/scanner";
 import { colors, fontFamily, space } from "@yuntera/expo-kit/theme";
-import { Card, Divider, Screen, Stack, Text } from "@yuntera/expo-kit/ui";
+import { Card, ChevronIcon, Divider, Screen, Stack, Text } from "@yuntera/expo-kit/ui";
+import { router } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { camera } from "@/lib/camera";
 import { plural } from "@/lib/floor";
 import { useWarehouse } from "@/lib/warehouse";
@@ -67,12 +68,30 @@ export default function LookupScreen() {
               {sku.bins.map((bin, index) => (
                 <View key={`${bin.location_id}:${bin.seller_id}`} style={styles.binWrap}>
                   {index > 0 ? <Divider /> : null}
-                  <View style={styles.bin}>
+                  <Pressable
+                    role="link"
+                    aria-label={`Abrir la ubicación ${bin.location_code}`}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/ubicacion/[codigo]",
+                        params: { codigo: bin.location_code },
+                      })
+                    }
+                    style={styles.bin}
+                    testID={`lookup-bin-${bin.location_code}`}
+                  >
                     <View style={styles.fill}>
                       <Text style={styles.binCode}>{bin.location_code}</Text>
                       <Text variant="small" tint="muted">
                         de {bin.seller_name}
+                        {bin.location_active ? "" : " · desactivada"}
                       </Text>
+                      {bin.promised > 0 ? (
+                        <Text variant="caption" tint="muted">
+                          {bin.promised} {bin.promised === 1 ? "espera" : "esperan"} a pedidos ·{" "}
+                          {bin.free} libres
+                        </Text>
+                      ) : null}
                     </View>
                     <Text
                       style={styles.binQuantity}
@@ -80,7 +99,8 @@ export default function LookupScreen() {
                     >
                       {bin.quantity}
                     </Text>
-                  </View>
+                    <ChevronIcon size={20} color={colors.inkMuted} />
+                  </Pressable>
                 </View>
               ))}
               <Text variant="small" tint="muted">
@@ -89,8 +109,8 @@ export default function LookupScreen() {
             </Stack>
           )}
           <Text variant="caption" tint="muted">
-            Si lo que ve en el estante no coincide, no lo corrija a ojo: avise al encargado para que
-            haga el conteo y el ajuste.
+            Si lo que ve en el estante no coincide, abra la ubicación y corrija la cantidad con lo
+            que contó, con el motivo.
           </Text>
         </Card>
       ) : null}

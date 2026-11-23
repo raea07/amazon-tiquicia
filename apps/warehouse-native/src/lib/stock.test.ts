@@ -1,0 +1,49 @@
+// Runs with Node's own test runner (`pnpm test` here), as floor.test.ts.
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { differenceText, parseCount, parseMove } from "./stock";
+
+describe("a move", () => {
+  it("needs a target and a whole number of free units", () => {
+    assert.deepEqual(parseMove({ quantity: "2", toLocationId: null, free: 5 }), {
+      error: "Elija a qué estante lo mueve.",
+    });
+    for (const quantity of ["", "0", "1.5", "-1", "dos"]) {
+      assert.deepEqual(parseMove({ quantity, toLocationId: "x", free: 5 }), {
+        error: "Escriba cuántas unidades mueve: un número entero desde 1.",
+      });
+    }
+    assert.deepEqual(parseMove({ quantity: "6", toLocationId: "x", free: 5 }), {
+      error: "Solo hay 5 unidades libres para mover: las demás esperan a pedidos.",
+    });
+    assert.deepEqual(parseMove({ quantity: " 5 ", toLocationId: "x", free: 5 }), {
+      quantity: 5,
+      toLocationId: "x",
+    });
+  });
+});
+
+describe("a count", () => {
+  it("needs a different number and a reason with letters", () => {
+    assert.ok("error" in parseCount({ counted: "", note: "Faltan dos", expected: 3 }));
+    assert.deepEqual(parseCount({ counted: "3", note: "Faltan dos", expected: 3 }), {
+      error: "Contó lo mismo que está registrado: no hay nada que corregir.",
+    });
+    assert.deepEqual(parseCount({ counted: "1", note: "12345 678", expected: 3 }), {
+      error: "Escriba el motivo con al menos 5 letras, por ejemplo «faltan 2, caja rota».",
+    });
+    assert.deepEqual(parseCount({ counted: "1", note: "  Faltan dos  ", expected: 3 }), {
+      counted: 1,
+      delta: -2,
+      note: "Faltan dos",
+    });
+    assert.ok("error" in parseCount({ counted: "20000", note: "Faltan dos", expected: 3 }));
+  });
+
+  it("shows the difference while typing", () => {
+    assert.equal(differenceText("", 7), "Escriba lo que contó para ver la diferencia.");
+    assert.equal(differenceText("7", 7), "Coincide con lo registrado: no hay nada que corregir.");
+    assert.equal(differenceText("5", 7), "Diferencia: −2 unidades (faltan). Quedarán 5 unidades.");
+    assert.equal(differenceText("8", 7), "Diferencia: +1 unidad (sobran). Quedarán 8 unidades.");
+  });
+});

@@ -1,7 +1,7 @@
-import type { OpsLocation, OpsWarehouseLocations } from "@yuntera/db";
+import type { OpsLocation, OpsStockChange, OpsWarehouseLocations } from "@yuntera/db";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
-import { Badge, EmptyState, SelectField, Skeleton, TextField } from "@yuntera/ui";
+import { Badge, EmptyState, formatDateTime, SelectField, Skeleton, TextField } from "@yuntera/ui";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { createLocation, renameLocation, setLocationActive } from "@/app/operations-actions";
@@ -26,7 +26,11 @@ export default function LocationsPage() {
 
 async function Locations() {
   const staff = await requireStaff("/operacion/ubicaciones", ["ops"]);
-  const warehouses = await (await sessionApi()).opsWarehouseLocations();
+  const api = await sessionApi();
+  const [warehouses, changes] = await Promise.all([
+    api.opsWarehouseLocations(),
+    api.opsStockChanges(100),
+  ]);
 
   return (
     <>
@@ -34,7 +38,9 @@ async function Locations() {
       <PageHeader title="Ubicaciones de bodega">
         Los estantes donde se guarda y se alista la mercadería en las bodegas de Yuntera. Una
         ubicación nueva se ofrece de inmediato en las pantallas de la bodega; una desactivada deja
-        de ofrecerse. No se desactiva una ubicación con mercadería o con tareas de alisto abiertas.
+        de ofrecerse. No se desactiva una ubicación con mercadería o con tareas de alisto abiertas:
+        para vaciarla, la bodega mueve sus unidades a otro estante desde su app (Bodega,
+        Ubicaciones, «Mover»).
       </PageHeader>
 
       {warehouses.length === 0 ? (
@@ -48,7 +54,59 @@ async function Locations() {
           ))}
         </div>
       )}
+
+      <StockChanges changes={changes} />
     </>
+  );
+}
+
+/** Moves and count corrections, newest first, for someone to review. */
+function StockChanges({ changes }: { changes: OpsStockChange[] }) {
+  return (
+    <section aria-labelledby="movimientos" className="mt-10">
+      <h2 id="movimientos" className="text-xl font-bold">
+        Movimientos y correcciones de existencias
+      </h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-muted">
+        Lo que la bodega movió de un estante a otro y las cantidades que corrigió al contar, con
+        quién, cuándo y por qué (los últimos 100). Una corrección cambia lo que la tienda puede
+        vender; la tienda la ve en su inventario con el motivo.
+      </p>
+      {changes.length === 0 ? (
+        <p className="mt-3 text-sm text-ink-muted">Todavía no hay movimientos ni correcciones.</p>
+      ) : (
+        <ul className="mt-3 flex max-w-4xl flex-col gap-2">
+          {changes.map((change) => (
+            <li
+              key={change.id}
+              className="rounded-lg border border-border bg-surface p-4 text-sm"
+              data-change={change.kind}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={change.kind === "move" ? "info" : "warning"}>
+                  {change.kind === "move" ? "Movimiento" : "Corrección"}
+                </Badge>
+                <span className="font-semibold">
+                  {change.title}
+                  {change.variant_name ? ` · ${change.variant_name}` : ""}
+                </span>
+                <span className="text-ink-muted">de {change.seller_name}</span>
+              </div>
+              <p className="mt-1">
+                {change.kind === "move"
+                  ? `${change.quantity} ${change.quantity === 1 ? "unidad" : "unidades"} de ${change.from_code ?? "?"} a ${change.to_code ?? "?"}`
+                  : `${change.change > 0 ? "+" : "−"}${Math.abs(change.change)} ${Math.abs(change.change) === 1 ? "unidad" : "unidades"} en ${change.to_code ?? change.from_code ?? "?"}`}{" "}
+                · {change.warehouse_code}
+              </p>
+              <p className="mt-1 text-ink-muted">
+                {change.actor_name ?? "Cuenta eliminada"} · {formatDateTime(change.at)}
+              </p>
+              {change.note ? <p className="mt-1">Motivo: {change.note}</p> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -178,7 +236,9 @@ function Shelf({ location }: { location: OpsLocation }) {
               <input type="hidden" name="locationId" value={location.id} />
               <input type="hidden" name="active" value="no" />
               <p className="text-ink-muted">
-                La bodega deja de verla al recibir y guardar. Puede volver a activarla aquí.
+                {location.units > 0
+                  ? `Tiene ${location.units} ${location.units === 1 ? "unidad" : "unidades"}: primero hay que vaciarla. La bodega las mueve a otro estante desde su app (Bodega, Ubicaciones, ${location.code}, «Mover»).`
+                  : "La bodega deja de verla al recibir y guardar. Puede volver a activarla aquí."}
               </p>
             </CatalogueForm>
           </div>

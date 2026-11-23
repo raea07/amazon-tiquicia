@@ -90,4 +90,6 @@ export const keys = {
   shipment: (shipmentId: string) => ["wms-shipment", shipmentId] as const,
   lookup: (warehouseId: string, code: string) => ["wms-sku", warehouseId, code] as const,
   returning: (warehouseId: string) => ["wms-returning", warehouseId] as const,
+  stockLocations: (warehouseId: string) => ["wms-stock-locations", warehouseId] as const,
+  location: (warehouseId: string, code: string) => ["wms-location", warehouseId, code] as const,
 };
