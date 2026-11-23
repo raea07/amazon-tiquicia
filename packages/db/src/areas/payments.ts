@@ -185,7 +185,7 @@ export type PaymentReview = z.infer<typeof paymentReview>;
 export const gatewayRefund = z.object({
   id,
   order_number: z.string().nullable(),
-  reason: z.enum(["order_cancelled", "return", "parcel_returned", "review"]),
+  reason: z.enum(["order_cancelled", "return", "parcel_returned", "delivery_fee", "review"]),
   payment_method: paymentMethod.nullable(),
   channel: refundChannel,
   status: gatewayRefundStatus,

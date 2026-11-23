@@ -24,6 +24,7 @@ import { listingsApi, listingsErrors } from "./listings";
 import { nativeAccountsApi, nativeAccountsErrors } from "./native-accounts";
 import * as notifications from "./notifications";
 import { operationsApi, operationsErrors } from "./operations";
+import { orderFollowupsApi, orderFollowupsErrors } from "./order-followups";
 import { paymentsApi, paymentsErrors } from "./payments";
 import * as peoplePayouts from "./people-payouts";
 import { photosApi, photosErrors } from "./photos";
@@ -31,7 +32,7 @@ import { sellerListingsApi, sellerListingsErrors } from "./seller-listings";
 import type { Caller, Messages } from "./types";
 import { webFollowupsApi, webFollowupsErrors } from "./web-followups";
 
-// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts and operations areas name their exports uniquely, so
+// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts, operations and order-followups areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
 // would clash with each other, so their schemas and types are re-exported by
 // name.
@@ -77,6 +78,7 @@ export {
   type ShopChannelChoicesInput,
 } from "./notifications";
 export * from "./operations";
+export * from "./order-followups";
 export * from "./payments";
 export type {
   AuditTrailEntry,
@@ -118,6 +120,7 @@ export const areaErrors = {
   ...catalogueFollowupsErrors,
   ...nativeAccountsErrors,
   ...operationsErrors,
+  ...orderFollowupsErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -140,6 +143,9 @@ export const areaApi = (caller: Caller) => ({
   ...catalogueFollowupsApi(caller),
   ...nativeAccountsApi(caller),
   ...operationsApi(caller),
-  // Last: some of its methods replace core ones (see followups.ts).
+  // Some of its methods replace core ones (see followups.ts).
   ...followupsApi(caller),
+  // After the core, integrity and operations methods it replaces with wider
+  // answers (see order-followups.ts).
+  ...orderFollowupsApi(caller),
 });

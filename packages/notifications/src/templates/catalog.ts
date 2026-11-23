@@ -332,6 +332,11 @@ export const TEMPLATES: Record<string, Template> = {
 
   order_cancelled: ({ vars: v, name, links }) => {
     const number = orderNumber(v);
+    // What really comes back: the event says it when the order was cancelled
+    // because its parcels came back (084200), where the delivery fee may stay
+    // charged; a cancellation before anything left gives back the whole total.
+    const refunded = v.amount_minor === undefined ? n(v.total_minor) : n(v.amount_minor);
+    const feeKept = v.amount_minor !== undefined && refunded < n(v.total_minor);
     return {
       from: "orders",
       subject: `Su pedido ${number} fue cancelado`,
@@ -340,8 +345,13 @@ export const TEMPLATES: Record<string, Template> = {
       paragraphs: [
         `Su pedido ${number} fue cancelado.`,
         v.paid
-          ? `Le devolvemos ${colones(n(v.total_minor))} por el mismo medio con que pagó. Le avisaremos cuando el reembolso esté hecho.`
+          ? `Le devolvemos ${colones(refunded)} por el mismo medio con que pagó. Le avisaremos cuando el reembolso esté hecho.`
           : "No se le cobró nada.",
+        ...(v.paid && feeKept
+          ? [
+              "El costo de envío no se devuelve: intentamos entregarle el pedido. Si cree que es un error, respóndanos a este correo.",
+            ]
+          : []),
       ],
       action: { label: "Ver el pedido", url: orderUrl(v, links) },
       note: ORDER_FOOTER,
