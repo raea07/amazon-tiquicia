@@ -168,10 +168,58 @@ describe.skipIf(!db.enabled)(
     });
 
     afterAll(async () => {
-      await cleanUp().catch(() => undefined);
-      await pool?.end();
-      await db.close();
+      try {
+        await cleanUp();
+        await removeFixture();
+      } finally {
+        await pool?.end();
+        await db.close();
+      }
     });
+
+    /**
+     * Everything this file made, gone, so the other contract files (which
+     * count the catalogue, the warehouse's locations and the drivers) see
+     * the seed: its route, orders, ledger rows of its products and shelf
+     * (the ledger refuses deletes, so as the superuser with triggers off, for
+     * this file's rows only), stock, offers, variants, products, shelf and
+     * driver. The two shoppers and the driver's sign-in stay, as other files'
+     * do.
+     */
+    async function removeFixture() {
+      const mine = [users.get(SHOPPER), users.get(SHOPPER2)];
+      await db.query(
+        "delete from public.routes r using public.drivers d where d.id = r.driver_id and d.user_id = $1",
+        [users.get(DRIVER)],
+      );
+      await db.query("delete from public.orders where user_id = any($1)", [mine]);
+      const skus = Object.values(SKU);
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await client.query("set local session_replication_role = replica");
+        await client.query(
+          "delete from public.stock_movements where sku_id = any($1) or to_location_id = $2 or from_location_id = $2",
+          [skus, shelfId],
+        );
+        await client.query("commit");
+      } finally {
+        client.release();
+      }
+      await db.query("update public.pick_tasks set location_id = null where location_id = $1", [
+        shelfId,
+      ]);
+      await db.query("delete from public.bin_stock where sku_id = any($1) or location_id = $2", [
+        skus,
+        shelfId,
+      ]);
+      await db.query("delete from public.warehouse_locations where id = $1", [shelfId]);
+      await db.query("delete from public.stock_levels where sku_id = any($1)", [skus]);
+      await db.query("delete from public.offers where id = any($1)", [Object.values(OFFER)]);
+      await db.query("delete from public.skus where id = any($1)", [skus]);
+      await db.query("delete from public.products where id = any($1)", [[PRODUCT_X, PRODUCT_Z]]);
+      await db.query("delete from public.drivers where user_id = $1", [users.get(DRIVER)]);
+    }
 
     /** Open orders of this file cancelled, then deleted; its route closed. */
     async function cleanUp() {
