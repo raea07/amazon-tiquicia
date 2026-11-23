@@ -306,9 +306,7 @@ async function packedOrder() {
   );
   check(
     done.includes(`Le devolvemos también el envío, ${colones(placed.shipping_minor)}`) &&
-      done.includes(
-        `le devolvemos lo que pagó por él: ${colones(placed.items_total_minor)}`,
-      ),
+      done.includes(`le devolvemos lo que pagó por él: ${colones(placed.items_total_minor)}`),
     "the history does not state the amounts",
   );
   check(done.includes("Reembolsado"), "the order does not read Reembolsado");
