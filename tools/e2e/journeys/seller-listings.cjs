@@ -265,12 +265,13 @@ const DESCRIPTION =
     "the cart does not say when the other offer arrives",
   );
   await visitor.goto(WEB + BOTTLE, { waitUntil: "networkidle" });
-  const visitorBuyBox = visitor.locator('aside[aria-label="Comprar"]');
-  check(
-    (await text(visitorBuyBox)).includes("Tienda Sendero"),
-    "Tienda Sendero's offer is not shown first",
-  );
-  const pageDate = await text(visitorBuyBox.locator("dd.text-success").first());
+  // Tienda Sendero's offer on its product page, wherever the page lists it (for
+  // up to a minute the cached page may still show the sold-out offer first).
+  const senderoInCart = visitor
+    .locator('aside[aria-label="Comprar"], section[aria-labelledby="otras-ofertas"] li')
+    .filter({ hasText: "Tienda Sendero" })
+    .first();
+  const pageDate = await text(senderoInCart.locator("dd.text-success").first());
   check(
     arrival === `Llega ${pageDate}`,
     `the cart's date (${arrival}) is not the product page's (${pageDate})`,
