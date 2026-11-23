@@ -43,9 +43,33 @@ export function brandOptions(brands: ShopBrand[]) {
   ];
 }
 
-/** "Mostrando 3 productos de Nimbo". */
-export const brandSummary = (count: number, name: string | undefined) =>
-  `Mostrando ${count} ${count === 1 ? "producto" : "productos"} de ${name ?? "esa marca"}`;
+/** What a listing's search query looks like to the screen (react-query's names). */
+export interface ListingResults {
+  isSuccess: boolean;
+  isPlaceholderData?: boolean;
+  data?: { pages: { total_count: number }[][] };
+}
+
+/**
+ * How many products the search for the options on screen found, or null
+ * while it has not answered for them yet (the first page of a new filter,
+ * or another filter's results standing in). A count is only said once it is
+ * the count of what is asked: "0 productos" while loading would be false.
+ */
+export function settledTotal(results: ListingResults): number | null {
+  if (!results.isSuccess || results.isPlaceholderData || !results.data) return null;
+  return results.data.pages[0]?.[0]?.total_count ?? 0;
+}
+
+/**
+ * "Mostrando 3 productos de Nimbo" once the search has answered; before
+ * that (`count` null) a line with no number, in the words of the website's
+ * "Cargando productos…".
+ */
+export const brandSummary = (count: number | null, name: string | undefined) =>
+  count === null
+    ? `Cargando productos de ${name ?? "esa marca"}…`
+    : `Mostrando ${count} ${count === 1 ? "producto" : "productos"} de ${name ?? "esa marca"}`;
 
 export const BRAND_EMPTY = {
   title: "No hay productos de esa marca aquí",

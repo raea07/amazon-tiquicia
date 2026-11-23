@@ -20,6 +20,7 @@ import {
   brandOptions,
   brandSummary,
   currentBrand,
+  settledTotal,
   showBrandFilter,
 } from "@/lib/brand-filter";
 import { ProductCard } from "./product";
@@ -130,7 +131,9 @@ export function Listing({
     },
   });
   const products = results.data?.pages.flat() ?? [];
-  const total = results.data?.pages[0]?.[0]?.total_count ?? 0;
+  // Null until the search for these options has answered: while it loads
+  // (a new filter, or brand A changed for brand B) no count is said.
+  const total = settledTotal(results);
   const brandList = brands.data ?? [];
   const chosenBrand = currentBrand(brandList, brand);
   const clearBrand = () => onChange({ brand: null });
@@ -146,9 +149,16 @@ export function Listing({
       />
       {brand ? (
         <View style={styles.brandSummary}>
-          <Text variant="small" aria-live="polite" testID="brand-summary">
-            {brandSummary(total, chosenBrand?.name)}
-          </Text>
+          {results.isError ? null : (
+            <Text
+              variant="small"
+              aria-live="polite"
+              aria-busy={total === null}
+              testID="brand-summary"
+            >
+              {brandSummary(total, chosenBrand?.name)}
+            </Text>
+          )}
           <Button variant="ghost" onPress={clearBrand} testID="brand-clear">
             {BRAND_EMPTY.clear}
           </Button>
@@ -161,7 +171,7 @@ export function Listing({
     <View style={styles.controls}>
       {header}
       {brandFilter}
-      {results.isSuccess && products.length > 0 && !brand ? (
+      {total !== null && products.length > 0 && !brand ? (
         <Text variant="small" tint="muted" aria-live="polite">
           {total} {total === 1 ? "producto" : "productos"}
         </Text>

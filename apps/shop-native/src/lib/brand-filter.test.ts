@@ -7,6 +7,7 @@ import {
   brandSummary,
   currentBrand,
   parseBrand,
+  settledTotal,
   showBrandFilter,
 } from "./brand-filter";
 
@@ -14,6 +15,8 @@ const webListing = readFileSync(
   join(__dirname, "../../../web/src/components/catalog-listing.tsx"),
   "utf8",
 ).replace(/\s+/g, " ");
+
+const webSearchPage = readFileSync(join(__dirname, "../../../web/src/app/buscar/page.tsx"), "utf8");
 
 const nimbo = { slug: "nimbo", name: "Nimbo", product_count: 5, former_slugs: ["nimbo-cr"] };
 const volcan = { slug: "volcan", name: "Volcán", product_count: 1, former_slugs: [] };
@@ -62,5 +65,27 @@ describe("the brand filter", () => {
     ]) {
       expect(webListing, phrase).toContain(phrase);
     }
+  });
+
+  it("states no count until the search for these options has answered", () => {
+    const page = (total: number) => [{ total_count: total }];
+    // The first page of a new filter is pending: no data at all.
+    expect(settledTotal({ isSuccess: false })).toBeNull();
+    // Another filter's results standing in while this one loads.
+    expect(
+      settledTotal({ isSuccess: true, isPlaceholderData: true, data: { pages: [page(9)] } }),
+    ).toBeNull();
+    // Answered: the count of the first page, and 0 only when truly empty.
+    expect(settledTotal({ isSuccess: true, data: { pages: [page(5), page(5)] } })).toBe(5);
+    expect(settledTotal({ isSuccess: true, data: { pages: [[]] } })).toBe(0);
+    // A failed search states no count either.
+    expect(settledTotal({ isSuccess: false, data: undefined })).toBeNull();
+
+    expect(brandSummary(null, "Nimbo")).toBe("Cargando productos de Nimbo…");
+    expect(brandSummary(null, undefined)).toBe("Cargando productos de esa marca…");
+    expect(brandSummary(null, "Nimbo")).not.toMatch(/\d/);
+    expect(brandSummary(0, "Nimbo")).toBe("Mostrando 0 productos de Nimbo");
+    // The same word for loading as the website's search page.
+    expect(webSearchPage).toContain("Cargando productos…");
   });
 });

@@ -22,6 +22,7 @@
 // Fails on any browser console error, uncaught exception or 5xx response.
 
 const { chromium, request } = require("playwright");
+const { settledText } = require("../../e2e/lib/settle.cjs");
 
 const BASE = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -93,20 +94,59 @@ async function as(email) {
   const nimboCount = nimbo[0]?.total_count ?? 0;
   check(nimboCount >= 2, `the seed has Nimbo products to filter (${nimboCount})`);
 
+  // The search answers for a brand can be held back, to read the screen while
+  // it waits for them as a slow phone connection would show it.
+  const held = new Map();
+  const hold = (slug) => {
+    const gate = {};
+    gate.release = new Promise((resolve) => (gate.open = resolve));
+    gate.reached = new Promise((resolve) => (gate.reach = resolve));
+    held.set(slug, gate);
+    return gate;
+  };
+  await page.route("**/rest/v1/rpc/search_products", async (route) => {
+    const gate = held.get(route.request().postDataJSON()?.p_brand_slug);
+    if (gate) {
+      gate.reach();
+      await gate.release;
+    }
+    await route.continue();
+  });
+  const heldUp = (gate, slug) =>
+    Promise.race([
+      gate.reached,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`no search for ${slug} was sent`)), 10_000),
+      ),
+    ]);
+  const summaryText = (wanted, what) =>
+    settledText(visible("brand-summary"), wanted, { what, timeout: 15_000 });
+
   await page.goto(`${BASE}/buscar`, { waitUntil: "networkidle" });
   await visible("brand-filter").waitFor();
   const brandBox = await visible("brand").boundingBox();
   check(brandBox !== null && brandBox.height >= 44, "the brand field is at least 44 px high");
+  const nimboGate = hold("nimbo");
   await visible("brand").click();
   await visible("brand-option-nimbo").click();
   await page.waitForURL(/marca=nimbo/);
+  await heldUp(nimboGate, "nimbo");
   await visible("brand-summary").waitFor();
-  const summary = await flat(visible("brand-summary"));
-  log("  brand summary:", summary);
+  // The answer is held: whatever the screen says now, it says while loading.
+  const loading = await flat(visible("brand-summary"));
+  log("  brand summary while loading:", loading);
   check(
-    summary === `Mostrando ${nimboCount} productos de Nimbo`,
-    "the results say how many products of the brand there are",
+    !/\d/.test(loading) && loading === "Cargando productos de Nimbo…",
+    "while the brand's results load, the summary states no count (never '0 productos')",
   );
+  nimboGate.open();
+  held.delete("nimbo");
+  const summary = await summaryText(
+    `Mostrando ${nimboCount} productos de Nimbo`,
+    "the Nimbo summary",
+  );
+  log("  brand summary:", summary);
+  check(true, "the results say how many products of the brand there are");
   await cards().first().waitFor();
   const shown = (await cards().evaluateAll((els) => els.map((el) => el.dataset.testid))).map((id) =>
     id.replace(/^product-/, ""),
@@ -117,6 +157,35 @@ async function as(email) {
   );
   check((await overflow()) <= 0, "the filtered results have no sideways scrolling at 390 px");
   await shot("01-brand");
+
+  // From one brand to another: Nimbo's count is never shown under the other's name.
+  const others = (await visitor("list_brands", {})).filter(
+    (b) => b.slug !== "nimbo" && b.product_count > 0,
+  );
+  const other = others.find((b) => b.product_count !== nimboCount) ?? others[0];
+  check(Boolean(other), `the seed has another brand to switch to (${other?.name})`);
+  const otherCount =
+    (await visitor("search_products", { p_brand_slug: other.slug, p_limit: 1 }))[0]?.total_count ??
+    0;
+  const otherGate = hold(other.slug);
+  await visible("brand").click();
+  await visible(`brand-option-${other.slug}`).click();
+  await page.waitForURL(new RegExp(`marca=${other.slug}`));
+  await heldUp(otherGate, other.slug);
+  const switching = await flat(visible("brand-summary"));
+  log("  brand summary while switching:", switching);
+  check(
+    !/\d/.test(switching) && !switching.includes("Nimbo"),
+    `while ${other.name}'s results load, the summary states no count and not Nimbo's`,
+  );
+  otherGate.open();
+  held.delete(other.slug);
+  await summaryText(
+    `Mostrando ${otherCount} ${otherCount === 1 ? "producto" : "productos"} de ${other.name}`,
+    `the ${other.name} summary`,
+  );
+  check(true, `then it says how many products ${other.name} has (${otherCount})`);
+  await page.unroute("**/rest/v1/rpc/search_products");
   await visible("brand-clear").click();
   await page.waitForURL((url) => !new URL(url).searchParams.has("marca"));
   await page.getByText("Todos los productos").filter({ visible: true }).first().waitFor();
