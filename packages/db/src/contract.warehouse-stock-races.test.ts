@@ -21,9 +21,9 @@
  *         first: the move is refused, `location_inactive`).
  *
  * The parcel is this file's own (a shopper it creates, an order it places
- * and pays). What these tests change they undo: the packing is rolled back,
+ * on cash on delivery). What these tests change they undo: the packing is rolled back,
  * the order is cancelled (its picked units go back to the shelf), the units
- * counted in leave the shop's total, and the test ledger rows, shelves and
+ * counted in leave the shop's total, the order is deleted, and the test ledger rows, shelves and
  * locations are removed, so the suite passes on a used database and twice
  * in a row.
  */
@@ -115,11 +115,13 @@ describe.skipIf(!db.enabled)("moving stock at the same time (against a seeded da
     const placed = await shopper.placeOrder({
       items: [{ offerId: offer ?? "", quantity: 3 }],
       addressId: address?.id ?? "",
-      paymentMethod: "sinpe_movil",
+      // Cash on delivery: released to the warehouse at once, and no payment
+      // is captured, so cancelling it at the end leaves no refund or
+      // document behind for the invoicing suites to find.
+      paymentMethod: "cash_on_delivery",
       idempotencyKey: `carrera-bodega-${Date.now()}`,
     });
     orderId = placed.order_id;
-    await shopper.confirmSandboxPayment(orderId);
     const task = (
       await db.query<{ id: string; shipment_id: string }>(
         `select t.id, t.shipment_id from public.pick_tasks t join public.shipments s on s.id = t.shipment_id
@@ -143,6 +145,13 @@ describe.skipIf(!db.enabled)("moving stock at the same time (against a seeded da
         .catch(() => undefined);
     }
     await removeTestLocations();
+    // The cancelled order itself goes too (its lines, parcel and events follow
+    // by cascade), so suites that count the seed's orders see only those.
+    await db.query(
+      `delete from public.orders o using auth.users u
+        where u.id = o.user_id and u.email = $1 and o.status = 'cancelled'`,
+      [SHOPPER],
+    );
     await pool?.end();
     await db.close();
   });
