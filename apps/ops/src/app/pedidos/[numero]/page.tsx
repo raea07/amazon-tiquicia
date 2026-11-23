@@ -1,10 +1,14 @@
 import {
+  deliveryFeeComesBack,
+  isRescheduledOrder,
   isRescheduledShipment,
+  isStoppedShipment,
   ORDER_STATUS_LABEL,
   type OrderStatus,
+  orderComingBack,
   type ShipmentStatus,
 } from "@yuntera/core";
-import { ApiError } from "@yuntera/db";
+import { ApiError, type OrderDetailWithRecall } from "@yuntera/db";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import {
@@ -26,8 +30,10 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { confirmPayment } from "@/app/actions";
 import { staffCancelOrder } from "@/app/integrity-actions";
+import { CatalogueOutcome } from "@/components/catalogue-outcome";
 import { DeliveryCodePanel, ReturnedParcelForm } from "@/components/integrity-forms";
 import { NotificationLine } from "@/components/notification-list";
+import { RecallShipmentForm } from "@/components/order-recall-form";
 import { PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
 import {
   ATTEMPT_STATUS,
@@ -47,11 +53,14 @@ export default function OrderPage({ params }: PageProps<"/pedidos/[numero]">) {
           ← Pedidos
         </Link>
       </p>
-      <div className="mt-3">
-        <Suspense fallback={<Skeleton className="h-96" />}>
-          <Order params={params} />
-        </Suspense>
-      </div>
+      {/* Stopping a parcel removes its own form: the outcome is said at the bottom. */}
+      <CatalogueOutcome>
+        <div className="mt-3">
+          <Suspense fallback={<Skeleton className="h-96" />}>
+            <Order params={params} />
+          </Suspense>
+        </div>
+      </CatalogueOutcome>
     </div>
   );
 }
@@ -83,7 +92,19 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
         <header>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold">Pedido {order.order_number}</h1>
-            <OrderStatusBadge status={order.status} />
+            {/* What is happening, not the order's status alone: its parcels may
+                be off a route or stopped while the order still reads "shipped". */}
+            {orderComingBack(order.status, order.shipments)?.cancels ? (
+              <Badge tone="warning">
+                Se está cancelando: espera que la bodega reciba el paquete
+              </Badge>
+            ) : orderComingBack(order.status, order.shipments) ? (
+              <Badge tone="warning">Un paquete regresa a la bodega; el resto se entregó</Badge>
+            ) : isRescheduledOrder(order.status, order.shipments) ? (
+              <Badge tone="warning">Ningún paquete en camino: espera otra ruta</Badge>
+            ) : (
+              <OrderStatusBadge status={order.status} />
+            )}
           </div>
           <p className="mt-1 text-ink-muted">
             Realizado el {formatDateTime(order.placed_at)} · prometido para el{" "}
@@ -139,19 +160,41 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                     <span className="font-semibold">{shipment.tracking_code}</span>
                     <span className="ml-2 text-ink-muted">
                       {shipment.package_count} {shipment.package_count === 1 ? "bulto" : "bultos"}
-                      {isRescheduledShipment(shipment.status, shipment.attempt_count)
-                        ? " · quitado de una ruta, sin intento de entrega"
-                        : shipment.attempt_count > 0
-                          ? ` · ${shipment.attempt_count} ${shipment.attempt_count === 1 ? "intento" : "intentos"}`
-                          : ""}
+                      {isStoppedShipment(shipment.status, shipment.recalled)
+                        ? shipment.attempt_count > 0
+                          ? ` · detenido en la bodega, después de ${shipment.attempt_count} ${shipment.attempt_count === 1 ? "intento" : "intentos"} de entrega`
+                          : " · detenido en la bodega, sin intento de entrega"
+                        : shipment.status === "returning" && shipment.attempt_count === 0
+                          ? " · quitado de una ruta y devuelto, sin intento de entrega"
+                          : isRescheduledShipment(shipment.status, shipment.attempt_count)
+                            ? " · quitado de una ruta, sin intento de entrega"
+                            : shipment.attempt_count > 0
+                              ? ` · ${shipment.attempt_count} ${shipment.attempt_count === 1 ? "intento" : "intentos"}`
+                              : ""}
                       {shipment.driver_first_name ? ` · ${shipment.driver_first_name}` : ""}
                     </span>
                   </span>
-                  {isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+                  {isStoppedShipment(shipment.status, shipment.recalled) ? (
+                    <Badge tone="warning">Detenido: vuelve a los estantes</Badge>
+                  ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
                     <Badge tone="warning">Quitado de una ruta: espera otra</Badge>
                   ) : (
                     <ShipmentStatusBadge status={shipment.status} />
                   )}
+                  {shipment.can_recall && canSee(staff.staff_role, ["ops"]) ? (
+                    <div className="w-full border-t border-border pt-3">
+                      <RecallShipmentForm
+                        shipmentId={shipment.id}
+                        trackingCode={shipment.tracking_code}
+                        orderNumber={order.order_number}
+                        onRoute={shipment.status === "ready_for_dispatch"}
+                        money={recallMoney(order, shipment.id)}
+                        paid={["captured", "partially_refunded"].includes(
+                          order.payment?.status ?? "",
+                        )}
+                      />
+                    </div>
+                  ) : null}
                   {shipment.status === "returning" && canSee(staff.staff_role, ["ops"]) ? (
                     <div className="w-full border-t border-border pt-3">
                       <ReturnedParcelForm
@@ -331,15 +374,46 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
           <section className="rounded-lg border border-border bg-surface p-5 text-sm">
             <h2 className="text-lg font-bold">Cancelar el pedido</h2>
             <p className="mt-1 text-ink-muted">
-              Ya no se puede cancelar: hay un paquete empacado o en camino. Si el cliente no lo
-              quiere, que lo rechace en la entrega; al volver a bodega se recibe como devuelto y se
-              le reembolsa.
+              {order.shipments.some((shipment) => shipment.can_recall)
+                ? "Ya hay un paquete empacado. Para cancelar, deténgalo en «Paquetes»: vuelve a los estantes y, cuando la bodega lo reciba, se reembolsa y el pedido queda cancelado."
+                : "Ya no se puede cancelar: hay un paquete en camino. Si el cliente no lo quiere, que lo rechace en la entrega; al volver a bodega se recibe como devuelto y se le reembolsa."}
             </p>
           </section>
         ) : null}
       </aside>
     </div>
   );
+}
+
+/**
+ * What stopping this parcel does to the shopper's money, for the
+ * confirmation: its goods come back when the warehouse receives it, and the
+ * delivery fee too when it is the last parcel still to deliver and nobody
+ * went to the door (the database's rule, deliveryFeeComesBack).
+ */
+function recallMoney(order: OrderDetailWithRecall, shipmentId: string): string {
+  const paid = ["captured", "partially_refunded"].includes(order.payment?.status ?? "");
+  if (!paid) return "No se cobró nada todavía, así que no hay dinero que devolver.";
+  const shipment = order.shipments.find((s) => s.id === shipmentId);
+  // What the database refunds for it (private.refund_units): each unit in
+  // this parcel at its price, also when a line is split over parcels.
+  const goods = (shipment?.units ?? []).reduce((sum, unit) => {
+    const item = order.items.find((i) => i.id === unit.order_item_id);
+    return sum + (item ? item.unit_price_minor * unit.quantity : 0);
+  }, 0);
+  // Every other parcel has ended undelivered or is on its way back too: the
+  // order is cancelled when the warehouse has them all.
+  const last = order.shipments.every(
+    (s) =>
+      s.id === shipmentId ||
+      s.status === "cancelled" ||
+      s.status === "returned" ||
+      s.status === "returning",
+  );
+  const fee = last && deliveryFeeComesBack(order.shipments) ? order.shipping_minor : 0;
+  return `Cuando la bodega lo reciba, se le devuelven al cliente ${formatPrice(goods + fee)}${
+    fee > 0 ? ", productos y envío," : " por los productos"
+  } por el mismo medio con que pagó${last ? ", y el pedido queda cancelado" : ""}.`;
 }
 
 async function OrderMessages({ orderNumber }: { orderNumber: string }) {
@@ -367,6 +441,8 @@ type TimelineEvent = {
 
 /** The note staff's removal of a stop writes (ops_remove_route_stop), in the same moment. */
 const REMOVAL_NOTE = "Central quitó el paquete ";
+/** The staff note stopping a parcel writes (ops_recall_shipment), in the same moment. */
+const RECALL_NOTE = "Central detuvo el paquete ";
 
 /**
  * A history line in words, never a status code. A parcel's step written by
@@ -377,11 +453,18 @@ function timelineWords(event: TimelineEvent, timeline: readonly TimelineEvent[])
   if (event.note) return event.note;
   const status = event.to_status ?? "";
   if (event.kind === "shipment_status") {
-    const removal = timeline.some(
-      (other) =>
-        other.kind === "note" && other.at === event.at && other.note?.startsWith(REMOVAL_NOTE),
-    );
-    if (removal) return "Quitado de una ruta, sin intento de entrega";
+    const noteNow = (prefix: string) =>
+      timeline.some(
+        (other) => other.kind === "note" && other.at === event.at && other.note?.startsWith(prefix),
+      );
+    // Stopping a parcel on a route removes its stop in the same moment: its
+    // step back to the shelves is the stop, not a removal.
+    if (status === "returning" && noteNow(RECALL_NOTE)) {
+      return "Detenido en la bodega: vuelve a los estantes";
+    }
+    if ((status === "delivery_failed" || status === "packed") && noteNow(REMOVAL_NOTE)) {
+      return "Quitado de una ruta, sin intento de entrega";
+    }
     const words = SHIPMENT_STATUS_LABEL[status as ShipmentStatus];
     return words ? `Paquete: ${words.toLowerCase()}` : "El paquete cambió de estado";
   }

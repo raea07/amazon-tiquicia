@@ -1,4 +1,5 @@
-import type { OpsOpenRoute, OpsRouteStop } from "@yuntera/db";
+import { isRescheduledShipment, type ShipmentStatus } from "@yuntera/core";
+import type { OpsOpenRouteWithAttempts, OpsRouteStopWithAttempts } from "@yuntera/db";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import {
@@ -90,7 +91,7 @@ async function Routes() {
   );
 }
 
-function RouteCard({ route }: { route: OpsOpenRoute }) {
+function RouteCard({ route }: { route: OpsOpenRouteWithAttempts }) {
   const status = ROUTE_STATUS[route.status];
   return (
     <li className="rounded-lg border border-border bg-surface p-4 text-sm" data-route={route.code}>
@@ -141,7 +142,25 @@ function RouteCard({ route }: { route: OpsOpenRoute }) {
   );
 }
 
-function StopRow({ stop }: { stop: OpsRouteStop }) {
+/**
+ * Where the stop's parcel stands, in words. A parcel whose stop staff removed
+ * after the driver had it reads "delivery failed" in the database with no
+ * attempt counted: nobody went to the door, so it is not called a failure.
+ */
+function parcelWords(stop: OpsRouteStopWithAttempts): string {
+  const status = stop.shipment_status as ShipmentStatus;
+  if (isRescheduledShipment(status, stop.attempt_count)) {
+    return stop.removed_at
+      ? "quitado de esta ruta, sin intento de entrega"
+      : "quitado de una ruta, sin intento de entrega";
+  }
+  return (
+    SHIPMENT_STATUS_LABEL[status as keyof typeof SHIPMENT_STATUS_LABEL]?.toLowerCase() ??
+    "en un estado desconocido"
+  );
+}
+
+function StopRow({ stop }: { stop: OpsRouteStopWithAttempts }) {
   const status = STOP_STATUS[stop.status];
   return (
     <li className="rounded-md border border-border p-3" data-stop={stop.tracking_code}>
@@ -149,11 +168,7 @@ function StopRow({ stop }: { stop: OpsRouteStop }) {
         <span className="font-semibold tabular-nums">{stop.sequence}.</span>
         <span className="font-semibold">{stop.tracking_code}</span>
         <Badge tone={status?.tone ?? "neutral"}>{status?.label ?? stop.status}</Badge>
-        <span className="text-ink-muted">
-          Paquete:{" "}
-          {SHIPMENT_STATUS_LABEL[stop.shipment_status as keyof typeof SHIPMENT_STATUS_LABEL] ??
-            stop.shipment_status}
-        </span>
+        <span className="text-ink-muted">Paquete: {parcelWords(stop)}</span>
       </div>
       <p className="mt-1 text-ink-muted">
         <Link

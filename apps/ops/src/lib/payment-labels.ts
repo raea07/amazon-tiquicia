@@ -74,6 +74,7 @@ export const REFUND_REASON: Record<string, string> = {
   order_cancelled: "Pedido cancelado",
   return: "Devolución",
   parcel_returned: "Paquete devuelto",
+  delivery_fee: "Envío devuelto: no se intentó la entrega",
   review: "Pago por revisar",
 };
 

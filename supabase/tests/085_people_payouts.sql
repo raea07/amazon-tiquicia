@@ -1780,7 +1780,11 @@ $$;
 reset role;
 select pg_temp.allow_inspection();
 
--- With no hold, only what is still on its way is pending.
+-- With no hold, only what is still on its way is pending. An order cancelled
+-- because its parcels came back is not on its way (its parcels ended; the
+-- seller is settled as for any other ended parcel), and one cancelled before
+-- anything left was reversed in full: neither is pending. A used database
+-- has such orders (the hosted preview has two since 23 November).
 update public.app_settings set value = '0' where key = 'payout_hold_days';
 do $$
 declare
@@ -1793,7 +1797,8 @@ begin
       join public.ledger_accounts a on a.id = e.account_id
       join public.ledger_transactions t on t.id = e.transaction_id
       join public.orders o on o.id = t.order_id
-      where a.seller_id = b.seller_id and o.delivered_at is null),
+      where a.seller_id = b.seller_id and o.delivered_at is null
+        and o.status not in ('cancelled', 'refunded')),
       'without a hold, pending is exactly the undelivered orders';
   end loop;
 end

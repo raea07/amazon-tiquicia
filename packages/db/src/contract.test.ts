@@ -251,7 +251,16 @@ describe.skipIf(!DATABASE_URL)("API contract (against a seeded database)", () =>
       const api = staff();
       expect((await api.myRoles())?.staff_role).toBe("admin");
       expect((await api.opsOverview()).payments_mode).toBe("sandbox");
-      expect((await api.opsOrders()).length).toBe(17);
+      // The seed's 17 orders. Other contract files place orders of their own
+      // shoppers (contract.order-followups.test.ts), which this count leaves out.
+      const { rows: seedOrders } = await pool.query<{ order_number: string }>(
+        "select order_number from public.orders where idempotency_key like 'seed-%'",
+      );
+      const seedNumbers = new Set(seedOrders.map((o) => o.order_number));
+      expect(seedNumbers.size).toBe(17);
+      expect((await api.opsOrders()).filter((o) => seedNumbers.has(o.order_number)).length).toBe(
+        17,
+      );
       expect((await api.opsOrders({ status: "delivered" })).length).toBe(10);
       expect((await api.opsSellers("pending")).length).toBe(1);
       expect((await api.opsListingsForReview()).length).toBe(1);

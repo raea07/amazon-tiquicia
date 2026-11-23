@@ -122,14 +122,20 @@ async function Board({ searchParams }: PageProps<"/bodega">) {
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-display text-lg font-bold">{parcel.tracking_code}</p>
-                  <Badge tone="warning">De vuelta</Badge>
+                  <Badge tone="warning">
+                    {parcel.never_left ? "Nunca salió de la bodega" : "De vuelta"}
+                  </Badge>
                 </div>
                 <p className="mt-1 text-sm text-ink-muted">
                   {parcel.units} {parcel.units === 1 ? "unidad" : "unidades"} en {parcel.lines}{" "}
                   {parcel.lines === 1 ? "línea" : "líneas"} · pedido {parcel.order_number} ·{" "}
-                  {parcel.attempt_count === 1
-                    ? "1 intento de entrega"
-                    : `${parcel.attempt_count} intentos de entrega`}
+                  {parcel.never_left
+                    ? "Central lo detuvo antes de que saliera: devuélvalo a los estantes"
+                    : parcel.attempt_count === 0
+                      ? "lo quitaron de una ruta, sin intento de entrega"
+                      : parcel.attempt_count === 1
+                        ? "1 intento de entrega"
+                        : `${parcel.attempt_count} intentos de entrega`}
                 </p>
                 <div className="mt-3">
                   <ReturnedParcelCheckIn shipmentId={parcel.shipment_id} />

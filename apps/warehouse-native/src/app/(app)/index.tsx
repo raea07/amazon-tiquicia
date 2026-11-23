@@ -17,6 +17,7 @@ import {
 import { StyleSheet, View } from "react-native";
 import { FloorRow } from "@/components/floor-row";
 import { isToDo, pendingUnits, plural, STEP, sortBoard } from "@/lib/floor";
+import { returnedParcelBadge, returnedParcelDetails } from "@/lib/returned-parcel";
 import { keys, useWarehouse } from "@/lib/warehouse";
 
 /**
@@ -141,16 +142,8 @@ export default function BoardScreen() {
                     key={parcel.shipment_id}
                     href={{ pathname: "/devuelto/[id]", params: { id: parcel.shipment_id } }}
                     title={parcel.tracking_code}
-                    details={`${plural(parcel.units, "unidad", "unidades")} en ${plural(
-                      parcel.lines,
-                      "línea",
-                      "líneas",
-                    )} · pedido ${parcel.order_number} · ${plural(
-                      parcel.attempt_count,
-                      "intento de entrega",
-                      "intentos de entrega",
-                    )}`}
-                    badges={<Badge tone="warning">De vuelta</Badge>}
+                    details={returnedParcelDetails(parcel)}
+                    badges={<Badge tone="warning">{returnedParcelBadge(parcel)}</Badge>}
                     testID="returned-row"
                   />
                 ))}

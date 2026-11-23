@@ -1,4 +1,8 @@
-import { ApiError, type DistrictMoveImpact, type OpsCantonDistricts } from "@yuntera/db";
+import {
+  ApiError,
+  type DistrictMoveImpact,
+  type OpsCantonDistrictsWithOwnZones as OpsCantonDistricts,
+} from "@yuntera/db";
 import { messageOf, sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Alert, Badge, buttonClass, SelectField, Skeleton } from "@yuntera/ui";
@@ -77,8 +81,9 @@ async function Districts({
       <OperationsNav current="/operacion/distritos" admin={staff.staff_role === "admin"} />
       <PageHeader title="Distritos">
         Los distritos del país no se crean ni se renombran aquí. Lo que se decide es a qué zona de
-        entrega pertenece cada uno, o si por ahora no se entrega. Antes de confirmar se ve cuántas
-        direcciones guardadas y pedidos abiertos toca el cambio.
+        entrega pertenece cada uno, o si por ahora no se entrega. Un distrito sigue la zona de su
+        cantón salvo que se le asigne otra; al devolverlo a la zona del cantón, vuelve a seguirla.
+        Antes de confirmar se ve cuántas direcciones guardadas y pedidos abiertos toca el cambio.
       </PageHeader>
 
       <form method="get" className="mt-6 flex max-w-xl flex-wrap items-end gap-3">
@@ -97,7 +102,11 @@ async function Districts({
                 .filter((c) => c.province === province)
                 .map((c) => (
                   <option key={c.code} value={c.code}>
-                    {c.name} ({c.served_count} de {c.district_count} con entrega)
+                    {c.name} ({c.served_count} de {c.district_count} con entrega
+                    {c.own_zone_count > 0
+                      ? ` · ${plural(c.own_zone_count, "con zona propia", "con zona propia")}`
+                      : ""}
+                    )
                   </option>
                 ))}
             </optgroup>
@@ -158,6 +167,11 @@ async function Districts({
                             </Badge>
                           ) : (
                             <Badge tone="warning">No se entrega</Badge>
+                          )}
+                          {district.own_zone ? (
+                            <Badge tone="info">Zona propia, no la del cantón</Badge>
+                          ) : (
+                            <span className="text-ink-muted">Sigue la zona del cantón</span>
                           )}
                           <span className="text-ink-muted">
                             {plural(district.saved_address_count, "dirección", "direcciones")} ·{" "}

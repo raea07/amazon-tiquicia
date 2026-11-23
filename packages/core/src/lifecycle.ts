@@ -52,9 +52,12 @@ export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
 export const SHIPMENT_TRANSITIONS: Readonly<Record<ShipmentStatus, readonly ShipmentStatus[]>> = {
   pending: ["picking", "cancelled"],
   picking: ["packed", "pending", "cancelled"],
-  packed: ["ready_for_dispatch", "cancelled"],
-  // Back to packed when dispatch takes it off a route before it left.
-  ready_for_dispatch: ["out_for_delivery", "packed", "cancelled"],
+  // Back to the shelves (returning) when staff stop it before it left
+  // (ops_recall_shipment).
+  packed: ["ready_for_dispatch", "returning", "cancelled"],
+  // Back to packed when dispatch takes it off a route before it left; to the
+  // shelves when staff stop it on a route that has not started.
+  ready_for_dispatch: ["out_for_delivery", "packed", "returning", "cancelled"],
   out_for_delivery: ["delivered", "delivery_failed"],
   // A failed attempt is retried or the parcel starts its way back.
   delivery_failed: ["ready_for_dispatch", "returning"],
@@ -111,12 +114,29 @@ export function orderStatusFromShipments(
     ["out_for_delivery", "delivered", "delivery_failed", "returning", "returned"].includes(s),
   ).length;
 
-  if (delivered > 0 && ended === live.length) return "delivered";
-  if (dispatched === live.length) return "shipped";
-  if (dispatched > 0) return "partially_shipped";
-  if (live.some((s) => s !== "pending")) return "processing";
-  return current === "confirmed" ? "confirmed" : "processing";
+  let target: OrderStatus;
+  if (delivered > 0 && ended === live.length) target = "delivered";
+  else if (dispatched === live.length) target = "shipped";
+  else if (dispatched > 0) target = "partially_shipped";
+  else if (live.some((s) => s !== "pending")) target = "processing";
+  else target = current === "confirmed" ? "confirmed" : "processing";
+  // Never back: a parcel re-planned after a failed attempt and taken off its
+  // route again is packed, but the order that went out stays where it is.
+  const rank = (status: OrderStatus) => ORDER_PROGRESS.indexOf(status);
+  return rank(target) < rank(current) ? current : target;
 }
+
+/**
+ * The order statuses that follow its parcels, in the order they come
+ * (private.sync_order_status has the same list between its markers).
+ */
+export const ORDER_PROGRESS: readonly OrderStatus[] = [
+  "confirmed",
+  "processing",
+  "partially_shipped",
+  "shipped",
+  "delivered",
+];
 
 /** Buyer-facing wording. Statuses are internal; customers read sentences. */
 export const ORDER_STATUS_LABEL: Readonly<Record<OrderStatus, { "es-CR": string; en: string }>> = {
@@ -160,4 +180,78 @@ export function isRescheduledOrder(
   if (status !== "shipped" && status !== "partially_shipped") return false;
   const open = shipments.filter((s) => s.status !== "delivered" && s.status !== "cancelled");
   return open.length > 0 && open.every((s) => isRescheduledShipment(s.status, s.attempt_count));
+}
+
+/**
+ * A parcel staff stopped before it left the warehouse (ops_recall_shipment):
+ * it waits to be checked back onto the shelves, and its goods are refunded
+ * when the warehouse confirms. Nobody is bringing it to the shopper.
+ */
+export function isStoppedShipment(status: ShipmentStatus, recalled: boolean): boolean {
+  return status === "returning" && recalled;
+}
+
+/**
+ * An order that is being called off: every parcel still to deliver was
+ * stopped before it left (isStoppedShipment), so the order ends cancelled
+ * once the warehouse receives them, and its money goes back then. Shown as
+ * such instead of "En camino" or "Preparando su pedido". With a parcel
+ * delivered (the order is not cancelled then: only the stopped parcel's
+ * goods go back), one still on its way, or none left to deliver, it is not.
+ */
+export function isOrderBeingStopped(
+  status: OrderStatus,
+  shipments: ReadonlyArray<{ status: ShipmentStatus; recalled?: boolean }>,
+): boolean {
+  if (!["confirmed", "processing", "partially_shipped", "shipped"].includes(status)) return false;
+  if (shipments.some((s) => s.status === "delivered")) return false;
+  const open = shipments.filter(
+    (s) => s.status !== "delivered" && s.status !== "cancelled" && s.status !== "returned",
+  );
+  return open.length > 0 && open.every((s) => isStoppedShipment(s.status, s.recalled === true));
+}
+
+/**
+ * How an order stands while every parcel still to deliver is on its way
+ * back to the warehouse (`returning`: staff stopped it, or it was taken off a
+ * route or failed at the door and sent back). Nobody is bringing anything to
+ * the shopper, so it never reads "En camino", the promised date or the
+ * delivery code. `cancels`: nothing of it was delivered, so it ends
+ * cancelled when the warehouse receives them (wms_receive_returned_shipment);
+ * otherwise only those parcels' goods go back. `stopped`: every such parcel
+ * was stopped by staff in the warehouse (isOrderBeingStopped). Null when some
+ * parcel may still reach the shopper, or the order has ended.
+ */
+export function orderComingBack(
+  status: OrderStatus,
+  shipments: ReadonlyArray<{ status: ShipmentStatus; recalled?: boolean }>,
+): { cancels: boolean; stopped: boolean } | null {
+  if (!["confirmed", "processing", "partially_shipped", "shipped"].includes(status)) return null;
+  const open = shipments.filter(
+    (s) => s.status !== "delivered" && s.status !== "cancelled" && s.status !== "returned",
+  );
+  if (open.length === 0 || !open.every((s) => s.status === "returning")) return null;
+  return {
+    cancels: !shipments.some((s) => s.status === "delivered"),
+    stopped: open.every((s) => s.recalled === true),
+  };
+}
+
+/**
+ * Whether an order that ends cancelled because its parcels came back gets
+ * its delivery fee back too: nothing of it was delivered and no parcel ever
+ * had an attempt at the shopper's door. A stop staff removed is not an
+ * attempt (isRescheduledShipment), nor is a parcel stopped before it left.
+ * The database applies the same rule when the warehouse receives the last
+ * parcel (wms_receive_returned_shipment, private.order_had_door_attempt,
+ * which also reads the stops a driver marked failed; driver_fail_stop counts
+ * an attempt on the parcel each time, so the two agree).
+ */
+export function deliveryFeeComesBack(
+  shipments: ReadonlyArray<{ status: ShipmentStatus; attempt_count: number }>,
+): boolean {
+  return (
+    shipments.length > 0 &&
+    shipments.every((s) => s.status !== "delivered" && s.attempt_count === 0)
+  );
 }

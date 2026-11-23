@@ -1,15 +1,18 @@
 import { brand } from "@yuntera/brand";
 import {
+  deliveryFeeComesBack,
   isRescheduledOrder,
   isRescheduledShipment,
+  isStoppedShipment,
   ORDER_STATUS_LABEL,
+  orderComingBack,
   toCostaRicaTime,
 } from "@yuntera/core";
 import {
   ApiError,
   type MyOrderReturn,
   type MyOrderReview,
-  type OrderDetail,
+  type OrderDetailWithRecall as OrderDetail,
   type OrderPayment,
   type ReviewHideReason,
 } from "@yuntera/db";
@@ -108,6 +111,20 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
   const withdrawalOpen = delivered && today <= order.withdrawal_deadline;
   const warrantyOpen = delivered && order.warranty_until !== null && today <= order.warranty_until;
   const awaitingPayment = order.status === "pending_payment";
+  // Every parcel still to deliver is on its way back to the warehouse
+  // (stopped by staff, or sent back after a route): nothing reaches the
+  // shopper, so no "En camino", no date and no delivery code.
+  const back = orderComingBack(order.status, order.shipments);
+  // Money held for the shopper, so a cancellation gives some back.
+  const paid = ["captured", "partially_refunded"].includes(order.payment?.status ?? "");
+  const refundedSoFar = payment.refunds.reduce((sum, refund) => sum + refund.amount_minor, 0);
+  const feeBack = deliveryFeeComesBack(order.shipments);
+  // What comes back when the warehouse receives them: what is left of the
+  // payment, less the delivery fee when someone went to the door.
+  const comesBack = Math.max(
+    0,
+    (order.payment?.amount_minor ?? 0) - refundedSoFar - (feeBack ? 0 : order.shipping_minor),
+  );
 
   return (
     <>
@@ -132,7 +149,11 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-bold">Pedido {order.order_number}</h1>
         {/* Not "En camino" when no parcel is on its way to the shopper any more. */}
-        {isRescheduledOrder(order.status, order.shipments) ? (
+        {back ? (
+          <Badge tone="warning">
+            {back.cancels ? "Se está cancelando" : "Un paquete regresa a la bodega"}
+          </Badge>
+        ) : isRescheduledOrder(order.status, order.shipments) ? (
           <Badge tone="info">Entrega reprogramada</Badge>
         ) : (
           <OrderStatusBadge status={order.status} />
@@ -153,9 +174,42 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
           {payment.money_in_review && !(awaitingPayment && payment.stage === "review") ? (
             <MoneyInReview payment={payment} />
           ) : null}
+          {back ? (
+            <Alert
+              tone="warning"
+              title={
+                back.cancels
+                  ? "Estamos cancelando su pedido"
+                  : "Un paquete regresa a nuestra bodega"
+              }
+            >
+              {back.stopped
+                ? "Detuvimos su pedido en nuestra bodega: ya no saldrá hacia usted. "
+                : back.cancels
+                  ? "Su pedido regresa a nuestra bodega sin entregarse. "
+                  : "Un paquete de su pedido regresa a nuestra bodega sin entregarse. "}
+              {!paid
+                ? back.cancels
+                  ? "No se le cobró nada, así que no hay nada que devolver."
+                  : ""
+                : back.cancels
+                  ? `Cuando la bodega confirme que lo recibió, le devolvemos ${formatPrice(comesBack)}${
+                      feeBack && order.shipping_minor > 0 ? ", el envío incluido," : ""
+                    } por el mismo medio con que pagó.`
+                  : "Cuando la bodega lo reciba, le devolvemos lo que pagó por ese paquete."}
+            </Alert>
+          ) : null}
           <RefundList payment={payment} />
+          {payment.refunds.length > 1 ? (
+            <p className="-mt-3 text-sm" data-testid="refund-total">
+              En total le devolvemos <strong>{formatPrice(refundedSoFar)}</strong>
+              {refundedSoFar === order.total_minor && order.shipping_minor > 0
+                ? ": todo lo que pagó, el envío incluido."
+                : "."}
+            </p>
+          ) : null}
 
-          {order.delivery_pin ? (
+          {order.delivery_pin && !back ? (
             <section className="rounded-lg border-2 border-brand bg-brand-soft p-5">
               <h2 className="text-lg font-bold">Su código de entrega</h2>
               <p className="mt-2 font-display text-5xl font-extrabold tracking-[0.2em] text-link tabular-nums">
@@ -176,7 +230,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
               <p className="mt-2 font-semibold text-success">
                 Entregado el {formatDateTime(order.delivered_at)}
               </p>
-            ) : order.status === "cancelled" || order.status === "refunded" ? null : (
+            ) : order.status === "cancelled" || order.status === "refunded" || back ? null : (
               <p className="mt-2 font-semibold text-success">
                 {order.promise_earliest === order.promise_latest
                   ? `Llega el ${formatDate(order.promise_latest)}`
@@ -200,7 +254,9 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                         {shipment.tracking_code}
                       </span>
                     </p>
-                    {isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+                    {isStoppedShipment(shipment.status, shipment.recalled) ? (
+                      <Badge tone="warning">Detenido en la bodega</Badge>
+                    ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
                       <Badge tone="info">Entrega reprogramada</Badge>
                     ) : (
                       <ShipmentStatusBadge status={shipment.status} />
@@ -212,7 +268,19 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                       código de entrega.
                     </p>
                   ) : null}
-                  {isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+                  {isStoppedShipment(shipment.status, shipment.recalled) ? (
+                    <p className="mt-2 text-sm">
+                      Este paquete no saldrá de nuestra bodega.
+                      {paid
+                        ? " Le devolvemos lo que pagó por él cuando la bodega confirme que lo recibió."
+                        : ""}
+                    </p>
+                  ) : shipment.status === "returning" ? (
+                    <p className="mt-2 text-sm">
+                      Este paquete regresa a nuestra bodega sin entregarse.
+                      {paid ? " Le devolvemos lo que pagó por él cuando la bodega lo reciba." : ""}
+                    </p>
+                  ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
                     <p className="mt-2 text-sm">
                       Reprogramamos la entrega de este paquete. Le avisaremos cuando vuelva a salir
                       hacia usted; si necesita cambiar algo, escríbanos.

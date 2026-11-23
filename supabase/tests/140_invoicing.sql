@@ -223,7 +223,13 @@ begin
     format('one fee factura per seller and paid order (%s)', v_fees);
   assert (select count(*) from new_docs where kind = 'delivery' and order_id in (select order_id from plan_orders))
          = v_delivery, format('one delivery document per paid order with shipping (%s)', v_delivery);
-  assert (select count(*) from new_docs where order_id in (select order_id from plan_orders)) = v_fees + v_delivery,
+  -- Besides, an order refunded before its documents were made (on a used
+  -- database: one whose parcels came back while no worker ran) gets the
+  -- credit notes of its own refunds, planned in the same run.
+  assert (select count(*) from new_docs n where n.order_id in (select order_id from plan_orders)
+          and not (n.kind = 'credit' and n.refund_id in (select r.id from private.refunds r
+                                                         where r.order_id = n.order_id)))
+         = v_fees + v_delivery,
     'and nothing else for them';
   if current_setting('t.fresh')::boolean then
     assert (select count(*) from new_docs) = v_fees + v_delivery, 'and nothing else at all';

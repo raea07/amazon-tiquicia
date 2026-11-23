@@ -14,6 +14,7 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { changeClosureEnd, endClosure, openClosure } from "@/app/operations-actions";
+import { removeClosureDay } from "@/app/order-followups-actions";
 import { CatalogueForm, CatalogueOutcome } from "@/components/catalogue-outcome";
 import { OperationsNav } from "@/components/operations-nav";
 import { CLOSURE_REASON, CLOSURE_STATE } from "@/lib/operations-labels";
@@ -167,8 +168,9 @@ async function Closures() {
             Días cerrados uno por uno ({list.single_days.length})
           </h2>
           <p className="mt-1 text-sm text-ink-muted">
-            Se cerraron antes de que existieran los cierres por periodo. Para cambiarlos, pida ayuda
-            al equipo técnico.
+            Se cerraron antes de que existieran los cierres por periodo. Si la zona sí puede
+            entregar ese día, ábralo de nuevo: la fecha de entrega que ve la tienda lo cuenta de
+            inmediato.
           </p>
           <ul className="mt-3 grid gap-2 text-sm lg:grid-cols-2">
             {list.single_days.map((day) => (
@@ -176,7 +178,21 @@ async function Closures() {
                 key={`${day.zone_id}-${day.day}`}
                 className="rounded-lg border border-border bg-surface p-3"
               >
-                {day.zone_name} · {formatDate(day.day)}
+                <p>
+                  {day.zone_name} · {formatDate(day.day)}
+                </p>
+                <details>
+                  <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+                    Abrir el {formatDate(day.day)} en {day.zone_name}
+                  </summary>
+                  <CatalogueForm action={removeClosureDay} submit="Abrir ese día" size="sm">
+                    <input type="hidden" name="zoneId" value={day.zone_id} />
+                    <input type="hidden" name="day" value={day.day} />
+                    <p className="text-ink-muted">
+                      La zona vuelve a entregar ese día. Los pedidos ya prometidos no cambian.
+                    </p>
+                  </CatalogueForm>
+                </details>
               </li>
             ))}
           </ul>

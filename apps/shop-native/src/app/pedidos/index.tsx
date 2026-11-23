@@ -1,8 +1,10 @@
+import { isRescheduledOrder, orderComingBack } from "@yuntera/core";
 import { useSession } from "@yuntera/expo-kit/auth";
 import { useApiQuery } from "@yuntera/expo-kit/data";
 import { signInPath } from "@yuntera/expo-kit/paths";
 import { colors, gutter, space } from "@yuntera/expo-kit/theme";
 import {
+  Badge,
   EmptyState,
   ErrorState,
   formatDate,
@@ -51,36 +53,50 @@ export default function OrdersScreen() {
             Cuando compre, aquí podrá seguir cada entrega.
           </EmptyState>
         }
-        renderItem={({ item: order }) => (
-          <Link
-            href={{ pathname: "/pedidos/[numero]", params: { numero: order.order_number } }}
-            asChild
-          >
-            <Pressable role="link" testID={`order-${order.order_number}`} style={styles.row}>
-              <ProductImage path={order.first_image_path} size={64} />
-              <View style={styles.body}>
-                <View style={styles.head}>
-                  <Text variant="bodyStrong">{order.order_number}</Text>
-                  <OrderStatusBadge status={order.status} />
+        renderItem={({ item: order }) => {
+          // Not "En camino" when no parcel is on its way to the shopper.
+          const back = orderComingBack(order.status, order.shipments);
+          return (
+            <Link
+              href={{ pathname: "/pedidos/[numero]", params: { numero: order.order_number } }}
+              asChild
+            >
+              <Pressable role="link" testID={`order-${order.order_number}`} style={styles.row}>
+                <ProductImage path={order.first_image_path} size={64} />
+                <View style={styles.body}>
+                  <View style={styles.head}>
+                    <Text variant="bodyStrong">{order.order_number}</Text>
+                    {back ? (
+                      <Badge tone="warning">
+                        {back.cancels ? "Se está cancelando" : "Un paquete regresa a la bodega"}
+                      </Badge>
+                    ) : isRescheduledOrder(order.status, order.shipments) ? (
+                      <Badge tone="info">Entrega reprogramada</Badge>
+                    ) : (
+                      <OrderStatusBadge status={order.status} />
+                    )}
+                  </View>
+                  <Text variant="small" tint="muted" numberOfLines={1}>
+                    {order.first_title}
+                    {order.item_count > 1 ? ` y ${order.item_count - 1} más` : ""}
+                  </Text>
+                  <Text variant="small" tint="muted">
+                    {back
+                      ? comingBackLine(back.cancels, order.paid)
+                      : order.delivered_at
+                        ? `Entregado el ${formatDate(order.delivered_at, { day: "numeric", month: "long" })}`
+                        : order.status === "cancelled" || order.status === "refunded"
+                          ? `Pedido el ${formatDate(order.placed_at, { day: "numeric", month: "long" })}`
+                          : `Llega el ${formatDate(order.promise_latest)}`}
+                  </Text>
                 </View>
-                <Text variant="small" tint="muted" numberOfLines={1}>
-                  {order.first_title}
-                  {order.item_count > 1 ? ` y ${order.item_count - 1} más` : ""}
+                <Text variant="figure" style={styles.total}>
+                  {formatPrice(order.total_minor)}
                 </Text>
-                <Text variant="small" tint="muted">
-                  {order.delivered_at
-                    ? `Entregado el ${formatDate(order.delivered_at, { day: "numeric", month: "long" })}`
-                    : order.status === "cancelled" || order.status === "refunded"
-                      ? `Pedido el ${formatDate(order.placed_at, { day: "numeric", month: "long" })}`
-                      : `Llega el ${formatDate(order.promise_latest)}`}
-                </Text>
-              </View>
-              <Text variant="figure" style={styles.total}>
-                {formatPrice(order.total_minor)}
-              </Text>
-            </Pressable>
-          </Link>
-        )}
+              </Pressable>
+            </Link>
+          );
+        }}
       />
     </SafeAreaView>
   );
@@ -102,3 +118,22 @@ const styles = StyleSheet.create({
   total: { fontSize: 16 },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 });
+
+/**
+ * The list's line for an order whose parcels are all on their way back to
+ * the warehouse (orderComingBack): what happens and, only when something was
+ * paid, that the money comes back. `paid` is null from a database that does
+ * not say it: then no promise is made. The same words as the website's list.
+ */
+function comingBackLine(cancels: boolean, paid: boolean | null): string {
+  if (cancels) {
+    return paid
+      ? "Se cancela cuando la bodega reciba el paquete; entonces le devolvemos el dinero."
+      : paid === false
+        ? "Se cancela cuando la bodega reciba el paquete. No se le cobró nada."
+        : "Se cancela cuando la bodega reciba el paquete.";
+  }
+  return paid
+    ? "Le devolvemos lo de ese paquete cuando la bodega lo reciba."
+    : "Ese paquete vuelve a nuestra bodega sin entregarse.";
+}
