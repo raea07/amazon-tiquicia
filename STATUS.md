@@ -1,6 +1,17 @@
 # Status
 
-Updated 23 November 2026, after the staff operations tools were merged on
+Updated 23 November 2026, after wave 7 was merged on top: order follow-ups
+(staff stop a packed parcel, the delivery fee refunded when nobody went to
+the door, an order that never moves backwards, the shopper told the truth
+while parcels come back or wait to go out again; migration `084200`),
+warehouse stock (open a location, move stock, correct a count, the shop's
+stock history; migration `084300`) and the native apps' parity with the
+websites (no migration). **The hosted preview does not have migrations
+`084200` and `084300` yet, nor this code**: it still has 39 migrations and
+the web apps of `22248bd`. Everything about wave 7 below was checked only on
+a development machine.
+
+Before that, on 23 November 2026, the staff operations tools were merged on
 top: the console's Operación section (delivery zones, districts, holidays,
 zone closures, warehouse locations, stuck routes, and the operational
 settings for administrators; migration `084000`), and two catalogue
@@ -61,22 +72,26 @@ Yuntera is a marketplace with its own warehouse and delivery, designed for
 Costa Rica. The whole product works on a development machine: a shopper can
 search, buy and pay; a seller can register, list with photos, edit listings,
 sell on another shop's product, switch variants off and on, describe the shop
-and give it a logo, stock, pack and see what they will be paid; staff can
+and give it a logo, stock, pack, follow every change to its stock and see
+what they will be paid; staff can
 verify sellers, review products, photos, logos and listing edits, run the
 catalogue (categories, brands, search synonyms, reviews, corrections and
 take-downs), run operations (delivery zones, districts, holidays, zone
 closures, warehouse locations, stuck routes and the platform's operational
 settings), add staff, drivers and warehouse workers,
-plan routes, settle cash, refund returns and pay sellers; a driver can deliver
-against the customer's code; a warehouse worker can pick, pack and receive.
+plan routes, stop a packed parcel before it leaves, settle cash, refund
+returns and pay sellers; a driver can deliver against the customer's code; a
+warehouse worker can pick, pack, receive, open a location, move stock between
+shelves and correct a count.
 Everyone can reset a password, confirm their e-mail and delete their account;
 staff and sellers can add a second factor; messages for every step of an order
 are planned and sent, but only to local fake providers. **A hosted preview
 exists.** The database is a Supabase project in your separate free
-organisation, with all 39 of the repository's migrations applied (the
+organisation, with 39 of the repository's 41 migrations applied (the
 security review's fixes, both follow-ups, payments, invoicing and its fixes,
 seller listings, the console catalogue, the native accounts, the operations
-tools and the catalogue follow-ups included), and the demo data loaded.
+tools and the catalogue follow-ups included; `084200` and `084300` of
+wave 7 are not there yet), and the demo data loaded.
 Payments there are simulated, and no worker is deployed, so nothing is sent,
 charged or invoiced. Since the review, apps and visitors can reach the database
 only through its functions: no table is readable or writable directly. The
@@ -86,7 +101,8 @@ four web apps are deployed as a preview on Vercel at
 not connected to the Git repository. A shopper app for iOS and Android exists
 with every shopping flow of the website, and the seller, driver and warehouse
 apps have the flows of their web counterparts (the drivers' app also shares
-the position during a route and works without signal); all four now delete
+the position during a route and works without signal; the seller app still
+uploads no images); all four now delete
 the account, reset and change the password inside the app; none of those
 three has been built for a phone yet. The shopper app's Android build
 (version code 4, from commit `3f251c3`, before the account screens) is in
@@ -102,6 +118,14 @@ built").
 
 In the order that unblocks the most.
 
+0. **Wave 7 is merged but not on the hosted preview.** Migrations `084200`
+   and `084300` and the code of this merge are applied to the preview by a
+   supervisor after this merge; nothing is needed from you for that. One
+   decision is yours: whether finance refunds the ₡1,500 delivery fee of
+   YT-101282 and YT-101283 on the preview, which were taken off routes
+   without an attempt and closed under the old rule (the new rule does not
+   apply backwards). Both are simulated money, so this matters only as the
+   model for production.
 1. **Register `yuntera.cr` and do the trademark search.** `yuntera.com` and
    `yuntera.app` were bought on 21 November 2026 through your Vercel team
    (registrant: Astra Vier Solutions; auto-renew on; US$12.03 and US$9.99 for
@@ -275,7 +299,13 @@ In the order that unblocks the most.
        Part 2 once, interactively, from commit `3f251c3` (`git checkout
        3f251c3` after cloning), so both stores carry the same code. That
        build keeps working against the updated preview: every call it makes
-       was tried there after the migrations and answered. The team account has used 4 of
+       was tried there after the migrations and answered. Of the 29 functions
+       it calls, `084200` changes two (`my_orders`, `get_order`) by adding
+       fields only; a contract test parses their answers on the merged
+       database with that build's own schemas. Your decision of 23 November
+       2026: from your first Android release on, each new Android build goes
+       straight to the internal testers without a click; until then builds
+       stay drafts. The build settings are not changed yet. The team account has used 4 of
        its 15 Android builds and 2 of its 15 iOS builds in the cycle from
        1 November to 1 December 2026; nothing was billed.
 
@@ -283,13 +313,13 @@ In the order that unblocks the most.
 
 | Part                 | Where                                                              | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | -------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shop                 | `apps/web`                                                         | Home, search with typo tolerance and a brand filter, categories (an old category address redirects to its new one), product pages with competing offers in one order (in stock, cheapest, oldest) each with its shop's logo and a link to the shop's page (`/tienda/<slug>`) and a delivery date, a cart that offers another shop's offer when the chosen one runs out, a notice on the order page when staff hid one of the shopper's reviews, cart, checkout with SINPE Móvil, card or cash on delivery, orders with tracking and delivery code, returns with where each stands (a request still waiting for staff can be withdrawn), reviews, account, help, a page to report a listing. An unknown product or category address answers "not found" (404). Product photos in a gallery and in every list. Password reset, e-mail confirmation, notification settings (channels, WhatsApp number, commercial consent), account deletion, and a public page on how to delete an account                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Seller centre        | `apps/seller`                                                      | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, a request to change the payout account, and the team (invitations that the invited person accepts) and requests to change the shop's name, fiscal details or contact. Selling an existing product of another shop (found by name, brand or barcode, no review), switching variants off and on, taking a listing back to draft, the Tienda page (description and logo, both reviewed), and offers paused below the price floor with the reason and a one-step fix. A photo manager on each listing (resized in the browser, reviewed before they show), the shop's notification settings, an optional second factor                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Internal console     | `apps/ops`                                                         | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail, shop-change requests, routes released by a driver who stopped being active, recording a return's goods back, checking in a returned parcel and releasing a locked delivery code. Photo review and take-down, the messages each order produced and the stuck ones with a resend button, staff's second factor (enrolment, the second step at sign-in, an administrator's reset of a colleague's). Offers a fee change paused (`/tarifas`), a listing edit that would pause other shops' offers shown with a confirmation, shops' logos (`/catalogo/logotipos`) and descriptions (`/cambios-tienda`). Catálogo: categories (create, rename with redirect, move, order, hide, delete if unused), brands (create, rename, hide, merge), search synonyms with a preview, review moderation with reasons, and correcting, taking down and putting back a published product (the console's catalogue forms work without JavaScript), and on dispatch a door position outside the country or a closing received late. Order search by name without the name in the address; navigation that folds into a menu on a phone. Operación (084000): delivery zones (create, edit, switch off and on, delete if unused), districts moved between zones or marked not served with a preview of what they touch, holidays, zone closures with an end that can change, warehouse locations, stuck routes (remove a pending stop, close a route) and, for administrators, the operational settings; brands deleted when no product names them (084100); the order page tells a parcel taken off a route from a failed delivery |
-| Routes and warehouse | `apps/field`                                                       | Driver: the day's route with each stop's district, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with the scanned code checked by the database, packing, receiving, stock lookup, checking in a returned parcel. A suspended driver sees a plain message and no route. Password reset and account deletion as in the other apps. A stop Central removed reads "Omitida" with what to do with the parcel, and the route's count leaves it out ("0 de 1 entregadas · 1 omitida")                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Database             | `supabase/`                                                        | 39 migrations (all 39 on the hosted preview), 98 tables (65 public, 33 private), 276 functions in `public` (254 for signed-in users, 17 of them also open to visitors, 22 server-side only), no table, view or sequence reachable by an app role, two storage buckets with their rules, row-level security on every table as a second lock, double-entry ledger, one register for every refund and one way back for each, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Shop                 | `apps/web`                                                         | Home, search with typo tolerance and a brand filter, categories (an old category address redirects to its new one), product pages with competing offers in one order (in stock, cheapest, oldest) each with its shop's logo and a link to the shop's page (`/tienda/<slug>`) and a delivery date, a cart that offers another shop's offer when the chosen one runs out, a notice on the order page when staff hid one of the shopper's reviews, cart, checkout with SINPE Móvil, card or cash on delivery, orders with tracking and delivery code, returns with where each stands (a request still waiting for staff can be withdrawn), reviews, account, help, a page to report a listing. An unknown product or category address answers "not found" (404). Product photos in a gallery and in every list. Password reset, e-mail confirmation, notification settings (channels, WhatsApp number, commercial consent), account deletion, and a public page on how to delete an account. An order whose parcels all come back says "Se está cancelando", and one whose parcels all wait in the warehouse to go out again says "Entrega reprogramada", never "En camino" or the old date; the money that comes back is promised only when something was paid (wave 7, 084200) |
+| Seller centre        | `apps/seller`                                                      | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, a request to change the payout account, and the team (invitations that the invited person accepts) and requests to change the shop's name, fiscal details or contact. Selling an existing product of another shop (found by name, brand or barcode, no review), switching variants off and on, taking a listing back to draft, the Tienda page (description and logo, both reviewed), and offers paused below the price floor with the reason and a one-step fix. A photo manager on each listing (resized in the browser, reviewed before they show), the shop's notification settings, an optional second factor. Inventario's "Historial de existencias": every change to the shop's stock, with the warehouse's reason for a count correction (084300) |
+| Internal console     | `apps/ops`                                                         | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail, shop-change requests, routes released by a driver who stopped being active, recording a return's goods back, checking in a returned parcel and releasing a locked delivery code. Photo review and take-down, the messages each order produced and the stuck ones with a resend button, staff's second factor (enrolment, the second step at sign-in, an administrator's reset of a colleague's). Offers a fee change paused (`/tarifas`), a listing edit that would pause other shops' offers shown with a confirmation, shops' logos (`/catalogo/logotipos`) and descriptions (`/cambios-tienda`). Catálogo: categories (create, rename with redirect, move, order, hide, delete if unused), brands (create, rename, hide, merge), search synonyms with a preview, review moderation with reasons, and correcting, taking down and putting back a published product (the console's catalogue forms work without JavaScript), and on dispatch a door position outside the country or a closing received late. Order search by name without the name in the address; navigation that folds into a menu on a phone. Operación (084000): delivery zones (create, edit, switch off and on, delete if unused), districts moved between zones or marked not served with a preview of what they touch, holidays, zone closures with an end that can change, warehouse locations, stuck routes (remove a pending stop, close a route) and, for administrators, the operational settings; brands deleted when no product names them (084100); the order page tells a parcel taken off a route from a failed delivery. Wave 7: stopping a packed parcel from the staff order page, with a confirmation that names the order and the money (084200); a single closed day opened again under Cierres; districts that follow their canton's zone again; Operación → Ubicaciones lists the warehouse's moves and count corrections with who made them (084300) |
+| Routes and warehouse | `apps/field`                                                       | Driver: the day's route with each stop's district, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with the scanned code checked by the database, packing, receiving, stock lookup, checking in a returned parcel. A suspended driver sees a plain message and no route. Password reset and account deletion as in the other apps. A stop Central removed reads "Omitida" with what to do with the parcel, and the route's count leaves it out ("0 de 1 entregadas · 1 omitida"). Since wave 7: Bodega → Ubicaciones opens a location by its code and shows what it holds, what open picks wait for and what is free, moves free units to another shelf and corrects a count with a reason; a returned parcel staff stopped reads "Nunca salió de la bodega"; a stop removed before the route started still says not to collect its parcel after the start |
+| Database             | `supabase/`                                                        | 41 migrations (39 on the hosted preview; `084200` and `084300` not yet), 98 tables (65 public, 33 private), 283 functions in `public` (261 for signed-in users, 17 of them also open to visitors, 22 server-side only), no table, view or sequence reachable by an app role, two storage buckets with their rules, row-level security on every table as a second lock, double-entry ledger, one register for every refund and one way back for each, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Domain logic         | `packages/core`                                                    | Money and IVA, fees, the offer order (one rule shared with the database by a parity test), search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. Shopper app: every shopper flow of the website. Seller app (Yuntera Vende): the seller centre's flows from packing to payouts and shop registration, the team and invitations, the reviewed changes to the shop's name, fiscal details and contact, where its description and logo stand (written and uploaded in the seller centre), and the shop's notification settings. Drivers' app (Yuntera Ruta): every driver flow, plus position sharing during a route and work without signal; each stop shows its district, and actions queued without signal keep the time they happened. Warehouse app (Yuntera Bodega): picking by camera or hand scanner, packing, receiving, checking in returned parcels, stock lookup. All four delete the account (the password typed again, blockers explained, nothing left on the phone afterwards), send the password-reset link (which opens the website) and change the password; the shopper app asks for the second step inside the app, reports a listing and saves message channels with the commercial consent, the consent logged as given in the app. The three ask for the second factor. `packages/expo-kit` is what all four share. None of the three has been built for a phone yet; until then, their users work in the web apps, too                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. Shopper app: every shopper flow of the website. Seller app (Yuntera Vende): the seller centre's flows from packing to payouts and shop registration, the team and invitations, the reviewed changes to the shop's name, fiscal details and contact, where its description and logo stand (written and uploaded in the seller centre), and the shop's notification settings. Drivers' app (Yuntera Ruta): every driver flow, plus position sharing during a route and work without signal; each stop shows its district, and actions queued without signal keep the time they happened. Warehouse app (Yuntera Bodega): picking by camera or hand scanner, packing, receiving, checking in returned parcels, stock lookup. All four delete the account (the password typed again, blockers explained, nothing left on the phone afterwards), send the password-reset link (which opens the website) and change the password; the shopper app asks for the second step inside the app, reports a listing and saves message channels with the commercial consent, the consent logged as given in the app. The three ask for the second factor. `packages/expo-kit` is what all four share. None of the three has been built for a phone yet; until then, their users work in the web apps, too. Since wave 7 (in no store build): the shopper app's cart offers another shop's offer for a line that can no longer be bought, its search and categories have the brand filter, its category menu is read again on every return to the foreground, and a taken-down product shows the website's not-found page; the seller app sells on another shop's product, switches variants, takes a listing back to draft, puts a paused offer back on sale, stops selling another shop's product, writes the shop's description, shows the stock history, and withdraws or removes a logo (uploading still happens in the seller centre); the warehouse app opens locations, moves stock and corrects counts |
 | Notifications        | `packages/notifications`, `supabase/functions`, `tools/dev-notify` | A planner in the database turns each event into one message per person and channel, exactly once; a worker sends them by e-mail, WhatsApp, SMS and push with retries and dead letters; signed delivery reports; quiet hours; suppressions; account e-mails in the same words as Auth's templates. Runs locally against fake providers only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Payments             | `packages/payments`, `supabase/functions`, `tools/dev-notify`      | Three modes: `sandbox` (the simulation), `test` and `live` through ONVO. Cards on ONVO's hosted page (3-D Secure there), SINPE Móvil matched by the payer's identification; an order is paid only on ONVO's signed notification or the worker's own question, applied once under the order's lock. Money that does not match is kept for finance. Refunds sent once and completed only on ONVO's confirmation; cash and hand-confirmed transfers paid back by finance by transfer. A pay step on the shop's and the shopper app's order page; the console's Cobros section (review, refunds, reconciliation, mode and fees). Runs locally against a fake ONVO only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Electronic invoices  | `packages/invoicing`, `supabase/functions`, `tools/dev-hacienda`   | Version 4.4 documents issued by the platform: a tiquete (or a factura, if asked at checkout) for the delivery fee, a fee factura to each seller, credit notes on cancellations and returns; numbered without gaps, signed XAdES-EPES, sent once, answers recorded. Simulated money (the sandbox simulation, the gateway's test environment, cash on delivery taken while payments are in sandbox), decided once when it is captured, never gets a document unless `invoicing_policy.simulated_payments` says so; its jobs end on their own. On the shopper's order page, in the seller's statements, and in the console's Comprobantes section (rejected, waiting, unsent, replace and retry). Runs locally against a fake of Hacienda only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -736,11 +766,13 @@ These are missing, not hidden. The first group blocks a public launch.
   the console.
 - Functions for the actions that existed only as direct writes (see "Things to
   know"): editing fees.
-- A screen (or function) to move stock between warehouse locations. A
-  location holding stock can be switched off only once orders empty it.
-- Editing or removing single-day zone closures that have no period (made
-  before `084000`); the console lists them read-only. There are none in the
-  seed.
+- Counting a product into a location where it has no record yet: the
+  location screens correct only products already listed there.
+- Stopping a seller's own packed parcel from the console (only parcels of a
+  Yuntera warehouse can be stopped; a seller's parcel is at the seller's).
+- A cancellation that locks stock in the same order as counts and receipts
+  (`private.cancel_order_internal`); until then the two can deadlock, and the
+  loser is told nothing was saved.
 - Sign-in limits as settings: they are constants inside functions, so the
   settings screen cannot show them (if they ever become settings they are
   protected by default).
@@ -764,28 +796,25 @@ and the warehouse use the web apps)
   the files the phones check; the apps answer only addresses in their own
   schemes (`yuntera://`, `yuntera-ruta://` and so on), and those were not
   tested.
-- Seller app, compared with the seller centre: writing the shop's
-  description and uploading its logo (the account screen shows where each
-  stands, lets a waiting description be withdrawn and says that both are done
-  in the seller centre, under "Tienda"), the seller actions of `083600`
-  (offers on another shop's product, variants on and off, a listing back to
-  draft, paused offers), photos (above) and "use my current location" for a
-  pickup place (only a Plus Code; the app has no location permission). Its terms and privacy links point at
+- Seller app, compared with the seller centre: uploading the shop's logo
+  (the account card says it is done in the seller centre, under "Tienda";
+  withdrawing a waiting logo and removing the current one are in the app),
+  photos (above) and "use my current location" for a pickup place (only a
+  Plus Code; the app has no location permission). A logo removed in the app
+  reaches the shop within its cache lifetime (about a minute), as other
+  seller changes do; the seller centre also asks the shop to refresh. Its terms and privacy links point at
   www.yuntera.cr unless `EXPO_PUBLIC_SHOP_URL` is set.
 - Drivers' app: starting a route and delivering against the code need
   signal; a driver suspended while the phone has no signal keeps the
   saved route until a call gets through (at most a day). Notification
   settings are not in the drivers' or the warehouse app, as the web field app
   has none.
-- Warehouse app: scanning the bin as well as the product, and a cycle-count
-  adjustment screen (neither is in the web app).
-- Shopper app: a cart line whose offer sold out says it is no longer
-  available; the website offers another shop's offer for it
-  (`cart_alternatives`), the app does not yet. There is no brand filter in
-  the app's search (the website has one), and its category menu is kept for
-  up to an hour, so a category staff just hid can still show there for that
-  long (its products stay on sale, as on the website). A product taken down
-  shows "No encontramos ese producto".
+- Warehouse app: scanning the bin as well as the product when picking (not
+  in the web app either). The location scanner's camera path is untested
+  (the web export has no camera).
+- Shopper app: `cart_alternatives` gives no delivery date, so the app asks
+  for the product page of each line that can no longer be bought to show the
+  other offer's date.
 
 **Later**
 
@@ -833,6 +862,23 @@ ones worth knowing about:
   shows the shopper "Entrega reprogramada".
 - **Brands are deleted only when nothing names them**
   ([decision 42](docs/02-architecture/decisions.md#42-brands-are-deleted-only-when-nothing-names-them-product-pages-refuse-what-is-not-on-sale-at-the-helper)).
+- **Your decision of 23 November 2026 on the delivery fee**
+  ([decision 43](docs/02-architecture/decisions.md#43-order-follow-ups-the-delivery-fee-when-nobody-went-to-the-door-stopping-a-packed-parcel-an-order-that-never-moves-back)):
+  when an order is cancelled because its parcels came back and nobody ever
+  went to the shopper's door, the delivery fee is refunded too; after an
+  attempt at the door, or when another parcel was delivered, it stays
+  charged. Mine around it: the fee is its own row in the refund register;
+  staff stop a packed parcel through a new function, and only parcels of a
+  Yuntera warehouse; an order's status never moves backwards.
+- **Warehouse stock** ([decision 44](docs/02-architecture/decisions.md#44-warehouse-stock-what-is-free-moves-that-the-shop-never-sees-counts-only-onto-shelves)):
+  a move never changes the shop's stock and the shop does not see it;
+  counted units can be added only on shelves (storage, picking, returns,
+  receiving); picks prefer shelves that really have free units.
+- **Your decision of 23 November 2026 on Android builds**
+  ([decision 45](docs/02-architecture/decisions.md#45-android-builds-of-the-shopper-app-go-to-the-internal-testers-without-a-click)):
+  from your first Android release of the shopper app on, each new build goes
+  to the internal testers without a click; until then builds stay drafts.
+  Recorded only: no build setting was changed.
 
 ## Things to know before trusting the numbers
 
@@ -840,9 +886,10 @@ Found while building or reviewing; none is fixed by pretending otherwise.
 
 - **Refund policy choices to confirm or change:** a refund returns the
   commission to the seller but not the payment and warehouse fees; shipping is
-  not refunded when a parcel comes back undelivered; every return, a
-  withdrawal included, is refunded only once the goods are recorded back at the
-  warehouse.
+  refunded when a parcel comes back and nobody went to the door, and kept
+  after an attempt (your decision, from `084200` on; not on the preview yet);
+  every return, a withdrawal included, is refunded only once the goods are
+  recorded back at the warehouse.
 - **Cash on delivery collects the whole order at the first parcel handed
   over** (less the goods of parcels already on their way back). A parcel that
   comes back after that is refunded by transfer, which needs the shopper's
@@ -1025,11 +1072,10 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     same variant's offer in `seller_add_offer` was checked by hand with two
     database sessions, not by an automated test (the catalogue's two races,
     the rating and the category depth, have contract tests). No message was
-    really sent: the new messages were only planned. The native shopper app
-    does not offer another shop's offer for a sold-out cart line yet, and the
-    native seller app has no screens for these seller actions (it shows where
-    the description and logo stand and says they are changed in the seller
-    centre).
+    really sent: the new messages were only planned. Since wave 7 the native
+    shopper app offers another shop's offer for a sold-out cart line and the
+    native seller app has these seller actions (logo uploads stay in the
+    seller centre); neither is in a store build.
   - A form the browser posts itself, before an app's scripts have run (or
     when they never load), does what it says, but the page Next.js sends
     back for it is empty: seen on the console's catalogue forms and on the
@@ -1128,8 +1174,9 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   - A warehouse location cannot be switched off while it holds stock, is
     named in an open pick task, or has units picked from it into parcels
     still being picked (cancelling those orders puts them back there). A
-    trigger keeps stock out of a location that is off. There is no tool to
-    move stock between locations. Switching off, renaming or creating a
+    trigger keeps stock out of a location that is off. Since `084300` the
+    warehouse empties a location by moving its stock (Bodega → Ubicaciones →
+    Mover). Switching off, renaming or creating a
     location locks the warehouse `FOR NO KEY UPDATE`, so it never deadlocks
     with a stock write (a review found 28 deadlocks in 300 simultaneous pairs
     with `FOR UPDATE`; a race test now holds a stock write between its two
@@ -1143,12 +1190,12 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     collect and the dispatch card leave the stop out. A stop removed before
     the route starts tells the driver not to collect that parcel. The order's
     heading says "Entrega reprogramada" when every parcel still to deliver
-    was rescheduled; **the shopper's list of orders still says "En camino"**
-    for such an order (`my_orders` carries no parcel states). **Left as it is:** a
-    parcel that had a real failed attempt, went out again and was then
-    removed by staff has `attempt_count` 1, so the shopper still reads "No
-    pudimos entregarlo". The shopper app in the stores' test tracks
-    (`3f251c3`) shows any removed stop as "Entrega fallida" until rebuilt.
+    was rescheduled; the shopper's list of orders said "En camino" for such
+    an order, and a parcel that had a real failed attempt and was then
+    removed again still read "No pudimos entregarlo": both are fixed by
+    `084200` and wave 7's screens (not on the preview yet). The shopper app in
+    the stores' test tracks (`3f251c3`) shows any removed stop as "Entrega
+    fallida" until rebuilt.
   - Colón inputs in the console accept whole colones in Costa Rican form
     ("1.500", "1 500", "1.500,00") and refuse céntimos. A closure cancelled
     before it started stays on Cierres for 7 days with "Volver a cerrar". A
@@ -1172,21 +1219,61 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     `050_fulfillment`, `070_api` and `095_account_security` now also hold when other
     journeys drove R-1003 to the end or the warehouse took a shopper's order
     further (`used-db-check.sh all` failed on them before).
-  - Found on the preview, left as they are: moving a district to a zone
-    always stores that zone on the district, even when it is its canton's
-    zone, so a district moved away and back no longer follows a later change
-    of its canton (no console action clears it). A parcel taken off a route
-    and returned to the warehouse without any delivery attempt refunds the
-    goods only: the order is cancelled but the delivery fee stays charged
-    (`private.refund_units`, as for any returned parcel). Once a parcel is
-    packed, neither the shopper nor staff can cancel the order; it can only
-    go out, or come back through a route and a return.
+  - Found on the preview and fixed by `084200` (not on the preview yet): a
+    district moved away and back to its canton's zone follows its canton
+    again; a parcel taken off a route and returned without any delivery
+    attempt now refunds the delivery fee too when the order ends cancelled;
+    staff can stop a packed parcel. Until `084200` is applied there, the
+    preview behaves as before.
   - On the preview real PostgREST passed the new functions' `smallint[]`,
     `text[]` and `jsonb` arguments (a zone's weekdays, a district move, a
     setting). Not verified: the races on the hosted database (they ran only
     locally), the shop's district list following a zone or district change
     there (the Vercel login stops the refresh call), and the native apps on a
     phone (their screens ran only as web exports).
+
+- **Wave 7 (`084200`, `084300` and the native parity), merged on
+  23 November 2026, not on the hosted preview yet:**
+  - The delivery fee comes back only for orders cancelled after `084200` is
+    applied; YT-101282 and YT-101283 on the preview kept theirs ("What needs
+    you", item 0). When it comes back the shopper gets two refund messages of
+    each kind (goods, then fee), each with its own amount. Refunding the fee
+    through the real gateway or by transfer was checked only through the
+    register and the existing refund logic; locally every refund is
+    simulated. The messages were planned, not rendered and sent.
+  - An order's status never moves backwards. While every parcel left comes
+    back to the warehouse it reads "Se está cancelando" with no date and no
+    delivery code (the database withholds the code too); while every parcel
+    left waits in the warehouse to go out again it reads "Entrega
+    reprogramada". The store build `3f251c3` cannot read the new fields: it
+    still shows "En camino" in its list for such orders, but no longer the
+    delivery code of an order whose parcels come back.
+  - "Never left the building" means the parcel never reached "out for
+    delivery" in its history; parcels made without history (none in the
+    seed) would read as never left.
+  - A returned parcel's resellable units land on the warehouse's first
+    switched-on returns location (DEV-01 in the seed); with none switched on,
+    the check-in is refused. The next pick of the product goes there when no
+    shelf has free units.
+  - Locks found when the streams were merged: starting a pick and packing now
+    take the order's lock before the parcel's, as stopping a parcel does (a
+    stop at the moment of packing deadlocked one caller before). Still open:
+    a cancellation racing a count or a receipt of the same product on the
+    same shelf, and a pick racing a cancellation, can end with a deadlock for
+    one caller (`private.cancel_order_internal`), and a stop racing a route's
+    start can too. Every app now says "nothing was saved, try again" for
+    such an error (`try_again`, from PostgreSQL's 40P01 and 40001) instead
+    of "something went wrong"; the local API stand-in passes the code
+    through as the hosted Data API does.
+  - A pick task names one location; the picker may pick from another, which
+    can take units another task waits for there, and a line larger than the
+    chosen location's free units still comes up short there.
+  - No journey opens a single closed day (no function can create one; it is
+    covered by the database and contract tests), and the console's district
+    move form was not driven in a browser.
+  - Nothing of wave 7 ran on a phone: the native screens were checked through
+    the web export only (no camera, no real pull-to-refresh, no
+    foreground event from the phone).
 
 ## Running it
 
