@@ -17,8 +17,10 @@ import { Link, Redirect } from "expo-router";
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { OrderStatusBadge } from "@/components/badges";
+import { KeptNotice } from "@/components/kept-notice";
 import { ProductImage } from "@/components/product";
 import { needsSignIn } from "@/lib/guard";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 
 /** "Sus pedidos": every order, newest first, each opening its tracking page. */
 export default function OrdersScreen() {
@@ -27,7 +29,7 @@ export default function OrdersScreen() {
 
   if (needsSignIn(status)) return <Redirect href={signInPath("/pedidos")} />;
   if (orders.isPending) return <LoadingState label="Cargando sus pedidos…" />;
-  if (orders.isError)
+  if (firstReadFailed(orders))
     return <ErrorState error={orders.error} onRetry={() => void orders.refetch()} />;
 
   return (
@@ -43,6 +45,20 @@ export default function OrdersScreen() {
             tintColor={colors.brand}
             colors={[colors.brand]}
           />
+        }
+        ListHeaderComponent={
+          refreshFailed(orders) ? (
+            <View style={styles.kept}>
+              <KeptNotice
+                title={KEPT.orders.title}
+                body={KEPT.orders.body}
+                error={orders.error}
+                onRetry={() => void orders.refetch()}
+                retrying={orders.isFetching}
+                testID="orders-kept"
+              />
+            </View>
+          ) : undefined
         }
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
@@ -107,6 +123,7 @@ export default function OrdersScreen() {
 }
 
 const styles = StyleSheet.create({
+  kept: { marginBottom: space[3] },
   page: { flex: 1, backgroundColor: colors.bg },
   content: { paddingVertical: space[3], flexGrow: 1 },
   row: {

@@ -1,30 +1,23 @@
-import type { CartAlternative, CartLine } from "@yuntera/db";
-import { useApiQuery } from "@yuntera/expo-kit/data";
+import type { CartLine, DatedCartAlternative } from "@yuntera/db";
 import { tone } from "@yuntera/expo-kit/theme";
 import { Alert, Button, formatDate, Stack, Text, TextLink } from "@yuntera/expo-kit/ui";
 import { useCart } from "@/lib/cart-context";
-import { arrivalText, unavailableNote } from "@/lib/cart-wording";
+import { type AlternativesLookup, arrivalText, unavailableNote } from "@/lib/cart-wording";
+import { TRY_AGAIN } from "@/lib/kept-reads";
 
 const warningText = { color: tone.warning.fg };
 
 /**
- * When the other shop's offer would arrive in the shopper's district: the
- * product page's answer for that offer (the same query as the product
- * screen, so it is often already in the cache). Nothing while it loads, and
- * nothing when the district is not served (the summary says so).
+ * When the other shop's offer would arrive in the cart's district: the date
+ * the database gives with the alternative (cart_alternatives, 084600), the
+ * one that offer's product page gives at the same moment. Nothing when the
+ * district is not served (the summary says so).
  */
-function AlternativeArrival({ alternative }: { alternative: CartAlternative }) {
-  const { postalCode } = useCart();
-  const product = useApiQuery(["product", alternative.product_slug, postalCode], (api) =>
-    api.getProduct(alternative.product_slug, postalCode),
-  );
-  const offer = product.data?.skus
-    .flatMap((sku) => sku.offers)
-    .find((candidate) => candidate.offer_id === alternative.alternative_offer_id);
-  if (!offer?.promise) return null;
+function AlternativeArrival({ alternative }: { alternative: DatedCartAlternative }) {
+  if (!alternative.promise) return null;
   return (
     <Text variant="smallStrong" style={warningText} testID="cart-alternative-arrival">
-      {arrivalText(offer.promise, (value) => formatDate(value))}
+      {arrivalText(alternative.promise, (value) => formatDate(value))}
     </Text>
   );
 }
@@ -40,17 +33,34 @@ export function UnavailableLine({
   line,
   alternative,
   quantity,
+  lookup = "done",
+  onRetry,
 }: {
   line: CartLine;
-  alternative: CartAlternative | undefined;
+  alternative: DatedCartAlternative | undefined;
   quantity: number;
+  /** Whether the other shops were checked (see cart-wording.ts). */
+  lookup?: AlternativesLookup;
+  /** Asks for the other shops again, when they could not be checked. */
+  onRetry?: () => void;
 }) {
   const cart = useCart();
-  const note = unavailableNote(line, alternative ?? null, quantity);
+  const note = unavailableNote(line, alternative ?? null, quantity, alternative ? "done" : lookup);
   if (!alternative || !note.swapLabel) {
     return (
       <Alert tone="warning" title={note.title} testID="cart-unavailable">
-        {note.body}
+        {lookup === "failed" && onRetry ? (
+          <Stack gap={2}>
+            <Text variant="small" style={warningText}>
+              {note.body}
+            </Text>
+            <Button variant="secondary" onPress={onRetry} testID="cart-alternatives-retry">
+              {TRY_AGAIN}
+            </Button>
+          </Stack>
+        ) : (
+          note.body
+        )}
       </Alert>
     );
   }

@@ -19,9 +19,18 @@ export interface UnavailableNote {
 }
 
 /**
+ * Whether the cart knows who else sells a line: "done" once the alternatives
+ * answered, "loading" while they are asked, "failed" when they could not be
+ * read. "Nobody else sells it" is only said when done.
+ */
+export type AlternativesLookup = "done" | "loading" | "failed";
+
+/**
  * Whose offer ran out and, when another shop sells the same variant, who and
  * at what price (the price the cart and the checkout then charge, read fresh
- * from the same offer). Otherwise, that it is gone and what to do.
+ * from the same offer). Otherwise, that it is gone and what to do; while the
+ * other shops are still being checked, or could not be, it says that instead
+ * of saying nobody sells it.
  */
 export function unavailableNote(
   line: Pick<CartLine, "title" | "seller_name" | "available">,
@@ -30,15 +39,20 @@ export function unavailableNote(
     "title" | "variant_name" | "seller_name" | "price_minor" | "available"
   > | null,
   quantity: number,
+  lookup: AlternativesLookup = "done",
 ): UnavailableNote {
   if (!alternative) {
+    const gone = line.seller_name
+      ? `La oferta de ${line.seller_name} ya no está disponible`
+      : "Ya no está disponible";
     return {
       title: line.title ?? "Producto no disponible",
-      body: `${
-        line.seller_name
-          ? `La oferta de ${line.seller_name} ya no está disponible`
-          : "Ya no está disponible"
-      } y ninguna otra tienda lo vende ahora. Quítelo para continuar con su compra.`,
+      body:
+        lookup === "loading"
+          ? `${gone}. Estamos revisando si otra tienda lo vende.`
+          : lookup === "failed"
+            ? `${gone}. No pudimos revisar si otra tienda lo vende: inténtelo de nuevo o quítelo para continuar con su compra.`
+            : `${gone} y ninguna otra tienda lo vende ahora. Quítelo para continuar con su compra.`,
     };
   }
   const what = `${alternative.title}${alternative.variant_name ? `, ${alternative.variant_name}` : ""}`;

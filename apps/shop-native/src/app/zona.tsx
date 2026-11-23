@@ -2,9 +2,11 @@ import { Button, ErrorState, FormMessage, LoadingState, Screen, Text } from "@yu
 import { router } from "expo-router";
 import { useState } from "react";
 import { DistrictPicker } from "@/components/district-picker";
+import { KeptNotice } from "@/components/kept-notice";
 import { isPostalCode } from "@/lib/cart";
 import { useCart } from "@/lib/cart-context";
 import { useDistricts } from "@/lib/catalog";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 
 /** "¿Dónde le entregamos?": the district delivery dates and shipping are worked out for. */
 export default function ZoneScreen() {
@@ -41,14 +43,26 @@ export default function ZoneScreen() {
       </Text>
       {districts.isPending ? (
         <LoadingState label="Cargando distritos…" />
-      ) : districts.isError ? (
+      ) : firstReadFailed(districts) || !districts.data ? (
         <ErrorState error={districts.error} onRetry={() => void districts.refetch()} />
       ) : (
-        <DistrictPicker
-          districts={districts.data}
-          postalCode={postalCode}
-          onChange={setPostalCode}
-        />
+        <>
+          {refreshFailed(districts) ? (
+            <KeptNotice
+              title={KEPT.districts.title}
+              body={KEPT.districts.body}
+              error={districts.error}
+              onRetry={() => void districts.refetch()}
+              retrying={districts.isFetching}
+              testID="districts-kept"
+            />
+          ) : null}
+          <DistrictPicker
+            districts={districts.data}
+            postalCode={postalCode}
+            onChange={setPostalCode}
+          />
+        </>
       )}
     </Screen>
   );

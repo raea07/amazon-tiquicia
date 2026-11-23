@@ -22,7 +22,9 @@ import {
 } from "@yuntera/expo-kit/ui";
 import { useState } from "react";
 import { View } from "react-native";
+import { KeptNotice } from "@/components/kept-notice";
 import { validateProfile } from "@/lib/address";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 
 /**
  * Name and phone. The commercial consent is with the channels for messages,
@@ -182,12 +184,19 @@ export default function AccountScreen() {
 
   if (status !== "signedIn") return <SignedOut />;
   if (profile.isPending || addresses.isPending) return <LoadingState />;
-  if (profile.isError)
+  if (firstReadFailed(profile))
     return <ErrorState error={profile.error} onRetry={() => void profile.refetch()} />;
-  if (addresses.isError)
+  if (firstReadFailed(addresses))
     return <ErrorState error={addresses.error} onRetry={() => void addresses.refetch()} />;
+  if (!addresses.data) return <LoadingState />;
 
   const data = profile.data;
+  // Shown and asking again failed: kept, and said (kept-reads.ts).
+  const keptError = refreshFailed(profile)
+    ? profile.error
+    : refreshFailed(addresses)
+      ? addresses.error
+      : null;
   return (
     <Screen
       refreshing={profile.isRefetching || addresses.isRefetching}
@@ -196,6 +205,19 @@ export default function AccountScreen() {
         void addresses.refetch();
       }}
     >
+      {keptError ? (
+        <KeptNotice
+          title={KEPT.account.title}
+          body={KEPT.account.body}
+          error={keptError}
+          onRetry={() => {
+            void profile.refetch();
+            void addresses.refetch();
+          }}
+          retrying={profile.isFetching || addresses.isFetching}
+          testID="account-kept"
+        />
+      ) : null}
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <ListRow
           href="/pedidos"

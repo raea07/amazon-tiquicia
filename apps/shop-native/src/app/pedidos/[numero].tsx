@@ -37,6 +37,7 @@ import {
   TextLink,
 } from "@yuntera/expo-kit/ui";
 import { Link, Stack as Nav, Redirect, useLocalSearchParams } from "expo-router";
+import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { OrderStatusBadge, ShipmentStatusBadge } from "@/components/badges";
 import {
@@ -46,6 +47,7 @@ import {
   RefundList,
   WAITING_STAGES,
 } from "@/components/gateway-payment";
+import { KeptNotice } from "@/components/kept-notice";
 import {
   CancelOrder,
   Expandable,
@@ -56,6 +58,14 @@ import {
 } from "@/components/order-actions";
 import { ProductImage } from "@/components/product";
 import { needsSignIn } from "@/lib/guard";
+import {
+  AMOUNT_UNREAD,
+  firstReadFailed,
+  KEPT,
+  PAYMENT_UNREAD,
+  RETURN_UNREAD,
+  refreshFailed,
+} from "@/lib/kept-reads";
 import { PAYMENT_LABEL, SHIPMENT_STATUS_LABEL } from "@/lib/labels";
 import { amountComingBack, refundedSoFar as refundedSoFarOf } from "@/lib/refund-outlook";
 import { returnNextStep, returnTitle } from "@/lib/returns";
@@ -150,24 +160,36 @@ export default function OrderScreen() {
   const number = oneParam(params.numero) ?? "";
   const { status } = useSession();
   const order = useApiQuery(["order", number], (api) => api.getOrder(number), { personal: true });
-  // Where each return stands, so the screen can say what happens next.
+  // Where each return stands, so the screen can say what happens next. Read
+  // once the order is on screen (also when a refresh of the order failed and
+  // the screen keeps it).
   const returns = useApiQuery(["order-returns", number], (api) => api.myOrderReturns(number), {
     personal: true,
-    enabled: order.isSuccess,
+    enabled: order.data !== undefined,
   });
   // How its payment stands at the gateway; asked again while it changes on its own.
   const payment = useApiQuery(["order-payment", number], (api) => api.orderPayment(number), {
     personal: true,
-    enabled: order.isSuccess,
+    enabled: order.data !== undefined,
     refetchInterval: (query) => {
       const stage = query.state.data?.stage;
       return stage && WAITING_STAGES.includes(stage) ? 3000 : false;
     },
   });
 
+  // A pull, and every "Intentar de nuevo" on this page: the order, its
+  // payment and its returns, all three read again.
+  const [pulling, setPulling] = useState(false);
+  const readAgain = () => {
+    setPulling(true);
+    void Promise.allSettled([order.refetch(), payment.refetch(), returns.refetch()]).finally(() =>
+      setPulling(false),
+    );
+  };
+
   if (needsSignIn(status)) return <Redirect href={signInPath(`/pedidos/${number}`)} />;
   if (order.isPending) return <LoadingState label="Cargando su pedido…" />;
-  if (order.isError) {
+  if (firstReadFailed(order)) {
     // Someone else's order and one that does not exist look the same: not found.
     if (order.error instanceof ApiError && order.error.code === "order_not_found") {
       return (
@@ -181,8 +203,11 @@ export default function OrderScreen() {
     }
     return <ErrorState error={order.error} onRetry={() => void order.refetch()} />;
   }
+  if (!order.data) return <LoadingState label="Cargando su pedido…" />;
 
   const o = order.data;
+  // The payment could not be read at all: no amount is said, and the page says why.
+  const paymentUnread = firstReadFailed(payment);
   const today = toCostaRicaTime(new Date()).date;
   const delivered = o.status === "delivered" || o.status === "completed";
   const withdrawalOpen = delivered && today <= o.withdrawal_deadline;
@@ -223,8 +248,18 @@ export default function OrderScreen() {
       : null;
 
   return (
-    <Screen refreshing={order.isRefetching} onRefresh={() => void order.refetch()}>
+    <Screen refreshing={pulling} onRefresh={readAgain}>
       <Nav.Screen options={{ title: o.order_number }} />
+      {refreshFailed(order) ? (
+        <KeptNotice
+          title={KEPT.order.title}
+          body={KEPT.order.body}
+          error={order.error}
+          onRetry={readAgain}
+          retrying={pulling}
+          testID="order-kept"
+        />
+      ) : null}
       {oneParam(params.nuevo) === "1" ? (
         <Alert tone="success" title="¡Recibimos su pedido!">
           {awaitingPayment
@@ -257,6 +292,25 @@ export default function OrderScreen() {
       ) : awaitingPayment && payment.data ? (
         <PaymentInstructions order={o} payment={payment.data} />
       ) : null}
+      {paymentUnread ? (
+        <KeptNotice
+          title={PAYMENT_UNREAD.title}
+          body={PAYMENT_UNREAD.body}
+          error={payment.error}
+          onRetry={readAgain}
+          retrying={pulling || payment.isFetching}
+          testID="payment-unread"
+        />
+      ) : refreshFailed(payment) ? (
+        <KeptNotice
+          title={KEPT.payment.title}
+          body={KEPT.payment.body}
+          error={payment.error}
+          onRetry={readAgain}
+          retrying={pulling || payment.isFetching}
+          testID="payment-kept"
+        />
+      ) : null}
       {payment.data?.money_in_review && !(awaitingPayment && payment.data.stage === "review") ? (
         <MoneyInReview payment={payment.data} />
       ) : null}
@@ -281,7 +335,9 @@ export default function OrderScreen() {
                 : ""
               : back.cancels
                 ? comesBack === null
-                  ? `Cuando la bodega confirme que lo recibió, le devolvemos su dinero por el mismo medio con que pagó.${feeKept ? ` ${feeKept}` : ""}`
+                  ? `Cuando la bodega confirme que lo recibió, le devolvemos su dinero por el mismo medio con que pagó.${
+                      paymentUnread ? ` ${AMOUNT_UNREAD}` : ""
+                    }${feeKept ? ` ${feeKept}` : ""}`
                   : `Cuando la bodega confirme que lo recibió, le devolvemos ${formatPrice(comesBack)}${
                       feeBack && o.shipping_minor > 0 ? ", el envío incluido," : ""
                     } por el mismo medio con que pagó.${feeKept ? ` ${feeKept}` : ""}`
@@ -467,6 +523,10 @@ export default function OrderScreen() {
               ) : item.returned_quantity > 0 && returns.isPending ? (
                 <Text variant="small" tint="muted">
                   Devolución en trámite.
+                </Text>
+              ) : item.returned_quantity > 0 && firstReadFailed(returns) ? (
+                <Text variant="small" tint="warning" testID="return-unread">
+                  {`Devolución en trámite. ${RETURN_UNREAD} Deslice hacia abajo para intentarlo de nuevo.`}
                 </Text>
               ) : null}
             </Card>
