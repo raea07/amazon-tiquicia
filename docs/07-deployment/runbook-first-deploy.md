@@ -1999,6 +1999,21 @@ four count corrections of the charger and the moves of the test in the stock
 history; the two 0-unit shelf rows; 6 audit entries; sessions of demo
 accounts left to expire.
 
+**Tried from outside afterwards** (after 20:40 UTC, a second check that
+used only the public API and the demo accounts): no hole found. Table reads
+and writes were refused for every role; each new function refused each wrong
+caller; the four redefined private functions answered "not found" in `public`
+and "schema not exposed" with the `private` profile headers; a replayed
+check-in of a returned parcel gave `shipment_not_returning` and no second
+refund. It left order YT-101556 (a throwaway shopper's, cancelled and
+refunded in the simulation; the account was deleted and the order kept
+without the shopper's data) and two moves of one charger, there and back.
+Its sign-in helper first sent the demo password with a line break after it,
+so nine demo accounts each got one wrong-password attempt at the sign-in
+service; none was locked and all nine signed in afterwards. A check like this
+must read the password file with the line break removed before the first
+sign-in, and must try one account before the rest.
+
 **For production**: the same order. The read-only checks of point 2 matter
 only on a database with data; check the isolation level before the push.
 

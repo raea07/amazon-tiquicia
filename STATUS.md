@@ -475,6 +475,21 @@ On the hosted preview on 23 November 2026 (19:46 to 20:40 UTC), after
   tests never run against a hosted database), anything on a phone, a real
   payment gateway, a real message (no worker is deployed) and an electronic
   invoice (the issuer is not set up).
+- **Tried to break from outside afterwards** (a second, independent check
+  through the public API only, after 20:40 UTC): no hole found. Every
+  direct read and write of the tables wave 7 touches was refused for every
+  role, the administrator included; every new function refused every wrong
+  caller before changing anything (also `ops_recall_shipment` against a real
+  packed parcel, and every `wms_*` function as the seller who owns the stocked
+  product); the four private functions `084300` redefined cannot be reached
+  with or without the `private` profile headers; hostile quantities, shelves
+  and stale counts changed nothing; checking a returned parcel in twice gave
+  no second refund; the delivery code and the reason staff typed stayed
+  hidden; a paid order cancelled by its shopper refunded the full amount, fee
+  included, exactly once. Not tried, for want of the data from outside: a
+  switched-off shelf as a target, a parcel on a started route that is still
+  in Despacho, a seller's own parcel, and a staff account that is not an
+  administrator.
 
 | Check              | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1304,6 +1319,15 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     B-01-01-A, the cutting board on B-01-02-A), which no screen shows and
     nothing in the product deletes. Every shelf holds the units it held
     before.
+  - What the outside check left on the preview: one order, YT-101556,
+    placed, paid in the simulation and cancelled by a throwaway shopper whose
+    account was then deleted (the order stays, without the shopper's data),
+    with its one refund and ledger rows; two more moves of one charger
+    (A-02-02-A to B-01-01-A and back) in the stock history. By a mistake in
+    that check's sign-in helper, nine demo accounts each got one sign-in
+    attempt with a wrong password, sent straight to the sign-in service; no
+    account was locked, the apps' own attempt counter was not touched, and
+    all nine signed in afterwards (confirmed in the database at 20:58 UTC).
   - The delivery fee comes back only for orders cancelled after `084200` was
     applied; YT-101282 and YT-101283 on the preview kept theirs and stay as
     they are. When it comes back the shopper gets two refund messages of
