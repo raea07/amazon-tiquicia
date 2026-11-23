@@ -2,7 +2,17 @@ import { colors, radius, space, tone } from "@yuntera/expo-kit/theme";
 import { Badge, formatPrice, Text } from "@yuntera/expo-kit/ui";
 import { Link } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
-import { parcels, placeOf, type ShownStop, STOP_LABEL, skippedStopNote } from "@/lib/route";
+import {
+  parcels,
+  placeOf,
+  type ShownRoute,
+  type ShownStop,
+  STOP_LABEL,
+  skippedStopNote,
+} from "@/lib/route";
+
+/** What a stop needs to know of its route: whether, and when, it started. */
+type RouteStart = Pick<ShownRoute, "status" | "started_at">;
 
 /** The stop's state in words (never colour alone), with "Por enviar" when the phone has not sent it. */
 export function StopBadges({ stop }: { stop: ShownStop }) {
@@ -26,7 +36,7 @@ export function CashChip({ amountMinor }: { amountMinor: number }) {
   );
 }
 
-function StopBody({ stop, routeStatus }: { stop: ShownStop; routeStatus: string }) {
+function StopBody({ stop, route }: { stop: ShownStop; route: RouteStart }) {
   return (
     <>
       <View style={styles.head}>
@@ -46,7 +56,7 @@ function StopBody({ stop, routeStatus }: { stop: ShownStop; routeStatus: string 
       </Text>
       {stop.status === "skipped" ? (
         <Text variant="smallStrong" testID="stop-row-skipped">
-          {skippedStopNote(routeStatus)}
+          {skippedStopNote(route, stop)}
         </Text>
       ) : null}
       <View style={styles.chips}>
@@ -65,15 +75,15 @@ function StopBody({ stop, routeStatus }: { stop: ShownStop; routeStatus: string 
  */
 export function StopRow({
   stop,
-  routeStatus,
+  route,
   next,
   actionable,
   later,
   testID,
 }: {
   stop: ShownStop;
-  /** The route's status: what to do with a removed stop's parcel depends on it. */
-  routeStatus: string;
+  /** The route's status and start: what to do with a removed stop's parcel depends on them. */
+  route: RouteStart;
   next: boolean;
   actionable: boolean;
   later: boolean;
@@ -82,7 +92,7 @@ export function StopRow({
   if (!actionable) {
     return (
       <View style={[styles.row, styles.closed]} testID={testID}>
-        <StopBody stop={stop} routeStatus={routeStatus} />
+        <StopBody stop={stop} route={route} />
       </View>
     );
   }
@@ -103,7 +113,7 @@ export function StopRow({
             PARA DESPUÉS
           </Text>
         ) : null}
-        <StopBody stop={stop} routeStatus={routeStatus} />
+        <StopBody stop={stop} route={route} />
       </Pressable>
     </Link>
   );

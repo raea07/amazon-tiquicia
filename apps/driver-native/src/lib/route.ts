@@ -160,12 +160,32 @@ export function progressLine(
 }
 
 /**
- * What a driver does with the parcel of a stop staff removed: before the
- * route starts it is not collected (it went back to dispatch); after, it is
- * brought back. The same words as the drivers' web app.
+ * Whether staff took the stop off before the driver started the route: the
+ * parcel then went back to dispatch and the driver never had it. The
+ * database closes a removed stop at the moment of the removal
+ * (ops_remove_route_stop sets `completed_at`), so a stop removed while the
+ * route was only assigned stays "before the start" after the driver starts.
  */
-export function skippedStopNote(routeStatus: string): string {
-  return routeStatus === "assigned"
+export function removedBeforeStart(
+  route: Pick<DriverRoute, "status" | "started_at">,
+  stop: Pick<DriverStop, "status" | "completed_at">,
+): boolean {
+  if (stop.status !== "skipped") return false;
+  if (route.status === "assigned" || !route.started_at) return true;
+  if (!stop.completed_at) return false;
+  return Date.parse(stop.completed_at) < Date.parse(route.started_at);
+}
+
+/**
+ * What a driver does with the parcel of a stop staff removed: removed before
+ * the route started, it is not collected (it went back to dispatch); after,
+ * it is brought back. The same words as the drivers' web app.
+ */
+export function skippedStopNote(
+  route: Pick<DriverRoute, "status" | "started_at">,
+  stop: Pick<DriverStop, "status" | "completed_at">,
+): string {
+  return removedBeforeStart(route, stop)
     ? "Central quitó esta parada de la ruta. No recoja este paquete: volvió a Despacho."
     : "Central quitó esta parada de la ruta. Si lleva el paquete, devuélvalo a la bodega.";
 }
