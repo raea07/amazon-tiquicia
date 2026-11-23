@@ -11,7 +11,10 @@
 // list and page promise no money back, as nothing was paid) and a paid one
 // taken off a route being driven and sent back to the warehouse (the list
 // and page say it is being cancelled, never "En camino", and show no date or
-// delivery code). Fails on any console error, uncaught exception or 5xx.
+// delivery code). Last, a paid order whose parcel came back after the
+// driver found nobody home: once checked in, the page says the delivery fee
+// is not refunded and why (the parcel stopped before it left says nothing of
+// the kind). Fails on any console error, uncaught exception or 5xx.
 
 const { chromium, request } = require("playwright");
 const { ownRoute } = require("../../e2e/lib/own-route.cjs");
@@ -220,6 +223,10 @@ async function packedOrder(buyer, method) {
       `En total le devolvemos ${colones(order.total_minor)}: todo lo que pagó, el envío incluido.`,
     "the order page gives the total refunded",
   );
+  check(
+    (await shop.getByTestId("fee-kept").count()) === 0,
+    "no word of a fee kept for a parcel stopped before it left",
+  );
   await shop.screenshot({
     path: `${SHOTS}/native-order-followups-05-refunded.png`,
     fullPage: true,
@@ -295,6 +302,52 @@ async function packedOrder(buyer, method) {
   await noSideways(shop, "order page, sent back");
   await shop.screenshot({
     path: `${SHOTS}/native-order-followups-07-sent-back.png`,
+    fullPage: true,
+  });
+
+  // ── 7. A paid order after a real attempt at the door: the fee stays ──
+  // The driver finds nobody home, Central sends the parcel back, the
+  // warehouse checks it in: the goods are refunded, the delivery fee is not
+  // (someone went to the door), and the page says why.
+  const tried = (await ownRoute(1)).stops[0];
+  const driver = await as("repartidor@yuntera.example");
+  await driver("driver_fail_stop", { p_stop_id: tried.stopId, p_reason: "nobody_home" });
+  await driver.dispose();
+  const triedOrder = await buyer("get_order", { p_order_number: tried.orderNumber });
+  check(triedOrder.shipping_minor > 0, "fixture: the order tried at the door has a delivery fee");
+  const central2 = await as("central@yuntera.example");
+  await central2("ops_return_shipment", { p_shipment_id: triedOrder.shipments[0].id });
+  await central2.dispose();
+  const feeLine = `El envío (${colones(triedOrder.shipping_minor)}) no se devuelve porque fuimos a entregarlo a su dirección.`;
+  await shop.goto(`${SHOP}/pedidos`, { waitUntil: "networkidle" });
+  await shopId(`order-${tried.orderNumber}`).click();
+  await shop.getByText(`Pedido ${tried.orderNumber}`).first().waitFor();
+  await shopId("order-stopping").waitFor();
+  const triedPage = squash(await shopId("order-stopping").innerText());
+  log("   ", triedPage);
+  check(
+    triedPage.includes(feeLine) && !triedPage.includes("el envío incluido"),
+    "while it comes back, the page says why the delivery fee stays",
+  );
+  const triedBodega = await as("bodega@yuntera.example");
+  const triedIn = await triedBodega("wms_receive_returned_shipment", {
+    p_shipment_id: triedOrder.shipments[0].id,
+    p_resellable: true,
+    p_note: null,
+  });
+  await triedBodega.dispose();
+  check(
+    (triedIn.delivery_fee_refund_minor ?? 0) === 0 && triedIn.order_status === "cancelled",
+    "fixture: cancelled, no delivery-fee refund after a real attempt",
+  );
+  await shop.reload({ waitUntil: "load" });
+  await shopId("fee-kept").waitFor();
+  const kept = squash(await shopId("fee-kept").innerText());
+  log("   ", kept);
+  check(kept === feeLine, "after the check-in the page still says why the fee stays");
+  await noSideways(shop, "order page, fee kept");
+  await shop.screenshot({
+    path: `${SHOTS}/native-order-followups-08-fee-kept.png`,
     fullPage: true,
   });
   await buyer.dispose();
