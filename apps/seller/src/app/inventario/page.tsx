@@ -1,6 +1,7 @@
+import type { SellerStockHistoryEntry } from "@yuntera/db";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { DataTable, PageHeader } from "@yuntera/next-kit/shell";
-import { Alert, Badge, EmptyState, formatDate, Skeleton } from "@yuntera/ui";
+import { Alert, Badge, EmptyState, formatDate, formatDateTime, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -30,12 +31,13 @@ export default function InventoryPage() {
 async function Inventory() {
   const { shop } = await requireShop("/inventario");
   const api = await sessionApi();
-  const [listings, stock, locations, inbounds, districts] = await Promise.all([
+  const [listings, stock, locations, inbounds, districts, history] = await Promise.all([
     api.sellerListings(shop.id),
     api.sellerStock(shop.id),
     api.sellerLocations(shop.id),
     api.sellerInbounds(shop.id),
     getDistricts(),
+    api.sellerStockHistory(shop.id, 50),
   ]);
 
   if (listings.length === 0) {
@@ -208,6 +210,63 @@ async function Inventory() {
           </div>
         </section>
       ) : null}
+
+      <StockHistory history={history} />
     </div>
+  );
+}
+
+/** What each change to the shop's stock was, in the shop's words. */
+const HISTORY_KIND: Record<SellerStockHistoryEntry["kind"], string> = {
+  received: "Recibidas",
+  shipped: "Salieron en un pedido",
+  returned: "Volvieron de una entrega que no se hizo",
+  warehouse_count: "Corrección de conteo de la bodega",
+  own_count: "Su conteo",
+  other: "Otro cambio",
+};
+
+function StockHistory({ history }: { history: SellerStockHistoryEntry[] }) {
+  return (
+    <section aria-labelledby="historial">
+      <h2 id="historial" className="text-xl font-bold">
+        Historial de existencias
+      </h2>
+      <p className="mt-1 max-w-3xl text-sm text-ink-muted">
+        Cada cambio en las unidades que usted tiene, del más reciente al más antiguo (los últimos
+        50). Cuando la bodega corrige un conteo, aquí ve cuántas unidades y por qué.
+      </p>
+      {history.length === 0 ? (
+        <p className="mt-3 text-sm text-ink-muted">Todavía no hay cambios.</p>
+      ) : (
+        <ul className="mt-3 flex max-w-3xl flex-col gap-2">
+          {history.map((entry) => (
+            <li
+              key={entry.id}
+              className="rounded-lg border border-border bg-surface p-4 text-sm"
+              data-kind={entry.kind}
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="font-semibold">
+                  {entry.title}
+                  {entry.variant_name ? ` · ${entry.variant_name}` : ""}
+                </p>
+                <p className="font-display text-base font-bold tabular-nums">
+                  {entry.change > 0 ? "+" : "−"}
+                  {Math.abs(entry.change)}{" "}
+                  <span className="text-sm font-normal">
+                    {Math.abs(entry.change) === 1 ? "unidad" : "unidades"}
+                  </span>
+                </p>
+              </div>
+              <p className="mt-1 text-ink-muted">
+                {HISTORY_KIND[entry.kind]} · {entry.warehouse_name} · {formatDateTime(entry.at)}
+              </p>
+              {entry.note ? <p className="mt-1">Motivo: {entry.note}</p> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

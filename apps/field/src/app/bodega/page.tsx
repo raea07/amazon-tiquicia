@@ -59,9 +59,14 @@ async function Board({ searchParams }: PageProps<"/bodega">) {
           <p className="text-sm text-ink-muted">{board.warehouse.code}</p>
           <h1 className="text-2xl font-bold">{board.warehouse.name}</h1>
         </div>
-        <Link href="/bodega/buscar" className={buttonClass({ variant: "secondary" })}>
-          Buscar un producto
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/bodega/ubicaciones" className={buttonClass({ variant: "secondary" })}>
+            Ubicaciones
+          </Link>
+          <Link href="/bodega/buscar" className={buttonClass({ variant: "secondary" })}>
+            Buscar un producto
+          </Link>
+        </div>
       </header>
 
       <section aria-labelledby="paquetes">

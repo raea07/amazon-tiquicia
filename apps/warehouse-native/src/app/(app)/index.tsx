@@ -9,6 +9,7 @@ import {
   LinkButton,
   LoadingState,
   Logo,
+  PackageIcon,
   Screen,
   SearchIcon,
   Stack,
@@ -77,6 +78,15 @@ export default function BoardScreen() {
         testID="open-lookup"
       >
         Buscar un producto
+      </LinkButton>
+      <LinkButton
+        href="/ubicaciones"
+        variant="secondary"
+        block
+        icon={<PackageIcon size={20} color={colors.ink} />}
+        testID="open-locations"
+      >
+        Ubicaciones
       </LinkButton>
 
       {board.isPending ? (

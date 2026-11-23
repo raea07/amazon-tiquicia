@@ -1,9 +1,10 @@
 import { sessionApi } from "@yuntera/next-kit/server";
-import { Alert, buttonClass, Skeleton } from "@yuntera/ui";
+import { Alert, Badge, buttonClass, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { requireWarehouse } from "@/lib/access";
+import { locationHref } from "@/lib/locations";
 
 export const metadata: Metadata = { title: "Buscar un producto" };
 
@@ -74,15 +75,32 @@ async function Result({ searchParams }: Pick<PageProps<"/bodega/buscar">, "searc
         <>
           <ul className="mt-3 divide-y divide-border text-sm">
             {sku.bins.map((bin) => (
-              <li
-                key={`${bin.location_id}:${bin.seller_id}`}
-                className="flex items-center justify-between gap-3 py-2"
-              >
-                <span>
-                  <span className="font-display text-lg font-bold">{bin.location_code}</span>
-                  <span className="ml-2 text-ink-muted">de {bin.seller_name}</span>
-                </span>
-                <span className="font-display text-lg font-bold tabular-nums">{bin.quantity}</span>
+              <li key={`${bin.location_id}:${bin.seller_id}`}>
+                <Link
+                  href={locationHref(bin.location_code)}
+                  className="flex min-h-11 items-center justify-between gap-3 py-2 hover:bg-surface-muted"
+                >
+                  <span>
+                    <span className="font-display text-lg font-bold text-link underline">
+                      {bin.location_code}
+                    </span>
+                    <span className="ml-2 text-ink-muted">de {bin.seller_name}</span>
+                    {bin.location_active ? null : (
+                      <span className="ml-2">
+                        <Badge tone="warning">Desactivada</Badge>
+                      </span>
+                    )}
+                    {bin.promised > 0 ? (
+                      <span className="block text-xs text-ink-muted">
+                        {bin.promised} {bin.promised === 1 ? "espera" : "esperan"} a pedidos ·{" "}
+                        {bin.free} libres
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="font-display text-lg font-bold tabular-nums">
+                    {bin.quantity}
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>
@@ -90,8 +108,8 @@ async function Result({ searchParams }: Pick<PageProps<"/bodega/buscar">, "searc
         </>
       )}
       <p className="mt-3 text-xs text-ink-muted">
-        Si lo que ve en el estante no coincide, no lo corrija a ojo: avise al encargado para que
-        haga el conteo y el ajuste.
+        Si lo que ve en el estante no coincide, abra la ubicación y corrija la cantidad con lo que
+        contó, con el motivo.
       </p>
     </section>
   );
