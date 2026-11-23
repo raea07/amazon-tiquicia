@@ -150,8 +150,8 @@ async function Closures() {
             Cierres cancelados ({cancelled.length})
           </h2>
           <p className="mt-1 text-sm text-ink-muted">
-            Se terminaron antes de empezar en los últimos 7 días. Si fue un error, vuelva a cerrar
-            la zona con las mismas fechas.
+            Se terminaron en los últimos 7 días sin que pasara ninguno de sus días. Si fue un error,
+            vuelva a cerrar la zona con las mismas fechas.
           </p>
           <ul className="mt-3 grid gap-4 lg:grid-cols-2">
             {cancelled.map((closure) => (
@@ -220,6 +220,9 @@ function CancelledRow({ closure, today }: { closure: OpsClosure; today: string }
 
 function ClosureRow({ closure, today }: { closure: OpsClosure; today: string }) {
   const state = CLOSURE_STATE[closure.state];
+  // Ending a closure gives back the days from today on: one that starts
+  // today (or later) is cancelled whole (ops_end_zone_closure), so it says so.
+  const cancels = closure.state === "upcoming" || closure.starts_on >= today;
   return (
     <li
       className="rounded-lg border border-border bg-surface p-4 text-sm"
@@ -229,6 +232,9 @@ function ClosureRow({ closure, today }: { closure: OpsClosure; today: string }) 
         <h3 className="text-base font-bold">{closure.zone_name}</h3>
         <Badge tone={state?.tone ?? "neutral"}>{state?.label ?? closure.state}</Badge>
         {closure.ended_early ? <Badge tone="neutral">Terminado antes</Badge> : null}
+        {closure.state === "current" && closure.starts_on === today ? (
+          <Badge tone="neutral">Empezó hoy</Badge>
+        ) : null}
       </div>
       <p className="mt-1">
         {closure.starts_on === closure.ends_on
@@ -301,7 +307,9 @@ function ClosureRow({ closure, today }: { closure: OpsClosure; today: string }) 
               <p className="text-ink-muted">
                 {closure.state === "upcoming"
                   ? "Todavía no empezó: se cancela y la zona recibe entregas esos días."
-                  : "La zona recibe entregas desde hoy. Los días ya pasados quedan como estaban."}
+                  : cancels
+                    ? "Empezó hoy y ningún día quedó atrás: se cancela y la zona recibe entregas desde hoy, en todas esas fechas."
+                    : "La zona recibe entregas desde hoy. Los días ya pasados quedan como estaban."}
               </p>
             </CatalogueForm>
           </div>

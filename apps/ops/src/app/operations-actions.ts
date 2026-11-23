@@ -71,6 +71,8 @@ async function operationsAction(
 
 const uuid = z.uuid();
 const text = (formData: FormData, name: string) => String(formData.get(name) ?? "").trim();
+/** A single box as CatalogueForm puts it back after a refusal: "on" when ticked, "" when not. */
+const ticked = (formData: FormData, name: string) => (formData.get(name) === "on" ? "on" : "");
 const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const count = (detail: string | null) => Number.parseInt(detail ?? "", 10);
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -106,7 +108,7 @@ function zoneValues(formData: FormData): Record<string, string> {
     ...typed(formData, ...ZONE_FIELDS),
     processingWeekdays: formData.getAll("processingWeekdays").map(String).join(","),
     deliveryWeekdays: formData.getAll("deliveryWeekdays").map(String).join(","),
-    codAvailable: formData.get("codAvailable") === "on" ? "on" : "",
+    codAvailable: ticked(formData, "codAvailable"),
   };
 }
 
@@ -241,7 +243,8 @@ export async function moveDistricts(
 // ── Holidays ────────────────────────────────────────────────────────────────
 
 export async function addHoliday(_previous: ActionState, formData: FormData): Promise<ActionState> {
-  const values = typed(formData, "day", "name");
+  // The confirmation box comes back as it was ticked, like the zone form's boxes.
+  const values = { ...typed(formData, "day", "name"), confirm: ticked(formData, "confirm") };
   const day = isoDay.safeParse(text(formData, "day"));
   if (!day.success) return { error: "Elija el día del feriado.", values };
   if (text(formData, "name").length < 3) return { error: "Escriba el nombre del feriado.", values };
@@ -348,7 +351,7 @@ export async function endClosure(_previous: ActionState, formData: FormData): Pr
   return operationsAction("/operacion/cierres", "catalog", async (api) => {
     const closure = await api.opsEndZoneClosure(id.data, revision);
     return closure.state === "cancelled"
-      ? "Cierre cancelado: todavía no había empezado, así que la zona recibe entregas en esas fechas. Si fue un error, use «Volver a cerrar» en Cierres cancelados."
+      ? "Cierre cancelado: ninguno de sus días había pasado, así que la zona recibe entregas en todas esas fechas. Si fue un error, use «Volver a cerrar» en Cierres cancelados."
       : "Cierre terminado: la zona recibe entregas desde hoy. Para volver a cerrarla, cambie el último día.";
   });
 }
@@ -359,7 +362,7 @@ export async function updateSetting(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const values = typed(formData, "value");
+  const values = { ...typed(formData, "value"), confirm: ticked(formData, "confirm") };
   const key = text(formData, "key");
   const unit = text(formData, "unit");
   let expected: unknown;

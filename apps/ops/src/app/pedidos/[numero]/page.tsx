@@ -1,4 +1,9 @@
-import { isRescheduledShipment } from "@yuntera/core";
+import {
+  isRescheduledShipment,
+  ORDER_STATUS_LABEL,
+  type OrderStatus,
+  type ShipmentStatus,
+} from "@yuntera/core";
 import { ApiError } from "@yuntera/db";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
@@ -9,6 +14,7 @@ import {
   formatDateTime,
   formatPrice,
   OrderStatusBadge,
+  SHIPMENT_STATUS_LABEL,
   ShipmentStatusBadge,
   Skeleton,
   TextAreaField,
@@ -183,7 +189,7 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
             {order.timeline.map((event, index) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: a fixed, ordered history
               <li key={index}>
-                <span className="font-medium">{event.note ?? event.to_status ?? event.kind}</span>
+                <span className="font-medium">{timelineWords(event, order.timeline)}</span>
                 <span className="ml-2 text-ink-muted">{formatDateTime(event.at)}</span>
               </li>
             ))}
@@ -350,4 +356,38 @@ async function OrderMessages({ orderNumber }: { orderNumber: string }) {
       ))}
     </ul>
   );
+}
+
+type TimelineEvent = {
+  at: string;
+  kind: "order_status" | "shipment_status" | "payment" | "note";
+  to_status: string | null;
+  note: string | null;
+};
+
+/** The note staff's removal of a stop writes (ops_remove_route_stop), in the same moment. */
+const REMOVAL_NOTE = "Central quitó el paquete ";
+
+/**
+ * A history line in words, never a status code. A parcel's step written by
+ * staff taking its stop off a route (the same moment as the removal note)
+ * reads "Quitado de una ruta", not "Entrega fallida": nobody went to the door.
+ */
+function timelineWords(event: TimelineEvent, timeline: readonly TimelineEvent[]): string {
+  if (event.note) return event.note;
+  const status = event.to_status ?? "";
+  if (event.kind === "shipment_status") {
+    const removal = timeline.some(
+      (other) =>
+        other.kind === "note" && other.at === event.at && other.note?.startsWith(REMOVAL_NOTE),
+    );
+    if (removal) return "Quitado de una ruta, sin intento de entrega";
+    const words = SHIPMENT_STATUS_LABEL[status as ShipmentStatus];
+    return words ? `Paquete: ${words.toLowerCase()}` : "El paquete cambió de estado";
+  }
+  if (event.kind === "order_status") {
+    return ORDER_STATUS_LABEL[status as OrderStatus]?.["es-CR"] ?? "El pedido cambió de estado";
+  }
+  if (event.kind === "payment") return "Cambio en el pago";
+  return "Nota";
 }
