@@ -19,7 +19,9 @@ import { checkSecret } from "../guard";
  * following it would report a refresh that never happened. Anything else is
  * logged, so a lost refresh shows in the logs instead of passing in silence.
  */
-export async function refreshShopCatalog(options: { categories?: boolean } = {}): Promise<void> {
+export async function refreshShopCatalog(
+  options: { categories?: boolean; districts?: boolean } = {},
+): Promise<void> {
   const shop = process.env.NEXT_PUBLIC_SHOP_URL;
   if (!shop || !process.env.SHOP_REFRESH_KEY) return;
   const check = checkSecret("SHOP_REFRESH_KEY", process.env.SHOP_REFRESH_KEY, process.env);
@@ -28,14 +30,21 @@ export async function refreshShopCatalog(options: { categories?: boolean } = {})
     return;
   }
   const key = check.value;
+  const scope = [
+    ...(options.categories ? ["categories"] : []),
+    ...(options.districts ? ["districts"] : []),
+  ];
   try {
     const response = await fetch(new URL("/api/catalogo/refrescar", shop), {
       method: "POST",
       // The category menu sits in every page's prepared shell, so it is dropped
-      // only when categories changed (asked for here), not with every refresh.
-      headers: options.categories
-        ? { "x-refresh-key": key, "x-refresh-scope": "categories" }
-        : { "x-refresh-key": key },
+      // only when categories changed (asked for here), not with every refresh;
+      // the district list (which says where the shop delivers) only when staff
+      // changed a zone or a district.
+      headers:
+        scope.length > 0
+          ? { "x-refresh-key": key, "x-refresh-scope": scope.join(",") }
+          : { "x-refresh-key": key },
       cache: "no-store",
       redirect: "manual",
       signal: AbortSignal.timeout(3000),

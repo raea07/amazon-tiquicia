@@ -136,11 +136,24 @@ export function CatalogueForm({
   useEffect(() => outcomes?.mount(id), [outcomes, id]);
 
   // Browsers clear a form when its action finishes; put back what was typed
-  // when the action refused it.
+  // when the action refused it. Checkboxes and radio buttons come back as a
+  // comma-separated list of the values that were chosen ("1,2,5"; "on" for a
+  // single box left with its default value; "" for none).
   const form = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (!state.error || !state.values || !form.current) return;
     for (const [name, value] of Object.entries(state.values)) {
+      const boxes = Array.from(form.current.elements).filter(
+        (element): element is HTMLInputElement =>
+          element instanceof HTMLInputElement &&
+          element.name === name &&
+          (element.type === "checkbox" || element.type === "radio"),
+      );
+      if (boxes.length > 0) {
+        const chosen = new Set(value.split(",").filter(Boolean));
+        for (const box of boxes) box.checked = chosen.has(box.value);
+        continue;
+      }
       const field = form.current.elements.namedItem(name);
       if (
         field instanceof HTMLInputElement ||

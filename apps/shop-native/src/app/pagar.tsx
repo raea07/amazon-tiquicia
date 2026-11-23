@@ -107,9 +107,9 @@ export default function CheckoutScreen() {
   if (!target) {
     return (
       <Screen>
-        <Alert tone="warning" title="Todavía no entregamos en sus direcciones guardadas">
-          Por ahora llegamos al Gran Área Metropolitana. Agregue una dirección dentro de la zona de
-          entrega.
+        <Alert tone="warning" title="Por ahora no entregamos en sus direcciones guardadas">
+          Para comprar ahora, agregue una dirección en una zona donde sí entregamos. Sus direcciones
+          quedan guardadas: cuando volvamos a entregar ahí, podrá elegirlas de nuevo.
         </Alert>
         <LinkButton href="/direcciones/nueva?siguiente=/pagar" block>
           Agregar una dirección

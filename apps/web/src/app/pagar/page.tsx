@@ -78,9 +78,9 @@ async function Checkout() {
   if (!target || quote.total_minor == null) {
     return (
       <div className="max-w-3xl">
-        <Alert tone="warning" title="Todavía no entregamos en sus direcciones guardadas">
-          Por ahora llegamos al Gran Área Metropolitana. Agregue una dirección dentro de la zona de
-          entrega.
+        <Alert tone="warning" title="Por ahora no entregamos en sus direcciones guardadas">
+          Para comprar ahora, agregue una dirección en una zona donde sí entregamos. Sus direcciones
+          quedan guardadas: cuando volvamos a entregar ahí, podrá elegirlas de nuevo.
         </Alert>
         <div className="mt-6">
           <AddressForm districts={districts} defaultName={viewer.name} returnTo="/pagar" />

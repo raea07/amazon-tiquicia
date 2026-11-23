@@ -9,6 +9,7 @@ import {
   money,
   multiply,
   parseColones,
+  parseWholeColones,
   percentage,
   splitTaxInclusive,
   subtract,
@@ -162,4 +163,22 @@ describe("parseColones", () => {
       expect(parseColones(text)).toBeNull();
     },
   );
+});
+
+describe("parseWholeColones", () => {
+  it.each([
+    ["150,00", 15_000],
+    ["150", 15_000],
+    ["1.500", 150_000],
+    ["1 500", 150_000],
+    ["₡1.500", 150_000],
+    ["1.500,00", 150_000],
+    ["0", 0],
+  ])("reads %s", (text, expected) => {
+    expect(parseWholeColones(text)).toBe(expected);
+  });
+
+  it.each(["150,50", "1500,5", "", "-5", "1,5", "abc"])("refuses %s", (text) => {
+    expect(parseWholeColones(text)).toBeNull();
+  });
 });

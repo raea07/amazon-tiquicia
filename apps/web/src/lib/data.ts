@@ -4,6 +4,7 @@ import {
   CATALOG_TAG,
   CATEGORIES_TAG,
   CATEGORY_MENU_TAG,
+  DISTRICTS_TAG,
   productPageTags,
   shopPageTags,
   suggestionTags,
@@ -61,7 +62,8 @@ export async function getBrands(categorySlug: string | null) {
 export async function getDistricts() {
   "use cache";
   cacheLife("days");
-  cacheTag("districts");
+  // Dropped by the refresh endpoint when staff change a zone or a district.
+  cacheTag(DISTRICTS_TAG);
   return publicApi().listDistricts();
 }
 

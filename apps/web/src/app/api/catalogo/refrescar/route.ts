@@ -1,5 +1,10 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { CATALOG_TAG, CATEGORIES_TAG, CATEGORY_MENU_TAG } from "@yuntera/next-kit/cache-tags";
+import {
+  CATALOG_TAG,
+  CATEGORIES_TAG,
+  CATEGORY_MENU_TAG,
+  DISTRICTS_TAG,
+} from "@yuntera/next-kit/cache-tags";
 import { checkSecret } from "@yuntera/next-kit/guard";
 import { revalidateTag } from "next/cache";
 
@@ -43,10 +48,14 @@ export async function POST(request: Request) {
   // Staff changed categories: the category pages read the new tree at once, and
   // the menu, which is part of every page's prepared shell, is refreshed in the
   // background so the shells stay prepared (one visitor may still see the old menu).
-  if (request.headers.get("x-refresh-scope") === "categories") {
+  const scope = (request.headers.get("x-refresh-scope") ?? "").split(",");
+  if (scope.includes("categories")) {
     revalidateTag(CATEGORIES_TAG, { expire: 0 });
     revalidateTag(CATEGORY_MENU_TAG, "max");
   }
+  // Staff changed a zone or a district: the address form and the zone picker
+  // say at once where the shop delivers.
+  if (scope.includes("districts")) revalidateTag(DISTRICTS_TAG, { expire: 0 });
   return new Response(null, { status: 204 });
 }
 

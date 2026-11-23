@@ -51,6 +51,22 @@ describe("refreshShopCatalog", () => {
     });
   });
 
+  it("asks for the district list too, only when zones or districts changed", async () => {
+    fetchMock.mockResolvedValue(answer(204));
+    await refreshShopCatalog({ districts: true });
+    const [, first] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(first.headers).toEqual({
+      "x-refresh-key": "a-shared-key",
+      "x-refresh-scope": "districts",
+    });
+    await refreshShopCatalog({ categories: true, districts: true });
+    const [, both] = fetchMock.mock.calls[1] as [URL, RequestInit];
+    expect(both.headers).toEqual({
+      "x-refresh-key": "a-shared-key",
+      "x-refresh-scope": "categories,districts",
+    });
+  });
+
   it("counts a redirect to a login page as a failure, and says where it led", async () => {
     fetchMock.mockResolvedValue(
       answer(302, { location: "https://vercel.com/sso-api?url=https%3A%2F%2Fshop&nonce=secret" }),

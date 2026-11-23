@@ -53,7 +53,8 @@ export const SHIPMENT_TRANSITIONS: Readonly<Record<ShipmentStatus, readonly Ship
   pending: ["picking", "cancelled"],
   picking: ["packed", "pending", "cancelled"],
   packed: ["ready_for_dispatch", "cancelled"],
-  ready_for_dispatch: ["out_for_delivery", "cancelled"],
+  // Back to packed when dispatch takes it off a route before it left.
+  ready_for_dispatch: ["out_for_delivery", "packed", "cancelled"],
   out_for_delivery: ["delivered", "delivery_failed"],
   // A failed attempt is retried or the parcel starts its way back.
   delivery_failed: ["ready_for_dispatch", "returning"],
@@ -133,3 +134,14 @@ export const ORDER_STATUS_LABEL: Readonly<Record<OrderStatus, { "es-CR": string;
   cancelled: { "es-CR": "Cancelado", en: "Cancelled" },
   refunded: { "es-CR": "Reembolsado", en: "Refunded" },
 };
+
+/**
+ * A parcel back at the warehouse's door without anyone having tried to
+ * deliver it: staff took its stop off a route while the driver had it
+ * (ops_remove_route_stop), which moves it to delivery_failed without counting
+ * an attempt. The shopper is told it was rescheduled, not that delivery
+ * failed; dispatch sees it was taken off a route.
+ */
+export function isRescheduledShipment(status: ShipmentStatus, attemptCount: number): boolean {
+  return status === "delivery_failed" && attemptCount === 0;
+}

@@ -1,5 +1,5 @@
 import { brand } from "@yuntera/brand";
-import { ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
+import { isRescheduledShipment, ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
 import {
   ApiError,
   type MyOrderReturn,
@@ -11,6 +11,7 @@ import {
 import { ProductImage } from "@yuntera/next-kit/product-image";
 import {
   Alert,
+  Badge,
   formatDate,
   formatDateTime,
   formatPrice,
@@ -189,7 +190,11 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                         {shipment.tracking_code}
                       </span>
                     </p>
-                    <ShipmentStatusBadge status={shipment.status} />
+                    {isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+                      <Badge tone="info">Entrega reprogramada</Badge>
+                    ) : (
+                      <ShipmentStatusBadge status={shipment.status} />
+                    )}
                   </div>
                   {shipment.driver_first_name ? (
                     <p className="mt-2 text-sm">
@@ -197,7 +202,12 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                       código de entrega.
                     </p>
                   ) : null}
-                  {shipment.status === "delivery_failed" ? (
+                  {isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+                    <p className="mt-2 text-sm">
+                      Reprogramamos la entrega de este paquete. Le avisaremos cuando vuelva a salir
+                      hacia usted; si necesita cambiar algo, escríbanos.
+                    </p>
+                  ) : shipment.status === "delivery_failed" ? (
                     <p className="mt-2 text-sm text-warning">
                       No pudimos entregarlo. Lo intentaremos de nuevo el próximo día hábil; si
                       necesita cambiar algo, escríbanos.

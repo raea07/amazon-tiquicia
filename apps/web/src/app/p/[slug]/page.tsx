@@ -302,8 +302,8 @@ function BuyBox({
           <OfferFacts offer={featured} />
 
           {zone && !zone.active ? (
-            <Alert tone="warning" className="mt-4" title="Todavía no entregamos en su zona">
-              Por ahora llegamos al Gran Área Metropolitana.{" "}
+            <Alert tone="warning" className="mt-4" title="Por ahora no entregamos en su zona">
+              Puede comprar para una dirección en otra zona.{" "}
               <Link href="/zona" className="underline">
                 Cambiar de zona
               </Link>

@@ -13,8 +13,8 @@ export default function ZonePage({ searchParams }: PageProps<"/zona">) {
     <div className="shell max-w-3xl py-8">
       <h1 className="text-3xl font-bold">¿Dónde le entregamos?</h1>
       <p className="mt-2 text-ink-muted">
-        Con su distrito le mostramos la fecha de entrega y el costo de envío reales. Por ahora
-        llegamos al Gran Área Metropolitana.
+        Con su distrito le mostramos la fecha de entrega y el costo de envío reales, o le decimos si
+        por ahora no entregamos ahí.
       </p>
       <div className="mt-6 rounded-lg border border-border bg-surface p-5">
         <Suspense fallback={<Skeleton className="h-32" />}>

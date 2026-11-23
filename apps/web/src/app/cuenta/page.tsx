@@ -91,7 +91,8 @@ async function Account() {
                 ) : null}
                 {address.zone_active ? null : (
                   <p className="mt-1 font-medium text-warning">
-                    Todavía no entregamos en esta zona.
+                    Por ahora no entregamos aquí. La dirección queda guardada para cuando volvamos a
+                    entregar en esta zona.
                   </p>
                 )}
                 <form action={deleteAddress} className="mt-2">

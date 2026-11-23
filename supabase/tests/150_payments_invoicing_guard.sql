@@ -1,6 +1,7 @@
 -- The per-request check (check_request, decision 23) and the new functions
 -- of payments (083400), invoicing (083500), the invoicing fixes (083510),
--- seller listings (083600) and the native apps' consent source (083900).
+-- seller listings (083600), the native apps' consent source (083900) and the
+-- console's operations tools (084000).
 --
 -- None of them is on the check's short list of what a password-only session
 -- of an account with a second factor may call: the shopper's payment and
@@ -41,6 +42,14 @@ begin
     'cart_alternatives',
     -- the notification settings, recreated with the consent source (083900)
     'set_my_notification_settings', 'seller_set_notification_settings',
+    -- the operations tools (084000), and the shop's reads they redefined
+    'ops_delivery_zones', 'ops_create_zone', 'ops_update_zone', 'ops_set_zone_active', 'ops_delete_zone',
+    'ops_district_cantons', 'ops_canton_districts', 'ops_district_move_preview', 'ops_move_districts',
+    'ops_holidays', 'ops_add_holiday', 'ops_remove_holiday', 'ops_zone_closures', 'ops_open_zone_closure',
+    'ops_change_zone_closure_end', 'ops_end_zone_closure', 'ops_settings', 'ops_update_setting',
+    'ops_warehouse_locations', 'ops_create_location', 'ops_rename_location', 'ops_set_location_active',
+    'ops_open_routes', 'ops_remove_route_stop', 'ops_close_route', 'my_addresses', 'checkout_quote',
+    'seller_save_location',
     -- the workers' own, if a signed-in token ever reached them
     'worker_payments_claim', 'worker_payments_event', 'worker_payments_hello', 'worker_payments_report',
     'worker_invoice_claim', 'worker_invoice_health', 'worker_invoice_hint', 'worker_invoice_plan',

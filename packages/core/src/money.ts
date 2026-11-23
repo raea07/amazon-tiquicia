@@ -190,3 +190,15 @@ export function parseColones(input: string): number | null {
   const amount = whole * 100 + minor;
   return Number.isSafeInteger(amount) ? amount : null;
 }
+
+/**
+ * Like parseColones, for amounts set in whole colones (a delivery fee, a
+ * limit): céntimos or null. "150,00" is ₡150, as parseColones reads it; an
+ * amount with céntimos ("150,50") is refused rather than rounded, and so is
+ * anything parseColones refuses. Never strips separators blindly: "150,00"
+ * once became ₡15 000 that way.
+ */
+export function parseWholeColones(input: string): number | null {
+  const minor = parseColones(input);
+  return minor !== null && minor % 100 === 0 ? minor : null;
+}

@@ -108,7 +108,7 @@ export function CheckoutForm({
                 </span>
                 {address.zone_active ? null : (
                   <span className="mt-1 block font-medium text-warning">
-                    Todavía no entregamos en esta zona.
+                    Por ahora no entregamos aquí. Elija otra dirección.
                   </span>
                 )}
               </span>

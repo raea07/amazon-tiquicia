@@ -36,8 +36,8 @@ export default function ZoneScreen() {
     >
       <Text variant="title">¿Dónde le entregamos?</Text>
       <Text tint="muted">
-        Con su distrito le mostramos la fecha de entrega y el costo de envío reales. Por ahora
-        llegamos al Gran Área Metropolitana.
+        Con su distrito le mostramos la fecha de entrega y el costo de envío reales, o le decimos si
+        por ahora no entregamos ahí.
       </Text>
       {districts.isPending ? (
         <LoadingState label="Cargando distritos…" />

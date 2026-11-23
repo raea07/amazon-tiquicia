@@ -88,7 +88,7 @@ export function DistrictPicker({
           selected
             ? selected.zone_active
               ? `Código postal ${selected.postal_code}. Sí entregamos aquí.`
-              : `Código postal ${selected.postal_code}. Todavía no entregamos en esta zona.`
+              : `Código postal ${selected.postal_code}. Por ahora no entregamos en esta zona.`
             : undefined
         }
       >
@@ -96,7 +96,7 @@ export function DistrictPicker({
         {options.map((d) => (
           <option key={d.postal_code} value={d.postal_code}>
             {d.district}
-            {d.zone_active ? "" : " (aún no llegamos)"}
+            {d.zone_active ? "" : " (por ahora no entregamos)"}
           </option>
         ))}
       </SelectField>

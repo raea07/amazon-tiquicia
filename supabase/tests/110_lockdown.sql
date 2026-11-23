@@ -560,6 +560,21 @@ select pg_temp.staff_as('ops');
 select pg_temp.login('comprador3@yuntera.example');
 select pg_temp.denied('DTA-7', 'update public.delivery_zones set shipping_fee_minor = 0');
 select pg_temp.denied('DTA-7', 'insert into public.holidays (day, name) values (current_date, ''Feriado'')');
+-- The operations tools (084000) are functions too: none of their tables is
+-- written directly, by operations staff or anyone else.
+select pg_temp.denied('DTA-7', 'update public.districts set served = false');
+select pg_temp.denied('DTA-7', 'insert into public.zone_closures (zone_id, day) values (''gam-core'', current_date + 3)');
+select pg_temp.denied('DTA-7', $q$insert into public.zone_closure_periods (zone_id, starts_on, ends_on, reason)
+                                  values ('gam-core', current_date + 3, current_date + 4, 'weather')$q$);
+select pg_temp.denied('DTA-7', 'select * from public.zone_closure_periods');
+select pg_temp.denied('DTA-7', 'update public.warehouse_locations set active = false');
+select pg_temp.denied('DTA-7', 'update public.route_stops set status = ''skipped''');
+select pg_temp.denied('DTA-7', 'update public.routes set status = ''cancelled''');
+reset role;
+select pg_temp.staff_as('admin');
+select pg_temp.login('comprador3@yuntera.example');
+select pg_temp.denied('DTA-7', 'update public.app_settings set value = ''20'' where key = ''max_open_complaints_per_account''');
+select pg_temp.denied('DTA-7', 'update public.app_settings set value = ''"live"'' where key = ''payments_mode''');
 reset role;
 select pg_temp.staff_as('finance');
 select pg_temp.login('comprador3@yuntera.example');
