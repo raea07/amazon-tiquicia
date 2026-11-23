@@ -25,6 +25,7 @@
 // Fails on any console error, uncaught exception or 5xx.
 
 const { chromium, request } = require("playwright");
+const { settledText } = require("../../e2e/lib/settle.cjs");
 
 const BASE = process.env.NATIVE_SELLER_URL || "http://127.0.0.1:3011";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -308,7 +309,11 @@ async function as(email) {
   await visible(`variant-${small.sku_code}-toggle`).click();
   await page.getByText("Variante retirada: ya no se puede pedir.").first().waitFor();
   check(
-    (await said(`variant-${small.sku_code}`)).includes("Retirada"),
+    Boolean(
+      await settledText(visible(`variant-${small.sku_code}`), /Retirada/, {
+        what: "the retired size",
+      }),
+    ),
     "the size reads as retired, in words",
   );
   check(!(await sizesOnSale()).includes("Talla S"), "the shop no longer offers size S");
@@ -338,7 +343,9 @@ async function as(email) {
   await visible("unpublish-result").waitFor();
   check(
     (await said("unpublish-result")).includes("Ya no aparece en la tienda ni en las búsquedas") &&
-      (await said("edit-state")).includes("Borrador"),
+      Boolean(
+        await settledText(visible("edit-state"), /Borrador/, { what: "the listing's state" }),
+      ),
     "the app says it is back to draft and what that means",
   );
   check(

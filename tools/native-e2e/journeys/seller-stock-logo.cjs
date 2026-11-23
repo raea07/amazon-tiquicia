@@ -17,6 +17,7 @@
 // Fails on any console error, uncaught exception or 5xx.
 
 const { chromium, request } = require("playwright");
+const { settledText } = require("../../e2e/lib/settle.cjs");
 
 const BASE = process.env.NATIVE_SELLER_URL || "http://127.0.0.1:3011";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -228,7 +229,9 @@ async function logoFor(owner, staff, shopId, jpeg, { publish }) {
   front = await owner("seller_shop_front", { p_seller_id: shopId });
   check(front.logo === null, "the shop no longer shows a logo");
   check(
-    (await said("shop-face-logo")).includes("Sin logotipo"),
+    Boolean(
+      await settledText(visible("shop-face-logo"), /Sin logotipo/, { what: "the shop's card" }),
+    ),
     "the card says the shop now shows its initial",
   );
   await shot("03-logo-removed");

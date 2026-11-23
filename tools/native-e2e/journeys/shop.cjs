@@ -15,6 +15,7 @@
 // is allowed by URL and status, at that step only.
 
 const { chromium, request } = require("playwright");
+const { settledText } = require("../../e2e/lib/settle.cjs");
 
 const BASE = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -197,7 +198,10 @@ async function claimAs(email, orderItemId) {
   check(true, "added to the cart");
   await page.goBack();
   await page.waitForURL(/\/buscar/);
-  check(/1/.test(await tab("Carrito").innerText()), "the cart tab shows one unit");
+  check(
+    Boolean(await settledText(tab("Carrito"), /1/, { what: "the cart tab" })),
+    "the cart tab shows one unit",
+  );
   await tab("Carrito").click();
   await page.waitForURL(/\/carrito/);
   await visible("cart-summary").waitFor();
@@ -289,7 +293,12 @@ async function claimAs(email, orderItemId) {
   // 10. The cart was emptied by the order
   await page.goBack();
   await page.waitForURL(/\/cuenta/);
-  check(!(await tab("Carrito").innerText()).match(/\d/), "the cart badge is gone after ordering");
+  check(
+    Boolean(
+      await settledText(tab("Carrito"), (text) => !/\d/.test(text), { what: "the cart tab" }),
+    ),
+    "the cart badge is gone after ordering",
+  );
 
   // 10b. A return on an order already delivered: approved at once, refunded
   // only once the product is back at the warehouse.

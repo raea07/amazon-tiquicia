@@ -34,6 +34,7 @@
 // when the phone sleeps or the app is killed.
 
 const { chromium, request } = require("playwright");
+const { settledText } = require("../../e2e/lib/settle.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const URL_ = process.env.NATIVE_DRIVER_URL || "http://127.0.0.1:3012";
@@ -212,6 +213,9 @@ async function newRoute() {
   // The stack keeps the screens below the current one in the page, hidden: use the visible one.
   const byId = (id) => page.getByTestId(id).filter({ visible: true }).first();
   const textOf = async (id) => (await byId(id).innerText()).replace(/\s+/g, " ").trim();
+  // For a text that changes when data or the queue arrives: wait for what is expected.
+  const says = async (id, wanted) =>
+    Boolean(await settledText(byId(id), wanted, { what: `the text of ${id}` }));
   const shot = (name) =>
     page.screenshot({ path: `${SHOTS}/native-driver-${name}.png`, fullPage: true });
   const noSideways = async () =>
@@ -342,7 +346,7 @@ async function newRoute() {
     ),
     "and says to hand in the cash",
   );
-  check(/₡23\s?400/.test(await textOf("cash-R-1003")), "the cash to hand in is ₡23 400");
+  check(await says("cash-R-1003", /₡23\s?400/), "the cash to hand in is ₡23 400");
   await shot("06-route-finished");
 
   // ── 5. The API stops ──
@@ -358,14 +362,8 @@ async function newRoute() {
     "offline, an arrival is kept on the phone",
   );
   await byId("offline-banner").waitFor();
-  check(
-    /Sin conexión/.test(await textOf("offline-banner")),
-    "the screen says there is no connection",
-  );
-  check(
-    (await textOf("outbox")).startsWith("1 acción por enviar"),
-    "the queue shows 1 action to send",
-  );
+  check(await says("offline-banner", /Sin conexión/), "the screen says there is no connection");
+  check(await says("outbox", /^1 acción por enviar/), "the queue shows 1 action to send");
 
   const tracking2 = /paquete (YT\d+)/.exec(await page.locator("body").innerText())[1];
   await byId("deliver-name").fill("Quien recibe");
@@ -392,10 +390,7 @@ async function newRoute() {
     /guardado en el teléfono/.test(await textOf("flash")),
     "offline, a failed delivery is kept on the phone",
   );
-  check(
-    (await textOf("outbox")).startsWith("2 acciones por enviar"),
-    "the queue shows '2 acciones por enviar'",
-  );
+  check(await says("outbox", /^2 acciones por enviar/), "the queue shows '2 acciones por enviar'");
   check(
     (await textOf("outbox")).includes(`Llegada a la parada 1 de la ruta ${B}`),
     "each waiting action names its stop and route",
@@ -406,13 +401,10 @@ async function newRoute() {
   await page.reload({ waitUntil: "domcontentloaded" });
   await byId(`stop-${B}-1`).waitFor({ timeout: 30_000 });
   check(
-    /ruta guardada/.test(await textOf("offline-banner")),
+    await says("offline-banner", /ruta guardada/),
     "after a reload offline, the saved route is shown",
   );
-  check(
-    (await textOf("outbox")).startsWith("2 acciones por enviar"),
-    "the queue survived the reload",
-  );
+  check(await says("outbox", /^2 acciones por enviar/), "the queue survived the reload");
   check(
     /En la puerta/.test(await textOf(`stop-${B}-1`)) &&
       /Por enviar/.test(await textOf(`stop-${B}-1`)),
@@ -442,8 +434,8 @@ async function newRoute() {
     "after a restart offline with an expired token, the driver is still in, not at the sign-in screen",
   );
   check(
-    /ruta guardada/.test(await textOf("offline-banner")) &&
-      (await textOf("outbox")).startsWith("2 acciones por enviar"),
+    (await says("offline-banner", /ruta guardada/)) &&
+      (await says("outbox", /^2 acciones por enviar/)),
     "and the saved route and the queue are still there",
   );
   // Sharing stopped with the reload; the driver turns it back on, and a position waits too.
