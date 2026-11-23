@@ -16,8 +16,9 @@
 --     updated public.products every time. One product row is shared by all its
 --     variants and every shop that sells it, and nothing orders product rows,
 --     so two transactions writing two such products in opposite order
---     deadlocked on "products" (the race harness's family E: 1 to 42 in 100
---     natural rounds, 100 in 100 forced). The summary (offer_count,
+--     deadlocked on "products" (the race harness's family E at 717048f: 4 to
+--     41 in 100 natural rounds, two checkouts 30 in 100, every forced round;
+--     with this migration 0 in every one of them). The summary (offer_count,
 --     featured_offer_id, min_price_minor, list_price_minor, in_stock,
 --     fulfilled_by_platform, best_handling_days) depends on whether an offer
 --     has units, never on how many. So:
@@ -41,9 +42,10 @@
 --     before (READ COMMITTED re-checks the row's WHERE, not the values worked
 --     out earlier). Both offers ended at 0 while the product said in stock
 --     with a featured offer that had none, until the next change to one of its
---     offers (family F: 3 to 5 in 5 rounds before; a staff cancellation giving
---     a last unit back against a checkout of another offer ended the other way
---     round, out of stock with stock). It now takes the product row FOR NO KEY
+--     offers (family F at 717048f: 83 in 100 natural rounds, 100 in 100
+--     forced; a staff cancellation giving a last unit back against a checkout
+--     of another offer ended the other way round, out of stock with stock, 58
+--     and 65 in 100; with this migration 0). It now takes the product row FOR NO KEY
 --     UPDATE before it reads the offers, so two refreshes of one product run
 --     one after the other and the later one computes from what the earlier
 --     one committed. This relies on READ COMMITTED and on the function being
@@ -75,11 +77,11 @@
 --     function follows it except private.cancel_order_internal, which put
 --     picked units back on their shelves BEFORE it took the stock rows and
 --     closed the pick tasks after the shelves: a cancellation against a count
---     or a receipt of the same product on the same shelf deadlocked (race C3:
---     4 to 18 in 50 natural rounds, every forced round), and a pick of the
---     order's other line at that moment could even leave a unit picked and
---     never put back (race C4 forced: every round; on hand then exceeds the
---     shelves). It now takes, after the order, its open pick tasks and then
+--     or a receipt of the same product on the same shelf deadlocked (race C3
+--     at 717048f: 6, 9 and 39 in 100 natural rounds, every forced round), and
+--     a pick of the order's other line at that moment could leave a unit
+--     picked and never put back (race C4: 43 in 100 natural rounds, every
+--     forced round; on hand then exceeds the shelves). With this migration 0. It now takes, after the order, its open pick tasks and then
 --     every stock row it will write (by product, shop and warehouse) before
 --     any shelf. Nothing else changes in it.
 --   * THE SWEEP IS CAPPED. private.expire_unpaid_orders took every expired
@@ -95,29 +97,38 @@
 --     private.sync_order_status); every other function that changes a parcel
 --     takes the order first. Staff stopping one of the route's parcels at that
 --     moment (ops_recall_shipment: the order, the parcel, then the route)
---     deadlocked with it (race G: most natural rounds, every forced round). It
+--     deadlocked with it (race G at 717048f: 24 in 100 natural rounds, every
+--     forced round; with this migration 0). It
 --     now takes the orders of its pending stops first, in id order. Either the
 --     stop goes first (the parcel comes back, its stop is skipped, the route
 --     starts without it) or the start does (the stop is refused:
 --     shipment_not_recallable, "it is on its way"). ops_recall_shipment is
 --     unchanged.
 --
--- WHAT STILL CAN DEADLOCK ON PRODUCT ROWS (measured with forced rounds;
+-- WHAT STILL CAN DEADLOCK ON PRODUCT ROWS (measured with tools/races, with
+-- this migration, natural / forced rounds of 100;
 -- the loser rolls back whole and the person reads "nothing was saved, try
 -- again", try_again; the sweep runs again five minutes later):
 --   - two transactions that EACH take an offer of two shared products across
---     zero (out of stock, or back in stock), in opposite order: two checkouts
---     of the last units, a cancellation that gives back last units against a
---     checkout of other last units, the sweep releasing last units (E5);
+--     zero (out of stock, or back in stock), in opposite order. Measured for
+--     two checkouts of last units (E5: 33 / 63; before this migration 26 /
+--     74, and then the summary was also wrong in 42 / 26 rounds); by the same
+--     mechanism, not raced separately: a cancellation, packing or the sweep
+--     against such a checkout;
 --   - a staff cancellation, packing or the sweep giving back (or taking) the
 --     last unit of one offer of a product and then writing another offer of
 --     the same product, against the seller changing or pausing that second
 --     offer at that moment (offer row, then product row) (E6). A checkout
 --     does not deadlock with it: place_order takes its offers FOR SHARE first,
---     so the seller waits (E6b);
+--     so the seller waits (E6: 22 / 100, before 20 / 100; E6b: 0 / 0);
 --   - a shop suspended or reinstated (its products in product-id order)
 --     against a writer that takes two of its products across zero in the
---     other order (E7).
+--     other order (E7: 3 / 100; before this migration, when its walk had
+--     no order, 1 / 100).
+-- And, not on product rows: packing against a seller switching off a variant
+-- two shops sell (seller_set_variant_active takes the variant FOR UPDATE,
+-- which waits for the key share packing's ledger row takes on it) (E10:
+-- 13 / 100; before this migration 20 / 100). Not changed here.
 -- Every statement that writes or locks public.products, and the order each
 -- path takes, is listed in docs/04-algorithms/sourcing-and-inventory.md.
 

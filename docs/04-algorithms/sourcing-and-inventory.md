@@ -248,23 +248,34 @@ across products. Two rules keep stock writers off them:
 - A path that refreshes several products takes them in product id order
   (`sellers_summary_trigger`: a shop approved, suspended or closed).
 
-What still can deadlock on product rows, each measured with forced rounds
-in `tools/races` (family E). The loser's transaction rolls back whole; the
+With 084400 the races where the products stay in stock (the sweep against
+a checkout, packing or a cancellation; two checkouts) went from 4 to 41
+deadlocks in 100 natural rounds (every forced round) to 0, and the stale
+summary (race F) from 58 to 100 wrong rounds in 100 to 0. What still can
+deadlock on product rows, measured with 100 natural and 100 forced rounds
+in `tools/races` (family E; numbers natural / forced). The loser's transaction rolls back whole; the
 shopper, packer or staff member reads "Alguien más cambiaba lo mismo en ese
 momento, así que no se guardó nada. Inténtelo de nuevo." (`try_again`); the sweep runs again five minutes later:
 
 - two transactions that each take offers of two shared products across zero
-  in opposite order: two checkouts of last units, a cancellation that gives
-  last units back against a checkout of other last units, the sweep
-  releasing last units against either (E5);
+  in opposite order: two checkouts of last units (E5: 33 / 63); by the
+  same mechanism, not raced separately, a cancellation, packing or the
+  sweep against such a checkout;
 - a cancellation, packing or the sweep that takes one offer of a product
   across zero and then writes another offer of the same product, against the
   seller changing or pausing that second offer at that moment (the seller's
   update takes the offer row, then the product row) (E6). A checkout does
   not: it takes its offers `FOR SHARE` before anything, so the seller waits
-  for it (E6b);
+  for it (E6: 22 / 100; E6b: 0 / 0);
 - a shop suspended or reinstated (its products in id order) against a
-  writer that takes two of its products across zero in the other order (E7).
+  writer that takes two of its products across zero in the other order
+  (E7: 3 / 100).
+
+Not on product rows, found while listing their writers: packing against a
+seller switching off a variant two shops sell (E10: 13 / 100, the same
+before 084400). `seller_set_variant_active` takes the variant `FOR UPDATE`,
+which waits for the key-share lock packing's ledger row takes on it, while
+packing waits for the offer the seller pauses.
 
 **Every statement that writes or locks `public.products`** (the definitions
 in force), the order its path takes, and what it means for stock writers.
