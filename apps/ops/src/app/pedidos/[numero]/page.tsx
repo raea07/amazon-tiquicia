@@ -1,3 +1,4 @@
+import { isRescheduledShipment } from "@yuntera/core";
 import { ApiError } from "@yuntera/db";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
@@ -132,11 +133,19 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                     <span className="font-semibold">{shipment.tracking_code}</span>
                     <span className="ml-2 text-ink-muted">
                       {shipment.package_count} {shipment.package_count === 1 ? "bulto" : "bultos"}
-                      {shipment.attempt_count > 0 ? ` · ${shipment.attempt_count} intento(s)` : ""}
+                      {isRescheduledShipment(shipment.status, shipment.attempt_count)
+                        ? " · quitado de una ruta, sin intento de entrega"
+                        : shipment.attempt_count > 0
+                          ? ` · ${shipment.attempt_count} ${shipment.attempt_count === 1 ? "intento" : "intentos"}`
+                          : ""}
                       {shipment.driver_first_name ? ` · ${shipment.driver_first_name}` : ""}
                     </span>
                   </span>
-                  <ShipmentStatusBadge status={shipment.status} />
+                  {isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+                    <Badge tone="warning">Quitado de una ruta: espera otra</Badge>
+                  ) : (
+                    <ShipmentStatusBadge status={shipment.status} />
+                  )}
                   {shipment.status === "returning" && canSee(staff.staff_role, ["ops"]) ? (
                     <div className="w-full border-t border-border pt-3">
                       <ReturnedParcelForm

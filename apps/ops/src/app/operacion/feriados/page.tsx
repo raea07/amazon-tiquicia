@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { addHoliday, removeHoliday } from "@/app/operations-actions";
 import { CatalogueForm, CatalogueOutcome } from "@/components/catalogue-outcome";
 import { OperationsNav } from "@/components/operations-nav";
+import { plural } from "@/lib/operations-labels";
 import { requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Feriados" };
@@ -102,8 +103,16 @@ async function Holidays() {
                 <p>{holiday.name}</p>
                 {holiday.promised_orders > 0 || holiday.routes_planned > 0 ? (
                   <p className="mt-1 text-ink-muted">
-                    {holiday.promised_orders} pedidos con entrega prometida ese día ·{" "}
-                    {holiday.routes_planned} rutas planeadas
+                    {[
+                      holiday.promised_orders > 0
+                        ? `${plural(holiday.promised_orders, "pedido", "pedidos")} con entrega prometida ese día`
+                        : null,
+                      holiday.routes_planned > 0
+                        ? plural(holiday.routes_planned, "ruta planeada", "rutas planeadas")
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
                 ) : null}
                 {holiday.changeable ? (

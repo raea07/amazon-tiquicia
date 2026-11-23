@@ -7,7 +7,7 @@ import { Suspense } from "react";
 import { createZone, deleteZone, setZoneActive, updateZone } from "@/app/operations-actions";
 import { CatalogueForm, CatalogueOutcome } from "@/components/catalogue-outcome";
 import { OperationsNav } from "@/components/operations-nav";
-import { colonesField, WEEKDAYS, weekdayList } from "@/lib/operations-labels";
+import { colonesField, plural, WEEKDAYS, weekdayList } from "@/lib/operations-labels";
 import { requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Zonas de entrega" };
@@ -128,7 +128,7 @@ function ZoneRow({ zone }: { zone: OpsZone }) {
               ? formatDate(zone.promise.latest)
               : `${formatDate(zone.promise.earliest)} a ${formatDate(zone.promise.latest)}`
             : "—"}
-          {zone.upcoming_closures > 0 ? ` · ${zone.upcoming_closures} cierre(s) por venir` : ""}
+          {zone.upcoming_closures > 0 ? ` · ${plural(zone.upcoming_closures, "cierre", "cierres")} por venir` : ""}
         </dd>
       </dl>
 

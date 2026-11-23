@@ -1,3 +1,4 @@
+import { isRescheduledShipment } from "@yuntera/core";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { DataTable, PageHeader } from "@yuntera/next-kit/shell";
@@ -271,9 +272,9 @@ async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParam
                   {shipment.recipient_name}
                   <span className="block text-ink-muted">
                     {shipment.order_number} ·{" "}
-                    {shipment.attempt_count === 0
+                    {isRescheduledShipment(shipment.status, shipment.attempt_count)
                       ? "quitado de una ruta, sin intento de entrega"
-                      : `${shipment.attempt_count} intento(s)`}
+                      : `${shipment.attempt_count} ${shipment.attempt_count === 1 ? "intento" : "intentos"}`}
                   </span>
                 </span>
                 <ActionForm

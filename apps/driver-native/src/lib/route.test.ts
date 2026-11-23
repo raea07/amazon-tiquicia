@@ -8,7 +8,9 @@ import {
   keptOnPhone,
   needsTracking,
   nextStop,
+  progressLine,
   refusalMessage,
+  summarise,
   withQueued,
 } from "./route";
 
@@ -162,6 +164,19 @@ describe("the day as the driver sees it", () => {
     assert.equal(nextStop(route)?.stop_id, "s2");
     assert.equal(nextStop(route, new Set(["s2"]))?.stop_id, "s3");
     assert.equal(nextStop(route, new Set(["s2", "s3"]))?.stop_id, "s2");
+  });
+
+  it("leaves stops staff removed out of the total and says how many there were", () => {
+    const [route] = withQueued(
+      day([stop(1, { status: "delivered" }), stop(2, { status: "skipped" }), stop(3)]),
+      [],
+    );
+    assert.ok(route);
+    const summary = summarise(route);
+    assert.deepEqual([summary.delivered, summary.total, summary.skipped], [1, 2, 1]);
+    assert.equal(progressLine(summary), "1 de 2 entregadas · 1 omitida");
+    assert.equal(progressLine({ delivered: 0, total: 1, skipped: 2 }), "0 de 1 entregadas · 2 omitidas");
+    assert.equal(progressLine({ delivered: 2, total: 3, skipped: 0 }), "2 de 3 entregadas");
   });
 
   it("needs position sharing only while a started route has a stop to visit", () => {

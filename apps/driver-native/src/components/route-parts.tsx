@@ -44,6 +44,11 @@ function StopBody({ stop }: { stop: ShownStop }) {
       <Text variant="small" tint="muted" numberOfLines={2}>
         {stop.senas}
       </Text>
+      {stop.status === "skipped" ? (
+        <Text variant="smallStrong" testID="stop-row-skipped">
+          Central quitó esta parada de la ruta. Si lleva el paquete, devuélvalo a la bodega.
+        </Text>
+      ) : null}
       <View style={styles.chips}>
         <View style={styles.chip}>
           <Text variant="caption">{`${parcels(stop.package_count)} · ${stop.tracking_code}`}</Text>

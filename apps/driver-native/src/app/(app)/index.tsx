@@ -21,7 +21,7 @@ import { StyleSheet, View } from "react-native";
 import { StopRow } from "@/components/route-parts";
 import { OfflineBanner, QueueCard, TrackingStatus } from "@/components/status";
 import { needsExplanation, useDriver } from "@/lib/driver";
-import { isOpen, nextStop, parcels, type ShownRoute, summarise } from "@/lib/route";
+import { isOpen, nextStop, parcels, progressLine, type ShownRoute, summarise } from "@/lib/route";
 
 /** The messages a stop screen leaves when it sends the driver back here, as on the web. */
 function Flash({ aviso }: { aviso: string | undefined }) {
@@ -84,7 +84,7 @@ function RouteCard({ route }: { route: ShownRoute }) {
           Ruta {route.code}
         </Text>
         <Text variant="small" tint="muted">
-          {`${summary.delivered} de ${summary.total} entregadas`}
+          {progressLine(summary)}
         </Text>
       </View>
 

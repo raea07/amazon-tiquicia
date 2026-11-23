@@ -63,6 +63,8 @@ async function Day({ searchParams }: Pick<PageProps<"/ruta">, "searchParams">) {
         );
         const next = open[0];
         const delivered = route.stops.filter((stop) => stop.status === "delivered").length;
+        // Stops staff took off the route are not part of the total.
+        const skipped = route.stops.filter((stop) => stop.status === "skipped").length;
         const packages = route.stops.reduce((sum, stop) => sum + stop.package_count, 0);
         return (
           <section
@@ -76,7 +78,8 @@ async function Day({ searchParams }: Pick<PageProps<"/ruta">, "searchParams">) {
                   Ruta {route.code}
                 </h2>
                 <p className="text-sm text-ink-muted">
-                  {delivered} de {route.stops.length} entregadas
+                  {delivered} de {route.stops.length - skipped} entregadas
+                  {skipped > 0 ? ` · ${skipped} ${skipped === 1 ? "omitida" : "omitidas"}` : ""}
                 </p>
               </div>
 

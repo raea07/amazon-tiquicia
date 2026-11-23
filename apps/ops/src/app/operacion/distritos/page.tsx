@@ -38,6 +38,8 @@ async function Districts({
   const cantonCode = (one(params.canton) ?? "").replace(/\D/g, "").slice(0, 3);
   const chosen = many(params.distrito).slice(0, 60);
   const target = (one(params.destino) ?? "").slice(0, 30);
+  // "Revisar el cambio" was pressed (the canton form alone does not send it).
+  const reviewing = one(params.revisar) === "1";
 
   const api = await sessionApi();
   const [cantons, zones] = await Promise.all([api.opsDistrictCantons(), api.opsDeliveryZones()]);
@@ -59,6 +61,14 @@ async function Districts({
       if (!(error instanceof ApiError)) throw error;
       problem = messageOf(error);
     }
+  }
+  if (canton && reviewing && !problem && (chosen.length === 0 || !target)) {
+    problem =
+      chosen.length === 0 && !target
+        ? "Elija al menos un distrito y a qué zona pasan, y vuelva a revisar el cambio."
+        : chosen.length === 0
+          ? "Elija al menos un distrito y vuelva a revisar el cambio."
+          : "Elija a qué zona pasan los distritos elegidos, o «No se entrega por ahora», y vuelva a revisar el cambio.";
   }
   const provinces = [...new Set(cantons.map((c) => c.province))];
 
@@ -111,10 +121,11 @@ async function Districts({
       {canton ? (
         <section aria-labelledby="distritos" className="mt-8">
           <h2 id="distritos" className="text-xl font-bold">
-            {canton.name}, {canton.province} ({canton.districts.length} distritos)
+            {canton.name}, {canton.province} ({plural(canton.districts.length, "distrito", "distritos")})
           </h2>
           <form method="get" className="mt-3 flex flex-col gap-4">
             <input type="hidden" name="canton" value={canton.code} />
+            <input type="hidden" name="revisar" value="1" />
             <fieldset>
               <legend className="text-sm font-semibold">
                 Elija los distritos que cambian (puede elegir todos los del cantón)

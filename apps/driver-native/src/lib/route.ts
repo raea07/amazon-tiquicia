@@ -124,7 +124,10 @@ export function nextStop(route: ShownRoute, later: ReadonlySet<string> = new Set
 
 export interface RouteSummary {
   delivered: number;
+  /** The stops the route still has: those staff removed (skipped) are not counted. */
   total: number;
+  /** Stops staff took off the route. */
+  skipped: number;
   open: number;
   packages: number;
   /** In progress with every stop closed (some perhaps still to be sent), or completed. */
@@ -133,13 +136,22 @@ export interface RouteSummary {
 
 export function summarise(route: ShownRoute): RouteSummary {
   const open = route.stops.filter(isOpen).length;
+  const skipped = route.stops.filter((stop) => stop.status === "skipped").length;
   return {
     delivered: route.stops.filter((stop) => stop.status === "delivered").length,
-    total: route.stops.length,
+    total: route.stops.length - skipped,
+    skipped,
     open,
     packages: route.stops.reduce((sum, stop) => sum + stop.package_count, 0),
     finished: route.status === "completed" || (route.status === "in_progress" && open === 0),
   };
+}
+
+/** "2 de 3 entregadas · 1 omitida": stops staff removed are not part of the total. */
+export function progressLine(summary: Pick<RouteSummary, "delivered" | "total" | "skipped">): string {
+  const done = `${summary.delivered} de ${summary.total} entregadas`;
+  if (summary.skipped === 0) return done;
+  return `${done} · ${summary.skipped} ${summary.skipped === 1 ? "omitida" : "omitidas"}`;
 }
 
 /** A route on which position sharing belongs: started, with a stop still to visit. */
