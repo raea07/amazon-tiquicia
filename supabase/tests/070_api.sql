@@ -143,6 +143,49 @@ reset role;
 
 -- ── Shopper ────────────────────────────────────────────────────────────────
 
+-- On a used database the shopper's parcel on the road may have been
+-- delivered (the field journey drives the seed's R-1003 to the end): one of
+-- the shopper's packed warehouse parcels goes out on a route instead, for
+-- this transaction only. On a fresh seed nothing happens here.
+do $$
+declare
+  v_ship uuid;
+  v_route uuid;
+  v_depot uuid;
+  v_driver uuid;
+  v_driver_user uuid;
+  v_day date := private.cr_local(now())::date;
+begin
+  if exists (select 1 from public.orders o join auth.users u on u.id = o.user_id
+             where u.email = 'comprador@yuntera.example' and o.status = 'shipped') then
+    return;
+  end if;
+  select s.id into v_ship
+  from public.shipments s
+  join public.orders o on o.id = s.order_id
+  join auth.users u on u.id = o.user_id
+  join public.warehouses w on w.id = s.origin_warehouse_id and w.kind = 'platform'
+  where u.email = 'comprador@yuntera.example' and s.status = 'packed'
+    and (select count(*) from public.shipments s2 where s2.order_id = o.id and s2.status <> 'cancelled') = 1
+  order by o.order_number limit 1;
+  if v_ship is null then
+    raise exception 'used database: the shopper has no parcel on the road and none packed to send';
+  end if;
+  select id into v_depot from public.warehouses where code = 'SJO1';
+  select d.id, d.user_id into v_driver, v_driver_user from public.drivers d
+  join auth.users u on u.id = d.user_id where u.email = 'repartidor@yuntera.example';
+  perform pg_temp.login('central@yuntera.example');
+  v_route := public.ops_create_route(
+    v_day, v_depot,
+    jsonb_build_array(jsonb_build_object('shipment_id', v_ship, 'sequence', 1)), v_driver);
+  -- The driver, without pg_temp.login (which only the suite's own role runs).
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_driver_user, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+  perform public.driver_start_route(v_route);
+end
+$$;
+reset role;
+
 select pg_temp.login('comprador@yuntera.example');
 
 do $$
