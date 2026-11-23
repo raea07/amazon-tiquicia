@@ -198,15 +198,15 @@ erDiagram
   INBOUND_SHIPMENTS ||--o{ INBOUND_SHIPMENT_LINES : lists
 ```
 
-| Table                                         | Holds                                                                |
-| --------------------------------------------- | -------------------------------------------------------------------- |
-| `warehouses`                                  | A platform warehouse, or a seller's own stock location (`kind`)      |
-| `warehouse_staff`                             | Which users work at which site                                       |
-| `warehouse_locations`                         | Bins: receiving, storage, pick, packing, staging, returns, damaged   |
-| `stock_levels`                                | `on_hand` and `reserved` per warehouse, SKU and seller               |
-| `bin_stock`                                   | Quantity per bin, SKU and seller                                     |
+| Table                                         | Holds                                                                                                                                                                                                                                    |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `warehouses`                                  | A platform warehouse, or a seller's own stock location (`kind`)                                                                                                                                                                          |
+| `warehouse_staff`                             | Which users work at which site                                                                                                                                                                                                           |
+| `warehouse_locations`                         | Bins: receiving, storage, pick, packing, staging, returns, damaged                                                                                                                                                                       |
+| `stock_levels`                                | `on_hand` and `reserved` per warehouse, SKU and seller                                                                                                                                                                                   |
+| `bin_stock`                                   | Quantity per bin, SKU and seller                                                                                                                                                                                                         |
 | `stock_movements`                             | Append-only ledger of every change, with reason, reference and actor; a move between locations (084300) is one `transfer` row with both locations and no on-hand change, a count correction an `adjust` row with reference `cycle_count` |
-| `inbound_shipments`, `inbound_shipment_lines` | Stock a seller announces, and what was actually received and damaged |
+| `inbound_shipments`, `inbound_shipment_lines` | Stock a seller announces, and what was actually received and damaged                                                                                                                                                                     |
 
 Stock belongs to a seller even when it sits in a Yuntera warehouse: the key is
 always warehouse + SKU + seller.
@@ -244,16 +244,16 @@ erDiagram
   ORDERS ||--o{ ORDER_EVENTS : "timeline of"
 ```
 
-| Table                    | Holds                                                                                                                                         | Notes                                                                                     |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `orders`                 | Totals, payment method, zone, a copy of the delivery details, promise dates, delivery PIN, withdrawal deadline, warranty end, idempotency key | Delivery details are copied so editing an address later cannot change where an order went |
-| `order_items`            | What was bought: copies of title, variant, image, price, tax rate, weight and size                                                            | Copies, so the order reads the same forever                                               |
-| `payments`               | Method, provider, status, amount, SINPE Móvil reference                                                                                       | No card data is stored here or anywhere                                                   |
-| `shipments`              | Tracking code, origin, status, weight, attempt count; since 084200 `recalled_at`, `recalled_by` and `recall_reason` (5 to 300 characters) when staff stopped it before it left                                                                                          | One per origin warehouse per order                                                        |
-| `inventory_reservations` | Units held for an order line: `active`, `consumed`, `released`                                                                                |                                                                                           |
-| `pick_tasks`             | One line to pick, with a suggested bin                                                                                                        | Created when a paid order is released to the warehouse                                    |
-| `order_events`           | Timeline; rows flagged `visible_to_customer` are the tracking history                                                                         |                                                                                           |
-| `private.outbox_events`  | Messages for work outside the transaction                                                                                                     | Written, not yet consumed                                                                 |
+| Table                    | Holds                                                                                                                                                                          | Notes                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `orders`                 | Totals, payment method, zone, a copy of the delivery details, promise dates, delivery PIN, withdrawal deadline, warranty end, idempotency key                                  | Delivery details are copied so editing an address later cannot change where an order went |
+| `order_items`            | What was bought: copies of title, variant, image, price, tax rate, weight and size                                                                                             | Copies, so the order reads the same forever                                               |
+| `payments`               | Method, provider, status, amount, SINPE Móvil reference                                                                                                                        | No card data is stored here or anywhere                                                   |
+| `shipments`              | Tracking code, origin, status, weight, attempt count; since 084200 `recalled_at`, `recalled_by` and `recall_reason` (5 to 300 characters) when staff stopped it before it left | One per origin warehouse per order                                                        |
+| `inventory_reservations` | Units held for an order line: `active`, `consumed`, `released`                                                                                                                 |                                                                                           |
+| `pick_tasks`             | One line to pick, with a suggested bin                                                                                                                                         | Created when a paid order is released to the warehouse                                    |
+| `order_events`           | Timeline; rows flagged `visible_to_customer` are the tracking history                                                                                                          |                                                                                           |
+| `private.outbox_events`  | Messages for work outside the transaction                                                                                                                                      | Written, not yet consumed                                                                 |
 
 ### Order lifecycle
 

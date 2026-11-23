@@ -50,13 +50,13 @@ shopper to contact the seller: Yuntera does that.
 
 ## Cancellations
 
-| When                        | What the shopper can do                                                                  |
-| --------------------------- | ---------------------------------------------------------------------------------------- |
-| Before payment is confirmed | Cancel from the order page; nothing is charged                                           |
-| Paid, not yet dispatched    | Cancel from the order page; full refund including shipping                               |
+| When                        | What the shopper can do                                                                                                                                                                                                                                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before payment is confirmed | Cancel from the order page; nothing is charged                                                                                                                                                                                                                                                             |
+| Paid, not yet dispatched    | Cancel from the order page; full refund including shipping                                                                                                                                                                                                                                                 |
 | Paid, already packed        | The shopper cannot cancel any more; support asks operations to stop the parcel (staff order page, "Detener el paquete"). The order reads "Se está cancelando"; once the warehouse checks the parcel in, the order is cancelled and everything paid comes back, shipping included (nobody went to the door) |
-| Out for delivery            | Refuse at the door or contact support; full refund of the items; treated as a withdrawal |
-| Delivered                   | Withdrawal or warranty, below                                                            |
+| Out for delivery            | Refuse at the door or contact support; full refund of the items; treated as a withdrawal                                                                                                                                                                                                                   |
+| Delivered                   | Withdrawal or warranty, below                                                                                                                                                                                                                                                                              |
 
 ## Withdrawal (_derecho de retracto_)
 
