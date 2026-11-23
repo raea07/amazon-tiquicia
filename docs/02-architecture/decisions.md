@@ -45,6 +45,10 @@ its own entry, not something that happens by drift.
 | 36  | [Session lifetimes per app](#36-session-lifetimes-per-app)                                                                                                                                                                 | Built; not on the preview yet            |
 | 37  | [Payments through a gateway worker, confirmed only by the gateway](#37-payments-through-a-gateway-worker-confirmed-only-by-the-gateway)                                                                                    | Built against a local fake; not deployed |
 | 38  | [The platform issues its own fiscal documents from the outbox](#38-the-platform-issues-its-own-fiscal-documents-from-the-outbox)                                                                                           | Built against a local fake; not deployed |
+| 39  | [One offer order everywhere, and shared listings without review](#39-one-offer-order-everywhere-and-shared-listings-without-review)                                                                                        | Built; applied to the preview            |
+| 40  | [Catalogue staff change the catalogue through functions; hiding is not taking down](#40-catalogue-staff-change-the-catalogue-through-functions-hiding-is-not-taking-down)                                                  | Built; applied to the preview            |
+| 41  | [Operations staff change zones, districts, the calendar, settings, locations and stuck routes](#41-operations-staff-change-zones-districts-the-calendar-settings-locations-and-stuck-routes-through-functions)             | Built; applied to the preview            |
+| 42  | [Brands are deleted only when nothing names them; product pages refuse what is not on sale](#42-brands-are-deleted-only-when-nothing-names-them-product-pages-refuse-what-is-not-on-sale-at-the-helper)                    | Built; applied to the preview            |
 | 43  | [Order follow-ups: the delivery fee, stopping a packed parcel, an order that never moves back](#43-order-follow-ups-the-delivery-fee-when-nobody-went-to-the-door-stopping-a-packed-parcel-an-order-that-never-moves-back) | Built; not on the preview yet            |
 | 44  | [Warehouse stock: free units, moves the shop never sees, counts only onto shelves](#44-warehouse-stock-what-is-free-moves-that-the-shop-never-sees-counts-only-onto-shelves)                                               | Built; not on the preview yet            |
 | 45  | [Android builds of the shopper app go to the internal testers without a click](#45-android-builds-of-the-shopper-app-go-to-the-internal-testers-without-a-click)                                                           | Decided; settings not changed yet        |
@@ -1566,13 +1570,18 @@ had no screen and few checks.
   screen showed it, when it would take units open picks wait for or that
   shoppers already bought, and below zero. Every correction is booked as a
   count, never as damage, and the shop sees it with the warehouse's reason.
-- **Picks prefer shelves.** A new pick task names a switched-on location
-  whose free units fill the whole task first, then one with some free
-  units; within that, storage and picking shelves before the returns and
-  receiving areas, then the most free units; a shelf with too few free units
-  never wins over a location that can fill the task, such as units that came
-  back into the returns area; the damaged, packing and dispatch areas only when nothing else holds
-  the product.
+- **Picks prefer shelves.** A new pick task names a switched-on storage,
+  picking, returns or receiving location whose free units fill the whole
+  task first, then one with some free units; within that, storage and
+  picking shelves before the returns and receiving areas, then the most
+  free units; a shelf with too few free units never wins over another
+  switched-on storage, picking, returns or receiving location that can fill
+  the task, such as units that came back into the returns area. Among
+  locations that cannot fill it, switched-on ones come before switched-off
+  ones; the damaged, packing and dispatch areas only when no other location
+  holds the product, switched on or off. Two releases of the same product
+  wait for each other on the shop's stock row, so two payments confirmed at
+  the same moment never send both tasks to a shelf that fills only one.
 - **Lock order.** Moves and corrections take the warehouse row
   `FOR NO KEY UPDATE` first, then the locations, then (a correction) the
   shop's stock row before the shelf's row, the order receipts and returned

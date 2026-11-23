@@ -87,16 +87,24 @@ Units already picked have left the shelf and are shown apart.
 - **Which shelf a new pick task names.** First a switched-on storage,
   picking, returns or receiving location whose free units fill the whole
   task; then one with some free units; then the rest. Within each group,
-  switched-on locations first, storage and picking shelves before the
-  returns and receiving areas, then the most free units, the most units, the
-  code. A task is never sent to a shelf with too few free units while
-  another location can fill it (an order of 3 with 1 free on the shelf and 6
-  back in the returns area is picked from the returns area), and a shelf
-  whose units are all promised never wins over units that came back into the
-  returns area. One task names one location: when no location can fill it
-  alone, the pick comes up short and staff move or recount first. The damaged, packing and dispatch areas only
-  when nothing else holds the product. The candidate shelves are locked
-  `FOR KEY SHARE` first, so a move or a count at that moment is waited for.
+  storage, picking, returns and receiving locations before the damaged,
+  packing and dispatch areas, switched-on locations before switched-off
+  ones, storage and picking shelves before the returns and receiving areas,
+  then the most free units, the most units, the code. A task is never sent
+  to a shelf with too few free units while another switched-on storage,
+  picking, returns or receiving location can fill it (an order of 3 with 1
+  free on the shelf and 6 back in the returns area is picked from the
+  returns area), and a shelf whose units are all promised never wins over
+  units that came back into the returns area. One task names one location:
+  when no location can fill it alone, the pick comes up short and staff
+  move or recount first. The damaged, packing and dispatch areas only when
+  no storage, picking, returns or receiving location holds the product,
+  switched on or off. The shop's stock rows of the order are locked
+  `FOR NO KEY UPDATE` first, so two releases of the same product (two
+  payments confirmed at the same moment) run one after the other and the
+  second counts the first's task as promised; then the candidate shelves
+  are locked `FOR KEY SHARE`, so a move or a count at that moment is waited
+  for.
 - **Stock adds up**: a shop's on-hand units in a warehouse equal the units on
   all its locations plus those picked into parcels still being picked, after
   moves, counts, recalls and check-ins (`169_returned_stock.sql`, and the two
