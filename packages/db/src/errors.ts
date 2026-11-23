@@ -52,8 +52,8 @@ const CORE_MESSAGES = {
     en: "A price changed while you were shopping. Review the new total before confirming.",
   },
   zone_not_served: {
-    "es-CR": "Todavía no entregamos en esa zona. Estamos trabajando para llegar pronto.",
-    en: "We do not deliver to that area yet. We are working to get there soon.",
+    "es-CR": "Por ahora no entregamos en esa zona. Elija una dirección en una zona donde sí entregamos.",
+    en: "We do not deliver to that area for now. Choose an address in an area we deliver to.",
   },
   zone_not_found: {
     "es-CR": "No reconocemos esa zona de entrega.",

@@ -108,7 +108,8 @@ function AddressRow({ address }: { address: Address }) {
       ) : null}
       {address.zone_active ? null : (
         <Text variant="smallStrong" tint="warning">
-          Todavía no entregamos en esta zona.
+          Por ahora no entregamos aquí. La dirección queda guardada para cuando volvamos a entregar
+          en esta zona.
         </Text>
       )}
       <FormMessage error={error} />

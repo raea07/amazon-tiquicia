@@ -26,8 +26,8 @@ export default async function HomePage() {
               {brand.taglines["es-CR"].primary}
             </h1>
             <p className="mt-4 max-w-xl text-lg text-ink-muted">
-              Compre a vendedores costarricenses y reciba al día siguiente en el Gran Área
-              Metropolitana. Nosotros mismos se lo llevamos.
+              Compre a vendedores costarricenses y nosotros mismos se lo llevamos. Hoy entregamos al día
+              siguiente en el Gran Área Metropolitana.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link href="/buscar" className={buttonClass({ size: "lg" })}>
@@ -46,7 +46,7 @@ export default async function HomePage() {
             {[
               [
                 "Entrega al día siguiente",
-                "En el GAM, si pide antes de las 2 p. m. Con nuestros propios repartidores.",
+                "Hoy, en el GAM, si pide antes de las 2 p. m. Con nuestros propios repartidores.",
               ],
               ["Pague como prefiera", "SINPE Móvil, tarjeta o en efectivo cuando recibe."],
               [

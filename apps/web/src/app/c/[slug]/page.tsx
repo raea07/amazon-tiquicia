@@ -12,7 +12,7 @@ export async function generateMetadata({ params }: PageProps<"/c/[slug]">): Prom
   return category
     ? {
         title: category.name_es,
-        description: `${category.name_es} de vendedores costarricenses, con entrega propia en el GAM.`,
+        description: `${category.name_es} de vendedores costarricenses, con entrega propia.`,
         alternates: { canonical: `/c/${slug}` },
       }
     : { title: "Categoría no encontrada" };

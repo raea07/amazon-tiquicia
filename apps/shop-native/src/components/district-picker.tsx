@@ -179,7 +179,7 @@ export function DistrictPicker({
         .map((d) => ({
           value: d.postal_code,
           label: d.district,
-          note: d.zone_active ? undefined : "Aún no llegamos",
+          note: d.zone_active ? undefined : "Por ahora no entregamos",
         })),
     [districts, canton],
   );
@@ -219,7 +219,7 @@ export function DistrictPicker({
           selected
             ? selected.zone_active
               ? `Código postal ${selected.postal_code}. Sí entregamos aquí.`
-              : `Código postal ${selected.postal_code}. Todavía no entregamos en esta zona.`
+              : `Código postal ${selected.postal_code}. Por ahora no entregamos en esta zona. Elija otro distrito.`
             : undefined
         }
         testID="district"

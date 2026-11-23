@@ -23,7 +23,7 @@ import { useDistrictName } from "@/lib/catalog";
 const PROMISES: Array<[string, string]> = [
   [
     "Entrega al día siguiente",
-    "En el GAM, si pide antes de las 2 p. m. Con nuestros propios repartidores.",
+    "Hoy, en el GAM, si pide antes de las 2 p. m. Con nuestros propios repartidores.",
   ],
   ["Pague como prefiera", "SINPE Móvil, tarjeta o en efectivo cuando recibe."],
   [
@@ -80,8 +80,8 @@ export default function HomeScreen() {
       <View style={styles.hero}>
         <Text variant="display">{brand.taglines["es-CR"].primary}</Text>
         <Text tint="muted">
-          Compre a vendedores costarricenses y reciba al día siguiente en el Gran Área
-          Metropolitana. Nosotros mismos se lo llevamos.
+          Compre a vendedores costarricenses y nosotros mismos se lo llevamos. Hoy entregamos al día
+          siguiente en el Gran Área Metropolitana.
         </Text>
         <View style={styles.heroActions}>
           <LinkButton href="/buscar">Ver todos los productos</LinkButton>

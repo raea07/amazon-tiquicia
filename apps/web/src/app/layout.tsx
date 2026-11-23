@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     template: `%s · ${brand.name}`,
   },
   description:
-    "Compre a vendedores costarricenses y reciba al día siguiente en el Gran Área Metropolitana. Pague con SINPE Móvil, tarjeta o contra entrega.",
+    "Compre a vendedores costarricenses y reciba su pedido con nuestros propios repartidores; hoy entregamos en el Gran Área Metropolitana. Pague con SINPE Móvil, tarjeta o contra entrega.",
   applicationName: brand.name,
   openGraph: { siteName: brand.name, locale: "es_CR", type: "website" },
   icons: { icon: "/icon.svg" },

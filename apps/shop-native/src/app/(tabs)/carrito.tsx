@@ -166,7 +166,7 @@ export default function CartScreen() {
         {q.issue === "zone_not_served" ? (
           <Alert tone="warning">
             <Text variant="small" style={{ color: colors.palette.maiz[900] }}>
-              Todavía no entregamos en la zona elegida.
+              Por ahora no entregamos en la zona elegida.
             </Text>
             <TextLink href="/zona">Cambiar de zona</TextLink>
           </Alert>

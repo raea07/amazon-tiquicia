@@ -209,7 +209,7 @@ export default function CheckoutScreen() {
             title: `${address.label ? `${address.label} · ` : ""}${address.recipient_name}`,
             description: `${address.senas}. ${address.district}, ${address.canton}.`,
             disabled: !address.zone_active,
-            disabledReason: "Todavía no entregamos en esta zona.",
+            disabledReason: "Por ahora no entregamos aquí. Elija otra dirección.",
           }))}
         />
         <Link href="/direcciones/nueva?siguiente=/pagar" style={styles.inlineLink}>
