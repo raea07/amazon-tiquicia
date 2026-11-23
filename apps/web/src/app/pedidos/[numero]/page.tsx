@@ -1,12 +1,14 @@
 import { brand } from "@yuntera/brand";
 import {
+  awaitingNewAttemptLine,
   deliveryFeeComesBack,
-  isRescheduledOrder,
   isRescheduledShipment,
   isStoppedShipment,
   ORDER_STATUS_LABEL,
+  orderAwaitingNewAttempt,
   orderComingBack,
   toCostaRicaTime,
+  waitsForNewAttempt,
 } from "@yuntera/core";
 import {
   ApiError,
@@ -115,6 +117,9 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
   // (stopped by staff, or sent back after a route): nothing reaches the
   // shopper, so no "En camino", no date and no delivery code.
   const back = orderComingBack(order.status, order.shipments);
+  // Or every parcel left waits in the warehouse to go out again: no "En
+  // camino" and no old date either.
+  const waiting = back ? null : orderAwaitingNewAttempt(order.status, order.shipments);
   // Money held for the shopper, so a cancellation gives some back.
   const paid = ["captured", "partially_refunded"].includes(order.payment?.status ?? "");
   const refundedSoFar = payment.refunds.reduce((sum, refund) => sum + refund.amount_minor, 0);
@@ -153,7 +158,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
           <Badge tone="warning">
             {back.cancels ? "Se está cancelando" : "Un paquete regresa a la bodega"}
           </Badge>
-        ) : isRescheduledOrder(order.status, order.shipments) ? (
+        ) : waiting ? (
           <Badge tone="info">Entrega reprogramada</Badge>
         ) : (
           <OrderStatusBadge status={order.status} />
@@ -230,7 +235,13 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
               <p className="mt-2 font-semibold text-success">
                 Entregado el {formatDateTime(order.delivered_at)}
               </p>
-            ) : order.status === "cancelled" || order.status === "refunded" || back ? null : (
+            ) : order.status === "cancelled" ||
+              order.status === "refunded" ||
+              back ? null : waiting ? (
+              <p className="mt-2 font-semibold" data-testid="awaiting-new-attempt">
+                {awaitingNewAttemptLine(waiting.failedAttempt)}
+              </p>
+            ) : (
               <p className="mt-2 font-semibold text-success">
                 {order.promise_earliest === order.promise_latest
                   ? `Llega el ${formatDate(order.promise_latest)}`
@@ -256,7 +267,8 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                     </p>
                     {isStoppedShipment(shipment.status, shipment.recalled) ? (
                       <Badge tone="warning">Detenido en la bodega</Badge>
-                    ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+                    ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ||
+                      waitsForNewAttempt(shipment.status, shipment.attempt_count) ? (
                       <Badge tone="info">Entrega reprogramada</Badge>
                     ) : (
                       <ShipmentStatusBadge status={shipment.status} />
@@ -280,7 +292,8 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                       Este paquete regresa a nuestra bodega sin entregarse.
                       {paid ? " Le devolvemos lo que pagó por él cuando la bodega lo reciba." : ""}
                     </p>
-                  ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+                  ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ||
+                    waitsForNewAttempt(shipment.status, shipment.attempt_count) ? (
                     <p className="mt-2 text-sm">
                       Reprogramamos la entrega de este paquete. Le avisaremos cuando vuelva a salir
                       hacia usted; si necesita cambiar algo, escríbanos.

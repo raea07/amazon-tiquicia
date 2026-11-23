@@ -1,4 +1,4 @@
-import { isRescheduledOrder, orderComingBack } from "@yuntera/core";
+import { awaitingNewAttemptLine, orderAwaitingNewAttempt, orderComingBack } from "@yuntera/core";
 import { ProductImage } from "@yuntera/next-kit/product-image";
 import {
   Badge,
@@ -54,7 +54,8 @@ async function Orders() {
       {orders.map((order) => {
         // Not "En camino" when no parcel is on its way to the shopper.
         const back = orderComingBack(order.status, order.shipments);
-        const rescheduled = isRescheduledOrder(order.status, order.shipments);
+        // Or when every parcel left waits in the warehouse to go out again.
+        const waiting = back ? null : orderAwaitingNewAttempt(order.status, order.shipments);
         return (
           <li key={order.order_number}>
             <Link
@@ -78,7 +79,7 @@ async function Orders() {
                     <Badge tone="warning">
                       {back.cancels ? "Se está cancelando" : "Un paquete regresa a la bodega"}
                     </Badge>
-                  ) : rescheduled ? (
+                  ) : waiting ? (
                     <Badge tone="info">Entrega reprogramada</Badge>
                   ) : (
                     <OrderStatusBadge status={order.status} />
@@ -91,11 +92,13 @@ async function Orders() {
                 <p className="mt-1 text-sm text-ink-muted">
                   {back
                     ? comingBackLine(back.cancels, order.paid)
-                    : order.delivered_at
-                      ? `Entregado el ${formatDate(order.delivered_at, { day: "numeric", month: "long" })}`
-                      : order.status === "cancelled" || order.status === "refunded"
-                        ? `Pedido el ${formatDate(order.placed_at, { day: "numeric", month: "long" })}`
-                        : `Llega el ${formatDate(order.promise_latest)}`}
+                    : waiting
+                      ? awaitingNewAttemptLine(waiting.failedAttempt)
+                      : order.delivered_at
+                        ? `Entregado el ${formatDate(order.delivered_at, { day: "numeric", month: "long" })}`
+                        : order.status === "cancelled" || order.status === "refunded"
+                          ? `Pedido el ${formatDate(order.placed_at, { day: "numeric", month: "long" })}`
+                          : `Llega el ${formatDate(order.promise_latest)}`}
                 </p>
               </div>
               <p className="shrink-0 font-display text-lg font-bold tabular-nums">

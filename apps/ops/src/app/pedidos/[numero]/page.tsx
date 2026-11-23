@@ -1,10 +1,10 @@
 import {
   deliveryFeeComesBack,
-  isRescheduledOrder,
   isRescheduledShipment,
   isStoppedShipment,
   ORDER_STATUS_LABEL,
   type OrderStatus,
+  orderAwaitingNewAttempt,
   orderComingBack,
   type ShipmentStatus,
 } from "@yuntera/core";
@@ -100,7 +100,7 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
               </Badge>
             ) : orderComingBack(order.status, order.shipments) ? (
               <Badge tone="warning">Un paquete regresa a la bodega; el resto se entregó</Badge>
-            ) : isRescheduledOrder(order.status, order.shipments) ? (
+            ) : orderAwaitingNewAttempt(order.status, order.shipments) ? (
               <Badge tone="warning">Ningún paquete en camino: espera otra ruta</Badge>
             ) : (
               <OrderStatusBadge status={order.status} />

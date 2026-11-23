@@ -33,7 +33,7 @@ export default function LocationsPage() {
             autoComplete="off"
             autoCapitalize="characters"
             required
-            placeholder="Escanee la etiqueta o escriba, p. ej. A-01-02-B"
+            placeholder="Escanee la etiqueta o escriba su código, por ejemplo A-01-02-B"
             className="min-h-11 w-full rounded-md border border-border-strong bg-surface px-3"
           />
         </div>

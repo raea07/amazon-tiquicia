@@ -1,4 +1,4 @@
-import { isRescheduledOrder, orderComingBack } from "@yuntera/core";
+import { awaitingNewAttemptLine, orderAwaitingNewAttempt, orderComingBack } from "@yuntera/core";
 import { useSession } from "@yuntera/expo-kit/auth";
 import { useApiQuery } from "@yuntera/expo-kit/data";
 import { signInPath } from "@yuntera/expo-kit/paths";
@@ -56,6 +56,8 @@ export default function OrdersScreen() {
         renderItem={({ item: order }) => {
           // Not "En camino" when no parcel is on its way to the shopper.
           const back = orderComingBack(order.status, order.shipments);
+          // Or when every parcel left waits in the warehouse to go out again.
+          const waiting = back ? null : orderAwaitingNewAttempt(order.status, order.shipments);
           return (
             <Link
               href={{ pathname: "/pedidos/[numero]", params: { numero: order.order_number } }}
@@ -70,7 +72,7 @@ export default function OrdersScreen() {
                       <Badge tone="warning">
                         {back.cancels ? "Se está cancelando" : "Un paquete regresa a la bodega"}
                       </Badge>
-                    ) : isRescheduledOrder(order.status, order.shipments) ? (
+                    ) : waiting ? (
                       <Badge tone="info">Entrega reprogramada</Badge>
                     ) : (
                       <OrderStatusBadge status={order.status} />
@@ -83,11 +85,13 @@ export default function OrdersScreen() {
                   <Text variant="small" tint="muted">
                     {back
                       ? comingBackLine(back.cancels, order.paid)
-                      : order.delivered_at
-                        ? `Entregado el ${formatDate(order.delivered_at, { day: "numeric", month: "long" })}`
-                        : order.status === "cancelled" || order.status === "refunded"
-                          ? `Pedido el ${formatDate(order.placed_at, { day: "numeric", month: "long" })}`
-                          : `Llega el ${formatDate(order.promise_latest)}`}
+                      : waiting
+                        ? awaitingNewAttemptLine(waiting.failedAttempt)
+                        : order.delivered_at
+                          ? `Entregado el ${formatDate(order.delivered_at, { day: "numeric", month: "long" })}`
+                          : order.status === "cancelled" || order.status === "refunded"
+                            ? `Pedido el ${formatDate(order.placed_at, { day: "numeric", month: "long" })}`
+                            : `Llega el ${formatDate(order.promise_latest)}`}
                   </Text>
                 </View>
                 <Text variant="figure" style={styles.total}>

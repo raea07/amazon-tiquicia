@@ -238,6 +238,59 @@ export function orderComingBack(
 }
 
 /**
+ * A parcel that went out, came back to the warehouse after a failed attempt,
+ * was planned on a new route and then taken off it again by staff
+ * (ops_remove_route_stop moves it back to `packed`), or that waits planned
+ * on a new route that has not started: it sits in the warehouse and will go
+ * out again. Its promised date no longer holds.
+ */
+export function waitsForNewAttempt(status: ShipmentStatus, attemptCount: number): boolean {
+  return (status === "packed" || status === "ready_for_dispatch") && attemptCount > 0;
+}
+
+/**
+ * How an order "on its way" (shipped or partly shipped) stands when no
+ * parcel of it is out for delivery any more and those still to deliver wait
+ * in the warehouse to go out again (or come back to it): rescheduled after
+ * staff took it off a route (isRescheduledShipment), failed at the door and
+ * not yet sent again, or planned again after a failed attempt and taken off
+ * that route too (waitsForNewAttempt). Nothing is on its way to the
+ * shopper, so the order never reads "En camino" or the old date.
+ * `failedAttempt`: some such parcel just failed at the door and waits for
+ * the next working day. Null when a parcel is out for delivery, every parcel
+ * still to deliver is coming back (orderComingBack says so), one is still
+ * being prepared for the first time, or the order has ended. It covers every
+ * order isRescheduledOrder covers.
+ */
+export function orderAwaitingNewAttempt(
+  status: OrderStatus,
+  shipments: ReadonlyArray<{ status: ShipmentStatus; attempt_count: number }>,
+): { failedAttempt: boolean } | null {
+  if (status !== "shipped" && status !== "partially_shipped") return null;
+  const open = shipments.filter(
+    (s) => s.status !== "delivered" && s.status !== "cancelled" && s.status !== "returned",
+  );
+  if (open.length === 0) return null;
+  if (open.some((s) => s.status === "out_for_delivery")) return null;
+  if (open.every((s) => s.status === "returning")) return null;
+  const waiting = (s: { status: ShipmentStatus; attempt_count: number }) =>
+    s.status === "returning" ||
+    s.status === "delivery_failed" ||
+    waitsForNewAttempt(s.status, s.attempt_count);
+  if (!open.every(waiting)) return null;
+  return {
+    failedAttempt: open.some((s) => s.status === "delivery_failed" && s.attempt_count > 0),
+  };
+}
+
+/** The shopper's line for such an order, instead of "Llega el …". */
+export function awaitingNewAttemptLine(failedAttempt: boolean): string {
+  return failedAttempt
+    ? "No pudimos entregarlo. Lo intentaremos de nuevo el próximo día hábil."
+    : "Reprogramamos la entrega. Le avisaremos cuando vuelva a salir hacia usted.";
+}
+
+/**
  * Whether an order that ends cancelled because its parcels came back gets
  * its delivery fee back too: nothing of it was delivered and no parcel ever
  * had an attempt at the shopper's door. A stop staff removed is not an

@@ -17,6 +17,7 @@ import {
 } from "@yuntera/expo-kit/ui";
 import type React from "react";
 import { useState } from "react";
+import { logoActions } from "@/lib/logo-actions";
 import { shopKey, useShop } from "@/lib/shops";
 import {
   askedFor,
@@ -33,6 +34,7 @@ import {
   SHOP_FACE_ELSEWHERE,
   type StatusText,
 } from "@/lib/team";
+import { RemoveLogoForm, WithdrawLogoButton } from "./logo-actions";
 import { ShopDescriptionForm } from "./shop-description";
 
 const longDay = (value: string) =>
@@ -338,12 +340,15 @@ function StatusAlert({
 /**
  * The shop's description and logo, as the seller centre's "Tienda" page shows
  * where they stand. The description is written, removed and withdrawn here;
+ * a logo waiting for review is withdrawn and the current one removed here;
  * a logo is uploaded in the seller centre (the app does not use the phone's
  * photos yet), and the card says so.
  */
 export function ShopFaceCard() {
   const shop = useShop();
   const [sent, setSent] = useState<string | null>(null);
+  // Held here: the logo's buttons go away with what they acted on.
+  const [logoDone, setLogoDone] = useState<string | null>(null);
   const front = useApiQuery(shopKey(shop.id, "front"), (api) => api.sellerShopFront(shop.id), {
     personal: true,
   });
@@ -352,6 +357,7 @@ export function ShopFaceCard() {
   const data = front.data;
   const description = descriptionStatus(data.description_request, longDay);
   const logo = logoStatus(data);
+  const canDo = logoActions(data);
   return (
     <Card testID="shop-face">
       <Text variant="heading">Descripción y logotipo</Text>
@@ -401,6 +407,9 @@ export function ShopFaceCard() {
       <Text variant="small" tint="muted" testID="shop-face-logo">
         {logo.current}
       </Text>
+      <FormMessage ok={logoDone} testID="logo-result" />
+      {canDo.withdraw ? <WithdrawLogoButton onDone={setLogoDone} /> : null}
+      {canDo.remove ? <RemoveLogoForm onDone={setLogoDone} /> : null}
       <Text variant="small" testID="shop-face-elsewhere">
         {data.can_edit ? SHOP_FACE_ELSEWHERE : SHOP_FACE_ADMIN_ONLY}
       </Text>

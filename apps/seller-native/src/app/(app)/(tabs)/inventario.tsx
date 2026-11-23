@@ -8,6 +8,7 @@ import {
   EmptyState,
   ErrorState,
   formatDate,
+  formatDateTime,
   InfoRow,
   LinkButton,
   LoadingState,
@@ -19,6 +20,15 @@ import { View } from "react-native";
 import { StockForm } from "@/components/stock-form";
 import { INBOUND_STATUS } from "@/lib/labels";
 import { shopKey, useShop } from "@/lib/shops";
+import {
+  HISTORY_EMPTY,
+  HISTORY_HEADING,
+  HISTORY_INTRO,
+  HISTORY_KIND,
+  HISTORY_LIMIT,
+  historyChange,
+  historyReason,
+} from "@/lib/stock-history";
 
 /**
  * Inventario: how many units of each product there are and where. Stock at
@@ -42,10 +52,16 @@ export default function InventoryScreen() {
     personal: true,
   });
 
-  const queries = [listings, stock, locations, inbounds];
+  const history = useApiQuery(
+    shopKey(shop.id, "stock-history"),
+    (api) => api.sellerStockHistory(shop.id, HISTORY_LIMIT),
+    { personal: true },
+  );
+
+  const queries = [listings, stock, locations, inbounds, history];
   const failed = queries.find((query) => query.isError);
   if (failed) return <ErrorState error={failed.error} onRetry={() => void failed.refetch()} />;
-  if (!listings.data || !stock.data || !locations.data || !inbounds.data) {
+  if (!listings.data || !stock.data || !locations.data || !inbounds.data || !history.data) {
     return <LoadingState label="Cargando su inventario…" />;
   }
 
@@ -198,6 +214,34 @@ export default function InventoryScreen() {
           )}
         </Stack>
       ) : null}
+
+      <View style={{ gap: space[3] }} testID="stock-history">
+        <Text variant="heading">{HISTORY_HEADING}</Text>
+        <Text variant="small" tint="muted">
+          {HISTORY_INTRO}
+        </Text>
+        {history.data.length === 0 ? (
+          <Text tint="muted">{HISTORY_EMPTY}</Text>
+        ) : (
+          history.data.map((entry) => (
+            <Card key={entry.id} testID={`history-${entry.id}`}>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+                <Text variant="bodyStrong" style={{ flex: 1 }}>
+                  {entry.title}
+                  {entry.variant_name ? ` · ${entry.variant_name}` : ""}
+                </Text>
+                <Text variant="bodyStrong">{historyChange(entry.change)}</Text>
+              </View>
+              <Text variant="small" tint="muted">
+                {HISTORY_KIND[entry.kind]} · {entry.warehouse_name} · {formatDateTime(entry.at)}
+              </Text>
+              {historyReason(entry.note) ? (
+                <Text variant="small">{historyReason(entry.note)}</Text>
+              ) : null}
+            </Card>
+          ))
+        )}
+      </View>
     </Screen>
   );
 }

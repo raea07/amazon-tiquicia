@@ -1,11 +1,13 @@
 import {
+  awaitingNewAttemptLine,
   deliveryFeeComesBack,
-  isRescheduledOrder,
   isRescheduledShipment,
   isStoppedShipment,
   ORDER_STATUS_LABEL,
+  orderAwaitingNewAttempt,
   orderComingBack,
   toCostaRicaTime,
+  waitsForNewAttempt,
 } from "@yuntera/core";
 import {
   ApiError,
@@ -188,6 +190,9 @@ export default function OrderScreen() {
   // (stopped by staff, or sent back after a route): nothing reaches the
   // shopper, so no "En camino", no date and no delivery code.
   const back = orderComingBack(o.status, o.shipments);
+  // Or every parcel left waits in the warehouse to go out again: no "En
+  // camino" and no old date either.
+  const waiting = back ? null : orderAwaitingNewAttempt(o.status, o.shipments);
   // Money held for the shopper, so a cancellation gives some back.
   const paid = ["captured", "partially_refunded"].includes(o.payment?.status ?? "");
   const refunds = payment.data?.refunds ?? [];
@@ -220,7 +225,7 @@ export default function OrderScreen() {
           <Badge tone="warning">
             {back.cancels ? "Se está cancelando" : "Un paquete regresa a la bodega"}
           </Badge>
-        ) : isRescheduledOrder(o.status, o.shipments) ? (
+        ) : waiting ? (
           <Badge tone="info">Entrega reprogramada</Badge>
         ) : (
           <OrderStatusBadge status={o.status} />
@@ -299,7 +304,11 @@ export default function OrderScreen() {
           <Text variant="bodyStrong" tint="success">
             Entregado el {formatDateTime(o.delivered_at)}
           </Text>
-        ) : o.status === "cancelled" || o.status === "refunded" || back ? null : (
+        ) : o.status === "cancelled" || o.status === "refunded" || back ? null : waiting ? (
+          <Text variant="bodyStrong" testID="awaiting-new-attempt">
+            {awaitingNewAttemptLine(waiting.failedAttempt)}
+          </Text>
+        ) : (
           <Text variant="bodyStrong" tint="success">
             {o.promise_earliest === o.promise_latest
               ? `Llega el ${formatDate(o.promise_latest)}`
@@ -319,7 +328,8 @@ export default function OrderScreen() {
               </Text>
               {isStoppedShipment(shipment.status, shipment.recalled) ? (
                 <Badge tone="warning">Detenido en la bodega</Badge>
-              ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+              ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ||
+                waitsForNewAttempt(shipment.status, shipment.attempt_count) ? (
                 <Badge tone="info">Entrega reprogramada</Badge>
               ) : (
                 <ShipmentStatusBadge status={shipment.status} />
@@ -348,7 +358,8 @@ export default function OrderScreen() {
                   paid ? " Le devolvemos lo que pagó por él cuando la bodega lo reciba." : ""
                 }`}
               </Text>
-            ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+            ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ||
+              waitsForNewAttempt(shipment.status, shipment.attempt_count) ? (
               <Text variant="small">
                 Reprogramamos la entrega de este paquete. Le avisaremos cuando vuelva a salir hacia
                 usted; si necesita cambiar algo, escríbanos.

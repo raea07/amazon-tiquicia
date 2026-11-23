@@ -466,6 +466,67 @@ async function packedOrder(method = "sinpe_movil") {
     "the reason typed in a stale stop form is lost",
   );
 
+  // ── 4e. Failed at the door, planned again, then taken off the new route ──
+  // The parcel is packed again with one attempt and the order stays
+  // "shipped" (an order never moves back): nothing is on its way, so the
+  // list and the page must not say "En camino" or the old date.
+  const again = await ownRoute(1);
+  const againStop = again.stops[0];
+  const driverApi = await as("repartidor@yuntera.example");
+  await driverApi("driver_fail_stop", { p_stop_id: againStop.stopId, p_reason: "nobody_home" });
+  await driverApi.dispose();
+  const failedDetail = await shopperApi("get_order", { p_order_number: againStop.orderNumber });
+  const dispatch = await central("ops_dispatch_board");
+  const drivers = await central("ops_drivers");
+  await central("ops_create_route", {
+    p_service_date: dispatch.date,
+    p_depot_warehouse_id: dispatch.depots[0].id,
+    p_stops: [{ shipment_id: failedDetail.shipments[0].id, sequence: 1, eta_minute: 15 }],
+    p_driver_id: drivers.find((d) => d.full_name.startsWith("Carlos")).id,
+    p_planned_km: 5,
+    p_planned_minutes: 30,
+  });
+  const openRoutes = await central("ops_open_routes");
+  const newStop = openRoutes
+    .flatMap((r) => r.stops.map((s) => ({ ...s, route: r })))
+    .find((s) => s.tracking_code === againStop.tracking && s.status === "pending");
+  await central("ops_remove_route_stop", {
+    p_stop_id: newStop.stop_id,
+    p_reason: "Se cambia de repartidor",
+  });
+  const againOrder = await shopperApi("get_order", { p_order_number: againStop.orderNumber });
+  log("re-planned and removed:", againOrder.status, JSON.stringify(againOrder.shipments[0].status));
+  check(
+    againOrder.status === "shipped" &&
+      againOrder.shipments[0].status === "packed" &&
+      againOrder.shipments[0].attempt_count === 1,
+    `fixture: the order is not shipped with a packed parcel after one attempt: ${againOrder.status} ${againOrder.shipments[0].status}`,
+  );
+  await shop.goto(`${WEB}/pedidos`, { waitUntil: "load" });
+  await shop.locator(`a[href="/pedidos/${againStop.orderNumber}"]`).waitFor();
+  const againRow = await text(shop.locator(`a[href="/pedidos/${againStop.orderNumber}"]`));
+  log("list row planned again and removed:", againRow);
+  check(
+    againRow.includes("Entrega reprogramada") &&
+      againRow.includes("Le avisaremos cuando vuelva a salir hacia usted") &&
+      !againRow.includes("En camino") &&
+      !againRow.includes("Llega el"),
+    `the list says the wrong thing for a parcel waiting to go out again: ${againRow}`,
+  );
+  await shop.goto(`${WEB}/pedidos/${againStop.orderNumber}`, { waitUntil: "networkidle" });
+  const againAll = await text(shop.locator("main"));
+  const againPage = againAll.slice(0, againAll.indexOf("Historial"));
+  log("page planned again and removed:", againPage.slice(0, 300));
+  check(
+    againPage.includes("Entrega reprogramada") &&
+      againPage.includes("Reprogramamos la entrega") &&
+      !againPage.includes("En camino") &&
+      !againPage.includes("Llega el") &&
+      !againPage.includes("Llega entre"),
+    `the order page says the wrong thing for a parcel waiting to go out again: ${againPage.slice(0, 300)}`,
+  );
+  await shop.screenshot({ path: SHOTS + "/of6e-shopper-planned-again.png", fullPage: true });
+
   // ── 5. A district moved away and back follows its canton ──────────────────
   await central("ops_move_districts", { p_postal_codes: ["10111"], p_zone_id: "gam-extended" });
   await staff.goto(`${OPS}/operacion/distritos?canton=101`, { waitUntil: "networkidle" });
