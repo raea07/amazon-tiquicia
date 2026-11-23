@@ -24,6 +24,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import { ProductThumb } from "@/components/parts";
 import { StockForm } from "@/components/stock-form";
+import { WithdrawOfferCard } from "@/components/withdraw-offer";
 import { FULFILLMENT_LABEL, PRODUCT_STATUS } from "@/lib/labels";
 import { withPriceFloor } from "@/lib/refusal";
 import { checkOffer, type OfferInput, plainColones } from "@/lib/rules";
@@ -273,6 +274,14 @@ export default function OfferScreen() {
           </>
         )}
       </Card>
+
+      {edit && !edit.editable && listing.product_status !== "archived" ? (
+        <WithdrawOfferCard
+          offerId={listing.offer_id}
+          priceMinor={listing.price_minor}
+          label={`${listing.title}${listing.variant_name ? `, ${listing.variant_name}` : ""}`}
+        />
+      ) : null}
 
       {edit?.editable ? (
         <Card>

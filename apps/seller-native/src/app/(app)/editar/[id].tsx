@@ -24,6 +24,7 @@ import {
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
+import { UnpublishCard, VariantsCard } from "@/components/listing-actions";
 import { CategoryField, PackageFields, useCategoryOptions } from "@/components/listing-fields";
 import { ListingChanges } from "@/components/parts";
 import { PRODUCT_STATUS } from "@/lib/labels";
@@ -34,6 +35,7 @@ import {
   type ListingEditInput,
   listingEditOutcome,
 } from "@/lib/rules";
+import { sharedBy, unpublished } from "@/lib/seller-listings";
 import { shopKey, useShop } from "@/lib/shops";
 
 const formOf = (content: ListingContent): ListingEditForm => ({
@@ -334,11 +336,10 @@ export default function EditListingScreen() {
   const [variant, setVariant] = useState(oneParam(params.v) ?? null);
   // Each outcome is shown next to what the seller pressed: the form may be
   // drawn afresh after a change (a new proposal resets it), so it lives here.
-  const [message, setMessage] = useState<{ at: "top" | "form" | "archive"; text: string } | null>(
-    null,
-  );
-  const say = (at: "top" | "form" | "archive") => (text: string) => setMessage({ at, text });
-  const shown = (at: "top" | "form" | "archive") => (message?.at === at ? message.text : null);
+  type Place = "top" | "form" | "archive" | "draft";
+  const [message, setMessage] = useState<{ at: Place; text: string } | null>(null);
+  const say = (at: Place) => (text: string) => setMessage({ at, text });
+  const shown = (at: Place) => (message?.at === at ? message.text : null);
   const listing = useApiQuery(
     shopKey(shop.id, "listing", productId, variant ?? ""),
     (api) => api.sellerListing(productId, variant),
@@ -375,6 +376,11 @@ export default function EditListingScreen() {
       </Stack>
 
       <FormMessage ok={shown("top")} testID="withdraw-result" />
+      {data.status === "draft" && shown("draft") ? (
+        <Alert tone="success" title="Volvió a borrador" testID="unpublish-result">
+          {shown("draft")}
+        </Alert>
+      ) : null}
       <ListingState listing={data} onWithdrawn={say("top")} />
 
       {archived ? null : (
@@ -397,6 +403,8 @@ export default function EditListingScreen() {
             </Stack>
           ) : null}
 
+          {data.variants.length > 1 ? <VariantsCard listing={data} /> : null}
+
           <EditForm
             // A new proposal, or a decision on one, starts the form afresh.
             key={`${data.status}:${data.pending?.request_id ?? "none"}:${data.content.sku_id}`}
@@ -406,13 +414,19 @@ export default function EditListingScreen() {
           />
           <FormMessage ok={shown("form")} testID="edit-result" />
 
+          {data.status === "active" ? (
+            <UnpublishCard
+              listing={data}
+              onDone={(withdrawn) => setMessage({ at: "draft", text: unpublished(withdrawn) })}
+            />
+          ) : null}
+
           <Card>
             <Text variant="heading">Archivar el producto</Text>
             <FormMessage ok={shown("archive")} testID="archive-result" />
             {data.shared ? (
               <Text variant="small" tint="muted">
-                Otro vendedor también vende desde esta publicación, así que no se puede archivar. Si
-                usted ya no lo vende, ponga su oferta en pausa desde la pantalla del producto.
+                {`${sharedBy(data.other_shops)}, así que no se puede archivar. Si usted ya no lo vende, ponga su oferta en pausa desde la pantalla del producto: la publicación sigue para la otra tienda.`}
               </Text>
             ) : (
               <>

@@ -18,6 +18,7 @@ import { Link, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-
 import { useCallback } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { ProductThumb } from "@/components/parts";
+import { PausedOffers } from "@/components/paused-offers";
 import { createdFlash, flashFor } from "@/lib/flash";
 import { FULFILLMENT_LABEL, PRODUCT_STATUS } from "@/lib/labels";
 import { shopKey, useShop } from "@/lib/shops";
@@ -73,6 +74,9 @@ export default function ListingsScreen() {
       <LinkButton href="/publicar" block testID="new-listing">
         Publicar un producto
       </LinkButton>
+      <LinkButton href="/ofrecer" variant="secondary" block testID="offer-existing">
+        Vender uno que ya existe
+      </LinkButton>
 
       {created === "revision" ? (
         <Alert tone="success" title="Producto enviado a revisión" testID="created-message">
@@ -85,6 +89,8 @@ export default function ListingsScreen() {
           Nadie más lo ve todavía.
         </Alert>
       ) : null}
+
+      <PausedOffers />
 
       {listings.data.length === 0 ? (
         <EmptyState

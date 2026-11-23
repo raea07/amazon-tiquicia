@@ -50,6 +50,7 @@ export default function AppLayout() {
       <Stack.Screen name="oferta/[id]" options={titled("Precio y existencias")} />
       <Stack.Screen name="editar/[id]" options={titled("Editar producto")} />
       <Stack.Screen name="publicar" options={titled("Publicar un producto")} />
+      <Stack.Screen name="ofrecer" options={titled("Vender uno que ya existe")} />
       <Stack.Screen name="lugar" options={titled("Lugar de recolección")} />
       <Stack.Screen name="envio" options={titled("Enviar a la bodega")} />
       <Stack.Screen name="cuenta" options={titled("Cuenta")} />
