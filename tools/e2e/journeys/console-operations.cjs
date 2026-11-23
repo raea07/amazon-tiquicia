@@ -3,8 +3,8 @@
 // and back; add a holiday on the day a product page promises, watch the date move,
 // and remove it; open a zone closure and end it early; an administrator changes an
 // operational setting and sees a protected one read-only; a warehouse location is
-// created and offered in the warehouse's receiving form; and a stuck route has its
-// stops removed and is closed, the driver seeing them skipped and the shopper reading
+// created and offered in the warehouse's receiving form; and a stuck route (the
+// journey's own, built through the API) has its stops removed and is closed, the driver seeing them skipped and the shopper reading
 // that the delivery was rescheduled. Along the way: an amount typed the Costa Rican way
 // ("1.500,00") is read as ₡1 500 and one with céntimos is refused with the ticked boxes
 // kept; a second member of staff's edit refuses the first one's stale form and the page
@@ -16,6 +16,7 @@
 // browser logs an error, or when any response is a 5xx.
 
 const { chromium, request } = require("playwright");
+const { ownRoute } = require("../lib/own-route.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
 const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
@@ -484,12 +485,17 @@ const crDay = (days = 0) =>
   );
 
   // ── 8. A route that cannot finish: its stops removed, then closed ──────────
+  // The journey's own started route, so the seed's R-1003 stays as the
+  // database suites expect it (tools/e2e/lib/own-route.cjs).
+  const own = await ownRoute(2);
+  log("own route:", JSON.stringify(own));
+  check(own.stops.length === 2, `the journey's route has ${own.stops.length} stops, not 2`);
   await go("/operacion/rutas");
-  const route = staff.locator('li[data-route="R-1003"]');
+  const route = staff.locator(`li[data-route="${own.code}"]`);
   log("route:", (await text(route)).slice(0, 220));
   const closeEarly = route.locator("summary", { hasText: "Cerrar la ruta" });
   check((await closeEarly.count()) === 0, "a route with stops out offers to be closed");
-  for (const tracking of ["YT500011", "YT500012"]) {
+  for (const tracking of own.stops.map((s) => s.tracking)) {
     const stop = route.locator(`li[data-stop="${tracking}"]`);
     await stop.locator("summary", { hasText: "Quitar de la ruta" }).click();
     await stop.locator('textarea[name="reason"]').fill("El camión se varó y no puede seguir.");
@@ -505,10 +511,13 @@ const crDay = (days = 0) =>
     .fill("Camión varado; paradas devueltas a despacho.");
   const closed = await submit(route, "Cerrar la ruta");
   log("route closed:", closed);
-  check(closed.includes("Ruta R-1003 cerrada"), `route not closed: ${closed}`);
+  check(closed.includes(`Ruta ${own.code} cerrada`), `route not closed: ${closed}`);
   await go("/despacho");
   const ready = await text(staff.locator('section[aria-labelledby="listos"]'));
-  check(ready.includes("YT500011"), "the parcel taken off the route is not waiting for a route");
+  check(
+    ready.includes(own.stops[0].tracking),
+    "the parcel taken off the route is not waiting for a route",
+  );
   // The driver sees the stops skipped, and why.
   const driver = await (
     await phone({
@@ -528,8 +537,16 @@ const crDay = (days = 0) =>
   await driver.screenshot({ path: SHOTS + "/co10-driver-skipped.png", fullPage: true });
   // The shopper whose parcel was taken off the route while the driver had it reads
   // that the delivery was rescheduled, not that nobody was home.
-  await shopper.goto(WEB + "/pedidos/YT-100011", { waitUntil: "networkidle" });
-  const parcel = await text(shopper.locator("main"));
+  const theirs = own.stops.find((s) => s.shopper);
+  check(Boolean(theirs), "no parcel of the journey's route belongs to a demo shopper");
+  let owner = shopper;
+  if (theirs && theirs.shopper !== "comprador@yuntera.example") {
+    owner = await (await browser.newContext({ locale: "es-CR" })).newPage();
+    watch(owner);
+    await signIn(owner, WEB, theirs.shopper);
+  }
+  await owner.goto(`${WEB}/pedidos/${theirs?.orderNumber}`, { waitUntil: "networkidle" });
+  const parcel = await text(owner.locator("main"));
   log("shopper's order:", parcel.slice(0, 300));
   check(
     parcel.includes("Entrega reprogramada") &&
@@ -538,7 +555,7 @@ const crDay = (days = 0) =>
       !parcel.includes("Entrega fallida"),
     "the shopper is told the delivery failed after staff removed the stop",
   );
-  await shopper.screenshot({ path: SHOTS + "/co10b-shopper-rescheduled.png", fullPage: true });
+  await owner.screenshot({ path: SHOTS + "/co10b-shopper-rescheduled.png", fullPage: true });
 
   // ── 9. Every page of the section at phone width ─────────────────────────────
   const mobile = await (await phone({ storageState: await staffContext.storageState() })).newPage();

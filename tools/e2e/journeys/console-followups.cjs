@@ -4,7 +4,8 @@
 //   - A holiday on a day with promised orders reads in correct Spanish
 //     ("1 pedido", never "1 pedidos").
 //   - On Distritos, "Revisar el cambio" with nothing chosen says what to choose.
-//   - Central takes a stop off route R-1003 while the driver has the parcel:
+//   - Central takes a stop off a started route (the journey's own, so the
+//     seed's R-1003 stays as it is) while the driver has the parcel:
 //     the driver's header leaves it out of the total and says one was removed;
 //     the staff order page reads "Quitado de una ruta", not "Entrega fallida".
 //   - Catálogo → Marcas: a new brand is deleted from its row; a brand with
@@ -17,6 +18,7 @@
 // browser logs an error, or when any response is a 5xx.
 
 const { chromium, request } = require("playwright");
+const { ownRoute } = require("../lib/own-route.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
 const FIELD = process.env.FIELD_URL || "http://127.0.0.1:3003";
@@ -167,11 +169,11 @@ async function rpcAs(email, calls) {
   await staff.screenshot({ path: SHOTS + "/cf2-districts-nothing-chosen.png", fullPage: true });
 
   // ── 3. A stop taken off a route ───────────────────────────────────────────
-  const [routes] = await rpcAs("central@yuntera.example", [["ops_open_routes", {}]]);
-  const stop = routes
-    .find((r) => r.code === "R-1003")
-    ?.stops.find((s) => s.tracking_code === "YT500011");
-  check(Boolean(stop), "route R-1003 has no stop for YT500011");
+  const route = await ownRoute(2);
+  log("own route:", JSON.stringify(route));
+  check(route.stops.length === 2, `the journey's route has ${route.stops.length} stops, not 2`);
+  const stop = { stop_id: route.stops[0].stopId };
+  const order = route.stops[0].orderNumber;
   const [removed] = await rpcAs("central@yuntera.example", [
     [
       "ops_remove_route_stop",
@@ -190,7 +192,9 @@ async function rpcAs(email, calls) {
   watch(driver);
   await signIn(driver, FIELD, "repartidor@yuntera.example");
   await driver.goto(FIELD + "/ruta", { waitUntil: "networkidle" });
-  const header = await text(driver.locator('section[aria-labelledby="ruta-R-1003"] > div').first());
+  const header = await text(
+    driver.locator(`section[aria-labelledby="ruta-${route.code}"] > div`).first(),
+  );
   log("driver header:", header.slice(0, 160));
   check(
     header.includes("0 de 1 entregadas · 1 omitida"),
@@ -199,7 +203,7 @@ async function rpcAs(email, calls) {
   check((await overflow(driver)) <= 0, "the driver's route scrolls sideways on a phone");
   await driver.screenshot({ path: SHOTS + "/cf3-driver-header.png", fullPage: true });
 
-  await go("/pedidos/YT-100011");
+  await go(`/pedidos/${order}`);
   const parcels = await text(staff.locator('section[aria-labelledby="paquetes"]'));
   log("staff order parcels:", parcels.slice(0, 200));
   check(
@@ -288,7 +292,7 @@ async function rpcAs(email, calls) {
   for (const [path, shot] of [
     ["/catalogo/marcas", "cf6-mobile-brands"],
     ["/operacion/distritos?canton=115&revisar=1", "cf7-mobile-districts"],
-    ["/pedidos/YT-100011", "cf8-mobile-order"],
+    [`/pedidos/${order}`, "cf8-mobile-order"],
   ]) {
     await mobile.goto(OPS + path, { waitUntil: "networkidle" });
     await mobile.evaluate(() => {
