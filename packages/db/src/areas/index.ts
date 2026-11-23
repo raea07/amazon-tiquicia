@@ -15,6 +15,7 @@
 import * as account from "./account";
 import { catalogueApi, catalogueErrors } from "./catalogue";
 import { catalogueFollowupsApi, catalogueFollowupsErrors } from "./catalogue-followups";
+import { countIntoLocationApi, countIntoLocationErrors } from "./count-into-location";
 import { followupsApi, followupsErrors } from "./followups";
 import { integrityApi, integrityErrors } from "./integrity";
 import { invoicingApi, invoicingErrors } from "./invoicing";
@@ -34,7 +35,7 @@ import type { Caller, Messages } from "./types";
 import { warehouseStockApi, warehouseStockErrors } from "./warehouse-stock";
 import { webFollowupsApi, webFollowupsErrors } from "./web-followups";
 
-// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts, operations, order-followups, warehouse-stock and lock-conflicts areas name their exports uniquely, so
+// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts, operations, order-followups, warehouse-stock, count-into-location and lock-conflicts areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
 // would clash with each other, so their schemas and types are re-exported by
 // name.
@@ -63,6 +64,7 @@ export {
 } from "./account";
 export * from "./catalogue";
 export * from "./catalogue-followups";
+export * from "./count-into-location";
 export * from "./followups";
 export * from "./integrity";
 export * from "./invoicing";
@@ -126,6 +128,7 @@ export const areaErrors = {
   ...operationsErrors,
   ...orderFollowupsErrors,
   ...warehouseStockErrors,
+  ...countIntoLocationErrors,
   ...lockConflictErrors,
 } as const satisfies Messages;
 
@@ -151,6 +154,7 @@ export const areaApi = (caller: Caller) => ({
   ...operationsApi(caller),
   // Replaces the core wmsFindSku and wmsAdjustStock (see warehouse-stock.ts).
   ...warehouseStockApi(caller),
+  ...countIntoLocationApi(caller),
   // Some of its methods replace core ones (see followups.ts).
   ...followupsApi(caller),
   // After the core, integrity and operations methods it replaces with wider
