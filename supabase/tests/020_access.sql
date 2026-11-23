@@ -459,6 +459,14 @@ reset role;
 
 -- A day after a route is finished, its stops (names, phones, directions) close to the driver.
 update public.routes set completed_at = now() - interval '25 hours' where status = 'completed';
+-- On a used database the seed's route R-1003 may have been driven to the end
+-- (or another of the driver's routes finished it): the driver's route still
+-- under way is then R-1003 again, as in the seed, for this transaction only.
+update public.routes set status = 'in_progress', completed_at = null
+where code = 'R-1003'
+  and not exists (select 1 from public.routes r join public.drivers d on d.id = r.driver_id
+                  join auth.users u on u.id = d.user_id
+                  where u.email = 'repartidor@yuntera.example' and r.status = 'in_progress');
 select pg_temp.login('repartidor@yuntera.example');
 do $$
 declare

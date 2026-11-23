@@ -455,12 +455,28 @@ $$;
 do $$
 declare
   v_stop uuid;
+  v_order uuid;
   r jsonb;
   i integer;
 begin
   select rs.id into v_stop from public.route_stops rs
   join public.routes rt on rt.id = rs.route_id
   where rt.status = 'in_progress' and rs.status = 'pending' limit 1;
+  if v_stop is null then
+    -- On a used database the seed's other open stop may have been delivered
+    -- or taken off its route: one more parcel out on a route, for this
+    -- transaction only.
+    if not exists (select 1 from auth.users where email = 'entregas050@yuntera.example') then
+      perform pg_temp.shopper('entregas050@yuntera.example', 'María Fernández Solís');
+    end if;
+    v_order := pg_temp.place('entregas050@yuntera.example',
+      pg_temp.items('olla-arrocera-volcan-1-8l:1'), 'cash_on_delivery', 'test-050-pins');
+    perform pg_temp.pack(pg_temp.shipment(v_order, 'platform'));
+    perform pg_temp.route(pg_temp.shipment(v_order, 'platform'));
+    select rs.id into v_stop from public.route_stops rs
+    join public.routes rt on rt.id = rs.route_id
+    where rt.status = 'in_progress' and rs.status = 'pending' limit 1;
+  end if;
   perform set_config('request.jwt.claims', json_build_object(
     'sub', (select id from auth.users where email = 'repartidor@yuntera.example'))::text, true);
   for i in 1 .. 4 loop
