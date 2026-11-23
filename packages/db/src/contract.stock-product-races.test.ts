@@ -38,6 +38,9 @@ vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
 
 const db = contractDatabase();
 const SHOPPER = "carrera-producto@yuntera.example";
+// A second shopper: one account's checkouts wait for each other (the limits on
+// what one account may hold), so (ii) needs two.
+const SHOPPER2 = "carrera-producto-2@yuntera.example";
 const DRIVER = "carrera-conductor@yuntera.example";
 const STAFF = "central@yuntera.example";
 const WORKER = "bodega@yuntera.example";
@@ -67,6 +70,7 @@ describe.skipIf(!db.enabled)(
       await db.connect();
       for (const [email, name] of [
         [SHOPPER, "Prueba Carrera Producto"],
+        [SHOPPER2, "Prueba Carrera Producto Dos"],
         [DRIVER, "Prueba Carrera Conductor"],
       ] as const) {
         await db.query(
@@ -80,9 +84,9 @@ describe.skipIf(!db.enabled)(
         `insert into public.addresses (user_id, label, recipient_name, phone, postal_code, senas, lat, lng, is_default)
          select s.id, 'Casa', 'Prueba Carrera Producto', a.phone, a.postal_code, a.senas, a.lat, a.lng, true
            from auth.users s, public.addresses a join auth.users u on u.id = a.user_id
-          where s.email = $1 and u.email = 'comprador@yuntera.example' and a.is_default and a.deleted_at is null
+          where s.email = any($1) and u.email = 'comprador@yuntera.example' and a.is_default and a.deleted_at is null
             and not exists (select 1 from public.addresses x where x.user_id = s.id and x.is_default and x.deleted_at is null)`,
-        [SHOPPER],
+        [[SHOPPER, SHOPPER2]],
       );
       await db.query(
         `insert into public.drivers (user_id, status, full_name, phone, id_number, vehicle_type, plate, capacity_kg,
@@ -95,7 +99,7 @@ describe.skipIf(!db.enabled)(
       );
       const { rows } = await db.query<{ email: string; id: string }>(
         "select email, id from auth.users where email = any($1)",
-        [[SHOPPER, DRIVER, STAFF, WORKER]],
+        [[SHOPPER, SHOPPER2, DRIVER, STAFF, WORKER]],
       );
       for (const row of rows) users.set(row.email, row.id);
 
@@ -173,19 +177,19 @@ describe.skipIf(!db.enabled)(
     async function cleanUp() {
       const { rows } = await db.query<{ id: string }>(
         `select o.id from public.orders o join auth.users u on u.id = o.user_id
-          where u.email = $1 and o.status in ('pending_payment', 'payment_review', 'confirmed', 'processing')
+          where u.email = any($1) and o.status in ('pending_payment', 'payment_review', 'confirmed', 'processing')
             and not exists (select 1 from public.shipments s where s.order_id = o.id
                             and s.status not in ('pending', 'picking', 'cancelled'))`,
-        [SHOPPER],
+        [[SHOPPER, SHOPPER2]],
       );
       for (const row of rows) {
         await db.query("select private.cancel_order_internal($1, 'Prueba de contrato')", [row.id]);
       }
       await db.query(
         `delete from public.orders o using auth.users u
-          where u.id = o.user_id and u.email = $1 and o.status = 'cancelled'
+          where u.id = o.user_id and u.email = any($1) and o.status = 'cancelled'
             and not exists (select 1 from public.shipments s where s.order_id = o.id and s.status = 'returned')`,
-        [SHOPPER],
+        [[SHOPPER, SHOPPER2]],
       );
     }
 
@@ -259,18 +263,22 @@ describe.skipIf(!db.enabled)(
       }
     }
 
-    const address = async () =>
+    const address = async (email = SHOPPER) =>
       (
         await db.query<{ id: string }>(
           "select a.id from public.addresses a join auth.users u on u.id = a.user_id where u.email = $1 and a.is_default and a.deleted_at is null",
-          [SHOPPER],
+          [email],
         )
       ).rows[0]?.id ?? "";
     let keys = 0;
     const placeSql = "select public.place_order($1::jsonb, $2, $3::public.payment_method, $4)";
-    const placeArgs = async (lines: [string, number][], method: "card" | "cash_on_delivery") => [
+    const placeArgs = async (
+      lines: [string, number][],
+      method: "card" | "cash_on_delivery",
+      email = SHOPPER,
+    ) => [
       JSON.stringify(lines.map(([offer, quantity]) => ({ offer_id: offer, quantity }))),
-      await address(),
+      await address(email),
       method,
       `carrera-producto-${Date.now()}-${keys++}`,
     ];
@@ -373,7 +381,7 @@ describe.skipIf(!db.enabled)(
         await layout({ z1: 1, z2: 1 });
         const holder = await session(null);
         const one = await session(SHOPPER);
-        const two = await session(SHOPPER);
+        const two = await session(SHOPPER2);
         try {
           // A third session holds the product row as a refresh does; both
           // checkouts reach their refresh while it is held.
@@ -389,7 +397,7 @@ describe.skipIf(!db.enabled)(
           expect(await waitsForLock(one.pid), `round ${round}: first waited`).toBe(true);
           const second = outcome(
             two.client
-              .query(placeSql, await placeArgs([[OFFER.z2, 1]], "card"))
+              .query(placeSql, await placeArgs([[OFFER.z2, 1]], "card", SHOPPER2))
               .then(() => two.client.query("commit")),
           );
           expect(await waitsForLock(two.pid), `round ${round}: second waited`).toBe(true);
