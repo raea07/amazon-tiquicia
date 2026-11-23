@@ -137,7 +137,8 @@ then seller):
    warehouses or the seller's own — that are active, in warehouse-id order. A
    concurrent order for the same stock waits here and then reads what is really
    left, so the last unit cannot be promised twice, and because every checkout
-   locks in the same order two of them cannot deadlock.
+   locks stock rows in the same order two of them cannot deadlock on stock
+   rows. They can still deadlock one level up, on product rows (see below).
 2. If one location has **all** the units the line needs, take them from there
    (the fullest such location; ties by warehouse id). The line travels whole.
 3. Otherwise gather the line from the fullest locations first until it is
@@ -162,7 +163,22 @@ What the shop shows (`offers.available_quantity`, the sum over the same
 locations) is therefore exactly what can be ordered.
 
 Lines are always processed in the same order so that two concurrent checkouts
-lock stock rows in the same sequence and cannot deadlock.
+lock stock rows in the same sequence and cannot deadlock on them. Packing,
+cancellations, the release to picking and the unpaid-order sweep take stock
+rows in the same order (product, shop, warehouse).
+
+Product rows are not ordered yet. Every stock write also updates the offer's
+`available_quantity` and, through a trigger, the product's summary row, and
+one product row is shared by every variant of the product and every shop that
+sells it. Two transactions that write two such products in opposite order
+can deadlock on the product rows: two checkouts, or the sweep against a
+checkout, packing or a staff cancellation. A race harness measured 1 to 42
+deadlocks in 100 rounds (two checkouts: 40 in 100) on a fixture built to
+cross them. Nothing is half-written: the loser rolls back and the shopper,
+packer or staff member is told to try again; the sweep runs again five
+minutes later. The fix (taking the product rows in product-id order before
+the first stock write, or skipping the summary update when nothing changes)
+is recorded as open in `STATUS.md`.
 
 ### Why this simple rule is enough for the pilot
 

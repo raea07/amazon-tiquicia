@@ -1312,10 +1312,31 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     cancellations sort by product, shop and warehouse, as checkout and the
     release do (in 084300). `contract.stock-lock-order-races` makes each
     race happen with a third session and fails without the fix. The same
-    change ends the older, rarer deadlock of the sweep against a checkout.
-    Checkout, packing, cancellations and receipts of a product now wait for
-    an open payment confirmation of it (milliseconds); reads and picks do
-    not.
+    change ends the deadlocks on stock rows; a race harness then measured 0
+    in 100 rounds for every stock-row pair it tried. Checkout, packing,
+    cancellations and receipts of a product now wait for an open payment
+    confirmation of it (milliseconds); reads and picks do not.
+  - Still open, older than wave 7: a deadlock one level up, on product rows.
+    Every stock write also updates the offer and the product's summary row
+    (triggers), and one product row is shared by every variant and every
+    shop that sells it; nothing takes product rows in one order. With two
+    such products written in opposite order, the harness measured: the
+    sweep against a checkout 1 to 4 in 100 rounds, against packing 42 in
+    100, against a staff cancellation 38 in 100; two checkouts 40 in 100
+    (the same before the last lock change: 0 to 42). Nothing is
+    half-written: the loser rolls back, the shopper, packer or staff member
+    reads "nothing was saved, try again", and the sweep runs again in 5
+    minutes. The fix needs `place_order`, defined in an applied migration,
+    so it waits for the next wave: take the product rows in product-id
+    order before the first stock write, or skip the summary update when
+    nothing changes.
+  - The sweep holds the stock rows of every order it cancels for its whole
+    run. A checkout, confirmation, pack or cancellation of one of those
+    products waits that long: measured about 2 ms per expired order (0.4 s
+    for 200, 2 s for 1000). Estimated, not measured: the 8 s timeout of the
+    hosted API would be reached near 4000 expired orders in one run, far
+    above pilot volume. If volumes grow, cap each run (for example 200
+    orders).
   - The release relies on READ COMMITTED, the level every caller runs in. A
     caller in REPEATABLE READ would wait and still name the same location
     for both tasks; nothing sets that level today.
@@ -1346,6 +1367,18 @@ Found while building or reviewing; none is fixed by pretending otherwise.
   - No journey opens a single closed day (no function can create one; it is
     covered by the database and contract tests), and the console's district
     move form was not driven in a browser.
+  - The seller app's Inicio no longer says "Hoy no tiene nada pendiente"
+    when the listing changes or the bank-account request could not be read:
+    it says what it knows, that the rest could not be checked, and offers
+    «Revisar de nuevo»; pulling down now reads all three again. A native
+    journey step makes the listing-changes read fail (web export only).
+  - Shopper app, order page: when the payment cannot be read, the refund
+    notice states no amount and does not say the amount could not be read;
+    pulling down reads only the order again, so the amount comes back only
+    when the app returns to the front. Nothing false is said. Open.
+  - Shopper app, listing: a background refresh that fails replaces results
+    already on screen with the error and «Intentar de nuevo». Nothing false
+    is said. Open.
   - Nothing of wave 7 ran on a phone: the native screens were checked through
     the web export only (no camera, no real pull-to-refresh, no
     foreground event from the phone).

@@ -125,8 +125,17 @@
 --     from several shops, in one transaction takes them by product, shop
 --     and warehouse: checkout, a release, a pack, a cancellation, and the
 --     unpaid-order sweep, which takes the rows of all the orders it cancels
---     first (section 2b), so none of them deadlocks with another. The races are proved with
---     two real sessions in packages/db/src/contract.warehouse-stock-races.test.ts.
+--     first (section 2b), so none of them deadlocks with another on stock
+--     rows. One level up they still can: every stock write also updates the
+--     offer and the product row (triggers refresh_offer_availability and
+--     refresh_product_summary), a product row is shared by every variant
+--     and every shop that sells it, and nothing takes product rows in one
+--     order. Two such products written in opposite order (two checkouts, or
+--     the sweep against a checkout, a pack or a cancellation) can deadlock
+--     on "products"; the loser rolls back whole and is told to try again
+--     (STATUS.md, under what is known). The races are proved with two real
+--     sessions in packages/db/src/contract.warehouse-stock-races.test.ts and
+--     contract.stock-lock-order-races.test.ts.
 --   * WHO. A worker of the warehouse (private.works_at) or operations staff.
 --     Reads carry the shop's trade name, never a shopper's data. The staff
 --     list of moves and corrections (ops_stock_changes) is for operations
