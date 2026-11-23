@@ -176,6 +176,7 @@ function RouteBlock({ route }: { route: ShownRoute }) {
             <View role="listitem" key={stop.stop_id}>
               <StopRow
                 stop={stop}
+                routeStatus={route.status}
                 next={route.status === "in_progress" && stop.stop_id === next?.stop_id}
                 actionable={isOpen(stop)}
                 later={later.has(stop.stop_id)}

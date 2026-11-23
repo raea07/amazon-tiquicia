@@ -2,7 +2,7 @@ import { colors, radius, space, tone } from "@yuntera/expo-kit/theme";
 import { Badge, formatPrice, Text } from "@yuntera/expo-kit/ui";
 import { Link } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
-import { parcels, placeOf, type ShownStop, STOP_LABEL } from "@/lib/route";
+import { parcels, placeOf, type ShownStop, STOP_LABEL, skippedStopNote } from "@/lib/route";
 
 /** The stop's state in words (never colour alone), with "Por enviar" when the phone has not sent it. */
 export function StopBadges({ stop }: { stop: ShownStop }) {
@@ -26,7 +26,7 @@ export function CashChip({ amountMinor }: { amountMinor: number }) {
   );
 }
 
-function StopBody({ stop }: { stop: ShownStop }) {
+function StopBody({ stop, routeStatus }: { stop: ShownStop; routeStatus: string }) {
   return (
     <>
       <View style={styles.head}>
@@ -46,7 +46,7 @@ function StopBody({ stop }: { stop: ShownStop }) {
       </Text>
       {stop.status === "skipped" ? (
         <Text variant="smallStrong" testID="stop-row-skipped">
-          Central quitó esta parada de la ruta. Si lleva el paquete, devuélvalo a la bodega.
+          {skippedStopNote(routeStatus)}
         </Text>
       ) : null}
       <View style={styles.chips}>
@@ -65,12 +65,15 @@ function StopBody({ stop }: { stop: ShownStop }) {
  */
 export function StopRow({
   stop,
+  routeStatus,
   next,
   actionable,
   later,
   testID,
 }: {
   stop: ShownStop;
+  /** The route's status: what to do with a removed stop's parcel depends on it. */
+  routeStatus: string;
   next: boolean;
   actionable: boolean;
   later: boolean;
@@ -79,7 +82,7 @@ export function StopRow({
   if (!actionable) {
     return (
       <View style={[styles.row, styles.closed]} testID={testID}>
-        <StopBody stop={stop} />
+        <StopBody stop={stop} routeStatus={routeStatus} />
       </View>
     );
   }
@@ -100,7 +103,7 @@ export function StopRow({
             PARA DESPUÉS
           </Text>
         ) : null}
-        <StopBody stop={stop} />
+        <StopBody stop={stop} routeStatus={routeStatus} />
       </Pressable>
     </Link>
   );

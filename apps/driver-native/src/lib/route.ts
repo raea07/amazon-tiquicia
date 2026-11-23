@@ -129,6 +129,7 @@ export interface RouteSummary {
   /** Stops staff took off the route. */
   skipped: number;
   open: number;
+  /** The parcels to collect at the depot: those of stops staff removed are not among them. */
   packages: number;
   /** In progress with every stop closed (some perhaps still to be sent), or completed. */
   finished: boolean;
@@ -142,7 +143,9 @@ export function summarise(route: ShownRoute): RouteSummary {
     total: route.stops.length - skipped,
     skipped,
     open,
-    packages: route.stops.reduce((sum, stop) => sum + stop.package_count, 0),
+    packages: route.stops
+      .filter((stop) => stop.status !== "skipped")
+      .reduce((sum, stop) => sum + stop.package_count, 0),
     finished: route.status === "completed" || (route.status === "in_progress" && open === 0),
   };
 }
@@ -154,6 +157,17 @@ export function progressLine(
   const done = `${summary.delivered} de ${summary.total} entregadas`;
   if (summary.skipped === 0) return done;
   return `${done} · ${summary.skipped} ${summary.skipped === 1 ? "omitida" : "omitidas"}`;
+}
+
+/**
+ * What a driver does with the parcel of a stop staff removed: before the
+ * route starts it is not collected (it went back to dispatch); after, it is
+ * brought back. The same words as the drivers' web app.
+ */
+export function skippedStopNote(routeStatus: string): string {
+  return routeStatus === "assigned"
+    ? "Central quitó esta parada de la ruta. No recoja este paquete: volvió a Despacho."
+    : "Central quitó esta parada de la ruta. Si lleva el paquete, devuélvalo a la bodega.";
 }
 
 /** A route on which position sharing belongs: started, with a stop still to visit. */

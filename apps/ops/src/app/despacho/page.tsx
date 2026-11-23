@@ -310,7 +310,11 @@ async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParam
             {board.routes.map((route) => {
               const status = ROUTE_STATUS[route.status];
               const done = route.stops.filter((stop) => stop.status === "delivered").length;
-              const cash = route.stops.reduce((sum, stop) => sum + stop.cod_amount_minor, 0);
+              // Stops staff removed are not part of the route any more: the
+              // same count as the driver's (total without them, then how many).
+              const kept = route.stops.filter((stop) => stop.status !== "skipped");
+              const skipped = route.stops.length - kept.length;
+              const cash = kept.reduce((sum, stop) => sum + stop.cod_amount_minor, 0);
               return (
                 <li key={route.route_id} className="rounded-lg border border-border bg-surface p-5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -318,8 +322,8 @@ async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParam
                     <Badge tone={status?.tone ?? "neutral"}>{status?.label ?? route.status}</Badge>
                   </div>
                   <p className="mt-1 text-sm text-ink-muted">
-                    {route.driver_name ?? "Sin repartidor"} · {done} de {route.stops.length}{" "}
-                    entregadas
+                    {route.driver_name ?? "Sin repartidor"} · {done} de {kept.length} entregadas
+                    {skipped > 0 ? ` · ${skipped} ${skipped === 1 ? "omitida" : "omitidas"}` : ""}
                     {route.planned_km ? ` · ${route.planned_km} km` : ""}
                     {route.planned_minutes
                       ? ` · ${Math.round(route.planned_minutes / 6) / 10} h`

@@ -10,6 +10,7 @@ import {
   nextStop,
   progressLine,
   refusalMessage,
+  skippedStopNote,
   summarise,
   withQueued,
 } from "./route";
@@ -180,6 +181,24 @@ describe("the day as the driver sees it", () => {
       "0 de 1 entregadas · 2 omitidas",
     );
     assert.equal(progressLine({ delivered: 2, total: 3, skipped: 0 }), "2 de 3 entregadas");
+  });
+
+  it("does not send the driver to collect the parcel of a stop staff removed", () => {
+    const [route] = withQueued(
+      day(
+        [
+          stop(1, { package_count: 2 }),
+          stop(2, { status: "skipped", package_count: 3 }),
+          stop(3, { package_count: 1 }),
+        ],
+        "assigned",
+      ),
+      [],
+    );
+    assert.ok(route);
+    assert.equal(summarise(route).packages, 3);
+    assert.match(skippedStopNote("assigned"), /No recoja este paquete: volvió a Despacho\./);
+    assert.match(skippedStopNote("in_progress"), /Si lleva el paquete, devuélvalo a la bodega\./);
   });
 
   it("needs position sharing only while a started route has a stop to visit", () => {

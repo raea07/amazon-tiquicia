@@ -65,7 +65,10 @@ async function Day({ searchParams }: Pick<PageProps<"/ruta">, "searchParams">) {
         const delivered = route.stops.filter((stop) => stop.status === "delivered").length;
         // Stops staff took off the route are not part of the total.
         const skipped = route.stops.filter((stop) => stop.status === "skipped").length;
-        const packages = route.stops.reduce((sum, stop) => sum + stop.package_count, 0);
+        // The parcels of removed stops went back to dispatch: not collected.
+        const packages = route.stops
+          .filter((stop) => stop.status !== "skipped")
+          .reduce((sum, stop) => sum + stop.package_count, 0);
         return (
           <section
             key={route.route_id}
@@ -86,9 +89,12 @@ async function Day({ searchParams }: Pick<PageProps<"/ruta">, "searchParams">) {
               {route.status === "assigned" ? (
                 <>
                   <p className="mt-2 text-sm">
-                    Recoja <span className="font-semibold">{packages} bultos</span> en{" "}
-                    {route.depot.name}. Revise que cada código de paquete esté en su lista antes de
-                    salir.
+                    Recoja{" "}
+                    <span className="font-semibold">
+                      {packages} {packages === 1 ? "bulto" : "bultos"}
+                    </span>{" "}
+                    en {route.depot.name}. Revise que cada código de paquete esté en su lista antes
+                    de salir.
                   </p>
                   <p className="text-sm text-ink-muted">{route.depot.address}</p>
                   <div className="mt-4">
@@ -151,8 +157,9 @@ async function Day({ searchParams }: Pick<PageProps<"/ruta">, "searchParams">) {
                     <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{stop.senas}</p>
                     {stop.status === "skipped" ? (
                       <p className="mt-1 text-sm font-medium">
-                        Central quitó esta parada de la ruta. Si lleva el paquete, devuélvalo a la
-                        bodega.
+                        {route.status === "assigned"
+                          ? "Central quitó esta parada de la ruta. No recoja este paquete: volvió a Despacho."
+                          : "Central quitó esta parada de la ruta. Si lleva el paquete, devuélvalo a la bodega."}
                       </p>
                     ) : null}
                     <p className="mt-2 flex flex-wrap gap-2 text-xs">
