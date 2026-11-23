@@ -36,7 +36,8 @@
  * the parcel is put back to "returning" and its order back to "processing"
  * with the lifecycle triggers off (`session_replication_role = replica`),
  * because a parcel is checked in only once in real life. Everything is
- * undone at the end, so the suite passes on a used database and twice in a
+ * undone at the end (the outbox events the rounds wrote included), so the
+ * suite passes on a used database and twice in a
  * row.
  */
 
@@ -72,6 +73,7 @@ describe.skipIf(!db.enabled)(
     let returnedShipment = "";
     let returnedOrder = "";
     let pickingShipment = "";
+    let eventsFrom = 0;
 
     beforeAll(async () => {
       pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 6 });
@@ -109,6 +111,12 @@ describe.skipIf(!db.enabled)(
       expect(found.rows[0], "the seed has no notebook in the warehouse").toBeDefined();
       if (found.rows[0]) product = found.rows[0];
       unexplainedBefore = await unexplained();
+      eventsFrom =
+        (
+          await db.query<{ n: number }>(
+            "select coalesce(max(id), 0)::integer as n from private.outbox_events",
+          )
+        ).rows[0]?.n ?? 0;
 
       // The two locations: a returns area (only the database creates those) and a shelf.
       await db.query(
@@ -147,6 +155,14 @@ describe.skipIf(!db.enabled)(
           .catch(() => undefined);
       }
       await cleanUp();
+      // The hundreds of check-ins and cancellations above wrote as many outbox
+      // events (order.cancelled, shipment.returned) for this file's own
+      // shopper; nothing consumes them during the contract tests, and a worker
+      // run by a later suite would otherwise plan messages for them first.
+      // (A plain delete: their consumers' jobs go with them by cascade.)
+      if (eventsFrom > 0) {
+        await db.query("delete from private.outbox_events where id > $1", [eventsFrom]);
+      }
       await pool?.end();
       await db.close();
     });

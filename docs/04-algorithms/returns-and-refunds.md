@@ -114,10 +114,19 @@ order. Closing frees its units, so a later claim on the same unit is possible.
 The payment and warehouse fees are not returned to the seller on a return:
 those services were provided.
 
-Shipping is not refunded when a parcel comes back undelivered: the delivery
-was attempted. **This is a policy choice for the owner to confirm**, like the
-one in [fees and settlement](fees-and-settlement.md) about which fees a
-refund returns to the seller.
+**The delivery fee when a parcel comes back** is the owner's decision of
+23 November 2026 ([decision 43](../02-architecture/decisions.md#43-order-follow-ups-the-delivery-fee-when-nobody-went-to-the-door-stopping-a-packed-parcel-an-order-that-never-moves-back),
+migration 084200). When an order is cancelled because its parcels came back
+and nobody ever went to the shopper's door, the delivery fee is refunded too;
+when an attempt was made at the door, or another parcel of the order was
+delivered, it stays charged (the service was given). An attempt is a stop the
+driver marked failed, or an attempt counted on a parcel; a stop staff removed
+is not one, nor is a parcel staff stopped before it left. The fee goes back
+as its own refund in the register (reason `delivery_fee`, one per order,
+never more than what is left of the payment), by the same way back as every
+other refund, and the delivery fee's fiscal document is credited in full. A
+cash order never paid refunds nothing. Orders closed before 084200 keep the
+old rule (the fee stayed charged).
 
 When every parcel of an order came back and none was delivered, the order is
 cancelled (the only way an order on its way can become cancelled).
@@ -268,8 +277,17 @@ payout is refused when refunds since it was scheduled leave less than it.
   refunded from finance's review list; those refunds are not in the register,
   so they get no "refund completed" message and no credit note (no document
   was made for that money).
-- Staff cannot cancel once a parcel is packed. Stopping such an order means
-  letting the parcel come back through the check-in.
+- Staff cannot cancel once a parcel is packed. Since 084200 they **stop**
+  it instead (`ops_recall_shipment`, from the staff order page): a packed
+  parcel of a Yuntera warehouse, or one on a route that has not started,
+  goes back to the shelves with a reason; its stop is removed; the order
+  keeps its status and reads "Se está cancelando" to the shopper; the
+  warehouse then checks it in as a returned parcel, which refunds the goods
+  (and the delivery fee, by the rule above) and cancels the order. A
+  seller's own packed parcel cannot be stopped this way, nor one on a route
+  that has started.
+- When the delivery fee comes back, the shopper gets two refund messages of
+  each kind (goods, then fee), each with its own amount.
 - A cash order whose first delivered parcel collects the whole amount, and
   whose other parcel then comes back, owes the shopper a refund by transfer
   for that parcel (the customer-service guide says how a cash refund is paid).

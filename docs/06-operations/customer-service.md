@@ -54,6 +54,7 @@ shopper to contact the seller: Yuntera does that.
 | --------------------------- | ---------------------------------------------------------------------------------------- |
 | Before payment is confirmed | Cancel from the order page; nothing is charged                                           |
 | Paid, not yet dispatched    | Cancel from the order page; full refund including shipping                               |
+| Paid, already packed        | The shopper cannot cancel any more; support asks operations to stop the parcel (staff order page, "Detener el paquete"). The order reads "Se está cancelando"; once the warehouse checks the parcel in, the order is cancelled and everything paid comes back, shipping included (nobody went to the door) |
 | Out for delivery            | Refuse at the door or contact support; full refund of the items; treated as a withdrawal |
 | Delivered                   | Withdrawal or warranty, below                                                            |
 
@@ -104,6 +105,20 @@ shopper to contact the seller: Yuntera does that.
 - **Second failed attempt.** The order is cancelled. The items are refunded in
   full; the default assumed is that the shipping charge is not refunded when
   both failures were the shopper's, subject to the lawyer's confirmation.
+- **The delivery fee when a parcel comes back** (the owner's decision of
+  23 November 2026): refunded too when nobody went to the shopper's door
+  (staff took the parcel off a route, or stopped it before it left);
+  kept after a real attempt at the door or when another parcel was
+  delivered. The shopper then gets two refund messages, one for the goods and
+  one for the fee.
+- **What the shopper reads meanwhile.** While every parcel left is coming
+  back, the order says "Se está cancelando" with no date and no delivery
+  code; while every parcel left waits in the warehouse to go out again, it
+  says "Entrega reprogramada". Neither says "En camino". The shopper app
+  build already in testing (`3f251c3`) still shows the old words.
+- **A closed day that should not be.** A single closed day made before
+  closure periods existed can be opened again under **Operación → Cierres**
+  ("Abrir ese día"); the zone delivers that day again.
 
 ## Refund mechanics
 

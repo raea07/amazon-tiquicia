@@ -189,18 +189,25 @@ tools/dev/stack.sh native 1
 tools/dev/stack.sh native-e2e 1
 ```
 
-That runs the nine native journeys, each on a freshly seeded database: `shop`
-(including a return), `seller` (including a price below the fees and a
-seller's second step), `driver` (including a stretch without signal, a
-suspension that hands the route back to Central and a delivery code locked
-and released), `driver-removed-stop` (a stop Central took off the route), `warehouse` (picking by scan, refused receipts and a returned
-parcel) and `staff` (the right and wrong kinds of account for the three staff
-apps), and the account screens of each app: `accounts-shop` (deletion, the
-password reset and change, the second step inside the app, reporting a
-listing, message channels), `accounts-seller` (the team, invitations, a shop
-change, the shop's notification settings, its description and logo) and
-`accounts-field` (deletion and the password in the drivers' and warehouse
-apps). Name some to run only those,
+That runs the fourteen native journeys, each on a freshly seeded database:
+`shop` (including a return), `shop-parity` (the cart's other shop's offer,
+the brand filter, the category menu kept fresh, a product taken down),
+`seller` (including a price below the fees and a seller's second step),
+`seller-listings` (offers on another shop's product, variants, back to
+draft, paused offers, the shop's description), `seller-stock-logo` (the
+stock history, withdrawing and removing a logo), `driver` (including a
+stretch without signal, a suspension that hands the route back to Central
+and a delivery code locked and released), `driver-removed-stop` (stops
+Central took off the route before and after the start), `warehouse` (picking
+by scan, refused receipts and a returned parcel), `warehouse-stock` (a
+location, a move, a count correction), `order-followups` (a stopped parcel
+in the shopper and warehouse apps) and `staff` (the right and wrong kinds of
+account for the three staff apps), and the account screens of each app:
+`accounts-shop` (deletion, the password reset and change, the second step
+inside the app, reporting a listing, message channels), `accounts-seller`
+(the team, invitations, a shop change, the shop's notification settings,
+its description and logo) and `accounts-field` (deletion and the password
+in the drivers' and warehouse apps). Name some to run only those,
 for example `tools/dev/stack.sh native-e2e 1 driver`. The seller, driver and
 warehouse apps also have unit tests for their own rules
 (`pnpm --filter @yuntera/driver-native test`), which `pnpm test` runs too.

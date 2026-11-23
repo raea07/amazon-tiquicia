@@ -102,10 +102,10 @@ decisions.
 
 | Pilot                                                                       | Launch                                       | Later                                        |
 | --------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
-| Receive an inbound shipment against its notice; record shortages and damage | Label printing for units without barcodes    | Cycle counting                               |
+| Receive an inbound shipment against its notice; record shortages and damage | Label printing for units without barcodes    | Cycle counting (a count correction per location exists since 084300) |
 | Put away to a location by scanning or typing its code                       | Batch picking across orders                  | Slotting suggestions                         |
 | Pick list per order, in bin order, confirmed line by line                   | Packing station flow with weight check       | Wave planning                                |
-| Pack and mark ready for dispatch                                            | Returns receiving and grading                | Multiple warehouses and transfers            |
+| Pack and mark ready for dispatch                                            | Returns receiving and grading                | Multiple warehouses and transfers (moves between locations of one warehouse exist since 084300) |
 | Hand over to a driver against a route                                       | Stock adjustments with a reason and approval | Handheld scanners; native app with fast scan |
 
 **Connectivity.** Warehouses have Wi-Fi, so the web app's need for a connection

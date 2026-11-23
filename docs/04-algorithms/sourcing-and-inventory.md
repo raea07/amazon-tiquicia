@@ -51,13 +51,50 @@ storefront shows at most "10" of it: exact stock is the seller's business.
 | Order placed                                | `place_order`                                  | —                | + quantity | `active`        | —                                                                              |
 | Order cancelled, or unpaid after 30 minutes | `cancel_order`, `private.expire_unpaid_orders` | —                | − quantity | `released`      | —                                                                              |
 | Parcel packed                               | `wms_pack_shipment`, `seller_mark_packed`      | − quantity       | − quantity | `consumed`      | `ship`                                                                         |
-| Cycle-count correction                      | `wms_adjust_stock`                             | ± delta          | —          | —               | `adjust`, with a mandatory note                                                |
+| Cycle-count correction                      | `wms_adjust_stock`                             | ± delta          | —          | —               | `adjust` with reference `cycle_count`, with a reason of at least 5 letters     |
+| Units moved between locations               | `wms_move_stock`                               | —                | —          | —               | one `transfer` row with both locations                                         |
+| A returned parcel checked in, resellable    | `wms_receive_returned_shipment`                | + quantity       | —          | —               | `return`, onto the warehouse's returns location                                |
 
 Stock leaves `on_hand` at **packing**, not at picking and not at delivery. From
 that moment the units are in a sealed parcel and no longer on a shelf.
 
 `seller_set_stock` refuses to set a count below what is already reserved
 (`below_reserved`): a seller cannot un-promise units an order is waiting for.
+
+### Locations: what is free, moves and counts (084300)
+
+Stock is reserved per warehouse, not per shelf. A shelf's units are tied to an
+order only once a pick task names it, so **free** units of a location are the
+units on it minus what its open pick tasks still wait for (never below 0).
+Units already picked have left the shelf and are shown apart.
+
+- **Moves** (`wms_move_stock`, from the location screens of the field app and
+  the warehouse app) take free units of one shop's product to a switched-on
+  storage or picking shelf of the same warehouse. The source may be any
+  location, also one switched off (that is how it is emptied). The shop's
+  stock and what shoppers can buy do not change, and the shop is not told.
+- **Count corrections** (`wms_adjust_stock`, "Corregir cantidad") send the
+  quantity the screen showed; a shelf that changed since is counted again
+  (`count_changed`). Units are counted in only on storage, picking, returns
+  and receiving locations; out anywhere. A correction never takes units open
+  picks wait for, nor leaves fewer than shoppers bought; it tells the worker
+  to ask operations instead. The shop sees each correction with the reason in
+  its stock history.
+- **Returned parcels** put their resellable units on the warehouse's first
+  switched-on returns location (by code); while none is switched on, the
+  check-in is refused (`returns_location_missing`), so no unit ends on no
+  location.
+- **Which shelf a new pick task names.** A switched-on location that really
+  has free units first; among those, storage and picking shelves before the
+  returns and receiving areas; then the most free units, the most units, the
+  code. A shelf whose units are all promised never wins over units that came
+  back into the returns area. The damaged, packing and dispatch areas only
+  when nothing else holds the product. The candidate shelves are locked
+  `FOR KEY SHARE` first, so a move or a count at that moment is waited for.
+- **Stock adds up**: a shop's on-hand units in a warehouse equal the units on
+  all its locations plus those picked into parcels still being picked, after
+  moves, counts, recalls and check-ins (`169_returned_stock.sql`, and the two
+  race test files in `packages/db`).
 
 ## Sourcing as built
 
@@ -167,9 +204,16 @@ gathered from both, one parcel each.
   warehouses serving different zones that would need to become per-location.
 - **Reservations are released by a scheduled job.** Without a scheduler, unpaid
   orders hold stock until the expiry function is called by hand.
-- **Bins are a suggestion.** A pick task proposes the bin holding the most
-  units; the associate may pick from another and say so. Bin quantities are
-  only as good as the putaway and pick discipline behind them.
+- **Bins are a suggestion.** A pick task proposes one location by the rule
+  above; the associate may pick from another and say so, and that can take
+  units another task waits for there. A line larger than the chosen
+  location's free units still comes up short there. Bin quantities are only
+  as good as the putaway and pick discipline behind them.
+- **A count cannot add a product that has no record on that location yet.**
+- **A cancellation and a count of the same product on the same shelf at the
+  same moment** can end with a deadlock for one of them
+  (`private.cancel_order_internal` takes the shelf row before the stock row);
+  the loser is told nothing was saved and to try again.
 - **No safety stock, no reorder points, no forecasting.** Listed under
   "Later" in the [scope](../01-product/scope-by-app.md).
 

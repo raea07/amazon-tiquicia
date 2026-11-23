@@ -205,7 +205,7 @@ erDiagram
 | `warehouse_locations`                         | Bins: receiving, storage, pick, packing, staging, returns, damaged   |
 | `stock_levels`                                | `on_hand` and `reserved` per warehouse, SKU and seller               |
 | `bin_stock`                                   | Quantity per bin, SKU and seller                                     |
-| `stock_movements`                             | Append-only ledger of every change, with reason, reference and actor |
+| `stock_movements`                             | Append-only ledger of every change, with reason, reference and actor; a move between locations (084300) is one `transfer` row with both locations and no on-hand change, a count correction an `adjust` row with reference `cycle_count` |
 | `inbound_shipments`, `inbound_shipment_lines` | Stock a seller announces, and what was actually received and damaged |
 
 Stock belongs to a seller even when it sits in a Yuntera warehouse: the key is
@@ -249,7 +249,7 @@ erDiagram
 | `orders`                 | Totals, payment method, zone, a copy of the delivery details, promise dates, delivery PIN, withdrawal deadline, warranty end, idempotency key | Delivery details are copied so editing an address later cannot change where an order went |
 | `order_items`            | What was bought: copies of title, variant, image, price, tax rate, weight and size                                                            | Copies, so the order reads the same forever                                               |
 | `payments`               | Method, provider, status, amount, SINPE Móvil reference                                                                                       | No card data is stored here or anywhere                                                   |
-| `shipments`              | Tracking code, origin, status, weight, attempt count                                                                                          | One per origin warehouse per order                                                        |
+| `shipments`              | Tracking code, origin, status, weight, attempt count; since 084200 `recalled_at`, `recalled_by` and `recall_reason` (5 to 300 characters) when staff stopped it before it left                                                                                          | One per origin warehouse per order                                                        |
 | `inventory_reservations` | Units held for an order line: `active`, `consumed`, `released`                                                                                |                                                                                           |
 | `pick_tasks`             | One line to pick, with a suggested bin                                                                                                        | Created when a paid order is released to the warehouse                                    |
 | `order_events`           | Timeline; rows flagged `visible_to_customer` are the tracking history                                                                         |                                                                                           |
@@ -283,7 +283,9 @@ stateDiagram-v2
 
 Payment owns the first states; after that the order's status is derived from
 its shipments (`private.sync_order_status`), one legal step at a time so the
-timeline shows every stage.
+timeline shows every stage. Since 084200 it never moves backwards: a
+parcel can step back (planned again, then taken off a route), but the order
+keeps the furthest status it reached until it ends.
 
 ### Shipment lifecycle
 
@@ -294,6 +296,9 @@ stateDiagram-v2
   picking --> packed
   picking --> pending: picking abandoned
   packed --> ready_for_dispatch
+  packed --> returning: staff stop it (084200)
+  ready_for_dispatch --> packed: taken off its route
+  ready_for_dispatch --> returning: staff stop it (084200)
   ready_for_dispatch --> out_for_delivery
   out_for_delivery --> delivered
   out_for_delivery --> delivery_failed
@@ -320,6 +325,7 @@ stateDiagram-v2
 | The withdrawal deadline never shrinks                  | Set at purchase to 8 business days ahead; on delivery set to the later of that and 8 business days from delivery                                   |
 | The legal warranty runs 30 business days from delivery | Set by `sync_order_status` when the order becomes `delivered`                                                                                      |
 | Orders are created and changed only by functions       | API roles have `SELECT` only on these tables                                                                                                       |
+| One delivery-fee refund per order                      | The refund register's reason `delivery_fee` (084200) with `UNIQUE (reason, source_id)`, the order as source                                        |
 
 ---
 

@@ -93,6 +93,33 @@ to shoppers only after putaway is confirmed.
 
 Batch picking across orders starts only when one person can no longer keep up.
 
+### Moving stock and correcting a count
+
+Both are done from the location screens: **Bodega → Ubicaciones** in the field
+app, **Ubicaciones** in the warehouse app (they need signal; each change is
+saved at once). Open a location by scanning or typing its code.
+
+- **Move** ("Mover"): choose the product, how many units and the shelf they
+  go to (a switched-on storage or picking shelf of the same warehouse), and
+  put them there right away. Only free units can move: units an open pick
+  waits for stay. A move does not change what the shop can sell, and the shop
+  is not told. To switch a location off, empty it first by moving everything
+  to another shelf; the console then lets operations switch it off.
+- **Correct a count** ("Corregir cantidad"): type what you counted and a
+  reason of at least 5 letters ("faltan 2, caja rota"); the screen shows the
+  difference. If the shelf changed while you counted, count again. A count
+  never goes below what open picks wait for or what shoppers bought; if it
+  would, tell operations, who resolve the order first. Units can be counted
+  in only on storage, picking, returns and receiving locations. The shop sees
+  each correction and its reason in its stock history.
+- **Returned units** land on the returns location (DEV-01 in SJO1) when a
+  parcel is checked in; put them on a shelf with "Mover" when convenient. The
+  next pick of that product is sent there if no shelf has free units. Keep a
+  returns location switched on: without one, returned parcels cannot be
+  checked in.
+- Operations sees every move and correction, with who made it, in the
+  console, **Operación → Ubicaciones**.
+
 ## Dispatch and route building
 
 1. After the cutoff, operations builds the next day's routes in _Yuntera
@@ -173,7 +200,12 @@ At the end of every route:
 | Address cannot be found       | Call; if unresolved, as above, and operations corrects the pin with the shopper                                                                                                                                                                              |
 | Shopper refuses the parcel    | Mark refused. The parcel returns; a cash order is cancelled, a prepaid one refunded according to policy                                                                                                                                                      |
 | Second failed attempt         | The order is cancelled and refunded as described in [customer service](customer-service.md)                                                                                                                                                                  |
+| Staff stop a packed parcel    | Operations stops it from the staff order page ("Detener el paquete", a reason and the tick box), while it is packed or on a route that has not started; its stop leaves the route. The warehouse list shows it as "Nunca salió de la bodega"; check it in as a returned parcel and put the units back. The shopper is refunded (the delivery fee too, if nobody went to the door) and the order is cancelled |
 | Withdrawal or warranty return | The driver collects on a regular route. The parcel is scanned into _Devoluciones_, inspected within one working day, and graded: resellable (back to its location), damaged (quarantine, returned to the seller), or disposed of with the seller's agreement |
+
+When a parcel comes back and the order ends cancelled, the delivery fee is
+refunded too if no driver ever went to the shopper's door; after a real
+attempt it stays charged (decision 43).
 
 Every returning parcel is scanned back in the same day. A parcel that left and
 did not come back delivered or scanned in is a missing parcel and is

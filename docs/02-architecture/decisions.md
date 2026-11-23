@@ -45,6 +45,9 @@ its own entry, not something that happens by drift.
 | 36  | [Session lifetimes per app](#36-session-lifetimes-per-app)                                                                                          | Built; not on the preview yet            |
 | 37  | [Payments through a gateway worker, confirmed only by the gateway](#37-payments-through-a-gateway-worker-confirmed-only-by-the-gateway)             | Built against a local fake; not deployed |
 | 38  | [The platform issues its own fiscal documents from the outbox](#38-the-platform-issues-its-own-fiscal-documents-from-the-outbox)                    | Built against a local fake; not deployed |
+| 43  | [Order follow-ups: the delivery fee, stopping a packed parcel, an order that never moves back](#43-order-follow-ups-the-delivery-fee-when-nobody-went-to-the-door-stopping-a-packed-parcel-an-order-that-never-moves-back) | Built; not on the preview yet            |
+| 44  | [Warehouse stock: free units, moves the shop never sees, counts only onto shelves](#44-warehouse-stock-what-is-free-moves-that-the-shop-never-sees-counts-only-onto-shelves) | Built; not on the preview yet            |
+| 45  | [Android builds of the shopper app go to the internal testers without a click](#45-android-builds-of-the-shopper-app-go-to-the-internal-testers-without-a-click) | Decided; settings not changed yet        |
 
 ---
 
@@ -1442,10 +1445,13 @@ free text staff type. Chosen where the work offered a choice:
 - A parcel that had a real failed attempt, went out again and was then
   removed by staff has `attempt_count` 1, so the shopper still reads "No
   pudimos entregarlo". Telling them apart would need the order to expose the
-  last stop's state.
+  last stop's state. (Since decision 43 the order list carries each parcel's
+  state, and such an order reads "Entrega reprogramada".)
 - There is still no screen to move stock between warehouse locations, nor to
   edit or remove single-day closures made before periods existed; sign-in
-  limits are constants in functions, not settings.
+  limits are constants in functions, not settings. (Since 084200 and 084300,
+  decisions 43 and 44, stock is moved from the location screens and a single
+  closed day can be opened; sign-in limits are still constants.)
 - A new zone gets its districts while it is off, and is switched on after.
 
 ## 42. Brands are deleted only when nothing names them; product pages refuse what is not on sale at the helper
@@ -1479,3 +1485,120 @@ product on sale opens for the public lived only in the callers of
 
 **Consequences.** The two test brands on the hosted preview can be removed
 from the console once 084100 is applied there.
+
+## 43. Order follow-ups: the delivery fee when nobody went to the door, stopping a packed parcel, an order that never moves back
+
+**Context.** On the hosted preview two orders (YT-101282, YT-101283) were
+taken off routes and came back to the warehouse without any driver going to
+the door; receiving them refunded the goods and kept the delivery fee. Once a
+parcel was packed, neither the shopper nor staff could cancel the order. And
+an order's heading followed its parcels backwards: a parcel planned again
+after a failed attempt and then taken off that route made the order's target
+"processing" again, and the removal failed.
+
+**Decision.** (migration 084200)
+
+- **The owner's decision of 23 November 2026, on the delivery fee.** Two
+  options were put to the owner: keep the delivery fee whenever a parcel
+  comes back, or refund it when nobody tried to deliver. The owner chose:
+  when an order is cancelled because its parcels came back and nobody ever
+  went to the shopper's door, the delivery fee is refunded too; when an
+  attempt was made at the door, or another parcel of the order was
+  delivered, the fee stays charged. An attempt is a stop the driver marked
+  failed, or an attempt counted on a parcel; a stop staff removed is not
+  one, nor is a parcel stopped before it left (`private.order_had_door_attempt`,
+  mirrored by `deliveryFeeComesBack` in `packages/core`). It applies from
+  084200 on; it is not applied to orders closed before.
+- **The delivery-fee refund is its own row in the refund register** (reason
+  `delivery_fee`, one per order, never more than what is left of the
+  payment), not folded into the last parcel's refund. It goes back the same
+  way as every other refund and credits the delivery fee's fiscal document in
+  full, with the same loop a whole cancellation uses. The goods' refunds and
+  the sellers' commission credits stay as they were.
+- **Staff stop a packed parcel through a new function**,
+  `ops_recall_shipment(p_shipment_id, p_reason)`, rather than a wider
+  `ops_return_shipment`: the old one has no reason argument and the console
+  and the field app call it, so a new signature would have been an overload.
+  Only parcels of a Yuntera warehouse can be stopped; a seller's own packed
+  parcel is at the seller's, and sellers have no screen to receive returned
+  parcels. A parcel on a route that has started is refused.
+- **An order's status never moves backwards** (`private.sync_order_status`
+  and `orderStatusFromShipments` keep one ordered list, checked by a parity
+  test). A parcel may step back (planned again, then taken off a route); the
+  order stays "shipped" until it ends. The shopper's screens read the parcels
+  to say what is really happening: "Se está cancelando" when everything left
+  is coming back, "Entrega reprogramada" when everything left waits in the
+  warehouse to go out again (`orderComingBack`, `orderAwaitingNewAttempt`).
+- **Found when it was merged with 084300:** starting a pick and packing take
+  the order's lock before the parcel's, as stopping a parcel does; before,
+  a stop at the moment of packing ended with a deadlock for one caller. A
+  returned parcel is not checked in while its Yuntera warehouse has no
+  returns location switched on (`returns_location_missing`), so its units
+  always land on a location.
+
+**Consequences.** The shopper gets two refund messages of each kind when the
+fee comes back (goods, then fee), each with its own true amount. The store
+build of the shopper app from `3f251c3` cannot read the new fields: it shows
+such orders by the order's status. YT-101282 and YT-101283 on the preview kept
+their ₡1,500 fee under the old rule; refunding it is a finance decision.
+
+## 44. Warehouse stock: what is free, moves that the shop never sees, counts only onto shelves
+
+**Context.** The warehouse could look a product up but not open a location,
+could not move stock between locations (so a location holding stock could be
+switched off only once orders emptied it), and the count-correction function
+had no screen and few checks.
+
+**Decision.** (migration 084300)
+
+- **Free units** of a location are the units on it minus what open pick
+  tasks naming it still wait for. Stock is reserved per warehouse, not per
+  shelf, so a pick task is the only promise a shelf carries.
+- **A move never changes the shop's stock, and the shop does not see it.**
+  `wms_move_stock` takes free units of one shop's product to a switched-on
+  storage or picking shelf of the same warehouse: one ledger row with both
+  sides, no change to on-hand, reserved or what shoppers can buy, no message,
+  and nothing in the shop's stock history. Staff see every move in the
+  console.
+- **Counted units can be added only on shelves**: storage, picking, returns
+  and receiving locations (`count_not_shelf` otherwise); units may be counted
+  out anywhere. A correction is refused when the shelf changed since the
+  screen showed it, when it would take units open picks wait for or that
+  shoppers already bought, and below zero. Every correction is booked as a
+  count, never as damage, and the shop sees it with the warehouse's reason.
+- **Picks prefer shelves.** A new pick task names a switched-on location that
+  really has free units first, storage and picking shelves before the
+  returns and receiving areas, then the most free units; a shelf whose units
+  are all promised never wins over units that came back into the returns
+  area; the damaged, packing and dispatch areas only when nothing else holds
+  the product.
+- **Lock order.** Moves and corrections take the warehouse row
+  `FOR NO KEY UPDATE` first, then the locations, then (a correction) the
+  shop's stock row before the shelf's row, the order receipts and returned
+  parcels take them in. Proved with two real sessions in
+  `contract.warehouse-stock-races.test.ts` and
+  `contract.returned-stock-races.test.ts` (100 rounds each against a
+  returned parcel's check-in).
+
+**Consequences.** A cancellation still takes a shelf's row before the shop's
+stock row (`private.cancel_order_internal`, unchanged here), so a
+cancellation racing a count of the same product on the same shelf can end
+with a deadlock for one of the two; the loser is told nothing was saved and
+to try again. A count cannot add a product that has no record on that
+location yet.
+
+## 45. Android builds of the shopper app go to the internal testers without a click
+
+**Context.** The first Android build of the shopper app reached Google Play's
+internal testing as a draft release, because the app had never been
+published; each draft needs a click in Play Console before testers get it.
+
+**Decision.** The owner's decision of 23 November 2026: from the owner's
+first Android release of the shopper app on, each new Android build goes
+straight to the internal testers without a click. Until that first release,
+builds stay drafts.
+
+**Consequences.** Recorded as a decision only: the build and submission
+settings (`apps/shop-native/eas.json`, the app configuration, identifiers,
+permissions and native modules) are not changed by this record. They change
+when the first release has been made.
