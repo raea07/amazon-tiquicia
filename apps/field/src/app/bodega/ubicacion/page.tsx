@@ -8,6 +8,7 @@ import { CountForm, MoveForm } from "@/components/stock-forms";
 import { StockOutcome } from "@/components/stock-outcome";
 import { requireWarehouse } from "@/lib/access";
 import { goneText, LOCATION_KIND, locationHref, movedText, units } from "@/lib/locations";
+import { CountIn } from "./count-in";
 
 export const metadata: Metadata = { title: "Ubicación" };
 
@@ -65,6 +66,20 @@ function Outcome({
   const target = one(params.destino) ?? "";
   if (moved !== null && moved > 0 && /^[A-Z0-9-]{1,20}$/.test(target)) {
     return <StockOutcome title="Unidades movidas">{movedText(moved, target)}</StockOutcome>;
+  }
+  const added = count(params.nuevas);
+  const product = one(params.producto) ?? "";
+  if (
+    added !== null &&
+    added > 0 &&
+    /^[A-Z0-9-]{4,32}$/.test(product) &&
+    listed.includes(product)
+  ) {
+    return (
+      <StockOutcome title="Producto contado">
+        {`Se ${added === 1 ? "sumó" : "sumaron"} ${units(added)} de ${product} a esta ubicación: ya aparece en la lista. La tienda ve el conteo y su motivo en su inventario.`}
+      </StockOutcome>
+    );
   }
   const counted = count(params.contadas);
   const delta = count(params.diferencia);
@@ -163,6 +178,7 @@ async function Location({ searchParams }: Pick<PageProps<"/bodega/ubicacion">, "
           ))}
         </ul>
       )}
+      <CountIn location={location} query={one(params.buscar)?.trim().slice(0, 80) ?? ""} />
       <p className="text-xs text-ink-muted">
         Mover y corregir se guardan al momento. Si la cantidad cambia mientras usted cuenta, la
         pantalla le pide contar de nuevo.

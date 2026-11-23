@@ -22,6 +22,7 @@ import {
 import { Stack as Nav, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { AccessibilityInfo, Platform, StyleSheet, View } from "react-native";
+import { CountIn } from "@/components/count-in";
 import { plural } from "@/lib/floor";
 import {
   countedText,
@@ -451,6 +452,18 @@ export default function LocationScreen() {
           ))}
         </Stack>
       )}
+      <CountIn
+        location={here}
+        onDone={(message) => {
+          setRefusal(null);
+          setDone(message);
+        }}
+        onRefused={() => {
+          setDone(null);
+          void location.refetch();
+          void all.refetch();
+        }}
+      />
     </Screen>
   );
 }

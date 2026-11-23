@@ -11,6 +11,8 @@ export const OUTCOME_KEYS = [
   "diferencia",
   "sin",
   "accion",
+  "nuevas",
+  "producto",
 ] as const;
 
 /**
