@@ -30,6 +30,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { confirmPayment } from "@/app/actions";
 import { staffCancelOrder } from "@/app/integrity-actions";
+import { CatalogueOutcome } from "@/components/catalogue-outcome";
 import { DeliveryCodePanel, ReturnedParcelForm } from "@/components/integrity-forms";
 import { NotificationLine } from "@/components/notification-list";
 import { RecallShipmentForm } from "@/components/order-recall-form";
@@ -52,11 +53,14 @@ export default function OrderPage({ params }: PageProps<"/pedidos/[numero]">) {
           ← Pedidos
         </Link>
       </p>
-      <div className="mt-3">
-        <Suspense fallback={<Skeleton className="h-96" />}>
-          <Order params={params} />
-        </Suspense>
-      </div>
+      {/* Stopping a parcel removes its own form: the outcome is said at the bottom. */}
+      <CatalogueOutcome>
+        <div className="mt-3">
+          <Suspense fallback={<Skeleton className="h-96" />}>
+            <Order params={params} />
+          </Suspense>
+        </div>
+      </CatalogueOutcome>
     </div>
   );
 }
