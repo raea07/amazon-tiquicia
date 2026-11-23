@@ -3,13 +3,20 @@ import { colors, radius, space, touchTarget } from "@yuntera/expo-kit/theme";
 import { EmptyState, LinkButton, LoadingState, Text } from "@yuntera/expo-kit/ui";
 import { Link, router, Stack, useLocalSearchParams } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { Listing, parseSort } from "@/components/listing";
+import { Listing, type ListingChange, parseSort } from "@/components/listing";
+import { parseBrand } from "@/lib/brand-filter";
 import { useCategories } from "@/lib/catalog";
 
 /** A category, at /c/<slug> like the website: its sub-categories, then its products. */
 export default function CategoryScreen() {
-  const params = useLocalSearchParams<{ slug: string; orden?: string; disponibles?: string }>();
+  const params = useLocalSearchParams<{
+    slug: string;
+    orden?: string;
+    disponibles?: string;
+    marca?: string;
+  }>();
   const slug = oneParam(params.slug) ?? "";
+  const brand = parseBrand(oneParam(params.marca));
   const sort = parseSort(oneParam(params.orden));
   const inStock = oneParam(params.disponibles) === "1";
   const categories = useCategories();
@@ -35,14 +42,16 @@ export default function CategoryScreen() {
     <>
       <Stack.Screen options={{ title: category.name_es }} />
       <Listing
-        key={`${slug}|${sort}|${inStock}`}
+        key={`${slug}|${brand ?? ""}|${sort}|${inStock}`}
         categorySlug={slug}
+        brand={brand}
         sort={sort}
         inStock={inStock}
-        onChange={(next) =>
+        onChange={(next: ListingChange) =>
           router.setParams({
             orden: (next.sort ?? sort) === "relevance" ? undefined : (next.sort ?? sort),
             disponibles: (next.inStock ?? inStock) ? "1" : undefined,
+            marca: next.brand === null ? undefined : (next.brand ?? brand),
           })
         }
         header={

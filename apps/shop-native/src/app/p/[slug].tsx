@@ -27,6 +27,7 @@ import { ProductGrid, ProductImage, Stars } from "@/components/product";
 import { QuantityStepper } from "@/components/quantity";
 import { useCart } from "@/lib/cart-context";
 import { chooseSku, rankOffers } from "@/lib/offers";
+import { NOT_FOUND } from "@/lib/wording";
 
 /** Who sells it, who delivers it, and when it arrives: the facts the law wants in plain sight. */
 function OfferFacts({ offer }: { offer: ProductOffer }) {
@@ -284,13 +285,18 @@ export default function ProductScreen() {
   if (product.isPending) return <LoadingState label="Cargando producto…" />;
   if (product.isError)
     return <ErrorState error={product.error} onRetry={() => void product.refetch()} />;
+  // Taken down, archived or never there: the website's not-found page, in its words.
   if (!product.data) {
     return (
       <EmptyState
-        title="No encontramos ese producto"
-        action={<LinkButton href="/buscar">Ver productos</LinkButton>}
+        title={NOT_FOUND.title}
+        action={
+          <LinkButton href="/" testID="not-found-home">
+            {NOT_FOUND.action}
+          </LinkButton>
+        }
       >
-        Puede que el enlace esté mal escrito o que el producto ya no esté a la venta.
+        {NOT_FOUND.body}
       </EmptyState>
     );
   }
