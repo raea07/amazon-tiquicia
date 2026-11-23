@@ -98,7 +98,9 @@ export default function HomeScreen() {
 
         <Stack gap={3}>
           <Text variant="heading">Por atender</Text>
-          <Text testID="today-summary">{todaySentence(todo)}</Text>
+          <Text testID="today-summary" aria-live="polite">
+            {todaySentence(todo, { loading: edits.isLoading || payout.isLoading })}
+          </Text>
           <StatGrid>
             <Stat
               label="Pedidos por empacar"

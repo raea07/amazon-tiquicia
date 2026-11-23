@@ -86,10 +86,16 @@ export function todayItems(
   return items;
 }
 
-/** The sentence under "Por atender". */
-export function todaySentence(items: TodoItem[]): string {
+/**
+ * The sentence under "Por atender". `loading` is true while the listing
+ * edits or the bank-account request are still being read: "nothing pending"
+ * is only said once they have answered (or failed, and are left out).
+ */
+export function todaySentence(items: TodoItem[], { loading = false } = {}): string {
   if (items.length === 0)
-    return "Hoy no tiene nada pendiente. Cuando entre un pedido aparece aquí.";
+    return loading
+      ? "Cargando lo que tiene pendiente…"
+      : "Hoy no tiene nada pendiente. Cuando entre un pedido aparece aquí.";
   const texts = items.map((item) => item.text);
   const list =
     texts.length === 1 ? texts[0] : `${texts.slice(0, -1).join(", ")} y ${texts[texts.length - 1]}`;

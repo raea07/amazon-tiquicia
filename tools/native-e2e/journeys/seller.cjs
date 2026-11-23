@@ -24,6 +24,7 @@
 
 const { createHmac } = require("node:crypto");
 const { chromium, request } = require("playwright");
+const { settledText } = require("../../e2e/lib/settle.cjs");
 
 const BASE = process.env.NATIVE_SELLER_URL || "http://127.0.0.1:3011";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -243,9 +244,12 @@ function colones(text) {
   }
 
   // 3. What needs doing today
-  const today = await textOf("today-summary");
+  // Said once the overview (and what the sentence adds to it) has answered.
+  const today = await settledText(visible("today-summary"), /1 paquete por empacar/, {
+    what: "the home screen's summary",
+  });
   log("   ", today);
-  check(/1 paquete por empacar/.test(today), "the home screen says one parcel waits to be packed");
+  check(true, "the home screen says one parcel waits to be packed");
   check((await textOf("stat-to-pack")) === "1", "and shows it as the figure to deal with");
   await noSideways("home");
   await shotFull("03-home-today");
@@ -439,10 +443,11 @@ function colones(text) {
   await visible(`pack-submit-${tracking}`).click();
   await visible("pack-result").waitFor();
   check(/listo/.test(await textOf("pack-result")), `parcel ${tracking} marked as packed`);
-  check(
-    (await textOf("parcels-waiting")).includes(tracking),
-    "it now waits for the driver, and nothing is left to pack",
-  );
+  // The list is read again after the pack: wait for it to have the parcel.
+  await settledText(visible("parcels-waiting"), (text) => text.includes(tracking), {
+    what: "the parcels waiting for the driver",
+  });
+  check(true, "it now waits for the driver, and nothing is left to pack");
   await visible("nothing-to-pack").waitFor();
   await noSideways("orders");
   await shot("12-orders-packed");

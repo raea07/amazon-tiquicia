@@ -51,6 +51,17 @@ describe("todayItems", () => {
     assert.match(todaySentence(items), /no tiene nada pendiente/);
   });
 
+  it("does not say nothing is pending while the edits or the bank request are still read", () => {
+    const items = todayItems(none, undefined, undefined, now);
+    assert.equal(todaySentence(items, { loading: true }), "Cargando lo que tiene pendiente…");
+    assert.doesNotMatch(todaySentence(items, { loading: true }), /no tiene nada/);
+    // What is already known is said; the rest joins it when it answers.
+    const known = todayItems({ ...none, to_pack: 1 }, undefined, undefined, now);
+    assert.equal(todaySentence(known, { loading: true }), "Hoy tiene 1 paquete por empacar.");
+    // A read that failed is left out, and then nothing pending is said.
+    assert.match(todaySentence(items, { loading: false }), /no tiene nada pendiente/);
+  });
+
   it("counts the overview's figures as the web summary does", () => {
     const items = todayItems({ ...none, to_pack: 1, offers_out_of_stock: 2 }, [], undefined, now);
     assert.equal(
