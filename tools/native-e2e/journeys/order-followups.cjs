@@ -18,6 +18,7 @@
 
 const { chromium, request } = require("playwright");
 const { ownRoute } = require("../../e2e/lib/own-route.cjs");
+const { settledText } = require("../../e2e/lib/settle.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const SHOP = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
@@ -153,12 +154,14 @@ async function packedOrder(buyer, method) {
   await shop.screenshot({ path: `${SHOTS}/native-order-followups-01-list.png`, fullPage: true });
   await shopId(`order-${order.order_number}`).click();
   await shopId("order-stopping").waitFor();
-  const stopping = squash(await shopId("order-stopping").innerText());
-  log("   ", stopping);
-  check(
-    stopping.includes(`le devolvemos ${colones(order.total_minor)}, el envío incluido,`),
-    "the order page says how much comes back, the delivery fee included",
+  // The amount is said once the payment (with its refunds) has answered.
+  const stopping = await settledText(
+    shopId("order-stopping"),
+    (text) => text.includes(`le devolvemos ${colones(order.total_minor)}, el envío incluido,`),
+    { what: "the cancelled order's notice" },
   );
+  log("   ", stopping);
+  check(true, "the order page says how much comes back, the delivery fee included");
   check(
     (await shop.getByTestId("delivery-pin").count()) === 0,
     "no delivery code for an order being cancelled",
@@ -281,13 +284,15 @@ async function packedOrder(buyer, method) {
   await shopId(`order-${sent.orderNumber}`).click();
   await shop.getByText(`Pedido ${sent.orderNumber}`).first().waitFor();
   await shopId("order-stopping").waitFor();
-  const sentPage = squash(await shopId("order-stopping").innerText());
-  log("   ", sentPage);
-  check(
-    sentPage.includes("Su pedido regresa a nuestra bodega sin entregarse.") &&
-      sentPage.includes(`le devolvemos ${colones(sentOrder.total_minor)}, el envío incluido,`),
-    "the page says a parcel sent back comes back and what is refunded",
+  const sentPage = await settledText(
+    shopId("order-stopping"),
+    (text) =>
+      text.includes("Su pedido regresa a nuestra bodega sin entregarse.") &&
+      text.includes(`le devolvemos ${colones(sentOrder.total_minor)}, el envío incluido,`),
+    { what: "the sent-back order's notice" },
   );
+  log("   ", sentPage);
+  check(true, "the page says a parcel sent back comes back and what is refunded");
   // The history below may say "En camino": it was, before it came back.
   const sentAll = squash(await shop.locator("body").innerText());
   const sentBody = sentAll.slice(0, sentAll.indexOf("Historial"));
@@ -323,7 +328,12 @@ async function packedOrder(buyer, method) {
   await shopId(`order-${tried.orderNumber}`).click();
   await shop.getByText(`Pedido ${tried.orderNumber}`).first().waitFor();
   await shopId("order-stopping").waitFor();
-  const triedPage = squash(await shopId("order-stopping").innerText());
+  // Wait for the amount (said once the payment has answered), then check the fee line.
+  const triedPage = await settledText(
+    shopId("order-stopping"),
+    (text) => /le devolvemos ₡/.test(text),
+    { what: "the tried order's notice" },
+  );
   log("   ", triedPage);
   check(
     triedPage.includes(feeLine) && !triedPage.includes("el envío incluido"),

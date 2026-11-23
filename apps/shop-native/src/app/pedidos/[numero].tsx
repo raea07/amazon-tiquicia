@@ -57,6 +57,7 @@ import {
 import { ProductImage } from "@/components/product";
 import { needsSignIn } from "@/lib/guard";
 import { PAYMENT_LABEL, SHIPMENT_STATUS_LABEL } from "@/lib/labels";
+import { amountComingBack, refundedSoFar as refundedSoFarOf } from "@/lib/refund-outlook";
 import { returnNextStep, returnTitle } from "@/lib/returns";
 
 function describeEvent(event: OrderDetail["timeline"][number]): string {
@@ -197,14 +198,18 @@ export default function OrderScreen() {
   // Money held for the shopper, so a cancellation gives some back.
   const paid = ["captured", "partially_refunded"].includes(o.payment?.status ?? "");
   const refunds = payment.data?.refunds ?? [];
-  const refundedSoFar = refunds.reduce((sum, refund) => sum + refund.amount_minor, 0);
+  // Zero only once the payment has answered; until then the refunds already
+  // made are unknown, and no amount is said (see refund-outlook.ts).
+  const refundedSoFar = refundedSoFarOf(payment.data?.refunds) ?? 0;
   const feeBack = deliveryFeeComesBack(o.shipments);
   // What comes back when the warehouse receives them: what is left of the
   // payment, less the delivery fee when someone went to the door.
-  const comesBack = Math.max(
-    0,
-    (o.payment?.amount_minor ?? 0) - refundedSoFar - (feeBack ? 0 : o.shipping_minor),
-  );
+  const comesBack = amountComingBack({
+    paymentMinor: o.payment?.amount_minor ?? 0,
+    refunds: payment.data?.refunds,
+    feeBack,
+    shippingMinor: o.shipping_minor,
+  });
   // Why the delivery fee stays charged, when the order is (being) cancelled
   // after a real attempt at the door (the web's words).
   const feeKept =
@@ -275,9 +280,11 @@ export default function OrderScreen() {
                 ? "No se le cobró nada, así que no hay nada que devolver."
                 : ""
               : back.cancels
-                ? `Cuando la bodega confirme que lo recibió, le devolvemos ${formatPrice(comesBack)}${
-                    feeBack && o.shipping_minor > 0 ? ", el envío incluido," : ""
-                  } por el mismo medio con que pagó.${feeKept ? ` ${feeKept}` : ""}`
+                ? comesBack === null
+                  ? `Cuando la bodega confirme que lo recibió, le devolvemos su dinero por el mismo medio con que pagó.${feeKept ? ` ${feeKept}` : ""}`
+                  : `Cuando la bodega confirme que lo recibió, le devolvemos ${formatPrice(comesBack)}${
+                      feeBack && o.shipping_minor > 0 ? ", el envío incluido," : ""
+                    } por el mismo medio con que pagó.${feeKept ? ` ${feeKept}` : ""}`
                 : "Cuando la bodega lo reciba, le devolvemos lo que pagó por ese paquete."
           }`.trim()}
         </Alert>
