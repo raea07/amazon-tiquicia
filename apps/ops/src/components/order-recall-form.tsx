@@ -13,6 +13,7 @@ export function RecallShipmentForm({
   orderNumber,
   onRoute,
   money,
+  paid,
 }: {
   shipmentId: string;
   trackingCode: string;
@@ -20,6 +21,8 @@ export function RecallShipmentForm({
   /** It is planned on a route that has not started: its stop is removed too. */
   onRoute: boolean;
   money: string;
+  /** Money was paid, so receiving it refunds something. */
+  paid: boolean;
 }) {
   return (
     <details>
@@ -35,6 +38,7 @@ export function RecallShipmentForm({
         >
           <input type="hidden" name="shipmentId" value={shipmentId} />
           <input type="hidden" name="orderNumber" value={orderNumber} />
+          <input type="hidden" name="paid" value={paid ? "1" : "0"} />
           <TextAreaField
             label="Por qué se detiene"
             name="reason"

@@ -7,10 +7,14 @@
 // the delivery fee included, without the delivery code. In the warehouse app
 // the parcel reads "Nunca salió de la bodega"; checking it in says the
 // shopper gets the goods and the delivery fee back. The shopper's page then
-// gives the total refunded. Fails on any console error, uncaught exception
-// or 5xx.
+// gives the total refunded. Then two more orders: a cash order stopped (the
+// list and page promise no money back, as nothing was paid) and a paid one
+// taken off a route being driven and sent back to the warehouse (the list
+// and page say it is being cancelled, never "En camino", and show no date or
+// delivery code). Fails on any console error, uncaught exception or 5xx.
 
 const { chromium, request } = require("playwright");
+const { ownRoute } = require("../../e2e/lib/own-route.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const SHOP = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
@@ -54,19 +58,20 @@ async function as(email) {
   return rpc;
 }
 
-(async () => {
-  // ── 1. A paid order, packed, and stopped by Central ──
-  const buyer = await as(SHOPPER);
+/** An order of the shopper, a notebook from the warehouse, picked and packed. */
+async function packedOrder(buyer, method) {
   const address = (await buyer("my_addresses")).find((a) => a.is_default && a.zone_active);
   const product = await buyer("get_product", { p_slug: "libreta-tapa-dura-a5" });
   const offer = product.skus.flatMap((k) => k.offers).find((o) => o.fulfillment === "platform");
   const placed = await buyer("place_order", {
     p_items: [{ offer_id: offer.offer_id, quantity: 1 }],
     p_address_id: address.id,
-    p_payment_method: "sinpe_movil",
+    p_payment_method: method,
     p_idempotency_key: `native-order-followups-${Date.now()}`,
   });
-  await buyer("confirm_sandbox_payment", { p_order_id: placed.order_id });
+  if (method !== "cash_on_delivery") {
+    await buyer("confirm_sandbox_payment", { p_order_id: placed.order_id });
+  }
   const bodega = await as("bodega@yuntera.example");
   const warehouse = (await bodega("my_roles")).warehouses[0].id;
   const board = await bodega("wms_board", { p_warehouse_id: warehouse });
@@ -87,12 +92,18 @@ async function as(email) {
     p_package_count: 1,
   });
   await bodega.dispose();
+  return { placed, shipment };
+}
+
+(async () => {
+  // ── 1. A paid order, packed, and stopped by Central ──
+  const buyer = await as(SHOPPER);
+  const { placed, shipment } = await packedOrder(buyer, "sinpe_movil");
   const central = await as("central@yuntera.example");
   await central("ops_recall_shipment", {
     p_shipment_id: shipment.shipment_id,
     p_reason: "El cliente pidió cancelar",
   });
-  await central.dispose();
   const order = await buyer("get_order", { p_order_number: placed.order_number });
   check(order.shipping_minor > 0, `the order ${order.order_number} pays a delivery fee`);
 
@@ -208,6 +219,79 @@ async function as(email) {
   );
   await shop.screenshot({
     path: `${SHOTS}/native-order-followups-05-refunded.png`,
+    fullPage: true,
+  });
+
+  // ── 5. A cash order stopped: nothing was paid, nothing is promised ──
+  const cash = await packedOrder(buyer, "cash_on_delivery");
+  await central("ops_recall_shipment", {
+    p_shipment_id: cash.shipment.shipment_id,
+    p_reason: "El cliente ya no lo quiere",
+  });
+  // ── 6. A paid order taken off a route being driven, then sent back ──
+  const route = await ownRoute(1);
+  const sent = route.stops[0];
+  await central("ops_remove_route_stop", { p_stop_id: sent.stopId, p_reason: "El camión se varó" });
+  const sentOrder = await buyer("get_order", { p_order_number: sent.orderNumber });
+  await central("ops_return_shipment", { p_shipment_id: sentOrder.shipments[0].id });
+  await central.dispose();
+
+  await shop.goto(`${SHOP}/pedidos`, { waitUntil: "networkidle" });
+  await shopId(`order-${cash.placed.order_number}`).waitFor();
+  const cashRow = squash(await shopId(`order-${cash.placed.order_number}`).innerText());
+  log("   ", cashRow);
+  check(
+    cashRow.includes("Se está cancelando") &&
+      cashRow.includes("No se le cobró nada") &&
+      !cashRow.includes("devolvemos"),
+    "the list promises no money back for a cash order",
+  );
+  const sentRow = squash(await shopId(`order-${sent.orderNumber}`).innerText());
+  log("   ", sentRow);
+  check(
+    sentRow.includes("Se está cancelando") &&
+      sentRow.includes("le devolvemos el dinero") &&
+      !sentRow.includes("En camino") &&
+      !sentRow.includes("Llega el"),
+    "the list says a parcel sent back is being cancelled",
+  );
+  await noSideways(shop, "order list, cash and sent back");
+  await shop.screenshot({ path: `${SHOTS}/native-order-followups-06-list.png`, fullPage: true });
+
+  await shopId(`order-${cash.placed.order_number}`).click();
+  await shopId("order-stopping").waitFor();
+  const cashPage = squash(await shopId("order-stopping").innerText());
+  log("   ", cashPage);
+  check(
+    cashPage.includes("No se le cobró nada, así que no hay nada que devolver.") &&
+      !/le devolvemos/i.test(squash(await shop.locator("body").innerText())),
+    "the page promises no money back for a cash order",
+  );
+  await shop.goto(`${SHOP}/pedidos`, { waitUntil: "networkidle" });
+  await shopId(`order-${sent.orderNumber}`).click();
+  await shop.getByText(`Pedido ${sent.orderNumber}`).first().waitFor();
+  await shopId("order-stopping").waitFor();
+  const sentPage = squash(await shopId("order-stopping").innerText());
+  log("   ", sentPage);
+  check(
+    sentPage.includes("Su pedido regresa a nuestra bodega sin entregarse.") &&
+      sentPage.includes(`le devolvemos ${colones(sentOrder.total_minor)}, el envío incluido,`),
+    "the page says a parcel sent back comes back and what is refunded",
+  );
+  // The history below may say "En camino": it was, before it came back.
+  const sentAll = squash(await shop.locator("body").innerText());
+  const sentBody = sentAll.slice(0, sentAll.indexOf("Historial"));
+  check(
+    !sentBody.includes("En camino") && !sentBody.includes("Llega el"),
+    "never En camino or a date for a parcel sent back",
+  );
+  check(
+    (await shop.getByTestId("delivery-pin").count()) === 0,
+    "no delivery code for a parcel sent back",
+  );
+  await noSideways(shop, "order page, sent back");
+  await shop.screenshot({
+    path: `${SHOTS}/native-order-followups-07-sent-back.png`,
     fullPage: true,
   });
   await buyer.dispose();

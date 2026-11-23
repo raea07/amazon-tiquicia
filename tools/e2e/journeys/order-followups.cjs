@@ -15,6 +15,13 @@
 //     shopper's list says "Entrega reprogramada", the staff order page's
 //     heading does not say "En camino", the route card does not call it a
 //     failed delivery, and Despacho does not either.
+//   - The same parcel then sent back to the warehouse (the preview's
+//     YT-101282 and YT-101283): the shopper's list and page and the staff
+//     heading say the order is being cancelled, with no "En camino", no date
+//     and no delivery code, and the page says how much comes back.
+//   - A cash order stopped: nothing was paid, so nothing is promised.
+//   - A stop form left open while the parcel was stopped elsewhere says why
+//     it is refused and keeps the reason typed.
 //   - A district moved away and back follows its canton again, and the
 //     console's district view says which districts have a zone of their own.
 //   - The pages at phone width, with no sideways scroll.
@@ -63,8 +70,11 @@ async function as(email) {
   return rpc;
 }
 
-/** One paid order of the third demo shopper, a notebook from the warehouse, picked and packed. */
-async function packedOrder() {
+/**
+ * One order of the third demo shopper, a notebook from the warehouse, picked
+ * and packed: paid in the simulation, or cash on delivery (not paid yet).
+ */
+async function packedOrder(method = "sinpe_movil") {
   const buyer = await as(SHOPPER);
   const address = (await buyer("my_addresses")).find((a) => a.is_default && a.zone_active);
   const product = await buyer("get_product", { p_slug: "libreta-tapa-dura-a5" });
@@ -72,10 +82,12 @@ async function packedOrder() {
   const placed = await buyer("place_order", {
     p_items: [{ offer_id: offer.offer_id, quantity: 1 }],
     p_address_id: address.id,
-    p_payment_method: "sinpe_movil",
+    p_payment_method: method,
     p_idempotency_key: `order-followups-${Date.now()}`,
   });
-  await buyer("confirm_sandbox_payment", { p_order_id: placed.order_id });
+  if (method !== "cash_on_delivery") {
+    await buyer("confirm_sandbox_payment", { p_order_id: placed.order_id });
+  }
   await buyer.dispose();
 
   const bodega = await as("bodega@yuntera.example");
@@ -356,6 +368,102 @@ async function packedOrder() {
       dispatchText.includes("quitado de una ruta, sin intento de entrega") &&
       /^(Quitados de una ruta|Entregas fallidas o quitadas de una ruta)/.test(dispatchText),
     `Despacho calls the removed parcel a failed delivery: ${dispatchText.slice(0, 120)}`,
+  );
+
+  // ── 4b. The same parcel sent back to the warehouse ───────────────────────
+  // What the preview walked for YT-101282 and YT-101283: nothing is on its
+  // way any more, and the order is cancelled once the warehouse receives it.
+  const offOrder = await shopperApi("get_order", { p_order_number: stop.orderNumber });
+  await central("ops_return_shipment", { p_shipment_id: offOrder.shipments[0].id });
+  await shop.goto(`${WEB}/pedidos`, { waitUntil: "load" });
+  await shop.locator(`a[href="/pedidos/${stop.orderNumber}"]`).waitFor();
+  const backRow = await text(shop.locator(`a[href="/pedidos/${stop.orderNumber}"]`));
+  log("list row sent back:", backRow);
+  check(
+    backRow.includes("Se está cancelando") &&
+      backRow.includes("le devolvemos el dinero") &&
+      !backRow.includes("En camino") &&
+      !backRow.includes("Llega el"),
+    `the list says the wrong thing for a parcel sent back: ${backRow}`,
+  );
+  await shop.goto(`${WEB}/pedidos/${stop.orderNumber}`, { waitUntil: "networkidle" });
+  // The history below may say "En camino": it was, before it came back.
+  const backAll = await text(shop.locator("main"));
+  const backPage = backAll.slice(0, backAll.indexOf("Historial"));
+  log("page sent back:", backPage.slice(0, 300));
+  check(
+    backPage.includes("Su pedido regresa a nuestra bodega sin entregarse.") &&
+      backPage.includes(`le devolvemos ${colones(offOrder.total_minor)}, el envío incluido,`),
+    "the shopper's page does not say the order comes back and what is refunded",
+  );
+  check(
+    !backPage.includes("En camino") &&
+      !backPage.includes("Llega el") &&
+      !backPage.includes("Su código de entrega"),
+    "the shopper's page shows En camino, a date or the delivery code for a parcel sent back",
+  );
+  check(
+    (await shopperApi("get_order", { p_order_number: stop.orderNumber })).delivery_pin === null,
+    "the database still gives the delivery code for an order whose parcel comes back",
+  );
+  await shop.screenshot({ path: SHOTS + "/of6b-shopper-sent-back.png", fullPage: true });
+  await staff.goto(`${OPS}/pedidos/${stop.orderNumber}`, { waitUntil: "networkidle" });
+  const backHeader = await text(staff.locator("main header").first());
+  log("staff heading sent back:", backHeader);
+  check(
+    backHeader.includes("Se está cancelando") && !backHeader.includes("En camino"),
+    `the staff heading for a parcel sent back: ${backHeader}`,
+  );
+
+  // ── 4c. A cash order stopped: nothing was paid, nothing is promised ──────
+  const codOrder = await packedOrder("cash_on_delivery");
+  const codDetail = await shopperApi("get_order", { p_order_number: codOrder });
+  await central("ops_recall_shipment", {
+    p_shipment_id: codDetail.shipments[0].id,
+    p_reason: "El cliente ya no lo quiere",
+  });
+  await shop.goto(`${WEB}/pedidos`, { waitUntil: "load" });
+  await shop.locator(`a[href="/pedidos/${codOrder}"]`).waitFor();
+  const codRow = await text(shop.locator(`a[href="/pedidos/${codOrder}"]`));
+  log("list row cash order:", codRow);
+  check(
+    codRow.includes("Se está cancelando") &&
+      codRow.includes("No se le cobró nada") &&
+      !codRow.includes("devolvemos"),
+    `the list promises money back for a cash order: ${codRow}`,
+  );
+  await shop.goto(`${WEB}/pedidos/${codOrder}`, { waitUntil: "networkidle" });
+  const codPage = await text(shop.locator("main"));
+  check(
+    codPage.includes("No se le cobró nada, así que no hay nada que devolver.") &&
+      !/le devolvemos/i.test(codPage),
+    `the page promises money back for a cash order: ${codPage.slice(0, 300)}`,
+  );
+  await shop.screenshot({ path: SHOTS + "/of6c-shopper-cash-stopped.png", fullPage: true });
+
+  // ── 4d. A stop form left open while the parcel was stopped elsewhere ─────
+  const staleOrder = await packedOrder();
+  const staleDetail = await shopperApi("get_order", { p_order_number: staleOrder });
+  await staff.goto(`${OPS}/pedidos/${staleOrder}`, { waitUntil: "networkidle" });
+  await staff.locator("summary", { hasText: "Detener el paquete" }).first().click();
+  const staleForm = staff
+    .locator("form", { has: staff.locator('input[name="shipmentId"]') })
+    .first();
+  await staleForm.locator('textarea[name="reason"]').fill("La dirección está equivocada");
+  await staleForm.locator('input[name="confirm"]').check();
+  await central("ops_recall_shipment", {
+    p_shipment_id: staleDetail.shipments[0].id,
+    p_reason: "Lo detuvo otra persona",
+  });
+  outcome = await submit(staff, staleForm, "Detener y devolver a los estantes");
+  log("stale form:", outcome);
+  check(
+    outcome.includes("ya no se puede detener") && outcome.includes("Recargue la página"),
+    `a stale stop form does not say why it is refused: ${outcome}`,
+  );
+  check(
+    (await staleForm.locator('textarea[name="reason"]').inputValue()).includes("equivocada"),
+    "the reason typed in a stale stop form is lost",
   );
 
   // ── 5. A district moved away and back follows its canton ──────────────────

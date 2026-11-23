@@ -1,10 +1,10 @@
 import {
   deliveryFeeComesBack,
-  isOrderBeingStopped,
   isRescheduledOrder,
   isRescheduledShipment,
   isStoppedShipment,
   ORDER_STATUS_LABEL,
+  orderComingBack,
   toCostaRicaTime,
 } from "@yuntera/core";
 import {
@@ -184,13 +184,21 @@ export default function OrderScreen() {
   const withdrawalOpen = delivered && today <= o.withdrawal_deadline;
   const warrantyOpen = delivered && o.warranty_until !== null && today <= o.warranty_until;
   const awaitingPayment = o.status === "pending_payment";
-  // Staff stopped every parcel still to deliver before it left: the order is
-  // being cancelled, and its money goes back when the warehouse receives them.
-  const stopping = isOrderBeingStopped(o.status, o.shipments);
-  const paid = ["captured", "partially_refunded", "refunded"].includes(o.payment?.status ?? "");
+  // Every parcel still to deliver is on its way back to the warehouse
+  // (stopped by staff, or sent back after a route): nothing reaches the
+  // shopper, so no "En camino", no date and no delivery code.
+  const back = orderComingBack(o.status, o.shipments);
+  // Money held for the shopper, so a cancellation gives some back.
+  const paid = ["captured", "partially_refunded"].includes(o.payment?.status ?? "");
   const refunds = payment.data?.refunds ?? [];
   const refundedSoFar = refunds.reduce((sum, refund) => sum + refund.amount_minor, 0);
   const feeBack = deliveryFeeComesBack(o.shipments);
+  // What comes back when the warehouse receives them: what is left of the
+  // payment, less the delivery fee when someone went to the door.
+  const comesBack = Math.max(
+    0,
+    (o.payment?.amount_minor ?? 0) - refundedSoFar - (feeBack ? 0 : o.shipping_minor),
+  );
 
   return (
     <Screen refreshing={order.isRefetching} onRefresh={() => void order.refetch()}>
@@ -208,8 +216,10 @@ export default function OrderScreen() {
           Pedido {o.order_number}
         </Text>
         {/* Not "En camino" when no parcel is on its way to the shopper any more. */}
-        {stopping ? (
-          <Badge tone="warning">Se está cancelando</Badge>
+        {back ? (
+          <Badge tone="warning">
+            {back.cancels ? "Se está cancelando" : "Un paquete regresa a la bodega"}
+          </Badge>
         ) : isRescheduledOrder(o.status, o.shipments) ? (
           <Badge tone="info">Entrega reprogramada</Badge>
         ) : (
@@ -228,15 +238,31 @@ export default function OrderScreen() {
       {payment.data?.money_in_review && !(awaitingPayment && payment.data.stage === "review") ? (
         <MoneyInReview payment={payment.data} />
       ) : null}
-      {stopping ? (
-        <Alert tone="warning" title="Estamos cancelando su pedido" testID="order-stopping">
-          {`Detuvimos su pedido antes de que saliera de nuestra bodega. ${
-            paid
-              ? `Cuando la bodega confirme que lo recibió, le devolvemos ${formatPrice(
-                  feeBack ? o.total_minor : o.items_total_minor,
-                )}${feeBack && o.shipping_minor > 0 ? ", el envío incluido," : ""} por el mismo medio con que pagó.`
-              : "No se le cobró nada, así que no hay nada que devolver."
-          }`}
+      {back ? (
+        <Alert
+          tone="warning"
+          title={
+            back.cancels ? "Estamos cancelando su pedido" : "Un paquete regresa a nuestra bodega"
+          }
+          testID="order-stopping"
+        >
+          {`${
+            back.stopped
+              ? "Detuvimos su pedido en nuestra bodega: ya no saldrá hacia usted. "
+              : back.cancels
+                ? "Su pedido regresa a nuestra bodega sin entregarse. "
+                : "Un paquete de su pedido regresa a nuestra bodega sin entregarse. "
+          }${
+            !paid
+              ? back.cancels
+                ? "No se le cobró nada, así que no hay nada que devolver."
+                : ""
+              : back.cancels
+                ? `Cuando la bodega confirme que lo recibió, le devolvemos ${formatPrice(comesBack)}${
+                    feeBack && o.shipping_minor > 0 ? ", el envío incluido," : ""
+                  } por el mismo medio con que pagó.`
+                : "Cuando la bodega lo reciba, le devolvemos lo que pagó por ese paquete."
+          }`.trim()}
         </Alert>
       ) : null}
       {payment.data ? <RefundList payment={payment.data} /> : null}
@@ -250,7 +276,7 @@ export default function OrderScreen() {
         </Text>
       ) : null}
 
-      {o.delivery_pin && !stopping ? (
+      {o.delivery_pin && !back ? (
         <View style={styles.pin} testID="delivery-code">
           <Text variant="heading">Su código de entrega</Text>
           <Text
@@ -273,7 +299,7 @@ export default function OrderScreen() {
           <Text variant="bodyStrong" tint="success">
             Entregado el {formatDateTime(o.delivered_at)}
           </Text>
-        ) : o.status === "cancelled" || o.status === "refunded" || stopping ? null : (
+        ) : o.status === "cancelled" || o.status === "refunded" || back ? null : (
           <Text variant="bodyStrong" tint="success">
             {o.promise_earliest === o.promise_latest
               ? `Llega el ${formatDate(o.promise_latest)}`
@@ -310,8 +336,17 @@ export default function OrderScreen() {
             ) : null}
             {isStoppedShipment(shipment.status, shipment.recalled) ? (
               <Text variant="small">
-                Este paquete no saldrá de nuestra bodega. Le devolvemos lo que pagó por él cuando la
-                bodega confirme que lo recibió.
+                {`Este paquete no saldrá de nuestra bodega.${
+                  paid
+                    ? " Le devolvemos lo que pagó por él cuando la bodega confirme que lo recibió."
+                    : ""
+                }`}
+              </Text>
+            ) : shipment.status === "returning" ? (
+              <Text variant="small">
+                {`Este paquete regresa a nuestra bodega sin entregarse.${
+                  paid ? " Le devolvemos lo que pagó por él cuando la bodega lo reciba." : ""
+                }`}
               </Text>
             ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
               <Text variant="small">

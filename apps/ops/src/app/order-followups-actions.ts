@@ -28,6 +28,12 @@ async function staffAction(
   returnTo: string,
   run: (api: Awaited<ReturnType<typeof sessionApi>>) => Promise<string>,
   values: Record<string, string>,
+  /**
+   * Refusals that leave the screen as it is, so the form that asked still
+   * shows why (redrawing would remove a form the page no longer offers, and
+   * its message with it).
+   */
+  keepFormOn: readonly string[] = [],
 ): Promise<ActionState> {
   if (!(await currentStaff())) redirectTo(signInPath(returnTo));
   try {
@@ -38,7 +44,7 @@ async function staffAction(
     if (isRedirect(error)) throw error;
     if (
       error instanceof ApiError &&
-      !["network", "unknown", "invalid_response"].includes(error.code)
+      !["network", "unknown", "invalid_response", ...keepFormOn].includes(error.code)
     ) {
       refresh();
     }
@@ -60,6 +66,8 @@ export async function recallShipment(
   };
   const shipmentId = z.uuid().safeParse(formData.get("shipmentId"));
   const number = orderNumber.safeParse(formData.get("orderNumber"));
+  // Whether money was paid, as the page knew it (only for the words).
+  const refundable = formData.get("paid") === "1";
   if (!shipmentId.success || !number.success) return { error: GENERIC_ERROR, values };
   const reason = (values.reason ?? "").trim();
   if (letters(reason) < RECALL_REASON_MIN_LETTERS) {
@@ -80,10 +88,22 @@ export async function recallShipment(
     async (api) => {
       const result = await api.opsRecallShipment(shipmentId.data, reason);
       return result.route_code
-        ? `Paquete ${result.tracking_code} detenido y quitado de la ruta ${result.route_code}. La bodega lo recibe en «Paquetes devueltos por recibir»; entonces se reembolsa.`
-        : `Paquete ${result.tracking_code} detenido. La bodega lo recibe en «Paquetes devueltos por recibir»; entonces se reembolsa.`;
+        ? `Paquete ${result.tracking_code} detenido y quitado de la ruta ${result.route_code}. La bodega lo recibe en «Paquetes devueltos por recibir»${
+            refundable ? "; entonces se reembolsa." : "; no hay nada que reembolsar."
+          }`
+        : `Paquete ${result.tracking_code} detenido. La bodega lo recibe en «Paquetes devueltos por recibir»${
+            refundable ? "; entonces se reembolsa." : "; no hay nada que reembolsar."
+          }`;
     },
     values,
+    // The parcel moved on meanwhile (another tab, the driver started the route).
+    [
+      "shipment_not_recallable",
+      "shipment_on_started_route",
+      "stop_attempt_in_progress",
+      "stop_already_closed",
+      "route_closed",
+    ],
   );
 }
 
