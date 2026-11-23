@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canOrderTransition,
   canShipmentTransition,
+  isRescheduledOrder,
   isRescheduledShipment,
   ORDER_STATUS_LABEL,
   ORDER_STATUSES,
@@ -311,6 +312,20 @@ describe("order lifecycle", () => {
     expect(isRescheduledShipment("delivery_failed", 0)).toBe(true);
     expect(isRescheduledShipment("delivery_failed", 1)).toBe(false);
     expect(isRescheduledShipment("out_for_delivery", 0)).toBe(false);
+  });
+
+  it("calls an order rescheduled only when every parcel still to deliver was", () => {
+    const rescheduled = { status: "delivery_failed" as const, attempt_count: 0 };
+    const delivered = { status: "delivered" as const, attempt_count: 1 };
+    const onItsWay = { status: "out_for_delivery" as const, attempt_count: 0 };
+    const failed = { status: "delivery_failed" as const, attempt_count: 1 };
+    expect(isRescheduledOrder("shipped", [rescheduled])).toBe(true);
+    expect(isRescheduledOrder("partially_shipped", [delivered, rescheduled])).toBe(true);
+    expect(isRescheduledOrder("shipped", [rescheduled, onItsWay])).toBe(false);
+    expect(isRescheduledOrder("shipped", [rescheduled, failed])).toBe(false);
+    expect(isRescheduledOrder("shipped", [delivered])).toBe(false);
+    expect(isRescheduledOrder("delivered", [rescheduled])).toBe(false);
+    expect(isRescheduledOrder("shipped", [])).toBe(false);
   });
 
   it("derives order status from its shipments", () => {

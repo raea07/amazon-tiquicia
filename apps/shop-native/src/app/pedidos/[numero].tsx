@@ -1,4 +1,9 @@
-import { isRescheduledShipment, ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
+import {
+  isRescheduledOrder,
+  isRescheduledShipment,
+  ORDER_STATUS_LABEL,
+  toCostaRicaTime,
+} from "@yuntera/core";
 import { ApiError, type OrderDetail, type OrderPayment } from "@yuntera/db";
 import { useSession } from "@yuntera/expo-kit/auth";
 import { useApiQuery } from "@yuntera/expo-kit/data";
@@ -188,7 +193,12 @@ export default function OrderScreen() {
         <Text variant="title" testID="order-title">
           Pedido {o.order_number}
         </Text>
-        <OrderStatusBadge status={o.status} />
+        {/* Not "En camino" when no parcel is on its way to the shopper any more. */}
+        {isRescheduledOrder(o.status, o.shipments) ? (
+          <Badge tone="info">Entrega reprogramada</Badge>
+        ) : (
+          <OrderStatusBadge status={o.status} />
+        )}
         <Text tint="muted">
           Realizado el {formatDate(o.placed_at, { day: "numeric", month: "long", year: "numeric" })}
         </Text>

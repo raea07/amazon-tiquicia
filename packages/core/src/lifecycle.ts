@@ -145,3 +145,19 @@ export const ORDER_STATUS_LABEL: Readonly<Record<OrderStatus, { "es-CR": string;
 export function isRescheduledShipment(status: ShipmentStatus, attemptCount: number): boolean {
   return status === "delivery_failed" && attemptCount === 0;
 }
+
+/**
+ * An order "on its way" (shipped or partly shipped) whose parcels still to
+ * deliver were all rescheduled (isRescheduledShipment): none is on its way to
+ * the shopper, so the order's heading says "Entrega reprogramada" rather than
+ * "En camino". Delivered and cancelled parcels do not count; with no parcel
+ * left to deliver, it is not.
+ */
+export function isRescheduledOrder(
+  status: OrderStatus,
+  shipments: ReadonlyArray<{ status: ShipmentStatus; attempt_count: number }>,
+): boolean {
+  if (status !== "shipped" && status !== "partially_shipped") return false;
+  const open = shipments.filter((s) => s.status !== "delivered" && s.status !== "cancelled");
+  return open.length > 0 && open.every((s) => isRescheduledShipment(s.status, s.attempt_count));
+}

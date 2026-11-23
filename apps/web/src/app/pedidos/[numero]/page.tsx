@@ -1,5 +1,10 @@
 import { brand } from "@yuntera/brand";
-import { isRescheduledShipment, ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
+import {
+  isRescheduledOrder,
+  isRescheduledShipment,
+  ORDER_STATUS_LABEL,
+  toCostaRicaTime,
+} from "@yuntera/core";
 import {
   ApiError,
   type MyOrderReturn,
@@ -126,7 +131,12 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
 
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-bold">Pedido {order.order_number}</h1>
-        <OrderStatusBadge status={order.status} />
+        {/* Not "En camino" when no parcel is on its way to the shopper any more. */}
+        {isRescheduledOrder(order.status, order.shipments) ? (
+          <Badge tone="info">Entrega reprogramada</Badge>
+        ) : (
+          <OrderStatusBadge status={order.status} />
+        )}
       </div>
       <p className="mt-1 text-ink-muted">
         Realizado el{" "}
