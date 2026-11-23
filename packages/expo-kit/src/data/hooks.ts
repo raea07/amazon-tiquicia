@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { Api } from "@yuntera/db";
+import { useCallback } from "react";
 import { useApi, useSession } from "../auth/session";
 
 /**
@@ -35,6 +36,29 @@ export function useApiQuery<T>(
   });
 }
 
+/**
+ * Marks keys (as given to useApiQuery, without the user prefix) as out of
+ * date and reads again the ones on screen. For a refresh that must wait
+ * until later than the mutation, such as when the screen showing its
+ * confirmation is left.
+ */
+export function useInvalidate() {
+  const client = useQueryClient();
+  const { viewer } = useSession();
+  const viewerId = viewer?.id ?? "anonymous";
+  // Stable between renders, so it can sit in an effect's dependencies.
+  return useCallback(
+    (keys: QueryKey[]) =>
+      Promise.all(
+        keys.flatMap((key) => [
+          client.invalidateQueries({ queryKey: key }),
+          client.invalidateQueries({ queryKey: ["user", viewerId, ...key] }),
+        ]),
+      ),
+    [client, viewerId],
+  );
+}
+
 /** Changes something through the API, then refreshes the keys it affects. */
 export function useApiMutation<TInput, TResult>(
   write: (api: Api, input: TInput) => Promise<TResult>,
@@ -44,19 +68,13 @@ export function useApiMutation<TInput, TResult>(
   } = {},
 ) {
   const api = useApi();
-  const client = useQueryClient();
-  const { viewer } = useSession();
+  const invalidate = useInvalidate();
   const { invalidates = [], onSuccess, ...rest } = options;
   return useMutation({
     mutationFn: (input: TInput) => write(api, input),
     ...rest,
     onSuccess: async (...args) => {
-      await Promise.all(
-        invalidates.flatMap((key) => [
-          client.invalidateQueries({ queryKey: key }),
-          client.invalidateQueries({ queryKey: ["user", viewer?.id ?? "anonymous", ...key] }),
-        ]),
-      );
+      await invalidate(invalidates);
       await onSuccess?.(...args);
     },
   });

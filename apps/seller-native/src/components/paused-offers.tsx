@@ -11,7 +11,8 @@ import {
   Text,
   TextField,
 } from "@yuntera/expo-kit/ui";
-import { useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { withPriceFloor } from "@/lib/refusal";
 import { plainColones } from "@/lib/rules";
@@ -20,13 +21,36 @@ import { shopKey, useShop } from "@/lib/shops";
 
 const dayMonth = (value: string) => formatDate(value, { day: "numeric", month: "long" });
 
-/** A new price and the offer back on sale, in one step (the seller centre's `ResumeOfferForm`). */
-function ResumeForm({ offer, label }: { offer: PausedOffer; label: string }) {
+/**
+ * The shop's offers paused below the price floor. Productos reads it too, so
+ * that pulling the list down reads it again.
+ */
+export function usePausedOffers() {
+  const shop = useShop();
+  return useApiQuery(shopKey(shop.id, "paused-offers"), (api) => api.sellerPausedOffers(shop.id), {
+    personal: true,
+  });
+}
+
+/**
+ * A new price and the offer back on sale, in one step (the seller centre's
+ * `ResumeOfferForm`). On success the offer leaves the paused list at once,
+ * so the confirmation is held by `PausedOffers`, above it.
+ */
+function ResumeForm({
+  offer,
+  label,
+  onResumed,
+}: {
+  offer: PausedOffer;
+  label: string;
+  onResumed: (message: string) => void;
+}) {
   const shop = useShop();
   const [price, setPrice] = useState(
     offer.min_price_minor ? plainColones(offer.min_price_minor) : "",
   );
-  const [result, setResult] = useState<{ ok?: string; error?: string }>({});
+  const [result, setResult] = useState<{ error?: string }>({});
   const resume = useApiMutation(
     (api, input: { priceMinor: number; listPriceMinor: number | null }) =>
       api.sellerUpdateOffer({
@@ -35,10 +59,9 @@ function ResumeForm({ offer, label }: { offer: PausedOffer; label: string }) {
         listPriceMinor: input.listPriceMinor,
         status: "active",
       }),
-    { invalidates: [shopKey(shop.id, "listings")] },
+    // The paused list drops the offer, and Productos shows it on sale.
+    { invalidates: [shopKey(shop.id, "paused-offers"), shopKey(shop.id, "listings")] },
   );
-  // Shown in place of the form; the list drops the offer the next time it is read.
-  if (result.ok) return <FormMessage ok={result.ok} testID="paused-offer-result" />;
   return (
     <Stack gap={2}>
       <TextField
@@ -62,7 +85,7 @@ function ResumeForm({ offer, label }: { offer: PausedOffer; label: string }) {
           setResult({});
           try {
             await resume.mutateAsync(checked.input);
-            setResult({ ok: RESUMED });
+            onResumed(RESUMED);
           } catch (error) {
             setResult({ error: withPriceFloor(error, messageOf(error)) });
           }
@@ -81,17 +104,17 @@ function ResumeForm({ offer, label }: { offer: PausedOffer; label: string }) {
  * The seller centre's `PausedOffers`, at the top of its products page.
  */
 export function PausedOffers() {
-  const shop = useShop();
-  const paused = useApiQuery(
-    shopKey(shop.id, "paused-offers"),
-    (api) => api.sellerPausedOffers(shop.id),
-    { personal: true },
-  );
+  const paused = usePausedOffers();
+  // "Precio guardado…" after a resume, said until the tab is left.
+  const [resumed, setResumed] = useState<string | undefined>();
+  useFocusEffect(useCallback(() => () => setResumed(undefined), []));
   // A list that could not be read is not a reason to hide the products under it.
   const offers = paused.data ?? [];
-  if (offers.length === 0) return null;
+  const confirmation = resumed ? <FormMessage ok={resumed} testID="paused-offer-result" /> : null;
+  if (offers.length === 0) return confirmation;
   return (
     <View style={styles.box} testID="paused-offers">
+      {confirmation}
       <Text variant="heading">{pausedHeading(offers.length)}</Text>
       <Text variant="small" tint="muted">
         Para venderla otra vez, ponga un precio que cubra las tarifas y guárdelo: vuelve a la venta
@@ -111,7 +134,7 @@ export function PausedOffers() {
                 <Text variant="smallStrong">
                   {`El precio más bajo que cubre las tarifas es ${formatPrice(offer.min_price_minor)}.`}
                 </Text>
-                <ResumeForm offer={offer} label={label} />
+                <ResumeForm offer={offer} label={label} onResumed={setResumed} />
               </>
             ) : (
               <Text variant="smallStrong">

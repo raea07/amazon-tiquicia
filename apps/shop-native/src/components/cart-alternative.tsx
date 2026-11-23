@@ -63,6 +63,8 @@ export function UnavailableLine({
         <AlternativeArrival alternative={alternative} />
         <Button
           onPress={() => cart.swap(line.offer_id, alternative.alternative_offer_id)}
+          // The label names the other shop: at 320 px it must not be cut off.
+          wrap
           testID="cart-swap"
         >
           {note.swapLabel}

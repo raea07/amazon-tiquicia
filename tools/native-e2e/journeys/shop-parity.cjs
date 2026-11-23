@@ -271,6 +271,22 @@ async function as(email) {
   check(swapBox !== null && swapBox.height >= 44, "the swap button is at least 44 px high");
   check((await overflow()) <= 0, "the cart has no sideways scrolling at 390 px");
   await page.screenshot({ path: `${SHOTS}/native-shop-parity-06-cart-swap.png`, fullPage: true });
+  // At the narrowest supported width the button still names the other shop
+  // in full: its label wraps instead of being cut off.
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.waitForTimeout(300);
+  const clipped = await visible("cart-swap").evaluate((button) =>
+    [...button.querySelectorAll("*")]
+      .filter((el) => el.textContent.includes("Cambiar a la oferta de"))
+      .some((el) => el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1),
+  );
+  check(!clipped, "at 320 px the swap button shows 'Cambiar a la oferta de TecnoCasa' whole");
+  check((await overflow()) <= 0, "the cart has no sideways scrolling at 320 px");
+  await page.screenshot({
+    path: `${SHOTS}/native-shop-parity-06b-cart-swap-320.png`,
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
 
   await visible("cart-swap").click();
   await visible("cart-continue").waitFor();

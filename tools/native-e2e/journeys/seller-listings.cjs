@@ -9,10 +9,11 @@
 //   2. TecnoCasa declares a much heavier package and staff approve it, which
 //      pauses Sendero's offer below the price floor. The app lists it with
 //      why and the lowest price that covers the fees, and puts it back on
-//      sale at a new price in one step.
+//      sale at a new price in one step: the paused box lets go of it at once.
 //   3. Pauses its offer of TecnoCasa's earphones: the shop no longer sells
 //      Sendero's offer; resumes it: it is back. Stops selling the blender for
-//      good (the tick box first): its offer leaves the product page.
+//      good (the tick box first): its offer leaves the product page, and
+//      back in Productos the list no longer shows it.
 //   4. Retires a size of its own T-shirt: the shop no longer offers that
 //      size; brings it back.
 //   5. Takes its puzzle back to draft (the tick box first): the product page
@@ -209,6 +210,22 @@ async function as(email) {
   await shot("02-paused-offer");
   await visible(`paused-resume-${blenderOffer.offer_id}`).click();
   await page.getByText("Precio guardado. Su oferta está a la venta otra vez.").first().waitFor();
+  // Without a reload: the paused box lets go of the offer, the confirmation
+  // stays, and the list shows the offer on sale.
+  await page
+    .getByTestId(`paused-offer-${blenderOffer.offer_id}`)
+    .waitFor({ state: "detached", timeout: 10_000 });
+  check(
+    (await said("paused-offer-result")) === "Precio guardado. Su oferta está a la venta otra vez.",
+    "the resumed offer leaves the paused box at once and the confirmation stays",
+  );
+  await page
+    .getByTestId(`listing-${blenderOffer.offer_id}`)
+    .filter({ visible: true, hasNotText: "En pausa" })
+    .first()
+    .waitFor({ timeout: 10_000 });
+  check(true, "Productos shows the resumed offer without 'En pausa'");
+  await shot("02b-resumed");
   const resumed = (await listings()).find((l) => l.offer_id === blenderOffer.offer_id);
   check(
     resumed.offer_status === "active" && resumed.price_minor === pausedNow.min_price_minor,
@@ -242,7 +259,10 @@ async function as(email) {
     "resumed, the shop sells Sendero's earphones again",
   );
 
-  await page.goto(`${BASE}/oferta/${blenderOffer.offer_id}`, { waitUntil: "networkidle" });
+  // Opened from Productos, as the seller does, so that going back returns there.
+  await page.goto(`${BASE}/productos`, { waitUntil: "networkidle" });
+  await visible(`listing-${blenderOffer.offer_id}`).click();
+  await page.waitForURL(new RegExp(`/oferta/${blenderOffer.offer_id}`));
   await visible("withdraw-offer").waitFor();
   await visible("withdraw-offer-submit").click();
   check(
@@ -265,6 +285,13 @@ async function as(email) {
       "archived" || !(await listings()).some((l) => l.offer_id === blenderOffer.offer_id),
     "the offer is archived",
   );
+  // Back in Productos, the list no longer shows the offer as on sale.
+  await page.goBack();
+  await page.waitForURL((url) => new URL(url).pathname === "/productos");
+  await page
+    .getByTestId(`listing-${blenderOffer.offer_id}`)
+    .waitFor({ state: "detached", timeout: 10_000 });
+  check(true, "back in Productos, the withdrawn offer is no longer listed");
 
   // ── 4. A size retired and brought back ─────────────────────────────────────
   const shirt = (await listings()).find((l) => l.product_slug === "camiseta-algodon-sendero");

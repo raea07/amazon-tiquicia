@@ -1,7 +1,8 @@
 import { messageOf } from "@yuntera/expo-kit/api";
-import { useApiMutation } from "@yuntera/expo-kit/data";
+import { useApiMutation, useInvalidate } from "@yuntera/expo-kit/data";
 import { Button, Card, Checkbox, FormMessage, Text } from "@yuntera/expo-kit/ui";
-import { useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import { WITHDRAW_CONFIRM_NEEDED, WITHDRAWN } from "@/lib/seller-listings";
 import { shopKey, useShop } from "@/lib/shops";
 
@@ -23,11 +24,31 @@ export function WithdrawOfferCard({
   const shop = useShop();
   const [confirmed, setConfirmed] = useState(false);
   const [result, setResult] = useState<{ ok?: string; error?: string }>({});
+  const invalidate = useInvalidate();
+  const withdrawn = useRef(false);
   const withdraw = useApiMutation(
     (api) => api.sellerUpdateOffer({ offerId, priceMinor, status: "archived" }),
-    // The list is read again only on the next visit: here the offer would
-    // vanish and take this confirmation with it.
-    { invalidates: [shopKey(shop.id, "overview")] },
+    // The shop's lists are read again when this screen is left (below): read
+    // now, the offer would vanish from this screen and take this
+    // confirmation with it.
+    {
+      invalidates: [shopKey(shop.id, "overview")],
+      onSuccess: () => {
+        withdrawn.current = true;
+      },
+    },
+  );
+  // Leaving the screen (back, or anywhere else): Productos no longer lists
+  // the offer as on sale.
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        if (!withdrawn.current) return;
+        withdrawn.current = false;
+        void invalidate([shopKey(shop.id)]);
+      },
+      [invalidate, shop.id],
+    ),
   );
   return (
     <Card testID="withdraw-offer">
