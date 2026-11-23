@@ -42,15 +42,21 @@
 --     units, a new task could be sent there and come up short. It now names
 --     first a switched-on shelf, returns or receiving area whose free units
 --     fill the whole task, then one with some free units, then the rest;
---     within each, switched-on locations first, storage and picking shelves
---     before the returns and receiving areas, then the most free units, the
---     most units, the code (units that came back from a parcel into the
---     returns area are picked before a shelf that cannot fill the task). It also takes the candidate shelves
---     FOR KEY SHARE before choosing, which waits for a move or a count that
---     holds one (FOR UPDATE) and is not blocked by picks, receipts or
---     cancellations (their updates take FOR NO KEY UPDATE): a move and a
---     release at the same moment are taken one after the other, and the
---     later one sees the other's result.
+--     within each, shelves and the returns and receiving areas before the
+--     damaged, packing and dispatch areas, switched-on locations first,
+--     storage and picking shelves before the returns and receiving areas,
+--     then the most free units, the most units, the code (units that came
+--     back from a parcel into the returns area are picked before a shelf
+--     that cannot fill the task). It first takes the order's stock rows
+--     (stock_levels) FOR NO KEY UPDATE, so two releases of the same product
+--     (two payments confirmed at once) are taken one after the other and
+--     the later one counts the other's task as promised; a ledger row's
+--     foreign key (KEY SHARE) does not wait for it. Then it takes the
+--     candidate shelves FOR KEY SHARE before choosing, which waits for a
+--     move or a count that holds one (FOR UPDATE) and is not blocked by
+--     picks, receipts or cancellations (their updates take FOR NO KEY
+--     UPDATE): a move and a release at the same moment are taken one after
+--     the other, and the later one sees the other's result.
 --   * A COUNT CORRECTION (wms_adjust_stock) keeps its five arguments, so the
 --     typed method that exists keeps working, and gains a sixth, optional:
 --     the quantity the screen showed (p_expected). When it is given and the
@@ -104,8 +110,10 @@
 --                    order private.apply_stock_change and every receipt
 --                    take them in.
 --     A pick takes its task, then one shelf row; a pack takes reservations,
---     then stock rows; neither waits for anything a move or a correction
---     holds while holding something they want. The races are proved with
+--     then stock rows; a release to picking takes the order's stock rows
+--     (product, shop, warehouse, the order place_order reserves them in),
+--     then its shelves KEY SHARE; none waits for anything a move or a
+--     correction holds while holding something they want. The races are proved with
 --     two real sessions in packages/db/src/contract.warehouse-stock-races.test.ts.
 --   * WHO. A worker of the warehouse (private.works_at) or operations staff.
 --     Reads carry the shop's trade name, never a shopper's data. The staff
@@ -302,24 +310,46 @@ $$;
 -- ═══ 2. Picking names the shelf with free units ═══════════════════════════
 
 -- Replaces the version in 20261121081000_checkout.sql. What changed: the
--- shelves it may choose from are taken FOR KEY SHARE first (so a move or a
--- count holding one is waited for, and seen), and the location named is
--- one that really has free units (on the shelf minus what open tasks
--- already wait for): first a switched-on storage, picking, returns or
--- receiving location whose free units fill the whole task, then one with
--- some free units, then the rest; within each, switched-on locations
--- first, storage and picking shelves before the returns and receiving
--- areas, then the most free units, the most units, the code. A shelf
--- whose units are all promised, or too few of them free, never wins over
--- a location that can fill the task (such as units that came back into
--- the returns area). The damaged, packing and dispatch
--- areas only when nothing else holds the product (their units still count
--- as sellable, see section 4).
+-- order's stock rows are taken first (so a second release of the same
+-- product waits and sees the first's task), then the shelves it may choose
+-- from FOR KEY SHARE (so a move or a count holding one is waited for, and
+-- seen), and the location named is one that really has free units (on the
+-- shelf minus what open tasks already wait for): first a switched-on
+-- storage, picking, returns or receiving location whose free units fill the
+-- whole task, then one with some free units, then the rest; within each,
+-- storage, picking, returns and receiving locations before the damaged,
+-- packing and dispatch areas, switched-on locations first, storage and
+-- picking shelves before the returns and receiving areas, then the most
+-- free units, the most units, the code. A shelf whose units are all
+-- promised, or too few of them free, never wins over another switched-on
+-- storage, picking, returns or receiving location that can fill the task
+-- (such as units that came back into the returns area). The damaged,
+-- packing and dispatch areas only when no other location holds the
+-- product, switched on or off (their units still count as sellable, see
+-- section 4).
 create or replace function private.release_order_to_fulfillment(p_order_id uuid) returns void
 language plpgsql security definer
 set search_path = ''
 as $$
 begin
+  -- Two releases of the same product wait for each other here, so the
+  -- second sees the first's task when it counts what is promised. The
+  -- shop's stock rows, in the order place_order reserves them (product,
+  -- shop, warehouse) and before any shelf, as a correction and every
+  -- receipt take them. NO KEY UPDATE: a ledger row's foreign key (KEY SHARE)
+  -- never waits for it.
+  perform 1
+  from public.stock_levels l
+  where (l.warehouse_id, l.sku_id, l.seller_id) in (
+    select s.origin_warehouse_id, i.sku_id, i.seller_id
+    from public.shipments s
+    join public.shipment_items si on si.shipment_id = s.id
+    join public.order_items i on i.id = si.order_item_id
+    join public.warehouses w on w.id = s.origin_warehouse_id and w.kind = 'platform'
+    where s.order_id = p_order_id)
+  order by l.sku_id, l.seller_id, l.warehouse_id
+  for no key update of l;
+
   perform 1
   from public.bin_stock b
   join public.warehouse_locations wl on wl.id = b.location_id
@@ -346,6 +376,7 @@ begin
                              >= si.quantity then 0
                         when b.quantity > private.location_promised(b.location_id, b.sku_id, b.seller_id) then 1
                         else 2 end,
+                   case when wl.kind in ('storage', 'pick', 'returns', 'receiving') then 0 else 1 end,
                    wl.active desc,
                    case when wl.kind in ('storage', 'pick') then 0
                         when wl.kind in ('returns', 'receiving') then 1

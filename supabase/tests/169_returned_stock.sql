@@ -324,5 +324,79 @@ do $$ begin
 end $$;
 select pg_temp.adds_up('X2 packed');
 
+-- ═══ 5. Where a task goes when no location can fill it ═════════════════════
+
+-- Fixture (rolled back to the savepoint): the notebook's units on every
+-- location of SJO1 are set aside, and a switched-off storage shelf of this
+-- suite holds 5. Shelves switched off with stock come from data made outside
+-- the functions (ops_set_location_active refuses it); the order between
+-- them is still fixed.
+savepoint no_location_fills;
+update public.stock_levels set on_hand = on_hand + 20
+where warehouse_id = current_setting('t.platform')::uuid and sku_id = current_setting('t.sku')::uuid
+  and seller_id = current_setting('t.seller')::uuid;
+update public.bin_stock b set quantity = 0
+from public.warehouse_locations wl
+where wl.id = b.location_id and wl.warehouse_id = current_setting('t.platform')::uuid
+  and b.sku_id = current_setting('t.sku')::uuid and b.seller_id = current_setting('t.seller')::uuid;
+insert into public.warehouse_locations (warehouse_id, code, kind, active)
+values (current_setting('t.platform')::uuid, 'Z-69-01-A', 'storage', true);
+select pg_temp.remember('off_shelf', (select id::text from public.warehouse_locations
+  where warehouse_id = current_setting('t.platform')::uuid and code = 'Z-69-01-A'));
+select pg_temp.remember('damaged', (select id::text from public.warehouse_locations
+  where warehouse_id = current_setting('t.platform')::uuid and code = 'CUA-01'));
+update public.warehouse_locations set active = true where id = current_setting('t.damaged')::uuid;
+insert into public.bin_stock (location_id, sku_id, seller_id, quantity)
+values (current_setting('t.off_shelf')::uuid, current_setting('t.sku')::uuid, current_setting('t.seller')::uuid, 5),
+       (current_setting('t.damaged')::uuid, current_setting('t.sku')::uuid, current_setting('t.seller')::uuid, 5)
+on conflict (location_id, sku_id, seller_id) do update set quantity = excluded.quantity;
+-- Switched off once it holds them (stock never lands on a switched-off location).
+update public.warehouse_locations set active = false where id = current_setting('t.off_shelf')::uuid;
+
+-- X3: a switched-off shelf and the switched-on damaged area both hold the
+-- product: the damaged area is used only when nothing else holds it.
+select pg_temp.remember('order_x3', pg_temp.place('devuelto169@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:3'), 'card', 'dev-169-x3')::text);
+select pg_temp.pay(current_setting('t.order_x3')::uuid);
+do $$ begin
+  assert (select t.location_id from public.pick_tasks t join public.shipments s on s.id = t.shipment_id
+          where s.order_id = current_setting('t.order_x3')::uuid) = current_setting('t.off_shelf')::uuid,
+    format('X3: the switched-off shelf comes before the damaged area, not %s',
+      (select wl.code from public.pick_tasks t join public.shipments s on s.id = t.shipment_id
+       join public.warehouse_locations wl on wl.id = t.location_id
+       where s.order_id = current_setting('t.order_x3')::uuid));
+end $$;
+
+-- X4: the returns area held 2, both now promised to a first order; a second
+-- order of 3 finds no location that can fill it, and the switched-on
+-- returns area is named ahead of the switched-off shelf.
+update public.bin_stock set quantity = 0
+where location_id = current_setting('t.damaged')::uuid and sku_id = current_setting('t.sku')::uuid
+  and seller_id = current_setting('t.seller')::uuid;
+delete from public.pick_tasks t using public.shipments s
+where s.id = t.shipment_id and s.order_id = current_setting('t.order_x3')::uuid;
+insert into public.bin_stock (location_id, sku_id, seller_id, quantity)
+values (current_setting('t.dev')::uuid, current_setting('t.sku')::uuid, current_setting('t.seller')::uuid, 2)
+on conflict (location_id, sku_id, seller_id) do update set quantity = excluded.quantity;
+select pg_temp.remember('order_x4a', pg_temp.place('devuelto169@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:2'), 'card', 'dev-169-x4a')::text);
+select pg_temp.pay(current_setting('t.order_x4a')::uuid);
+select pg_temp.remember('order_x4b', pg_temp.place('devuelto169@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:3'), 'card', 'dev-169-x4b')::text);
+select pg_temp.pay(current_setting('t.order_x4b')::uuid);
+do $$ begin
+  assert (select t.location_id from public.pick_tasks t join public.shipments s on s.id = t.shipment_id
+          where s.order_id = current_setting('t.order_x4a')::uuid) = current_setting('t.dev')::uuid,
+    'X4: the first order of 2 is filled from the returns area';
+  assert (pg_temp.screen('DEV-01') ->> 'free')::integer = 0, 'X4: nothing free in the returns area';
+  assert (select t.location_id from public.pick_tasks t join public.shipments s on s.id = t.shipment_id
+          where s.order_id = current_setting('t.order_x4b')::uuid) = current_setting('t.dev')::uuid,
+    format('X4: the switched-on returns area comes before the switched-off shelf, not %s',
+      (select wl.code from public.pick_tasks t join public.shipments s on s.id = t.shipment_id
+       join public.warehouse_locations wl on wl.id = t.location_id
+       where s.order_id = current_setting('t.order_x4b')::uuid));
+end $$;
+rollback to savepoint no_location_fills;
+
 select 'ok' as returned_stock;
 rollback;

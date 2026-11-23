@@ -18,7 +18,11 @@
  *         lock: neither waits);
  *   (iv)  a move against switching a location off, in both orders (the
  *         source emptied first: switched off; the target switched off
- *         first: the move is refused, `location_inactive`).
+ *         first: the move is refused, `location_inactive`);
+ *   (v)   two paid orders of the same product released to picking at the
+ *         same moment: the second release waits for the first (they share
+ *         the shop's stock row), so it counts the first's task as promised
+ *         before it names a shelf. Both are rolled back.
  *
  * The parcel is this file's own (a shopper it creates, an order it places
  * on cash on delivery). What these tests change they undo: the packing is rolled back,
@@ -397,6 +401,58 @@ describe.skipIf(!db.enabled)("moving stock at the same time (against a seeded da
       { code: "Y-94-03-A", active: false },
       { code: "Y-94-04-A", active: false },
     ]);
+    expect(await onHand()).toBe(baseOnHand + 14);
+  });
+
+  it("(v) two payments of the same product, confirmed at the same moment, are released one after the other", async () => {
+    // Two card orders, placed (and so reserved) beforehand: only the
+    // releases race. Before, the second release did not wait, could not see
+    // the first's task, and could send both to a shelf that fills only one.
+    const shopper = db.as(SHOPPER);
+    const address = (await shopper.myAddresses()).find((a) => a.is_default);
+    const offer = (
+      await db.query<{ id: string }>(
+        "select id from public.offers where sku_id = $1 and seller_id = $2",
+        [product.sku_id, product.seller_id],
+      )
+    ).rows[0]?.id;
+    const placed: string[] = [];
+    for (const n of [1, 2]) {
+      placed.push(
+        (
+          await shopper.placeOrder({
+            items: [{ offerId: offer ?? "", quantity: 1 }],
+            addressId: address?.id ?? "",
+            paymentMethod: "card",
+            idempotencyKey: `carrera-bodega-pago-${Date.now()}-${n}`,
+          })
+        ).order_id,
+      );
+    }
+    try {
+      const confirm = (order: string | undefined) => ({
+        as: SHOPPER,
+        sql: "select public.confirm_sandbox_payment($1)",
+        args: [order],
+      });
+      const result = await race(confirm(placed[0]), confirm(placed[1]), {
+        keepFirst: false,
+        keepSecond: false,
+      });
+      expect(result).toEqual({ first: "", second: "", waited: true });
+      const { rows } = await db.query<{ n: number }>(
+        `select count(*)::integer as n from public.pick_tasks t join public.shipments s on s.id = t.shipment_id
+          where s.order_id = any($1)`,
+        [placed],
+      );
+      expect(rows[0]?.n).toBe(0);
+    } finally {
+      for (const order of placed) {
+        await db.query("select private.cancel_order_internal($1, 'Prueba de carrera de bodega')", [
+          order,
+        ]);
+      }
+    }
     expect(await onHand()).toBe(baseOnHand + 14);
   });
 });
