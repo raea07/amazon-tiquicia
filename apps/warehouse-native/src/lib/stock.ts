@@ -84,7 +84,7 @@ export const movedText = (quantity: number, to: string) =>
  * apps/field/src/lib/locations.ts).
  */
 export const goneText = (action: "move" | "count", skuCode: string) =>
-  `${action === "move" ? "No se movió nada" : "No se corrigió nada"}: el producto ${skuCode} ya no está en esta ubicación, porque alguien lo movió o lo contó mientras tanto. Revise la ubicación y vuelva a contar.`;
+  `${action === "move" ? "No se movió nada" : "No se corrigió nada"}: el producto ${skuCode} ya no está en esta ubicación, porque alguien lo alistó, lo movió o corrigió la cantidad mientras tanto. ${action === "move" ? "Búsquelo en «Buscar un producto» para ver dónde está." : "Revise la ubicación y vuelva a contar."}`;
 
 /** Whether a refused product is no longer listed in the location as read again. */
 export const refusedAndGone = (

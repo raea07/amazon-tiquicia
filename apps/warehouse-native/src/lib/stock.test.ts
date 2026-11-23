@@ -79,9 +79,12 @@ describe("a refusal whose product has left the location", () => {
   it("says nothing was saved and what to do, in the web's words", () => {
     assert.equal(
       goneText("move", "YT-64D3BDF4"),
-      "No se movió nada: el producto YT-64D3BDF4 ya no está en esta ubicación, porque alguien lo movió o lo contó mientras tanto. Revise la ubicación y vuelva a contar.",
+      "No se movió nada: el producto YT-64D3BDF4 ya no está en esta ubicación, porque alguien lo alistó, lo movió o corrigió la cantidad mientras tanto. Búsquelo en «Buscar un producto» para ver dónde está.",
     );
-    assert.match(goneText("count", "YT-1"), /^No se corrigió nada: el producto YT-1 ya no está/);
+    assert.equal(
+      goneText("count", "YT-1"),
+      "No se corrigió nada: el producto YT-1 ya no está en esta ubicación, porque alguien lo alistó, lo movió o corrigió la cantidad mientras tanto. Revise la ubicación y vuelva a contar.",
+    );
     const web = readFileSync(join(__dirname, "../../../field/src/lib/locations.ts"), "utf8");
     const native = readFileSync(join(__dirname, "stock.ts"), "utf8");
     const words = (source: string) => /export const goneText = [^`]*(`[^`]*`)/.exec(source)?.[1];

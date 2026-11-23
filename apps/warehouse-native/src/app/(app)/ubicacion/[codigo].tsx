@@ -20,8 +20,8 @@ import {
   TextField,
 } from "@yuntera/expo-kit/ui";
 import { Stack as Nav, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useEffect, useState } from "react";
+import { AccessibilityInfo, Platform, StyleSheet, View } from "react-native";
 import { plural } from "@/lib/floor";
 import {
   countedText,
@@ -337,6 +337,18 @@ export default function LocationScreen() {
   // The last refusal, kept so that it is still shown when its product has
   // left the location meanwhile and its card (with the form) is gone.
   const [refusal, setRefusal] = useState<Refusal | null>(null);
+  const gone =
+    refusal &&
+    !location.isRefetching &&
+    location.data &&
+    refusedAndGone(refusal, location.data.items)
+      ? goneText(refusal.action, refusal.skuCode)
+      : null;
+  // The alert is announced where a live region is (web, Android); iOS has
+  // none, so VoiceOver is told the refusal itself.
+  useEffect(() => {
+    if (gone && Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(gone);
+  }, [gone]);
 
   if (location.isPending || all.isPending) return <LoadingState label="Cargando la ubicación…" />;
   if (location.isError || all.isError) {
@@ -398,9 +410,9 @@ export default function LocationScreen() {
           {done}
         </Alert>
       ) : null}
-      {refusal && !location.isRefetching && refusedAndGone(refusal, here.items) ? (
-        <Alert tone="warning" title="Ya no está en esta ubicación" testID="stock-gone">
-          {goneText(refusal.action, refusal.skuCode)}
+      {gone ? (
+        <Alert tone="danger" title="Ya no está en esta ubicación" testID="stock-gone">
+          {gone}
         </Alert>
       ) : null}
       {here.active ? null : (

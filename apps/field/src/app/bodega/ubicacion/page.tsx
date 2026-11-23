@@ -34,11 +34,27 @@ const count = (value: string | string[] | undefined) => {
   return /^-?\d{1,6}$/.test(text) ? Number(text) : null;
 };
 
-/** What the last move or correction did, as the action reported it in the address (shown once). */
-function Outcome({ params }: { params: Record<string, string | string[] | undefined> }) {
+/**
+ * What the last move or correction did, as the action reported it in the
+ * address (shown once). A refusal because the product left is believed only
+ * for a product code in the database's form (skus.code) that the location,
+ * as just read, really no longer lists: a shared link or an old bookmark
+ * never says stock is gone when it is not.
+ */
+function Outcome({
+  params,
+  listed,
+}: {
+  params: Record<string, string | string[] | undefined>;
+  listed: ReadonlyArray<string>;
+}) {
   const gone = one(params.sin) ?? "";
   const action = one(params.accion);
-  if (/^[A-Za-z0-9-]{1,40}$/.test(gone) && (action === "mover" || action === "contar")) {
+  if (
+    /^[A-Z0-9-]{4,32}$/.test(gone) &&
+    !listed.includes(gone) &&
+    (action === "mover" || action === "contar")
+  ) {
     return (
       <StockOutcome tone="danger" title="Ya no está en esta ubicación">
         {goneText(action === "mover" ? "move" : "count", gone)}
@@ -100,7 +116,7 @@ async function Location({ searchParams }: Pick<PageProps<"/bodega/ubicacion">, "
 
   return (
     <div className="flex flex-col gap-5">
-      <Outcome params={params} />
+      <Outcome params={params} listed={location.items.map((item) => item.sku_code)} />
       <header>
         <p className="text-sm text-ink-muted">
           {location.warehouse.name} · {LOCATION_KIND[location.kind]}

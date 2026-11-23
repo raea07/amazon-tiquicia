@@ -30,4 +30,4 @@ export const movedText = (quantity: number, to: string) =>
  * the warehouse app's `goneText`.
  */
 export const goneText = (action: "move" | "count", skuCode: string) =>
-  `${action === "move" ? "No se movió nada" : "No se corrigió nada"}: el producto ${skuCode} ya no está en esta ubicación, porque alguien lo movió o lo contó mientras tanto. Revise la ubicación y vuelva a contar.`;
+  `${action === "move" ? "No se movió nada" : "No se corrigió nada"}: el producto ${skuCode} ya no está en esta ubicación, porque alguien lo alistó, lo movió o corrigió la cantidad mientras tanto. ${action === "move" ? "Búsquelo en «Buscar un producto» para ver dónde está." : "Revise la ubicación y vuelva a contar."}`;

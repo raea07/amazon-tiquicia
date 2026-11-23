@@ -484,6 +484,24 @@ async function rpcAs(email, calls) {
     "the new shelf is empty again, as the database says",
   );
   await layout(field, "count-refused-gone");
+  // The address alone never says a product left: not for one the location
+  // still lists, nor for a code that is not a product code.
+  for (const [code, sin] of [
+    [source.location_code, notebook.sku_code],
+    [source.location_code, "llame-al-8888-0000"],
+  ]) {
+    await field.goto(
+      `${FIELD}/bodega/ubicacion?codigo=${encodeURIComponent(code)}&sin=${encodeURIComponent(sin)}&accion=mover`,
+      { waitUntil: "networkidle" },
+    );
+    await field.locator('[data-testid="location-summary"]').waitFor();
+    check(
+      (await field
+        .locator('main [role="alert"]', { hasText: "Ya no está en esta ubicación" })
+        .count()) === 0,
+      `a link with sin=${sin === notebook.sku_code ? "a listed product" : "a made-up code"} shows no refusal`,
+    );
+  }
   await ops.goto(OPS + "/operacion/ubicaciones", { waitUntil: "networkidle" });
   await shelf().locator("summary", { hasText: "Desactivar" }).click();
   await shelf().locator('button:has-text("Desactivar la ubicación")').click();

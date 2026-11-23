@@ -356,8 +356,12 @@ async function rpcAs(email, calls) {
   check(
     gone.includes(
       `No se movió nada: el producto ${notebook.sku_code} ya no está en esta ubicación`,
-    ) && gone.includes("Revise la ubicación y vuelva a contar"),
+    ) && gone.includes("Búsquelo en «Buscar un producto» para ver dónde está"),
     "a move whose product left the shelf says on the screen that nothing was moved",
+  );
+  check(
+    (await byId("stock-gone").first().getAttribute("role")) === "alert",
+    "the refusal is an alert (announced at once), as on the web",
   );
   check(
     (await page.getByTestId(`item-${notebook.sku_code}`).count()) === 0 &&
