@@ -4,10 +4,16 @@
 //   - A holiday on a day with promised orders reads in correct Spanish
 //     ("1 pedido", never "1 pedidos").
 //   - On Distritos, "Revisar el cambio" with nothing chosen says what to choose.
-//   - Central takes a stop off a started route (the journey's own, so the
-//     seed's R-1003 stays as it is) while the driver has the parcel:
-//     the driver's header leaves it out of the total and says one was removed;
-//     the staff order page reads "Quitado de una ruta", not "Entrega fallida".
+//   - Settings and holidays: after a refusal, the confirmation box stays as
+//     it was ticked.
+//   - Central takes a stop off the journey's own route (so the seed's R-1003
+//     stays as it is) before the driver starts it: the driver is told to
+//     collect only the parcels still on it, and not to collect the removed
+//     one. Then the driver starts it and Central takes off another stop while
+//     the driver has the parcel: the driver's header and the dispatch card
+//     leave both out of the total and say how many were removed; the staff
+//     order page reads "Quitado de una ruta", not "Entrega fallida", and its
+//     history shows no machine codes.
 //   - Catálogo → Marcas: a new brand is deleted from its row; a brand with
 //     products offers no deletion and says why; a brand that got a product
 //     while the page was open is refused with the number and what to do.
@@ -42,7 +48,8 @@ async function rpcAs(email, calls) {
   const out = [];
   for (const [fn, args] of calls) {
     const r = await ctx.post(`${API}/rest/v1/rpc/${fn}`, { headers, data: args });
-    out.push(await r.json());
+    // A function that returns nothing answers with an empty body.
+    out.push(await r.json().catch(() => null));
   }
   await ctx.dispose();
   return out;
@@ -168,20 +175,51 @@ async function rpcAs(email, calls) {
   );
   await staff.screenshot({ path: SHOTS + "/cf2-districts-nothing-chosen.png", fullPage: true });
 
-  // ── 3. A stop taken off a route ───────────────────────────────────────────
-  const route = await ownRoute(2);
+  // ── 3. Confirmation boxes kept after a refusal ────────────────────────────
+  await go("/operacion/ajustes");
+  const cod = staff.locator('li[data-setting="cod_max_order_minor"]');
+  await cod.locator("summary").click();
+  await cod.locator('input[name="value"]').fill("150,5");
+  await cod.locator('input[name="confirm"]').check();
+  const centimos = await submit(cod, "Guardar el nuevo valor");
+  log("amount with céntimos:", centimos);
+  check(centimos.includes("sin céntimos"), `an amount with céntimos was not refused: ${centimos}`);
+  check(
+    (await cod.locator('input[name="confirm"]').isChecked()) === true,
+    "the setting's confirmation box was cleared after a refusal",
+  );
+  check(
+    (await cod.locator('input[name="value"]').inputValue()) === "150,5",
+    "the typed amount was not kept",
+  );
+  await go("/operacion/feriados");
+  const holidayForm = staff
+    .locator("main form")
+    .filter({ has: staff.locator('input[name="name"]') });
+  await holidayForm.locator('input[name="day"]').fill(promised);
+  await holidayForm.locator('input[name="name"]').fill("X");
+  await holidayForm.locator('input[name="confirm"]').check();
+  const shortName = await submit(holidayForm, "Agregar el feriado");
+  log("short holiday name:", shortName);
+  check(shortName.includes("Escriba el nombre"), `a one-letter name was not refused: ${shortName}`);
+  check(
+    (await holidayForm.locator('input[name="confirm"]').isChecked()) === true,
+    "the holiday's confirmation box was cleared after a refusal",
+  );
+
+  // ── 4. Stops taken off a route ────────────────────────────────────────────
+  const route = await ownRoute(3, { start: false });
   log("own route:", JSON.stringify(route));
-  check(route.stops.length === 2, `the journey's route has ${route.stops.length} stops, not 2`);
-  const stop = { stop_id: route.stops[0].stopId };
-  const order = route.stops[0].orderNumber;
-  const [removed] = await rpcAs("central@yuntera.example", [
+  check(route.stops.length === 3, `the journey's route has ${route.stops.length} stops, not 3`);
+  // Before the driver starts: the parcel goes straight back to dispatch.
+  const [early] = await rpcAs("central@yuntera.example", [
     [
       "ops_remove_route_stop",
-      { p_stop_id: stop?.stop_id, p_reason: "La moto se dañó en el camino." },
+      { p_stop_id: route.stops[0].stopId, p_reason: "Este paquete va en otra ruta." },
     ],
   ]);
-  log("removed:", JSON.stringify(removed));
-  check(removed.shipment_status === "delivery_failed", "the parcel did not go back to dispatch");
+  log("removed before the start:", JSON.stringify(early));
+  check(early.shipment_status === "packed", "the parcel did not go back to dispatch");
 
   const driver = await (
     await phone({
@@ -192,16 +230,55 @@ async function rpcAs(email, calls) {
   watch(driver);
   await signIn(driver, FIELD, "repartidor@yuntera.example");
   await driver.goto(FIELD + "/ruta", { waitUntil: "networkidle" });
-  const header = await text(
-    driver.locator(`section[aria-labelledby="ruta-${route.code}"] > div`).first(),
+  const section = driver.locator(`section[aria-labelledby="ruta-${route.code}"]`);
+  let header = await text(section.locator("> div").first());
+  log("driver header before the start:", header.slice(0, 220));
+  check(
+    header.includes("0 de 2 entregadas · 1 omitida") && header.includes("Recoja 2 bultos"),
+    `the driver is sent to collect the removed parcel: ${header.slice(0, 220)}`,
   );
+  const earlyStop = await text(section.locator("ol > li").first());
+  check(
+    earlyStop.includes("No recoja este paquete: volvió a Despacho") &&
+      !earlyStop.includes("devuélvalo"),
+    `the removed stop does not say to leave the parcel: ${earlyStop.slice(0, 200)}`,
+  );
+  await driver.screenshot({ path: SHOTS + "/cf3a-driver-assigned.png", fullPage: true });
+
+  // Started, then a stop removed while the driver has the parcel.
+  await rpcAs("repartidor@yuntera.example", [
+    ["driver_start_route", { p_route_id: route.routeId }],
+  ]);
+  const stop = { stop_id: route.stops[1].stopId };
+  const order = route.stops[1].orderNumber;
+  const [removed] = await rpcAs("central@yuntera.example", [
+    [
+      "ops_remove_route_stop",
+      { p_stop_id: stop?.stop_id, p_reason: "La moto se dañó en el camino." },
+    ],
+  ]);
+  log("removed:", JSON.stringify(removed));
+  check(removed.shipment_status === "delivery_failed", "the parcel did not go back to dispatch");
+
+  await driver.goto(FIELD + "/ruta", { waitUntil: "networkidle" });
+  header = await text(section.locator("> div").first());
   log("driver header:", header.slice(0, 160));
   check(
-    header.includes("0 de 1 entregadas · 1 omitida"),
-    `the driver's header counts the removed stop: ${header.slice(0, 160)}`,
+    header.includes("0 de 1 entregadas · 2 omitidas"),
+    `the driver's header counts the removed stops: ${header.slice(0, 160)}`,
   );
   check((await overflow(driver)) <= 0, "the driver's route scrolls sideways on a phone");
   await driver.screenshot({ path: SHOTS + "/cf3-driver-header.png", fullPage: true });
+
+  await go("/despacho");
+  const card = await text(
+    staff.locator("li").filter({ has: staff.locator(`h3:text-is("${route.code}")`) }),
+  );
+  log("dispatch card:", card.slice(0, 160));
+  check(
+    card.includes("0 de 1 entregadas · 2 omitidas"),
+    `the dispatch card counts the removed stops: ${card.slice(0, 160)}`,
+  );
 
   await go(`/pedidos/${order}`);
   const parcels = await text(staff.locator('section[aria-labelledby="paquetes"]'));
@@ -212,9 +289,17 @@ async function rpcAs(email, calls) {
       !parcels.includes("Entrega fallida"),
     `the staff order page calls the removed stop a failed delivery: ${parcels.slice(0, 200)}`,
   );
+  const history = await text(staff.locator('section[aria-labelledby="historial"]'));
+  log("staff order history:", history.slice(0, 400));
+  check(
+    !/\b(confirmed|picking|processing|packed|ready_for_dispatch|out_for_delivery|shipped|delivery_failed|shipment_status)\b/.test(
+      history,
+    ) && history.includes("Quitado de una ruta"),
+    `the staff order history shows machine codes: ${history.slice(0, 400)}`,
+  );
   await staff.screenshot({ path: SHOTS + "/cf4-staff-order-rescheduled.png", fullPage: true });
 
-  // ── 4. Deleting a brand ───────────────────────────────────────────────────
+  // ── 5. Deleting a brand ───────────────────────────────────────────────────
   await go("/catalogo/marcas");
   const form = staff.locator('section[aria-labelledby="nueva-marca"]');
   await form.locator('input[name="name"]').fill("Marca de Paso");
@@ -286,7 +371,7 @@ async function rpcAs(email, calls) {
     ],
   ]);
 
-  // ── 5. At phone width ─────────────────────────────────────────────────────
+  // ── 6. At phone width ─────────────────────────────────────────────────────
   const mobile = await (await phone({ storageState: await staffContext.storageState() })).newPage();
   watch(mobile);
   for (const [path, shot] of [

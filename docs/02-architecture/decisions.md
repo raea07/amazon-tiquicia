@@ -1423,9 +1423,19 @@ free text staff type. Chosen where the work offered a choice:
   parcel already with the driver goes to `delivery_failed` without counting an
   attempt, without a message and with the status entry hidden; `attempt_count`
   0 is how the shop, the native shop, dispatch and the staff order page tell it
-  from a failed attempt (`isRescheduledShipment`). The driver sees the stop as
-  "Omitida" with the sentence to bring the parcel back, and the route's count
-  leaves it out.
+  from a failed attempt (`isRescheduledShipment`); an order whose parcels still
+  to deliver are all rescheduled says "Entrega reprogramada" in its heading
+  too (`isRescheduledOrder`). The driver sees the stop as "Omitida" with what
+  to do with the parcel (before the route starts: not to collect it; after:
+  to bring it back), and the route's count, the parcels to collect and the
+  dispatch card leave it out.
+- **One lock order for warehouse locations.** Staff changes to a location
+  lock the warehouse row `FOR NO KEY UPDATE` (not `FOR UPDATE`), then the
+  location. A stock write holds the location before its ledger row takes
+  `KEY SHARE` on the warehouse; `FOR UPDATE` there made the two wait for each
+  other and one of them (a staff order cancellation among them) end in a
+  deadlock error. `NO KEY UPDATE` still keeps two staff changes in one
+  warehouse one after the other.
 
 **Consequences.**
 

@@ -42,11 +42,11 @@ async function as(email) {
 }
 
 /**
- * Builds and starts the route. Returns { code, routeId, stops: [{ stopId,
+ * Builds the route and, unless `start` is false, starts it. Returns { code, routeId, stops: [{ stopId,
  * tracking, orderNumber, shopper }] } in route order; `shopper` is the demo
  * shopper whose order it is, or null if the order is someone else's.
  */
-async function ownRoute(count = 2) {
+async function ownRoute(count = 2, { start = true } = {}) {
   // New orders of the third demo shopper, paid in the simulation: the seed's
   // waiting orders stay for the suites that rely on them.
   const buyer = await as(BUYER);
@@ -130,7 +130,7 @@ async function ownRoute(count = 2) {
     (r) => r.status === "assigned" && r.stops.some((s) => tracking.has(s.tracking_code)),
   );
   if (!route) throw new Error("the journey's route was not assigned to the driver");
-  await driver("driver_start_route", { p_route_id: route.route_id });
+  if (start) await driver("driver_start_route", { p_route_id: route.route_id });
   await driver.dispose();
 
   // Whose order each parcel is, among the demo shoppers.

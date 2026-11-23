@@ -555,6 +555,13 @@ const crDay = (days = 0) =>
       !parcel.includes("Entrega fallida"),
     "the shopper is told the delivery failed after staff removed the stop",
   );
+  // The order's heading agrees: its only parcel is not on its way any more.
+  const heading = await text(owner.locator("main h1").locator(".."));
+  log("shopper's order heading:", heading);
+  check(
+    heading.includes("Entrega reprogramada") && !heading.includes("En camino"),
+    `the order's heading still says it is on its way: ${heading}`,
+  );
   await owner.screenshot({ path: SHOTS + "/co10b-shopper-rescheduled.png", fullPage: true });
 
   // ── 9. Every page of the section at phone width ─────────────────────────────

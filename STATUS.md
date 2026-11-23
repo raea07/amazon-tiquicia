@@ -1086,19 +1086,34 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     named in an open pick task, or has units picked from it into parcels
     still being picked (cancelling those orders puts them back there). A
     trigger keeps stock out of a location that is off. There is no tool to
-    move stock between locations.
+    move stock between locations. Switching off, renaming or creating a
+    location locks the warehouse `FOR NO KEY UPDATE`, so it never deadlocks
+    with a stock write (a review found 28 deadlocks in 300 simultaneous pairs
+    with `FOR UPDATE`; a race test now holds a stock write between its two
+    writes and fails with the old lock).
   - A stop staff remove while the driver has the parcel: `delivery_failed`
     with `attempt_count` 0, no message, the status entry hidden; the
     shopper's order page (web and native) says "Entrega reprogramada";
     dispatch and the staff order page say "quitado de una ruta, sin intento
-    de entrega"; the driver's count leaves the stop out. **Left as it is:** a
+    de entrega", and the staff order history says the same instead of a
+    status code; the driver's count, the parcels the driver is told to
+    collect and the dispatch card leave the stop out. A stop removed before
+    the route starts tells the driver not to collect that parcel. The order's
+    heading says "Entrega reprogramada" when every parcel still to deliver
+    was rescheduled; **the shopper's list of orders still says "En camino"**
+    for such an order (`my_orders` carries no parcel states). **Left as it is:** a
     parcel that had a real failed attempt, went out again and was then
     removed by staff has `attempt_count` 1, so the shopper still reads "No
     pudimos entregarlo". The shopper app in the stores' test tracks
     (`3f251c3`) shows any removed stop as "Entrega fallida" until rebuilt.
   - Colón inputs in the console accept whole colones in Costa Rican form
     ("1.500", "1 500", "1.500,00") and refuse céntimos. A closure cancelled
-    before it started stays on Cierres for 7 days with "Volver a cerrar".
+    before it started stays on Cierres for 7 days with "Volver a cerrar". A
+    closure that starts today reads "En curso · Empezó hoy", and ending it
+    says it is cancelled (no day of it had passed). After a refusal, the
+    confirmation boxes on Ajustes and Feriados stay as they were ticked.
+    Names and reasons staff type lose invisible characters (Hangul fillers
+    and tag characters included) and Unicode spaces count as spaces.
   - Every place the shop names an area it does not deliver to says "por
     ahora" with a next step, in the web and the native apps; help and landing
     texts describe the Gran Área Metropolitana as today's area.
