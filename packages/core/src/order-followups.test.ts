@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   canShipmentTransition,
   deliveryFeeComesBack,
+  deliveryFeeKeptLine,
   isOrderBeingStopped,
   isRescheduledOrder,
   isStoppedShipment,
@@ -84,6 +85,27 @@ describe("the delivery fee when nobody went to the door", () => {
       ]),
     ).toBe(false);
     expect(deliveryFeeComesBack([])).toBe(false);
+  });
+
+  it("is explained to the shopper when it stays charged after an attempt", () => {
+    const tried = [{ status: "returned" as const, attempt_count: 1 }];
+    expect(
+      deliveryFeeKeptLine({ shipments: tried, shippingMinor: 150000, paid: true, fee: "₡1 500" }),
+    ).toBe("El envío (₡1 500) no se devuelve porque fuimos a entregarlo a su dirección.");
+    // Nothing to explain: the fee comes back, there was no fee, or nothing was paid.
+    const never = [{ status: "returned" as const, attempt_count: 0 }];
+    expect(
+      deliveryFeeKeptLine({ shipments: never, shippingMinor: 150000, paid: true, fee: "x" }),
+    ).toBeNull();
+    expect(
+      deliveryFeeKeptLine({ shipments: tried, shippingMinor: 0, paid: true, fee: "x" }),
+    ).toBeNull();
+    expect(
+      deliveryFeeKeptLine({ shipments: tried, shippingMinor: 150000, paid: false, fee: "x" }),
+    ).toBeNull();
+    expect(
+      deliveryFeeKeptLine({ shipments: [], shippingMinor: 150000, paid: true, fee: "x" }),
+    ).toBeNull();
   });
 
   it("is the rule the database applies", () => {

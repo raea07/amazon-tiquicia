@@ -2,6 +2,7 @@ import { brand } from "@yuntera/brand";
 import {
   awaitingNewAttemptLine,
   deliveryFeeComesBack,
+  deliveryFeeKeptLine,
   isRescheduledShipment,
   isStoppedShipment,
   ORDER_STATUS_LABEL,
@@ -130,6 +131,17 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
     0,
     (order.payment?.amount_minor ?? 0) - refundedSoFar - (feeBack ? 0 : order.shipping_minor),
   );
+  // Why the delivery fee stays charged, when the order is (being) cancelled
+  // after a real attempt at the door.
+  const feeKept =
+    back?.cancels || (order.status === "cancelled" && refundedSoFar > 0)
+      ? deliveryFeeKeptLine({
+          shipments: order.shipments,
+          shippingMinor: order.shipping_minor,
+          paid: paid || refundedSoFar > 0,
+          fee: formatPrice(order.shipping_minor),
+        })
+      : null;
 
   return (
     <>
@@ -200,11 +212,16 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                 : back.cancels
                   ? `Cuando la bodega confirme que lo recibió, le devolvemos ${formatPrice(comesBack)}${
                       feeBack && order.shipping_minor > 0 ? ", el envío incluido," : ""
-                    } por el mismo medio con que pagó.`
+                    } por el mismo medio con que pagó.${feeKept ? ` ${feeKept}` : ""}`
                   : "Cuando la bodega lo reciba, le devolvemos lo que pagó por ese paquete."}
             </Alert>
           ) : null}
           <RefundList payment={payment} />
+          {feeKept && !back ? (
+            <p className="-mt-3 text-sm" data-testid="fee-kept">
+              {feeKept}
+            </p>
+          ) : null}
           {payment.refunds.length > 1 ? (
             <p className="-mt-3 text-sm" data-testid="refund-total">
               En total le devolvemos <strong>{formatPrice(refundedSoFar)}</strong>

@@ -175,7 +175,7 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                     </span>
                   </span>
                   {isStoppedShipment(shipment.status, shipment.recalled) ? (
-                    <Badge tone="warning">Detenido: vuelve a los estantes</Badge>
+                    <Badge tone="warning">Detenido: vuelve a la zona de devoluciones</Badge>
                   ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
                     <Badge tone="warning">Quitado de una ruta: espera otra</Badge>
                   ) : (
@@ -375,7 +375,7 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
             <h2 className="text-lg font-bold">Cancelar el pedido</h2>
             <p className="mt-1 text-ink-muted">
               {order.shipments.some((shipment) => shipment.can_recall)
-                ? "Ya hay un paquete empacado. Para cancelar, deténgalo en «Paquetes»: vuelve a los estantes y, cuando la bodega lo reciba, se reembolsa y el pedido queda cancelado."
+                ? "Ya hay un paquete empacado. Para cancelar, deténgalo en «Paquetes»: vuelve a la zona de devoluciones y, cuando la bodega lo reciba, se reembolsa y el pedido queda cancelado."
                 : "Ya no se puede cancelar: hay un paquete en camino. Si el cliente no lo quiere, que lo rechace en la entrega; al volver a bodega se recibe como devuelto y se le reembolsa."}
             </p>
           </section>
@@ -460,7 +460,7 @@ function timelineWords(event: TimelineEvent, timeline: readonly TimelineEvent[])
     // Stopping a parcel on a route removes its stop in the same moment: its
     // step back to the shelves is the stop, not a removal.
     if (status === "returning" && noteNow(RECALL_NOTE)) {
-      return "Detenido en la bodega: vuelve a los estantes";
+      return "Detenido en la bodega: vuelve a la zona de devoluciones";
     }
     if ((status === "delivery_failed" || status === "packed") && noteNow(REMOVAL_NOTE)) {
       return "Quitado de una ruta, sin intento de entrega";

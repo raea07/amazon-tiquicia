@@ -308,3 +308,22 @@ export function deliveryFeeComesBack(
     shipments.every((s) => s.status !== "delivered" && s.attempt_count === 0)
   );
 }
+
+/**
+ * The sentence that tells a shopper why the delivery fee stays charged when
+ * the order is cancelled because its parcels came back (or is being
+ * cancelled that way) after a real attempt at the door: the other side of
+ * deliveryFeeComesBack. Null when there is nothing to explain: the fee comes
+ * back, the order had no delivery fee, or nothing was paid. `fee` is the fee
+ * as the screen writes money (for example "₡1 500").
+ */
+export function deliveryFeeKeptLine(input: {
+  shipments: ReadonlyArray<{ status: ShipmentStatus; attempt_count: number }>;
+  shippingMinor: number;
+  paid: boolean;
+  fee: string;
+}): string | null {
+  if (!input.paid || input.shippingMinor <= 0 || input.shipments.length === 0) return null;
+  if (deliveryFeeComesBack(input.shipments)) return null;
+  return `El envío (${input.fee}) no se devuelve porque fuimos a entregarlo a su dirección.`;
+}

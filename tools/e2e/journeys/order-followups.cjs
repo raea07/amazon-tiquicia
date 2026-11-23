@@ -22,6 +22,10 @@
 //   - A cash order stopped: nothing was paid, so nothing is promised.
 //   - A stop form left open while the parcel was stopped elsewhere says why
 //     it is refused and keeps the reason typed.
+//   - A parcel that failed at the door, was planned again and taken off the
+//     new route reads "Entrega reprogramada", never "En camino"; once it is
+//     stopped and received, the delivery fee stays charged (someone went to
+//     the door) and the shopper's page says so, before and after.
 //   - A district moved away and back follows its canton again, and the
 //     console's district view says which districts have a zone of their own.
 //   - The pages at phone width, with no sideways scroll.
@@ -213,14 +217,14 @@ async function packedOrder(method = "sinpe_movil") {
     `the confirmation does not name the order and the money: ${confirmText}`,
   );
   await stopForm.locator('textarea[name="reason"]').fill("1234 ok");
-  let outcome = await submit(staff, stopForm, "Detener y devolver a los estantes");
+  let outcome = await submit(staff, stopForm, "Detener y devolver a la zona de devoluciones");
   log("short reason:", outcome);
   check(
     outcome.includes("al menos cinco letras"),
     `a short reason is not refused clearly: ${outcome}`,
   );
   await stopForm.locator('textarea[name="reason"]').fill("El cliente pidió cancelar por teléfono");
-  outcome = await submit(staff, stopForm, "Detener y devolver a los estantes");
+  outcome = await submit(staff, stopForm, "Detener y devolver a la zona de devoluciones");
   log("no confirmation:", outcome);
   check(
     outcome.includes("Marque la casilla"),
@@ -232,7 +236,7 @@ async function packedOrder(method = "sinpe_movil") {
   );
   await staff.screenshot({ path: SHOTS + "/of1-stop-confirmation.png", fullPage: true });
   await stopForm.locator('input[name="confirm"]').check();
-  outcome = await submit(staff, stopForm, "Detener y devolver a los estantes");
+  outcome = await submit(staff, stopForm, "Detener y devolver a la zona de devoluciones");
   log("stopped:", outcome);
   check(
     outcome.includes(`Paquete ${parcel.tracking_code} detenido`),
@@ -248,7 +252,7 @@ async function packedOrder(method = "sinpe_movil") {
   check(!staffHeader.includes("En camino"), "the staff heading says En camino");
   const staffParcels = await text(staff.locator("section", { has: staff.locator("#paquetes") }));
   check(
-    staffParcels.includes("Detenido: vuelve a los estantes") &&
+    staffParcels.includes("Detenido: vuelve a la zona de devoluciones") &&
       !/Entrega fallida|returning/.test(staffParcels),
     `the parcel is not described in plain words: ${staffParcels}`,
   );
@@ -296,7 +300,10 @@ async function packedOrder(method = "sinpe_movil") {
   log("warehouse row:", returnedText);
   check(
     returnedText.includes("Nunca salió de la bodega") &&
-      returnedText.includes("Central lo detuvo") &&
+      returnedText.includes(
+        "Central lo detuvo antes de que saliera: recíbalo y guarde las unidades en la zona de devoluciones",
+      ) &&
+      !returnedText.includes("estantes") &&
       !returnedText.includes("0 intentos"),
     `the warehouse is not told the parcel never left: ${returnedText}`,
   );
@@ -455,7 +462,7 @@ async function packedOrder(method = "sinpe_movil") {
     p_shipment_id: staleDetail.shipments[0].id,
     p_reason: "Lo detuvo otra persona",
   });
-  outcome = await submit(staff, staleForm, "Detener y devolver a los estantes");
+  outcome = await submit(staff, staleForm, "Detener y devolver a la zona de devoluciones");
   log("stale form:", outcome);
   check(
     outcome.includes("ya no se puede detener") && outcome.includes("Recargue la página"),
@@ -526,6 +533,42 @@ async function packedOrder(method = "sinpe_movil") {
     `the order page says the wrong thing for a parcel waiting to go out again: ${againPage.slice(0, 300)}`,
   );
   await shop.screenshot({ path: SHOTS + "/of6e-shopper-planned-again.png", fullPage: true });
+
+  // ── 4f. That parcel stopped and received: the fee stays, and the page says why ──
+  // Someone went to the door, so the delivery fee is not refunded (the
+  // owner's rule); the shopper is told so, before and after the check-in.
+  check(againOrder.shipping_minor > 0, "fixture: the re-planned order has a delivery fee");
+  await central("ops_recall_shipment", {
+    p_shipment_id: againOrder.shipments[0].id,
+    p_reason: "El cliente pidió cancelar",
+  });
+  const feeLine = `El envío (${colones(againOrder.shipping_minor)}) no se devuelve porque fuimos a entregarlo a su dirección.`;
+  await shop.goto(`${WEB}/pedidos/${againStop.orderNumber}`, { waitUntil: "networkidle" });
+  const keptAll = await text(shop.locator("main"));
+  const keptPage = keptAll.slice(0, keptAll.indexOf("Historial"));
+  log("page stopped after an attempt:", keptPage.slice(0, 400));
+  check(
+    keptPage.includes(
+      `le devolvemos ${colones(againOrder.total_minor - againOrder.shipping_minor)} por el mismo medio con que pagó. ${feeLine}`,
+    ) && !keptPage.includes("el envío incluido"),
+    `the page does not say why the delivery fee stays: ${keptPage.slice(0, 400)}`,
+  );
+  const keptBodega = await as("bodega@yuntera.example");
+  const received = await keptBodega("wms_receive_returned_shipment", {
+    p_shipment_id: againOrder.shipments[0].id,
+    p_resellable: true,
+    p_note: null,
+  });
+  await keptBodega.dispose();
+  check(
+    (received.delivery_fee_refund_minor ?? 0) === 0,
+    "fixture: no delivery-fee refund after a real attempt",
+  );
+  await shop.goto(`${WEB}/pedidos/${againStop.orderNumber}`, { waitUntil: "networkidle" });
+  const keptAfter = await text(shop.locator('[data-testid="fee-kept"]'));
+  log("page cancelled after an attempt:", keptAfter);
+  check(keptAfter === feeLine, "after the check-in the page still says why the fee stays");
+  await shop.screenshot({ path: SHOTS + "/of6f-shopper-fee-kept.png", fullPage: true });
 
   // ── 5. A district moved away and back follows its canton ──────────────────
   await central("ops_move_districts", { p_postal_codes: ["10111"], p_zone_id: "gam-extended" });

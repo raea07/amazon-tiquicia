@@ -1,6 +1,7 @@
 import {
   awaitingNewAttemptLine,
   deliveryFeeComesBack,
+  deliveryFeeKeptLine,
   isRescheduledShipment,
   isStoppedShipment,
   ORDER_STATUS_LABEL,
@@ -204,6 +205,17 @@ export default function OrderScreen() {
     0,
     (o.payment?.amount_minor ?? 0) - refundedSoFar - (feeBack ? 0 : o.shipping_minor),
   );
+  // Why the delivery fee stays charged, when the order is (being) cancelled
+  // after a real attempt at the door (the web's words).
+  const feeKept =
+    back?.cancels || (o.status === "cancelled" && refundedSoFar > 0)
+      ? deliveryFeeKeptLine({
+          shipments: o.shipments,
+          shippingMinor: o.shipping_minor,
+          paid: paid || refundedSoFar > 0,
+          fee: formatPrice(o.shipping_minor),
+        })
+      : null;
 
   return (
     <Screen refreshing={order.isRefetching} onRefresh={() => void order.refetch()}>
@@ -265,12 +277,17 @@ export default function OrderScreen() {
               : back.cancels
                 ? `Cuando la bodega confirme que lo recibió, le devolvemos ${formatPrice(comesBack)}${
                     feeBack && o.shipping_minor > 0 ? ", el envío incluido," : ""
-                  } por el mismo medio con que pagó.`
+                  } por el mismo medio con que pagó.${feeKept ? ` ${feeKept}` : ""}`
                 : "Cuando la bodega lo reciba, le devolvemos lo que pagó por ese paquete."
           }`.trim()}
         </Alert>
       ) : null}
       {payment.data ? <RefundList payment={payment.data} /> : null}
+      {feeKept && !back ? (
+        <Text variant="small" testID="fee-kept">
+          {feeKept}
+        </Text>
+      ) : null}
       {refunds.length > 1 ? (
         <Text variant="small" testID="refund-total">
           {`En total le devolvemos ${formatPrice(refundedSoFar)}${

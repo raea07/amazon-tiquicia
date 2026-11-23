@@ -11,7 +11,11 @@
  * product may have left the shelf, and its form with it); the page shows it
  * once and takes it out of the address. On any refusal the page behind is
  * drawn again too, so its numbers are the database's and no earlier
- * confirmation stays next to it, and the form keeps what was typed.
+ * confirmation stays next to it, and the form keeps what was typed. When
+ * the database refused because the product has meanwhile left the location
+ * (someone moved it all away or counted it to zero), its row and its form
+ * are gone from the page, so the refusal is shown at the top of the page
+ * instead, through the address (`sin`, `accion`).
  */
 
 import { reasonLetters, STOCK_LIMITS } from "@yuntera/db";
@@ -33,18 +37,24 @@ import { z } from "zod";
 const whole = (text: string | undefined) => (text?.trim() ? Number(text.trim()) : Number.NaN);
 
 const product = z.object({
+  warehouseId: z.uuid(),
   locationId: z.uuid(),
   locationCode: z.string().regex(/^[A-Z0-9-]{1,20}$/),
   skuId: z.uuid(),
   sellerId: z.uuid(),
+  skuCode: z.string().regex(/^[A-Za-z0-9-]{1,40}$/),
 });
+
+type Product = z.infer<typeof product>;
 
 function productOf(formData: FormData) {
   return product.safeParse({
+    warehouseId: formData.get("warehouseId"),
     locationId: formData.get("locationId"),
     locationCode: formData.get("locationCode"),
     skuId: formData.get("skuId"),
     sellerId: formData.get("sellerId"),
+    skuCode: formData.get("skuCode"),
   });
 }
 
@@ -59,6 +69,22 @@ const back = (code: string, outcome: Record<string, string>) =>
 function refuse(error: string, values: ActionState["values"]): ActionState {
   refresh();
   return { error, values };
+}
+
+/**
+ * After a database refusal: whether the product is still listed in the
+ * location (then its form shows the refusal). If reading fails, it is taken
+ * as listed, so the refusal is never hidden.
+ */
+async function stillListed(client: Awaited<ReturnType<typeof sessionApi>>, ids: Product) {
+  try {
+    const here = await client.wmsLocationStock(ids.warehouseId, ids.locationCode);
+    return Boolean(
+      here?.items.some((item) => item.sku_id === ids.skuId && item.seller_id === ids.sellerId),
+    );
+  } catch {
+    return true;
+  }
 }
 
 async function api(code: string) {
@@ -96,6 +122,9 @@ export async function moveStock(_previous: ActionState, formData: FormData): Pro
   } catch (error) {
     if (isRedirect(error)) throw error;
     // The shelf changed or the target was switched off meanwhile: show its numbers now.
+    if (!(await stillListed(client, ids.data))) {
+      redirectTo(back(ids.data.locationCode, { sin: ids.data.skuCode, accion: "mover" }));
+    }
     return refuse(messageOf(error), values);
   }
   redirectTo(
@@ -145,6 +174,9 @@ export async function correctCount(
     });
   } catch (error) {
     if (isRedirect(error)) throw error;
+    if (!(await stillListed(client, ids.data))) {
+      redirectTo(back(ids.data.locationCode, { sin: ids.data.skuCode, accion: "contar" }));
+    }
     return refuse(messageOf(error), values);
   }
   redirectTo(

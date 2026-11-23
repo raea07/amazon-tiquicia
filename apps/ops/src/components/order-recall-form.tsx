@@ -32,7 +32,7 @@ export function RecallShipmentForm({
       <div className="mt-2 max-w-xl">
         <CatalogueForm
           action={recallShipment}
-          submit="Detener y devolver a los estantes"
+          submit="Detener y devolver a la zona de devoluciones"
           variant="danger"
           size="sm"
         >
@@ -54,7 +54,8 @@ export function RecallShipmentForm({
             />
             <span>
               Confirmo: el paquete {trackingCode} del pedido {orderNumber} no sale
-              {onRoute ? ", se quita de su ruta" : ""} y vuelve a los estantes. {money}
+              {onRoute ? ", se quita de su ruta" : ""} y vuelve a la zona de devoluciones de la
+              bodega. {money}
             </span>
           </label>
         </CatalogueForm>

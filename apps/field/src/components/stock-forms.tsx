@@ -16,9 +16,15 @@ interface Shelf {
   code: string;
 }
 
-function Ids({ location, item }: { location: Shelf; item: WmsLocationItem }) {
+interface Here extends Shelf {
+  warehouseId: string;
+}
+
+function Ids({ location, item }: { location: Here; item: WmsLocationItem }) {
   return (
     <>
+      <input type="hidden" name="warehouseId" value={location.warehouseId} />
+      <input type="hidden" name="skuCode" value={item.sku_code} />
       <input type="hidden" name="locationId" value={location.id} />
       <input type="hidden" name="locationCode" value={location.code} />
       <input type="hidden" name="skuId" value={item.sku_id} />
@@ -36,7 +42,7 @@ export function MoveForm({
   item,
   targets,
 }: {
-  location: Shelf;
+  location: Here;
   item: WmsLocationItem;
   targets: Shelf[];
 }) {
@@ -109,7 +115,7 @@ export function MoveForm({
  * difference with what is recorded before confirming. The number the screen
  * showed goes with it, so a shelf that changed meanwhile is counted again.
  */
-export function CountForm({ location, item }: { location: Shelf; item: WmsLocationItem }) {
+export function CountForm({ location, item }: { location: Here; item: WmsLocationItem }) {
   const [state, action] = useActionState(correctCount, initial);
   const [counted, setCounted] = useState(state.values?.counted ?? "");
   const typed = counted.trim();

@@ -263,6 +263,31 @@ where current_setting('t.shelf_q')::integer > 1;
 select pg_temp.logout();
 select pg_temp.adds_up('one unit left on the shelf');
 
+-- X0: three notebooks while the shelf has only one free and the returns
+-- area holds more: the whole task goes where it can be filled, and the
+-- parcel is packed (a shelf with too few free units would end short).
+select pg_temp.remember('order_x0', pg_temp.place('devuelto169@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:3'), 'card', 'dev-169-x0')::text);
+select pg_temp.pay(current_setting('t.order_x0')::uuid);
+select pg_temp.remember('ship_x0', pg_temp.shipment(current_setting('t.order_x0')::uuid, 'platform')::text);
+do $$ begin
+  assert (select t.location_id from public.pick_tasks t where t.shipment_id = current_setting('t.ship_x0')::uuid)
+         = current_setting('t.dev')::uuid,
+    format('X0: a task of 3 goes to the returns area, which can fill it, not to %s',
+      (select wl.code from public.pick_tasks t join public.warehouse_locations wl on wl.id = t.location_id
+       where t.shipment_id = current_setting('t.ship_x0')::uuid));
+  assert (pg_temp.screen('A-01-02-B') ->> 'free')::integer = 1, 'X0: the shelf keeps its one free unit';
+end $$;
+select pg_temp.adds_up('X0 released');
+select pg_temp.pack(current_setting('t.ship_x0')::uuid);
+do $$ begin
+  assert (select status from public.shipments where id = current_setting('t.ship_x0')::uuid) = 'packed',
+    'X0: packed in full';
+  assert pg_temp.bin(current_setting('t.dev')::uuid) = current_setting('t.dev0')::integer + 1,
+    'X0: three units left the returns area';
+end $$;
+select pg_temp.adds_up('X0 packed');
+
 -- X1: the shelf still has a free unit: its pick goes to the shelf.
 select pg_temp.remember('order_x1', pg_temp.place('devuelto169@yuntera.example',
   pg_temp.items('libreta-tapa-dura-a5:1'), 'cash_on_delivery', 'dev-169-x1')::text);
@@ -293,7 +318,7 @@ select pg_temp.pack(current_setting('t.ship_x2')::uuid);
 do $$ begin
   assert (select status from public.pick_tasks where shipment_id = current_setting('t.ship_x2')::uuid) = 'done',
     'X2: picked in full, not short';
-  assert pg_temp.bin(current_setting('t.dev')::uuid) = current_setting('t.dev0')::integer + 3,
+  assert pg_temp.bin(current_setting('t.dev')::uuid) = current_setting('t.dev0')::integer,
     'X2: the unit left the returns area';
   assert (select status from public.shipments where id = current_setting('t.ship_x2')::uuid) = 'packed', 'X2: packed';
 end $$;

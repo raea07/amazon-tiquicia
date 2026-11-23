@@ -9,7 +9,10 @@
 // and the count is confirmed; then two more are found (a count upwards). One
 // unit is moved back, first to a shelf operations switch off while the form
 // is open (refused by the database, and that shelf is no longer chosen), then
-// to its first shelf. The product's lookup lists both shelves. Then the shop's
+// to its first shelf. The product's lookup lists both shelves and opens the
+// new one; a move typed there while a colleague empties the shelf is refused,
+// and since the product's card goes, the screen itself says nothing was
+// moved. Then the shop's
 // stock and its history (what the seller centre reads) show both corrections
 // with their reasons and never the moves, and the staff list (what the
 // console reads) shows both with who. Every screen at 390 px with no sideways
@@ -322,6 +325,48 @@ async function rpcAs(email, calls) {
   await page.getByTestId("location-title").filter({ hasText: TARGET }).first().waitFor();
   check(true, "a shelf of the lookup opens its location");
   await shot("06-lookup");
+
+  // ── A move typed on a stale screen: the product leaves the shelf meanwhile ──
+  // A colleague moves the three units back while the form is open. The move is
+  // refused and the product's card (with the form) goes, so the screen itself
+  // says nothing was moved and what to do.
+  await item().waitFor();
+  await inItem("open-move").click();
+  await inItem("move-quantity").fill("2");
+  await item().getByTestId(`move-target-${source.location_id}`).first().click();
+  const [emptied] = await rpcAs("bodega@yuntera.example", [
+    [
+      "wms_move_stock",
+      {
+        p_from_location_id: target.id,
+        p_to_location_id: source.location_id,
+        p_sku_id: notebook.sku_id,
+        p_seller_id: shop.id,
+        p_quantity: 3,
+        p_note: "Para vaciar el estante",
+      },
+    ],
+  ]);
+  check(emptied?.quantity === 3, "a colleague moved the three units back meanwhile");
+  expectRefusal = true;
+  await inItem("move-submit").click();
+  await byId("stock-gone").waitFor();
+  const gone = await textOf("stock-gone");
+  log("stale move:", gone);
+  check(
+    gone.includes(
+      `No se movió nada: el producto ${notebook.sku_code} ya no está en esta ubicación`,
+    ) && gone.includes("Revise la ubicación y vuelva a contar"),
+    "a move whose product left the shelf says on the screen that nothing was moved",
+  );
+  check(
+    (await page.getByTestId(`item-${notebook.sku_code}`).count()) === 0 &&
+      (await textOf("location-summary")).includes("Está vacía"),
+    "the shelf reads empty, as the database says",
+  );
+  expectRefusal = false;
+  await noSideways("a stale move refused");
+  await shot("06b-move-refused-gone");
 
   // ── What the shop and the staff list read ──
   const [history, stockAfter] = await rpcAs("sendero@yuntera.example", [

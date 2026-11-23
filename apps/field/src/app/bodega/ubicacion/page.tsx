@@ -7,7 +7,7 @@ import { Suspense } from "react";
 import { CountForm, MoveForm } from "@/components/stock-forms";
 import { StockOutcome } from "@/components/stock-outcome";
 import { requireWarehouse } from "@/lib/access";
-import { LOCATION_KIND, locationHref, movedText, units } from "@/lib/locations";
+import { goneText, LOCATION_KIND, locationHref, movedText, units } from "@/lib/locations";
 
 export const metadata: Metadata = { title: "Ubicación" };
 
@@ -36,6 +36,15 @@ const count = (value: string | string[] | undefined) => {
 
 /** What the last move or correction did, as the action reported it in the address (shown once). */
 function Outcome({ params }: { params: Record<string, string | string[] | undefined> }) {
+  const gone = one(params.sin) ?? "";
+  const action = one(params.accion);
+  if (/^[A-Za-z0-9-]{1,40}$/.test(gone) && (action === "mover" || action === "contar")) {
+    return (
+      <StockOutcome tone="danger" title="Ya no está en esta ubicación">
+        {goneText(action === "mover" ? "move" : "count", gone)}
+      </StockOutcome>
+    );
+  }
   const moved = count(params.movidas);
   const target = one(params.destino) ?? "";
   if (moved !== null && moved > 0 && /^[A-Z0-9-]{1,20}$/.test(target)) {
@@ -127,7 +136,11 @@ async function Location({ searchParams }: Pick<PageProps<"/bodega/ubicacion">, "
           {location.items.map((item) => (
             <Item
               key={`${item.sku_id}:${item.seller_id}`}
-              location={{ id: location.id, code: location.code }}
+              location={{
+                id: location.id,
+                code: location.code,
+                warehouseId: location.warehouse.id,
+              }}
               item={item}
               targets={targets}
             />
@@ -147,7 +160,7 @@ function Item({
   item,
   targets,
 }: {
-  location: { id: string; code: string };
+  location: { id: string; code: string; warehouseId: string };
   item: WmsLocationItem;
   targets: Array<{ id: string; code: string }>;
 }) {

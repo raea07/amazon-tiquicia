@@ -4,7 +4,14 @@ import { Alert } from "@yuntera/ui";
 import { useEffect } from "react";
 
 /** The address's keys that carry what the last move or correction did. */
-export const OUTCOME_KEYS = ["movidas", "destino", "contadas", "diferencia"] as const;
+export const OUTCOME_KEYS = [
+  "movidas",
+  "destino",
+  "contadas",
+  "diferencia",
+  "sin",
+  "accion",
+] as const;
 
 /**
  * What the last move or correction did, shown once. The action put it in the
@@ -12,7 +19,15 @@ export const OUTCOME_KEYS = ["movidas", "destino", "contadas", "diferencia"] as 
  * refusal (which draws the page again) or a reload never shows it next to
  * something that happened after.
  */
-export function StockOutcome({ title, children }: { title: string; children: string }) {
+export function StockOutcome({
+  title,
+  children,
+  tone = "success",
+}: {
+  title: string;
+  children: string;
+  tone?: "success" | "danger";
+}) {
   // After every render: the same outcome twice in a row draws this again
   // without mounting it anew.
   useEffect(() => {
@@ -22,7 +37,7 @@ export function StockOutcome({ title, children }: { title: string; children: str
     window.history.replaceState(null, "", `${url.pathname}${url.search}`);
   });
   return (
-    <Alert tone="success" title={title}>
+    <Alert tone={tone} title={title}>
       {children}
     </Alert>
   );

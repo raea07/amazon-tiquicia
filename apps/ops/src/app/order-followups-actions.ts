@@ -79,7 +79,7 @@ export async function recallShipment(
   }
   if (values.confirm !== "on") {
     return {
-      error: "Marque la casilla para confirmar que el paquete vuelve a los estantes.",
+      error: "Marque la casilla para confirmar que el paquete vuelve a la zona de devoluciones.",
       values,
     };
   }

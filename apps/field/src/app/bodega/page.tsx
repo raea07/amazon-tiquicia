@@ -135,7 +135,7 @@ async function Board({ searchParams }: PageProps<"/bodega">) {
                   {parcel.units} {parcel.units === 1 ? "unidad" : "unidades"} en {parcel.lines}{" "}
                   {parcel.lines === 1 ? "línea" : "líneas"} · pedido {parcel.order_number} ·{" "}
                   {parcel.never_left
-                    ? "Central lo detuvo antes de que saliera: devuélvalo a los estantes"
+                    ? "Central lo detuvo antes de que saliera: recíbalo y guarde las unidades en la zona de devoluciones"
                     : parcel.attempt_count === 0
                       ? "lo quitaron de una ruta, sin intento de entrega"
                       : parcel.attempt_count === 1

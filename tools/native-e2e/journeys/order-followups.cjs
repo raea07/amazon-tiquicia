@@ -181,7 +181,10 @@ async function packedOrder(buyer, method) {
   log("   ", parcelText);
   check(
     parcelText.includes("Nunca salió de la bodega") &&
-      parcelText.includes("Central lo detuvo") &&
+      parcelText.includes(
+        "Central lo detuvo antes de que saliera: recíbalo y guarde las unidades en la zona de devoluciones",
+      ) &&
+      !parcelText.includes("estantes") &&
       !parcelText.includes("0 intentos"),
     "the board says the parcel never left the building",
   );

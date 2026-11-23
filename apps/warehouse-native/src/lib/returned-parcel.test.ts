@@ -10,7 +10,10 @@ describe("a parcel waiting to be received back", () => {
   it("says a stopped parcel never left the building", () => {
     const stopped = { ...parcel, never_left: true };
     assert.equal(returnedParcelBadge(stopped), "Nunca salió de la bodega");
-    assert.match(returnedParcelDetails(stopped), /Central lo detuvo antes de que saliera/);
+    assert.match(
+      returnedParcelDetails(stopped),
+      /Central lo detuvo antes de que saliera: recíbalo y guarde las unidades en la zona de devoluciones/,
+    );
   });
 
   it("says a parcel taken off a route had no attempt, never 0 attempts", () => {

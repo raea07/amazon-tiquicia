@@ -76,3 +76,20 @@ export const movedText = (quantity: number, to: string) =>
   quantity === 1
     ? `Se movió 1 unidad a ${to}. Guárdela allí ahora.`
     : `Se movieron ${plural(quantity, "unidad", "unidades")} a ${to}. Guárdelas allí ahora.`;
+
+/**
+ * A move or a count the database refused because the product has left the
+ * location meanwhile (its card, and the form with the refusal, are gone
+ * once the location is read again). The web's words (`goneText` in
+ * apps/field/src/lib/locations.ts).
+ */
+export const goneText = (action: "move" | "count", skuCode: string) =>
+  `${action === "move" ? "No se movió nada" : "No se corrigió nada"}: el producto ${skuCode} ya no está en esta ubicación, porque alguien lo movió o lo contó mientras tanto. Revise la ubicación y vuelva a contar.`;
+
+/** Whether a refused product is no longer listed in the location as read again. */
+export const refusedAndGone = (
+  refused: { skuId: string; sellerId: string } | null,
+  items: ReadonlyArray<{ sku_id: string; seller_id: string }>,
+) =>
+  refused !== null &&
+  !items.some((item) => item.sku_id === refused.skuId && item.seller_id === refused.sellerId);

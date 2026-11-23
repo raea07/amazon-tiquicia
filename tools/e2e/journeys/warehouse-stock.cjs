@@ -12,7 +12,9 @@
 // the move. In the console, the staff list shows the move and
 // the correction with who did them; a shelf holding stock cannot be switched
 // off and the refusal says how to empty it; once the warehouse moved its units
-// back, it is switched off. Every screen is checked at 390 px (no sideways
+// back (while the worker was counting it: that stale count is refused at the
+// top of the page, since the product has left the shelf), it is switched
+// off. Every screen is checked at 390 px (no sideways
 // scroll, controls of at least 44 px, one page title) and photographed.
 //
 // A journey drives the real apps in a real browser against a freshly seeded
@@ -442,18 +444,46 @@ async function rpcAs(email, calls) {
   );
   await layout(ops, "console");
 
-  // The warehouse moves the five units back; then the shelf is switched off.
+  // A count typed on a stale page: while the worker counts the new shelf, a
+  // colleague moves its five units back. The count is refused, and because the
+  // product has left the shelf (its row and form go), the refusal is shown at
+  // the top of the page: nothing was corrected, look again.
   await field.goto(`${FIELD}/bodega/ubicacion?codigo=${TARGET}`, { waitUntil: "networkidle" });
-  await item().locator("summary", { hasText: "Mover" }).click();
-  await item().locator('input[name="quantity"]').fill("5");
-  await item().locator('select[name="toLocationId"]').selectOption({ label: source.location_code });
-  await item().locator('details[open] input[name="note"]').fill("Para vaciar el estante");
-  await item().locator('button:has-text("Mover las unidades")').click();
-  await outcome("Se movieron 5 unidades");
+  await item().locator("summary", { hasText: "Corregir cantidad" }).click();
+  await item().locator('input[name="counted"]').fill("7");
+  await item().locator('details[open] input[name="note"]').fill("Dos más en otra caja");
+  const [emptied] = await rpcAs("bodega@yuntera.example", [
+    [
+      "wms_move_stock",
+      {
+        p_from_location_id: created.id,
+        p_to_location_id: source.location_id,
+        p_sku_id: notebook.sku_id,
+        p_seller_id: shop.id,
+        p_quantity: 5,
+        p_note: "Para vaciar el estante",
+      },
+    ],
+  ]);
+  check(emptied?.quantity === 5, "a colleague moved the five units back meanwhile");
+  await item().locator('button:has-text("Corregir a")').click();
+  const gone = field.locator('main [role="alert"]', { hasText: "Ya no está en esta ubicación" });
+  await gone.waitFor();
+  await field.waitForFunction(() => !/[?&](sin|accion)=/.test(window.location.search));
+  await field.waitForLoadState("networkidle");
+  const goneText = await text(gone);
+  log("stale count:", goneText);
   check(
-    (await text(field.locator('[data-testid="location-summary"]'))).includes("Está vacía"),
-    "the new shelf is empty again",
+    goneText.includes(`No se corrigió nada: el producto ${notebook.sku_code} ya no está`) &&
+      goneText.includes("Revise la ubicación y vuelva a contar"),
+    "a count whose product left the shelf says at the top that nothing was corrected",
   );
+  check(
+    (await text(field.locator('[data-testid="location-summary"]'))).includes("Está vacía") &&
+      (await item().count()) === 0,
+    "the new shelf is empty again, as the database says",
+  );
+  await layout(field, "count-refused-gone");
   await ops.goto(OPS + "/operacion/ubicaciones", { waitUntil: "networkidle" });
   await shelf().locator("summary", { hasText: "Desactivar" }).click();
   await shelf().locator('button:has-text("Desactivar la ubicación")').click();

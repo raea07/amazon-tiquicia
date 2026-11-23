@@ -20,7 +20,7 @@ export function returnedParcelBadge(parcel: ReturningParcel): string {
 /** The line under the tracking code. */
 export function returnedParcelDetails(parcel: ReturningParcel): string {
   const origin = parcel.never_left
-    ? "Central lo detuvo antes de que saliera: devuélvalo a los estantes"
+    ? "Central lo detuvo antes de que saliera: recíbalo y guarde las unidades en la zona de devoluciones"
     : parcel.attempt_count === 0
       ? "lo quitaron de una ruta, sin intento de entrega"
       : plural(parcel.attempt_count, "intento de entrega", "intentos de entrega");

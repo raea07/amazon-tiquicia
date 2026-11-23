@@ -23,11 +23,20 @@ import { Stack as Nav, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { plural } from "@/lib/floor";
-import { countedText, differenceText, movedText, parseCount, parseMove } from "@/lib/stock";
+import {
+  countedText,
+  differenceText,
+  goneText,
+  movedText,
+  parseCount,
+  parseMove,
+  refusedAndGone,
+} from "@/lib/stock";
 import { LOCATION_KIND } from "@/lib/stock-labels";
 import { keys, useWarehouse } from "@/lib/warehouse";
 
 type Shelf = { id: string; code: string };
+type Refusal = { skuId: string; sellerId: string; skuCode: string; action: "move" | "count" };
 
 const product = (item: WmsLocationItem) =>
   `${item.title}${item.variant_name ? ` (${item.variant_name})` : ""}`;
@@ -221,7 +230,7 @@ function Item({
   item: WmsLocationItem;
   targets: Shelf[];
   onDone: (message: string) => void;
-  onRefused: () => void;
+  onRefused: (refusal: Refusal) => void;
 }) {
   const [open, setOpen] = useState<"move" | "count" | null>(null);
   const finished = (message: string) => {
@@ -229,6 +238,8 @@ function Item({
     onDone(message);
   };
   const shelf = { id: location.id, code: location.code };
+  const refused = (action: Refusal["action"]) => () =>
+    onRefused({ skuId: item.sku_id, sellerId: item.seller_id, skuCode: item.sku_code, action });
   return (
     <View style={styles.item} testID={`item-${item.sku_code}`}>
       <Stack gap={1}>
@@ -279,12 +290,12 @@ function Item({
             item={item}
             targets={targets}
             onDone={finished}
-            onRefused={onRefused}
+            onRefused={refused("move")}
           />
         )
       ) : null}
       {open === "count" ? (
-        <CountForm location={shelf} item={item} onDone={finished} onRefused={onRefused} />
+        <CountForm location={shelf} item={item} onDone={finished} onRefused={refused("count")} />
       ) : null}
     </View>
   );
@@ -323,6 +334,9 @@ export default function LocationScreen() {
     { personal: true },
   );
   const [done, setDone] = useState<string | null>(null);
+  // The last refusal, kept so that it is still shown when its product has
+  // left the location meanwhile and its card (with the form) is gone.
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
 
   if (location.isPending || all.isPending) return <LoadingState label="Cargando la ubicación…" />;
   if (location.isError || all.isError) {
@@ -355,6 +369,7 @@ export default function LocationScreen() {
     <Screen
       refreshing={location.isRefetching}
       onRefresh={() => {
+        setRefusal(null);
         void location.refetch();
         void all.refetch();
       }}
@@ -383,6 +398,11 @@ export default function LocationScreen() {
           {done}
         </Alert>
       ) : null}
+      {refusal && !location.isRefetching && refusedAndGone(refusal, here.items) ? (
+        <Alert tone="warning" title="Ya no está en esta ubicación" testID="stock-gone">
+          {goneText(refusal.action, refusal.skuCode)}
+        </Alert>
+      ) : null}
       {here.active ? null : (
         <Alert tone="warning" title="Ubicación desactivada">
           Ya no se guarda mercadería aquí. Mueva lo que queda a un estante activo.
@@ -404,10 +424,14 @@ export default function LocationScreen() {
               location={here}
               item={item}
               targets={targets}
-              onDone={setDone}
-              onRefused={() => {
+              onDone={(message) => {
+                setRefusal(null);
+                setDone(message);
+              }}
+              onRefused={(refused) => {
                 // An earlier move's or count's answer is not left next to this refusal.
                 setDone(null);
+                setRefusal(refused);
                 void location.refetch();
                 void all.refetch();
               }}

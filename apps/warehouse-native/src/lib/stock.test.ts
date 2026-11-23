@@ -1,7 +1,16 @@
 // Runs with Node's own test runner (`pnpm test` here), as floor.test.ts.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
-import { differenceText, movedText, parseCount, parseMove } from "./stock";
+import {
+  differenceText,
+  goneText,
+  movedText,
+  parseCount,
+  parseMove,
+  refusedAndGone,
+} from "./stock";
 
 describe("a move", () => {
   it("needs a target and a whole number of free units", () => {
@@ -55,5 +64,28 @@ describe("the answer after a move", () => {
       movedText(3, "B-01-02-A"),
       "Se movieron 3 unidades a B-01-02-A. Guárdelas allí ahora.",
     );
+  });
+});
+
+describe("a refusal whose product has left the location", () => {
+  const item = { sku_id: "s1", seller_id: "v1" };
+  it("is shown on the screen only when the product is no longer listed", () => {
+    const refused = { skuId: "s1", sellerId: "v1" };
+    assert.equal(refusedAndGone(null, []), false);
+    assert.equal(refusedAndGone(refused, [item]), false);
+    assert.equal(refusedAndGone(refused, []), true);
+    assert.equal(refusedAndGone(refused, [{ sku_id: "s1", seller_id: "v2" }]), true);
+  });
+  it("says nothing was saved and what to do, in the web's words", () => {
+    assert.equal(
+      goneText("move", "YT-64D3BDF4"),
+      "No se movió nada: el producto YT-64D3BDF4 ya no está en esta ubicación, porque alguien lo movió o lo contó mientras tanto. Revise la ubicación y vuelva a contar.",
+    );
+    assert.match(goneText("count", "YT-1"), /^No se corrigió nada: el producto YT-1 ya no está/);
+    const web = readFileSync(join(__dirname, "../../../field/src/lib/locations.ts"), "utf8");
+    const native = readFileSync(join(__dirname, "stock.ts"), "utf8");
+    const words = (source: string) => /export const goneText = [^`]*(`[^`]*`)/.exec(source)?.[1];
+    assert.ok(words(web));
+    assert.equal(words(web), words(native));
   });
 });
