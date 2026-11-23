@@ -1108,6 +1108,12 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     own shop and staff still see it (their preview).
   - The `packages/db` contract files now run one at a time: the zone races
     commit, for a moment, a shop with its zones off.
+  - The journeys that take stops off a route build their own route from new
+    orders of the third demo shopper, so the seed's route R-1003 and waiting
+    orders stay as the database suites expect. `020_access`,
+    `050_fulfillment` and `095_account_security` now also hold when other
+    journeys drove R-1003 to the end or the warehouse took a shopper's order
+    further (`used-db-check.sh all` failed on them before).
   - Not verified: real PostgREST passing the new functions' array and JSON
     arguments (only the local API stand-in), anything on the hosted preview,
     and the native apps on a phone (their screens ran only as web exports).
