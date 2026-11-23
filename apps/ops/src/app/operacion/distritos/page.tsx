@@ -121,7 +121,8 @@ async function Districts({
       {canton ? (
         <section aria-labelledby="distritos" className="mt-8">
           <h2 id="distritos" className="text-xl font-bold">
-            {canton.name}, {canton.province} ({plural(canton.districts.length, "distrito", "distritos")})
+            {canton.name}, {canton.province} (
+            {plural(canton.districts.length, "distrito", "distritos")})
           </h2>
           <form method="get" className="mt-3 flex flex-col gap-4">
             <input type="hidden" name="canton" value={canton.code} />

@@ -148,7 +148,9 @@ export function summarise(route: ShownRoute): RouteSummary {
 }
 
 /** "2 de 3 entregadas · 1 omitida": stops staff removed are not part of the total. */
-export function progressLine(summary: Pick<RouteSummary, "delivered" | "total" | "skipped">): string {
+export function progressLine(
+  summary: Pick<RouteSummary, "delivered" | "total" | "skipped">,
+): string {
   const done = `${summary.delivered} de ${summary.total} entregadas`;
   if (summary.skipped === 0) return done;
   return `${done} · ${summary.skipped} ${summary.skipped === 1 ? "omitida" : "omitidas"}`;

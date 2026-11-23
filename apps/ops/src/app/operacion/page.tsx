@@ -128,7 +128,9 @@ function ZoneRow({ zone }: { zone: OpsZone }) {
               ? formatDate(zone.promise.latest)
               : `${formatDate(zone.promise.earliest)} a ${formatDate(zone.promise.latest)}`
             : "—"}
-          {zone.upcoming_closures > 0 ? ` · ${plural(zone.upcoming_closures, "cierre", "cierres")} por venir` : ""}
+          {zone.upcoming_closures > 0
+            ? ` · ${plural(zone.upcoming_closures, "cierre", "cierres")} por venir`
+            : ""}
         </dd>
       </dl>
 

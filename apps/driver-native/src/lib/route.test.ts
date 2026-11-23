@@ -175,7 +175,10 @@ describe("the day as the driver sees it", () => {
     const summary = summarise(route);
     assert.deepEqual([summary.delivered, summary.total, summary.skipped], [1, 2, 1]);
     assert.equal(progressLine(summary), "1 de 2 entregadas · 1 omitida");
-    assert.equal(progressLine({ delivered: 0, total: 1, skipped: 2 }), "0 de 1 entregadas · 2 omitidas");
+    assert.equal(
+      progressLine({ delivered: 0, total: 1, skipped: 2 }),
+      "0 de 1 entregadas · 2 omitidas",
+    );
     assert.equal(progressLine({ delivered: 2, total: 3, skipped: 0 }), "2 de 3 entregadas");
   });
 
