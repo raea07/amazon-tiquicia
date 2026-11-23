@@ -286,6 +286,20 @@ select pg_temp.refused($q$select public.ops_create_zone('otra', 'Otra', 12, '{1}
 select pg_temp.refused($q$select public.ops_create_zone('otra', 'Otra', 12, '{1}', '{1}', 3, 2, 0)$q$, 'zone_transit_invalid');
 select pg_temp.refused($q$select public.ops_create_zone('otra', 'Otra', 12, '{1}', '{1}', 1, 1, -1)$q$, 'zone_fee_invalid');
 select pg_temp.refused($q$select public.ops_create_zone('otra', 'Otra', 12, '{1}', '{1}', 1, 1, 100, 0)$q$, 'zone_threshold_invalid');
+-- A name shoppers read: invisible characters alone are no name, and control
+-- characters do not reach the screen.
+select pg_temp.refused(format($q$select public.ops_create_zone('otra', %L, 12, '{1}', '{1}', 1, 1, 0)$q$,
+  '  ' || chr(8203) || chr(8203) || '  '), 'zone_name_invalid');
+select pg_temp.refused($q$select public.ops_create_zone('otra', '-- 12 --', 12, '{1}', '{1}', 1, 1, 0)$q$, 'zone_name_invalid');
+do $$
+declare
+  z jsonb;
+begin
+  z := public.ops_create_zone('nombre-raro', 'Zona' || chr(10) || 'Norte' || chr(7) || chr(8203), 12, '{1}', '{1}', 1, 1, 0);
+  assert z ->> 'name' = 'Zona Norte', format('zones: the name is cleaned %s', z ->> 'name');
+  perform public.ops_delete_zone('nombre-raro');
+end
+$$;
 
 -- Changing what a zone holds: against the revision it was read at.
 reset role;
@@ -400,6 +414,27 @@ select pg_temp.refused($q$select public.ops_set_zone_active('gam-core', false, 0
 select pg_temp.refused($q$select public.ops_set_zone_active('nada', false, 1)$q$, 'zone_not_found');
 -- A zone anything refers to is never deleted.
 select pg_temp.refused($q$select public.ops_delete_zone('gam-core')$q$, 'zone_in_use');
+-- A zone with no district served is not switched on: it would take no order.
+select pg_temp.refused($q$select public.ops_set_zone_active('prueba-ops', true,
+  (select revision from public.delivery_zones where id = 'prueba-ops'))$q$, 'zone_has_no_districts');
+reset role;
+-- Nor does an active zone with no district served count as somewhere the shop
+-- still delivers (fixture: the empty zone switched on in the database).
+update public.delivery_zones set active = true where id = 'prueba-ops';
+select pg_temp.login('comprador3@yuntera.example');
+do $$ begin
+  perform public.ops_set_zone_active('gam-core', false,
+    (select revision from public.delivery_zones where id = 'gam-core'));
+  perform pg_temp.refused($q$select public.ops_set_zone_active('gam-extended', false,
+    (select revision from public.delivery_zones where id = 'gam-extended'))$q$, 'zone_last_active');
+  assert exists (select 1 from public.list_districts() l where l.zone_active),
+    'zones: the shop still delivers somewhere';
+  perform public.ops_set_zone_active('gam-core', true,
+    (select revision from public.delivery_zones where id = 'gam-core'));
+end $$;
+reset role;
+update public.delivery_zones set active = false where id = 'prueba-ops';
+select pg_temp.login('comprador3@yuntera.example');
 reset role;
 update public.delivery_zones set active = true where id = 'gam-extended';
 
@@ -473,6 +508,15 @@ do $$ begin
     'districts: the saved address stays, not deliverable';
 end $$;
 reset role;
+-- Nor can a seller's pickup point be saved there: our drivers do not go there.
+select pg_temp.remember('vendedor_shop', (
+  select m.seller_id::text from public.seller_members m join auth.users u on u.id = m.user_id
+  where u.email = 'vendedor@yuntera.example' and m.role in ('owner', 'admin') order by m.seller_id limit 1));
+select pg_temp.login('vendedor@yuntera.example');
+select pg_temp.refused(format($q$select public.seller_save_location(%L, 'Bodega Carmen',
+  'Avenida segunda, 100 metros norte del parque', '11501', 9.93, -84.05)$q$,
+  current_setting('t.vendedor_shop')), 'zone_not_served');
+reset role;
 select pg_temp.login('comprador3@yuntera.example');
 do $$ begin
   perform public.ops_move_districts(array['11501'], 'gam-core');
@@ -484,6 +528,37 @@ select pg_temp.refused($q$select public.ops_move_districts(array[]::text[], 'gam
 select pg_temp.refused($q$select public.ops_move_districts(array['99999'], 'gam-core')$q$, 'district_not_found');
 select pg_temp.refused($q$select public.ops_move_districts(array['11501'], 'nada')$q$, 'zone_not_found');
 select pg_temp.refused($q$select public.ops_canton_districts('999')$q$, 'canton_not_found');
+reset role;
+-- No move may leave every active zone without a district served (fixture:
+-- only 11501 and 11502 served, only gam-core on; put back afterwards).
+create temporary table zones_before on commit drop as select id, active from public.delivery_zones;
+create temporary table unserved_before on commit drop as select postal_code from public.districts where not served;
+update public.districts set served = false where postal_code not in ('11501', '11502') and served;
+update public.delivery_zones set active = (id = 'gam-core') where active is distinct from (id = 'gam-core');
+select pg_temp.login('comprador3@yuntera.example');
+do $$
+declare
+  v jsonb;
+begin
+  v := public.ops_district_move_preview(array['11501', '11502'], null);
+  assert (v ->> 'nothing_served_after')::boolean, format('districts: the preview says nobody could order %s', v);
+  perform pg_temp.refused($q$select public.ops_move_districts(array['11501', '11502'], null)$q$,
+                          'districts_none_served');
+  -- Into a zone that is off, the same.
+  perform pg_temp.refused($q$select public.ops_move_districts(array['11501', '11502'], 'prueba-ops')$q$,
+                          'districts_none_served');
+  -- One of the two is fine: the other still takes orders.
+  v := public.ops_district_move_preview(array['11502'], null);
+  assert not (v ->> 'nothing_served_after')::boolean, format('districts: one left served %s', v);
+  assert (select count(*) from public.list_districts() l where l.zone_active) = 2,
+    'districts: nothing changed by the refused moves';
+end $$;
+reset role;
+update public.districts set served = true
+where not served and postal_code not in (select postal_code from pg_temp.unserved_before);
+update public.delivery_zones z set active = b.active from pg_temp.zones_before b
+where b.id = z.id and z.active is distinct from b.active;
+select pg_temp.login('comprador3@yuntera.example');
 -- The new zone, empty again, can be deleted.
 select public.ops_delete_zone('prueba-ops');
 reset role;
@@ -592,6 +667,11 @@ end $$;
 update public.routes set service_date = current_setting('t.route_two_date')::date
 where id = current_setting('t.route_two')::uuid;
 
+select pg_temp.login('comprador3@yuntera.example');
+select pg_temp.refused(format($q$select public.ops_add_holiday(%L, %L)$q$,
+  current_setting('t.free_day')::date + 3, chr(8203) || '- - -' || chr(8203)), 'holiday_name_invalid');
+reset role;
+
 -- ═══ 5. Zone closures ══════════════════════════════════════════════════════
 
 -- Fixture: the suite's order A promised inside the closure below.
@@ -672,6 +752,20 @@ begin
     'closures: its days are open again';
   perform pg_temp.refused(format($q$select public.ops_end_zone_closure(%L, 3)$q$,
     current_setting('t.closure')), 'zone_closure_over');
+  -- It stays on the list for a few days, so it can be closed again from there.
+  c := public.ops_zone_closures();
+  assert exists (select 1 from jsonb_array_elements(c -> 'closures') e
+                 where e ->> 'id' = current_setting('t.closure') and e ->> 'state' = 'cancelled'),
+    'closures: a cancelled one is still listed';
+  c := public.ops_open_zone_closure('gam-core', v_from, v_from + 4, 'weather');
+  assert c ->> 'state' = 'upcoming', format('closures: closed again after cancelling %s', c);
+  assert not exists (select 1 from jsonb_array_elements(public.ops_zone_closures() -> 'closures') e
+                     where e ->> 'id' = current_setting('t.closure')),
+    'closures: once closed again, the cancelled one is no longer offered';
+  perform public.ops_end_zone_closure((c ->> 'id')::uuid, (c ->> 'revision')::integer);
+  -- A note of invisible characters only is no note.
+  perform pg_temp.refused(format($q$select public.ops_open_zone_closure('gam-core', %L, %L, 'other', %L)$q$,
+    v_from + 10, v_from + 11, chr(8203) || '...' || chr(8203)), 'zone_closure_note_invalid');
 end
 $$;
 reset role;
@@ -918,6 +1012,58 @@ end $$;
 select pg_temp.login('comprador3@yuntera.example');
 select public.ops_set_location_active(current_setting('t.location')::uuid, true);
 reset role;
+-- Units picked from it into a parcel still being picked: not switched off,
+-- because cancelling that order puts them back on this shelf. (Fixture: an
+-- order of the suite's own, its pick task pointed at the location, picked.)
+select pg_temp.remember('order_d', pg_temp.place('opsrutas@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'ops-165-d')::text);
+select pg_temp.pay(current_setting('t.order_d')::uuid);
+select pg_temp.remember('ship_d', pg_temp.shipment(current_setting('t.order_d')::uuid, 'platform')::text);
+select pg_temp.act('bodega@yuntera.example');
+select public.wms_start_picking(current_setting('t.ship_d')::uuid);
+select pg_temp.logout();
+update public.pick_tasks set location_id = current_setting('t.location')::uuid
+where shipment_id = current_setting('t.ship_d')::uuid;
+insert into public.bin_stock (location_id, sku_id, seller_id, quantity)
+select current_setting('t.location')::uuid, t.sku_id, t.seller_id, sum(t.quantity)
+from public.pick_tasks t where t.shipment_id = current_setting('t.ship_d')::uuid
+group by t.sku_id, t.seller_id;
+select pg_temp.act('bodega@yuntera.example');
+do $$
+declare
+  t record;
+begin
+  for t in select pt.id, pt.quantity, k.code from public.pick_tasks pt
+           join public.skus k on k.id = pt.sku_id where pt.shipment_id = current_setting('t.ship_d')::uuid loop
+    perform public.wms_confirm_pick(t.id, t.quantity, null, t.code);
+  end loop;
+end $$;
+select pg_temp.logout();
+do $$ begin
+  assert (select status from public.shipments where id = current_setting('t.ship_d')::uuid) = 'picking'
+         and (select coalesce(sum(quantity), 0) from public.bin_stock
+              where location_id = current_setting('t.location')::uuid) = 0,
+    'fixture: D picked from the location, still being picked, the shelf empty';
+end $$;
+select pg_temp.login('comprador3@yuntera.example');
+do $$ begin
+  assert pg_temp.refused_detail(format($q$select public.ops_set_location_active(%L, false)$q$,
+           current_setting('t.location')), 'location_has_picked_units') = '1',
+    'locations: refused while picked units may come back';
+  assert (select (l ->> 'picked_units')::integer from jsonb_array_elements(public.ops_warehouse_locations()) w,
+          jsonb_array_elements(w -> 'locations') l where l ->> 'id' = current_setting('t.location')) = 1,
+    'locations: the screen shows them';
+end $$;
+reset role;
+-- And the order can still be cancelled: the units go back to the shelf.
+select private.cancel_order_internal(current_setting('t.order_d')::uuid, 'Cliente pidió cancelar');
+do $$ begin
+  assert (select status from public.shipments where id = current_setting('t.ship_d')::uuid) = 'cancelled'
+         and (select sum(quantity) from public.bin_stock where location_id = current_setting('t.location')::uuid) = 1,
+    'locations: the cancelled order put its units back';
+end $$;
+delete from public.bin_stock where location_id = current_setting('t.location')::uuid;
+
 -- The last storage or picking location of a warehouse stays on (fixture: the
 -- others switched off).
 update public.warehouse_locations set active = false

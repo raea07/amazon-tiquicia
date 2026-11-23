@@ -25,10 +25,16 @@
 --     there for now, and the product page gives no date. Orders already
 --     placed are untouched: they keep their zone, their promise and their
 --     route. Staff see how many are open in the zone before confirming. The
---     last active zone cannot be switched off (the shop would sell nothing).
---     A new zone starts switched off and with no districts; it is switched on
---     once districts are assigned to it. A zone can be deleted only while
---     nothing refers to it (no canton, district, order or closure).
+--     shop always keeps somewhere to deliver: the last active zone that
+--     serves a district cannot be switched off (`zone_last_active`), a zone
+--     with no district served cannot be switched on (`zone_has_no_districts`:
+--     it would promise addresses it has none of), and no district move may
+--     leave every active zone without a served district
+--     (`districts_none_served`). A new zone starts switched off and with no
+--     districts; it is switched on once districts are assigned to it. A zone
+--     can be deleted only while nothing refers to it (no canton, district,
+--     order or closure). Zone and holiday names lose control and invisible
+--     characters and must hold at least two letters (private.clean_label).
 --   * Zone parameters are validated here, not only in the console: money in
 --     whole céntimos and never negative, a cut-off between 06:00 and 22:00,
 --     at least one processing and one delivery weekday, transit days with the
@@ -46,7 +52,8 @@
 --     nothing is deleted. Moving a district to another zone changes the fee
 --     and the promise of future orders only. Staff see, before confirming,
 --     how many saved addresses and open orders the move touches and which
---     zones it would leave without districts.
+--     zones it would leave without districts. A seller's pickup point cannot
+--     be saved in a district that is not served (seller_save_location).
 --   * HOLIDAYS are Costa Rica dates (America/Costa_Rica, UTC−6 all year, as
 --     private.cr_local). Only days after today can be added or removed (today
 --     already has deliveries under way), at most two years ahead (a mistyped
@@ -64,8 +71,9 @@
 --     later, lasts at most 31 days and starts at most a year ahead. An
 --     OVERLAPPING closure of the same zone is REFUSED, not merged: the
 --     existing one's end can be changed instead. Ending a closure early
---     reopens the zone from today; one that had not started is cancelled.
---     Days already past stay as they were. Orders already promised inside a
+--     reopens the zone from today; one that had not started is cancelled,
+--     and stays on the console's list for 7 days so it can be closed again
+--     from there. Days already past stay as they were. Orders already promised inside a
 --     closure are listed for staff; nothing is cancelled or re-promised.
 --   * SETTINGS: every row of app_settings is listed. Operational settings
 --     (limits staff reasonably tune, in private.operational_setting below)
@@ -90,15 +98,22 @@
 --     only (wms_locations), so a new one is offered at once and one switched
 --     off is no longer offered; stock can no longer be put into a location
 --     that is off, even by a receipt that started before (trigger below).
+--     Nor can a location be switched off while units picked from it sit in a
+--     parcel still being picked (`location_has_picked_units`): cancelling
+--     that order puts them back on the shelf they came from, and the trigger
+--     would refuse it, so the order could not be cancelled at all.
 --   * STUCK ROUTES: dispatch removes a pending stop from an open route and
 --     closes a route once no stop is still out. The removed stop is kept,
 --     marked "skipped" (the driver reads "Omitida"), with who removed it and
 --     why. Its parcel goes back to waiting for a route:
 --       - not yet handed to the driver (ready_for_dispatch): back to packed;
 --       - already with the driver (out_for_delivery): to delivery_failed, as
---         after an attempt, but without counting an attempt and without the
---         shopper's "no pudimos entregar" message; it is on dispatch's list
---         again and the driver brings it back to the warehouse;
+--         after an attempt, but without counting an attempt, without a
+--         notification and with the status entry hidden from the shopper's
+--         history. Its attempt_count stays 0, and that is how the shop's order
+--         page and dispatch tell it from a failed attempt: the shopper reads
+--         that the delivery was rescheduled, not that nobody was home. It is
+--         on dispatch's list again and the driver brings it back;
 --       - cancelled (the case that got routes stuck before the review): it
 --         stays cancelled.
 --     The shopper's promise is not changed, and the parcel's next route sends
@@ -222,6 +237,26 @@ as $$
   select private.cr_local(now())::date;
 $$;
 
+-- A short name or reason as staff typed it, for showing: control characters
+-- become spaces, invisible ones (zero-width, direction marks, soft hyphens)
+-- go, and spaces are collapsed as in private.clean_text.
+create or replace function private.clean_label(p_text text) returns text
+language sql immutable
+set search_path = ''
+as $$
+  select private.clean_text(regexp_replace(
+    regexp_replace(coalesce(p_text, ''), '[\x01-\x1F\x7F-\x9F]', ' ', 'g'),
+    '[\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]', '', 'g'));
+$$;
+
+-- At least two letters: a name someone can read.
+create or replace function private.has_letters(p_text text) returns boolean
+language sql immutable
+set search_path = ''
+as $$
+  select coalesce(p_text ~ '[[:alpha:]].*[[:alpha:]]', false);
+$$;
+
 -- An order that can still change: not delivered, completed, cancelled or refunded.
 create or replace function private.order_is_open(p_status public.order_status) returns boolean
 language sql immutable
@@ -241,6 +276,14 @@ as $$
   select d.postal_code, d.canton_code, coalesce(d.zone_id, c.zone_id), d.served
   from public.districts d
   join public.cantons c on c.code = d.canton_code;
+$$;
+
+-- True when the zone serves at least one district.
+create or replace function private.zone_serves(p_zone_id text) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select exists (select 1 from private.district_zones() dz where dz.zone_id = p_zone_id and dz.served);
 $$;
 
 -- Replaces the version in geography: a district that is not served has no
@@ -270,7 +313,7 @@ language plpgsql immutable
 set search_path = ''
 as $$
 begin
-  if p_name is null or char_length(p_name) not between 2 and 60 then
+  if p_name is null or char_length(p_name) not between 2 and 60 or not private.has_letters(p_name) then
     perform private.fail('zone_name_invalid');
   end if;
   if p_cutoff_hour is null or p_cutoff_hour not between 6 and 22 then
@@ -557,7 +600,7 @@ set search_path = ''
 as $$
 declare
   v_id text := lower(trim(coalesce(p_zone_id, '')));
-  v_name text := private.clean_text(p_name);
+  v_name text := private.clean_label(p_name);
 begin
   if not private.has_staff_role('ops') then
     perform private.fail('forbidden');
@@ -605,7 +648,7 @@ set search_path = ''
 as $$
 declare
   z public.delivery_zones%rowtype;
-  v_name text := private.clean_text(p_name);
+  v_name text := private.clean_label(p_name);
   v_processing smallint[] := private.weekday_set(p_processing_weekdays);
   v_delivery smallint[] := private.weekday_set(p_delivery_weekdays);
 begin
@@ -660,8 +703,11 @@ begin
   if p_active is null then
     perform private.fail('zone_unchanged');
   end if;
-  -- One at a time, so two staff cannot each switch off one of the last two.
+  -- One at a time, so two staff cannot each switch off one of the last two;
+  -- and not while districts move (the same two locks, in the same order, as
+  -- ops_move_districts and ops_delete_zone), so "serves a district" holds.
   perform pg_advisory_xact_lock(hashtext('yuntera.zones'));
+  perform pg_advisory_xact_lock(hashtext('yuntera.districts'));
   select * into z from public.delivery_zones where id = p_zone_id for update;
   if not found then
     perform private.fail('zone_not_found');
@@ -672,8 +718,16 @@ begin
   if z.active = p_active then
     perform private.fail('zone_unchanged');
   end if;
+  -- Switched on, a zone with no district served would take no order and
+  -- would let the zone it stands for look covered.
+  if p_active and not private.zone_serves(z.id) then
+    perform private.fail('zone_has_no_districts');
+  end if;
+  -- Another active zone must still serve a district: an active zone with
+  -- none does not count.
   if not p_active and not exists (
-    select 1 from public.delivery_zones o where o.active and o.id <> z.id
+    select 1 from public.delivery_zones o
+    where o.active and o.id <> z.id and private.zone_serves(o.id)
   ) then
     perform private.fail('zone_last_active');
   end if;
@@ -836,7 +890,11 @@ begin
         select jsonb_agg(jsonb_build_object('id', z.id, 'name', z.name) order by z.sort, z.id)
         from public.delivery_zones z
         where exists (select 1 from private.district_zones() dz where dz.zone_id = z.id and dz.served)
-          and not exists (select 1 from after a where a.zone_id = z.id and a.served)), '[]'::jsonb)
+          and not exists (select 1 from after a where a.zone_id = z.id and a.served)), '[]'::jsonb),
+      -- No active zone would serve any district: nobody could order.
+      'nothing_served_after', not exists (
+        select 1 from after a join public.delivery_zones z on z.id = a.zone_id
+        where a.served and z.active)
     ));
 end;
 $$;
@@ -870,11 +928,17 @@ begin
     perform private.fail('forbidden');
   end if;
   -- One move at a time, so "left with no districts" is worked out on what is
-  -- there, and a zone being deleted cannot receive a district.
+  -- there, a zone being deleted cannot receive a district, and no zone is
+  -- switched on or off meanwhile (zones first, then districts, as
+  -- ops_set_zone_active and ops_delete_zone take them).
+  perform pg_advisory_xact_lock(hashtext('yuntera.zones'));
   perform pg_advisory_xact_lock(hashtext('yuntera.districts'));
   v_impact := private.district_move_impact(p_postal_codes, p_zone_id);
   if (v_impact ->> 'changing_count')::integer = 0 then
     perform private.fail('district_unchanged');
+  end if;
+  if (v_impact ->> 'nothing_served_after')::boolean then
+    perform private.fail('districts_none_served');
   end if;
   for r in
     select d.postal_code, d.zone_id as own_zone, dz.zone_id, d.served
@@ -955,7 +1019,7 @@ language plpgsql security definer
 set search_path = ''
 as $$
 declare
-  v_name text := private.clean_text(p_name);
+  v_name text := private.clean_label(p_name);
   v_today date := private.cr_today();
   v_routes integer;
   v_orders integer;
@@ -963,7 +1027,7 @@ begin
   if not private.has_staff_role('ops') then
     perform private.fail('forbidden');
   end if;
-  if v_name is null or char_length(v_name) not between 3 and 60 then
+  if v_name is null or char_length(v_name) not between 3 and 60 or not private.has_letters(v_name) then
     perform private.fail('holiday_name_invalid');
   end if;
   if p_day is null or p_day <= v_today then
@@ -1123,7 +1187,12 @@ begin
     'closures', coalesce((
       select jsonb_agg(private.ops_closure_json(p.id) order by p.starts_on, p.zone_id, p.id)
       from public.zone_closure_periods p
-      where p.cancelled_at is null and p.ends_on >= v_today - 30), '[]'::jsonb),
+      where (p.cancelled_at is null and p.ends_on >= v_today - 30)
+         -- Cancelled before it started, lately: shown so it can be closed
+         -- again, until the zone is closed on those days by another one.
+         or (p.cancelled_at > now() - interval '7 days' and p.ends_on >= v_today
+             and not private.closure_overlaps(p.zone_id, greatest(p.starts_on, v_today), p.ends_on, p.id))),
+      '[]'::jsonb),
     -- Days closed one by one, outside any period (before this migration).
     'single_days', coalesce((
       select jsonb_agg(jsonb_build_object('zone_id', c.zone_id, 'zone_name', z.name, 'day', c.day,
@@ -1165,7 +1234,7 @@ language plpgsql security definer
 set search_path = ''
 as $$
 declare
-  v_note text := private.clean_text(p_note);
+  v_note text := private.clean_label(p_note);
   p public.zone_closure_periods%rowtype;
 begin
   if not private.has_staff_role('ops') then
@@ -1175,6 +1244,7 @@ begin
     perform private.fail('zone_closure_reason_invalid');
   end if;
   if (p_reason = 'other' and (v_note is null or char_length(v_note) < 3))
+     or (v_note is not null and not private.has_letters(v_note))
      or char_length(coalesce(v_note, '')) > 200 then
     perform private.fail('zone_closure_note_invalid');
   end if;
@@ -1448,6 +1518,19 @@ begin
 end;
 $$;
 
+-- Units picked from a location into parcels that are still being picked:
+-- they go back to this location if the order is cancelled.
+create or replace function private.location_picked_units(p_location_id uuid) returns bigint
+language sql stable security definer
+set search_path = ''
+as $$
+  select coalesce(sum(m.quantity), 0)::bigint
+  from public.stock_movements m
+  join public.shipments s on s.id = m.reference_id
+  where m.from_location_id = p_location_id and m.reason = 'pick'
+    and m.reference_type = 'shipment' and s.status = 'picking';
+$$;
+
 create or replace function private.ops_location_json(p_location_id uuid) returns jsonb
 language sql stable security definer
 set search_path = ''
@@ -1459,6 +1542,7 @@ as $$
     'active', wl.active,
     'editable', wl.kind in ('storage', 'pick'),
     'units', (select coalesce(sum(b.quantity), 0) from public.bin_stock b where b.location_id = wl.id),
+    'picked_units', private.location_picked_units(wl.id),
     'open_tasks', (select count(*) from public.pick_tasks t
                    where t.location_id = wl.id and t.status in ('open', 'in_progress'))
   )
@@ -1579,6 +1663,7 @@ as $$
 declare
   wl public.warehouse_locations%rowtype;
   v_units bigint;
+  v_picked bigint;
   v_tasks integer;
 begin
   if not private.has_staff_role('ops') then
@@ -1609,6 +1694,12 @@ begin
     where t.location_id = wl.id and t.status in ('open', 'in_progress');
     if v_tasks > 0 then
       perform private.fail('location_has_open_tasks', v_tasks::text);
+    end if;
+    -- Units already taken off this shelf into a parcel still being picked:
+    -- cancelling that order puts them back here (cancel_order_internal).
+    v_picked := private.location_picked_units(wl.id);
+    if v_picked > 0 then
+      perform private.fail('location_has_picked_units', v_picked::text);
     end if;
     if not exists (select 1 from public.warehouse_locations l
                    where l.warehouse_id = wl.warehouse_id and l.id <> wl.id and l.active
@@ -1713,7 +1804,7 @@ language plpgsql security definer
 set search_path = ''
 as $$
 declare
-  v_reason text := private.clean_text(p_reason);
+  v_reason text := private.clean_label(p_reason);
   v_order uuid;
   v_route public.routes%rowtype;
   v_stop public.route_stops%rowtype;
@@ -1723,7 +1814,7 @@ begin
   if not private.has_staff_role('ops') then
     perform private.fail('forbidden');
   end if;
-  if v_reason is null or char_length(v_reason) not between 5 and 300 then
+  if v_reason is null or char_length(v_reason) not between 5 and 300 or not private.has_letters(v_reason) then
     perform private.fail('reason_required');
   end if;
   -- The order first, as every function that changes a parcel or its cash
@@ -1803,7 +1894,7 @@ language plpgsql security definer
 set search_path = ''
 as $$
 declare
-  v_reason text := private.clean_text(p_reason);
+  v_reason text := private.clean_label(p_reason);
   r public.routes%rowtype;
   v_open integer;
   v_status public.route_status;
@@ -1811,7 +1902,7 @@ begin
   if not private.has_staff_role('ops') then
     perform private.fail('forbidden');
   end if;
-  if v_reason is null or char_length(v_reason) not between 5 and 300 then
+  if v_reason is null or char_length(v_reason) not between 5 and 300 or not private.has_letters(v_reason) then
     perform private.fail('reason_required');
   end if;
   select * into r from public.routes where id = p_route_id for update;
@@ -1842,11 +1933,69 @@ begin
 end;
 $$;
 
+-- ═══ 11b. A seller's pickup point ══════════════════════════════════════════
+
+-- Replaces the version in limits. The one change: a district that is not
+-- served is refused like a switched-off zone (`zone_not_served`), since our
+-- drivers do not go there either.
+create or replace function public.seller_save_location(
+  p_seller_id uuid,
+  p_name text,
+  p_address text,
+  p_postal_code text,
+  p_lat double precision,
+  p_lng double precision
+) returns uuid
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_id uuid;
+begin
+  if not private.is_seller_admin(p_seller_id) then
+    perform private.fail('forbidden');
+  end if;
+  perform private.require_open_shop(p_seller_id);
+  if coalesce(char_length(trim(p_name)), 0) not between 3 and 80
+     or coalesce(char_length(trim(p_address)), 0) not between 15 and 500
+     or p_lat is null or p_lng is null then
+    perform private.fail('invalid_location');
+  end if;
+  -- Our drivers collect from this point, so it has to be where they work.
+  if not exists (
+    select 1
+    from public.districts d
+    join public.cantons c on c.code = d.canton_code
+    join public.delivery_zones z on z.id = coalesce(d.zone_id, c.zone_id)
+    where d.postal_code = p_postal_code and z.active and d.served
+  ) then
+    perform private.fail('zone_not_served');
+  end if;
+  if (select count(*) from public.warehouses w where w.seller_id = p_seller_id) >= 5 then
+    perform private.fail('too_many_locations');
+  end if;
+
+  insert into public.warehouses (code, name, kind, seller_id, address, postal_code, lat, lng)
+  values ('V' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 9)),
+          trim(p_name), 'seller', p_seller_id, trim(p_address), p_postal_code, p_lat, p_lng)
+  returning id into v_id;
+  return v_id;
+exception
+  when check_violation then
+    -- The point is outside Costa Rica.
+    perform private.fail('invalid_location');
+end;
+$$;
+
 -- ═══ 12. Grants ════════════════════════════════════════════════════════════
 
 revoke all on function
   private.operations_audit(text, text, text, jsonb, jsonb),
   private.cr_today(),
+  private.clean_label(text),
+  private.has_letters(text),
+  private.zone_serves(text),
+  private.location_picked_units(uuid),
   private.order_is_open(public.order_status),
   private.district_zones(),
   private.check_zone_service(text, integer, smallint[], smallint[], integer, integer, bigint, bigint),

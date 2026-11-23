@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canOrderTransition,
   canShipmentTransition,
+  isRescheduledShipment,
   ORDER_STATUS_LABEL,
   ORDER_STATUSES,
   ORDER_TRANSITIONS,
@@ -304,6 +305,12 @@ describe("order lifecycle", () => {
     expect(canShipmentTransition("delivery_failed", "ready_for_dispatch")).toBe(true);
     expect(canShipmentTransition("delivery_failed", "returning")).toBe(true);
     expect(canShipmentTransition("delivered", "returning")).toBe(false);
+  });
+
+  it("tells a parcel taken off a route from a failed attempt", () => {
+    expect(isRescheduledShipment("delivery_failed", 0)).toBe(true);
+    expect(isRescheduledShipment("delivery_failed", 1)).toBe(false);
+    expect(isRescheduledShipment("out_for_delivery", 0)).toBe(false);
   });
 
   it("derives order status from its shipments", () => {

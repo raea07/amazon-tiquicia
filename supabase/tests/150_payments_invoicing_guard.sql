@@ -49,6 +49,7 @@ begin
     'ops_change_zone_closure_end', 'ops_end_zone_closure', 'ops_settings', 'ops_update_setting',
     'ops_warehouse_locations', 'ops_create_location', 'ops_rename_location', 'ops_set_location_active',
     'ops_open_routes', 'ops_remove_route_stop', 'ops_close_route', 'my_addresses', 'checkout_quote',
+    'seller_save_location',
     -- the workers' own, if a signed-in token ever reached them
     'worker_payments_claim', 'worker_payments_event', 'worker_payments_hello', 'worker_payments_report',
     'worker_invoice_claim', 'worker_invoice_health', 'worker_invoice_hint', 'worker_invoice_plan',

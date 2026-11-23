@@ -169,6 +169,11 @@ function ZoneRow({ zone }: { zone: OpsZone }) {
             </CatalogueForm>
           </div>
         </details>
+      ) : zone.district_count === 0 ? (
+        <p className="mt-2 text-ink-muted">
+          Para encenderla, asígnele antes al menos un distrito en Distritos: sin distritos no
+          recibiría pedidos.
+        </p>
       ) : (
         <div className="mt-2">
           <CatalogueForm action={setZoneActive} submit="Encender la zona" size="sm">

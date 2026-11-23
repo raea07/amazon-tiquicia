@@ -210,7 +210,19 @@ function Preview({
       <h2 id="revisar" className="text-lg font-bold">
         Antes de confirmar
       </h2>
-      {preview.changing_count === 0 ? (
+      {preview.changing_count > 0 && preview.nothing_served_after ? (
+        <p className="mt-2 font-semibold text-danger">
+          Con este cambio ninguna zona encendida tendría distritos con entrega y nadie podría hacer
+          pedidos, así que no se puede hacer. Deje al menos un distrito con entrega en una zona
+          encendida.{" "}
+          <Link
+            href={`/operacion/distritos?canton=${canton}` as Route}
+            className="text-link underline"
+          >
+            Volver a elegir
+          </Link>
+        </p>
+      ) : preview.changing_count === 0 ? (
         <p className="mt-2">
           Los distritos elegidos ya están así. No hay nada que cambiar.{" "}
           <Link

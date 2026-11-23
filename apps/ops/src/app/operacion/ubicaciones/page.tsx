@@ -140,6 +140,9 @@ function Shelf({ location }: { location: OpsLocation }) {
       <p className="mt-1 text-ink-muted">
         {location.units} {location.units === 1 ? "unidad" : "unidades"} · {location.open_tasks}{" "}
         {location.open_tasks === 1 ? "tarea abierta" : "tareas abiertas"}
+        {location.picked_units > 0
+          ? ` · ${location.picked_units} ${location.picked_units === 1 ? "unidad" : "unidades"} en paquetes que se están alistando`
+          : ""}
       </p>
 
       <details className="mt-1">

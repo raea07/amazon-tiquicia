@@ -1,4 +1,4 @@
-import { ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
+import { isRescheduledShipment, ORDER_STATUS_LABEL, toCostaRicaTime } from "@yuntera/core";
 import { ApiError, type OrderDetail, type OrderPayment } from "@yuntera/db";
 import { useSession } from "@yuntera/expo-kit/auth";
 import { useApiQuery } from "@yuntera/expo-kit/data";
@@ -6,6 +6,7 @@ import { oneParam, signInPath } from "@yuntera/expo-kit/paths";
 import { colors, fontFamily, radius, space } from "@yuntera/expo-kit/theme";
 import {
   Alert,
+  Badge,
   Card,
   EmptyState,
   ErrorState,
@@ -244,7 +245,11 @@ export default function OrderScreen() {
                   ? `Paquete ${index + 1} de ${o.shipments.length}`
                   : "Paquete"}
               </Text>
-              <ShipmentStatusBadge status={shipment.status} />
+              {isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+                <Badge tone="info">Entrega reprogramada</Badge>
+              ) : (
+                <ShipmentStatusBadge status={shipment.status} />
+              )}
             </View>
             <Text variant="small" tint="muted">
               {shipment.tracking_code}
@@ -255,7 +260,12 @@ export default function OrderScreen() {
                 entrega.
               </Text>
             ) : null}
-            {shipment.status === "delivery_failed" ? (
+            {isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+              <Text variant="small">
+                Reprogramamos la entrega de este paquete. Le avisaremos cuando vuelva a salir hacia
+                usted; si necesita cambiar algo, escríbanos.
+              </Text>
+            ) : shipment.status === "delivery_failed" ? (
               <Text variant="small" tint="warning">
                 No pudimos entregarlo. Lo intentaremos de nuevo el próximo día hábil; si necesita
                 cambiar algo, escríbanos.

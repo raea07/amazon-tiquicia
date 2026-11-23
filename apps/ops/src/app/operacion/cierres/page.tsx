@@ -43,8 +43,11 @@ async function Closures() {
   const staff = await requireStaff("/operacion/cierres", ["ops"]);
   const api = await sessionApi();
   const [list, zones] = await Promise.all([api.opsZoneClosures(), api.opsDeliveryZones()]);
-  const open = list.closures.filter((closure) => closure.state !== "over");
+  const open = list.closures.filter(
+    (closure) => closure.state === "upcoming" || closure.state === "current",
+  );
   const over = list.closures.filter((closure) => closure.state === "over");
+  const cancelled = list.closures.filter((closure) => closure.state === "cancelled");
 
   return (
     <>
@@ -141,6 +144,23 @@ async function Closures() {
         </section>
       ) : null}
 
+      {cancelled.length > 0 ? (
+        <section aria-labelledby="cancelados" className="mt-10">
+          <h2 id="cancelados" className="text-xl font-bold">
+            Cierres cancelados ({cancelled.length})
+          </h2>
+          <p className="mt-1 text-sm text-ink-muted">
+            Se terminaron antes de empezar en los últimos 7 días. Si fue un error, vuelva a cerrar
+            la zona con las mismas fechas.
+          </p>
+          <ul className="mt-3 grid gap-4 lg:grid-cols-2">
+            {cancelled.map((closure) => (
+              <CancelledRow key={closure.id} closure={closure} today={list.today} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {list.single_days.length > 0 ? (
         <section aria-labelledby="dias-sueltos" className="mt-10">
           <h2 id="dias-sueltos" className="text-xl font-bold">
@@ -163,6 +183,38 @@ async function Closures() {
         </section>
       ) : null}
     </>
+  );
+}
+
+/** A closure ended before it started: the way back is to close the zone again. */
+function CancelledRow({ closure, today }: { closure: OpsClosure; today: string }) {
+  const startsOn = closure.starts_on > today ? closure.starts_on : today;
+  return (
+    <li
+      className="rounded-lg border border-border bg-surface p-4 text-sm"
+      data-closure={closure.id}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-base font-bold">{closure.zone_name}</h3>
+        <Badge tone="neutral">{CLOSURE_STATE.cancelled?.label ?? "Cancelado"}</Badge>
+      </div>
+      <p className="mt-1">
+        {startsOn === closure.ends_on
+          ? `El ${formatDate(startsOn)}`
+          : `Del ${formatDate(startsOn)} al ${formatDate(closure.ends_on)}`}{" "}
+        · {CLOSURE_REASON[closure.reason]}
+      </p>
+      {closure.note ? <p className="mt-1 break-words text-ink-muted">{closure.note}</p> : null}
+      <div className="mt-2">
+        <CatalogueForm action={openClosure} submit="Volver a cerrar" size="sm">
+          <input type="hidden" name="zoneId" value={closure.zone_id} />
+          <input type="hidden" name="startsOn" value={startsOn} />
+          <input type="hidden" name="endsOn" value={closure.ends_on} />
+          <input type="hidden" name="reason" value={closure.reason} />
+          <input type="hidden" name="note" value={closure.note ?? ""} />
+        </CatalogueForm>
+      </div>
+    </li>
   );
 }
 

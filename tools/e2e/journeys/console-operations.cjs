@@ -4,8 +4,12 @@
 // and remove it; open a zone closure and end it early; an administrator changes an
 // operational setting and sees a protected one read-only; a warehouse location is
 // created and offered in the warehouse's receiving form; and a stuck route has its
-// stops removed and is closed, the driver seeing them skipped. Every page of the
-// section is checked at phone width.
+// stops removed and is closed, the driver seeing them skipped and the shopper reading
+// that the delivery was rescheduled. Along the way: an amount typed the Costa Rican way
+// ("1.500,00") is read as ₡1 500 and one with céntimos is refused with the ticked boxes
+// kept; a second member of staff's edit refuses the first one's stale form and the page
+// then shows the current values; a closure cancelled before it started is closed again
+// from the list. Every page of the section is checked at phone width.
 //
 // A journey drives the real apps in a real browser against a freshly seeded
 // database. It fails when a step does not arrive where it should, when the
@@ -159,6 +163,76 @@ const crDay = (days = 0) =>
     "checkout does not offer the address again once the zone is on",
   );
 
+  // Amounts in colones as people type them: "1.500,00" is ₡1 500, céntimos are
+  // refused, and after a refusal the weekday boxes stay as they were ticked.
+  await go("/operacion");
+  const newZone = staff.locator('section[aria-labelledby="nueva-zona"]');
+  await newZone.locator('input[name="zoneId"]').fill("zona-prueba-co");
+  await newZone.locator('input[name="name"]').fill("Zona de prueba");
+  await newZone.locator('input[name="deliveryWeekdays"][value="1"]').uncheck();
+  await newZone.locator('input[name="shippingFee"]').fill("1500,50");
+  const cents = await submit(newZone, "Crear zona");
+  log("fee with céntimos:", cents);
+  check(cents.includes("sin céntimos"), `a fee with céntimos was not refused: ${cents}`);
+  check(
+    !(await newZone.locator('input[name="deliveryWeekdays"][value="1"]').isChecked()) &&
+      (await newZone.locator('input[name="deliveryWeekdays"][value="2"]').isChecked()),
+    "the weekday boxes did not stay as ticked after a refusal",
+  );
+  await newZone.locator('input[name="shippingFee"]').fill("1.500,00");
+  const createdZone = await submit(newZone, "Crear zona");
+  log("zone created:", createdZone);
+  check(createdZone.includes("Envío ₡1 500"), `"1.500,00" was not read as ₡1 500: ${createdZone}`);
+  const testZone = staff.locator('li[data-zone="zona-prueba-co"]');
+  await testZone.waitFor();
+  check(
+    (await testZone.locator('button:has-text("Encender la zona")').count()) === 0 &&
+      (await text(testZone)).includes("asígnele antes al menos un distrito"),
+    "a zone with no districts is offered to be switched on",
+  );
+  await testZone.locator("summary", { hasText: "Borrar la zona" }).click();
+  check(
+    (await submit(testZone, "Borrar la zona")).includes("Zona borrada"),
+    "the test zone was not deleted",
+  );
+
+  // Two members of staff editing the same zone: the second save from a stale form
+  // is refused, the page then shows the current values, and saving again works.
+  await go("/operacion");
+  const extendedA = staff.locator('li[data-zone="gam-extended"]');
+  await extendedA.locator("summary", { hasText: "Cambiar «GAM extendida»" }).click();
+  const other = await staffContext.newPage();
+  watch(other);
+  await other.goto(OPS + "/operacion", { waitUntil: "networkidle" });
+  const extendedB = other.locator('li[data-zone="gam-extended"]');
+  await extendedB.locator("summary", { hasText: "Cambiar «GAM extendida»" }).click();
+  await extendedB.locator('input[name="name"]').fill("GAM extendida B");
+  await extendedB.locator('button:has-text("Guardar la zona")').click();
+  await other.waitForSelector('li[data-zone="gam-extended"] h3:has-text("GAM extendida B")');
+  await other.close();
+  const revisionBefore = await extendedA.locator('input[name="revision"]').first().inputValue();
+  await extendedA.locator('input[name="name"]').fill("GAM extendida");
+  const stale = await submit(extendedA, "Guardar la zona");
+  log("stale edit:", stale);
+  check(stale.includes("Otra persona cambió"), `a stale edit was not refused: ${stale}`);
+  await staff.waitForFunction(
+    (before) =>
+      document.querySelector('li[data-zone="gam-extended"] input[name="revision"]')?.value !==
+      before,
+    revisionBefore,
+  );
+  check(
+    (await text(extendedA.locator("h3"))) === "GAM extendida B",
+    "after a stale edit the page does not show the current name",
+  );
+  check(
+    (await extendedA.locator('input[name="name"]').inputValue()) === "GAM extendida",
+    "after a stale edit what was typed was lost",
+  );
+  const retried = await submit(extendedA, "Guardar la zona");
+  log("saved again:", retried);
+  check(retried.includes("guardada"), `saving again after a stale edit failed: ${retried}`);
+
   // ── 3. A district moved to another zone, and back ──────────────────────────
   await go("/operacion/distritos?canton=115");
   const mercedes = staff.locator('li[data-district="11503"]');
@@ -290,6 +364,21 @@ const crDay = (days = 0) =>
     (await staff.locator('section[aria-labelledby="cierres"] li[data-closure]').count()) === 0,
     "the closure ended early is still listed as open",
   );
+  // It had not started, so it was cancelled; the way back is on the same screen.
+  const cancelledRow = staff.locator('section[aria-labelledby="cancelados"] li[data-closure]');
+  check((await cancelledRow.count()) === 1, "the cancelled closure is not offered to close again");
+  const reclosed = await submit(cancelledRow.first(), "Volver a cerrar");
+  log("closed again:", reclosed);
+  check(
+    reclosed.includes("Cierre guardado"),
+    `the cancelled closure was not closed again: ${reclosed}`,
+  );
+  await go("/operacion/cierres");
+  const reopened = staff.locator('section[aria-labelledby="cierres"] li[data-closure]').first();
+  await reopened.locator("summary", { hasText: "Terminar el cierre ahora" }).click();
+  const endedAgain = await submit(reopened, "Terminar el cierre");
+  log("ended again:", endedAgain);
+  check(endedAgain.includes("Cierre cancelado"), `the closure was not ended again: ${endedAgain}`);
 
   // ── 6. Settings: an operational one changed, a protected one read-only ─────
   await go("/operacion/ajustes");
@@ -437,6 +526,19 @@ const crDay = (days = 0) =>
     "the driver does not see the stops skipped",
   );
   await driver.screenshot({ path: SHOTS + "/co10-driver-skipped.png", fullPage: true });
+  // The shopper whose parcel was taken off the route while the driver had it reads
+  // that the delivery was rescheduled, not that nobody was home.
+  await shopper.goto(WEB + "/pedidos/YT-100011", { waitUntil: "networkidle" });
+  const parcel = await text(shopper.locator("main"));
+  log("shopper's order:", parcel.slice(0, 300));
+  check(
+    parcel.includes("Entrega reprogramada") &&
+      parcel.includes("Reprogramamos la entrega") &&
+      !parcel.includes("No pudimos entregarlo") &&
+      !parcel.includes("Entrega fallida"),
+    "the shopper is told the delivery failed after staff removed the stop",
+  );
+  await shopper.screenshot({ path: SHOTS + "/co10b-shopper-rescheduled.png", fullPage: true });
 
   // ── 9. Every page of the section at phone width ─────────────────────────────
   const mobile = await (await phone({ storageState: await staffContext.storageState() })).newPage();

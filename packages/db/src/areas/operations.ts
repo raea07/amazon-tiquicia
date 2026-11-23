@@ -131,6 +131,8 @@ export const districtMoveImpact = z.object({
   target: z.object({ id: z.string(), name: z.string(), active: z.boolean() }).nullable(),
   /** Zones that serve a district now and would serve none afterwards. */
   zones_left_empty: z.array(z.object({ id: z.string(), name: z.string() })),
+  /** No active zone would serve a district afterwards; the move is refused. */
+  nothing_served_after: z.boolean(),
 });
 export type DistrictMoveImpact = z.infer<typeof districtMoveImpact>;
 
@@ -372,6 +374,8 @@ export const opsLocation = z.object({
   editable: z.boolean(),
   units: count,
   open_tasks: count,
+  /** Picked from here into parcels still being picked: back here if cancelled. */
+  picked_units: count,
   previous_code: z.string().optional(),
 });
 export type OpsLocation = z.infer<typeof opsLocation>;
@@ -470,8 +474,8 @@ export const operationsErrors = {
   },
   zone_changed_meanwhile: {
     "es-CR":
-      "Otra persona cambió esta zona mientras usted la editaba. Revise los valores actuales y vuelva a intentarlo.",
-    en: "Someone else changed this zone while you were editing it. Check the current values and try again.",
+      "Otra persona cambió esta zona mientras usted la editaba. La página ya muestra los valores actuales: revíselos y vuelva a guardar.",
+    en: "Someone else changed this zone while you were editing it. The page now shows the current values: check them and save again.",
   },
   zone_unchanged: {
     "es-CR": "No hay nada que guardar: la zona ya está así.",
@@ -479,8 +483,18 @@ export const operationsErrors = {
   },
   zone_last_active: {
     "es-CR":
-      "Es la única zona activa: si se apaga, nadie podría hacer pedidos. Active otra antes de apagar esta.",
-    en: "This is the only active zone: switching it off would stop every order. Switch another one on first.",
+      "Es la única zona encendida que tiene distritos con entrega: si se apaga, nadie podría hacer pedidos. Encienda otra zona con distritos antes de apagar esta.",
+    en: "This is the only switched-on zone with districts served: switching it off would stop every order. Switch on another zone with districts first.",
+  },
+  zone_has_no_districts: {
+    "es-CR":
+      "Esta zona no tiene distritos con entrega, así que encendida no recibiría pedidos. Asígnele distritos en Distritos y enciéndala después.",
+    en: "This zone has no districts served, so switched on it would take no orders. Assign districts to it under Districts and switch it on afterwards.",
+  },
+  districts_none_served: {
+    "es-CR":
+      "Con este cambio ninguna zona encendida tendría distritos con entrega y nadie podría hacer pedidos. Deje al menos un distrito con entrega en una zona encendida.",
+    en: "With this change no switched-on zone would have a district served and nobody could order. Keep at least one district served in a switched-on zone.",
   },
   zone_in_use: {
     "es-CR":
@@ -571,8 +585,8 @@ export const operationsErrors = {
   },
   zone_closure_changed_meanwhile: {
     "es-CR":
-      "Otra persona cambió este cierre mientras usted lo veía. Revise las fechas actuales y vuelva a intentarlo.",
-    en: "Someone else changed this closure while you were looking at it. Check the current dates and try again.",
+      "Otra persona cambió este cierre mientras usted lo veía. La página ya muestra las fechas actuales: revíselas y vuelva a intentarlo.",
+    en: "Someone else changed this closure while you were looking at it. The page now shows the current dates: check them and try again.",
   },
   zone_closure_over: {
     "es-CR": "Este cierre ya terminó o se canceló; no hay nada que terminar.",
@@ -597,8 +611,8 @@ export const operationsErrors = {
   },
   setting_changed_meanwhile: {
     "es-CR":
-      "Otra persona cambió este ajuste mientras usted lo veía. Revise el valor actual y vuelva a intentarlo.",
-    en: "Someone else changed this setting while you were looking at it. Check the current value and try again.",
+      "Otra persona cambió este ajuste mientras usted lo veía. La página ya muestra el valor actual: revíselo y vuelva a intentarlo.",
+    en: "Someone else changed this setting while you were looking at it. The page now shows the current value: check it and try again.",
   },
   setting_unchanged: {
     "es-CR": "El ajuste ya tiene ese valor. No se cambió nada.",
@@ -627,8 +641,14 @@ export const operationsErrors = {
     en: "The location is already like that. Nothing was changed.",
   },
   location_has_stock: {
-    "es-CR": "Esta ubicación tiene mercadería. Muévala a otra ubicación antes de desactivarla.",
-    en: "This location holds goods. Move them to another location before switching it off.",
+    "es-CR":
+      "Esta ubicación tiene mercadería. Se puede desactivar cuando quede vacía, cuando esas unidades salgan en pedidos.",
+    en: "This location holds goods. It can be switched off once it is empty, when those units leave in orders.",
+  },
+  location_has_picked_units: {
+    "es-CR":
+      "Hay unidades sacadas de esta ubicación en paquetes que todavía se están alistando: si se cancela el pedido, vuelven aquí. Desactívela cuando esos paquetes estén empacados.",
+    en: "Units taken from this location are in parcels still being picked: if the order is cancelled, they come back here. Switch it off once those parcels are packed.",
   },
   location_has_open_tasks: {
     "es-CR": "Hay tareas de alisto abiertas en esta ubicación. Termínelas antes de cambiarla.",

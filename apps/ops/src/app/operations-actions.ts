@@ -9,6 +9,7 @@
  * shop shows what changed, asks the shop to drop its cached copies.
  */
 
+import { format, money, parseWholeColones } from "@yuntera/core";
 import { ApiError, CLOSURE_REASONS, LOCATION_CODE, type ZoneServiceInput } from "@yuntera/db";
 import {
   type ActionState,
@@ -32,7 +33,10 @@ type ShopRefresh = "none" | "catalog" | "districts";
 /**
  * Runs an operations change; on success, redraws the page and refreshes the
  * shop. `explain` may give a refusal a message that uses its detail (how many
- * units, routes or stops) instead of the general one for its code.
+ * units, routes or stops) instead of the general one for its code. When the
+ * refusal is that someone else changed the row meanwhile, the page is redrawn
+ * too, so it shows the current values and revision (what was typed is put
+ * back by the form) and a second try can succeed.
  */
 async function operationsAction(
   returnTo: string,
@@ -43,12 +47,16 @@ async function operationsAction(
 ): Promise<ActionState> {
   if (!(await currentStaff())) redirectTo(signInPath(returnTo));
   let explained: string | null = null;
+  let stale = false;
   const state = await attempt(async () => {
     let message: string;
     try {
       message = await run(await sessionApi());
     } catch (error) {
-      if (error instanceof ApiError) explained = explain?.(error) ?? null;
+      if (error instanceof ApiError) {
+        explained = explain?.(error) ?? null;
+        stale = error.code.endsWith("_changed_meanwhile");
+      }
       throw error;
     }
     // Product pages (date and delivery fee), the cart's quote is never cached;
@@ -56,8 +64,8 @@ async function operationsAction(
     if (shop !== "none") await refreshShopCatalog({ districts: shop === "districts" });
     return message;
   }, values);
+  if (state.ok || stale) refresh();
   if (explained) return { error: explained, values };
-  if (state.ok) refresh();
   return state;
 }
 
@@ -67,12 +75,16 @@ const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const count = (detail: string | null) => Number.parseInt(detail ?? "", 10);
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** Whole colones as typed ("1 500", "₡1.500") into céntimos; null when empty, NaN when not a number. */
+/**
+ * Whole colones as typed ("1 500", "₡1.500", "150,00") into céntimos; null
+ * when empty, NaN when not an amount of whole colones ("150,50", "-5").
+ */
 function colonesToMinor(value: string): number | null {
-  const digits = value.replace(/[\s₡.,]/g, "");
-  if (digits === "") return null;
-  return /^\d{1,9}$/.test(digits) ? Number(digits) * 100 : Number.NaN;
+  if (value.trim() === "") return null;
+  return parseWholeColones(value) ?? Number.NaN;
 }
+
+const colones = (minor: number) => format(money(minor, "CRC"));
 
 const wholeNumber = (value: string) => (/^-?\d{1,9}$/.test(value) ? Number(value) : Number.NaN);
 
@@ -88,6 +100,27 @@ const ZONE_FIELDS = [
   "freeShippingThreshold",
 ];
 
+/** What was typed into a zone's form, the ticked boxes included, to put back after a refusal. */
+function zoneValues(formData: FormData): Record<string, string> {
+  return {
+    ...typed(formData, ...ZONE_FIELDS),
+    processingWeekdays: formData.getAll("processingWeekdays").map(String).join(","),
+    deliveryWeekdays: formData.getAll("deliveryWeekdays").map(String).join(","),
+    codAvailable: formData.get("codAvailable") === "on" ? "on" : "",
+  };
+}
+
+/** The delivery fee and free-delivery amount as saved, for the success message. */
+const feeSaid = (zone: {
+  shipping_fee_minor: number;
+  free_shipping_threshold_minor: number | null;
+}) =>
+  `Envío ${colones(zone.shipping_fee_minor)}${
+    zone.free_shipping_threshold_minor === null
+      ? ", nunca gratis"
+      : `, gratis desde ${colones(zone.free_shipping_threshold_minor)}`
+  }.`;
+
 /** The zone's service as typed, or what is wrong with it in words. */
 function zoneService(formData: FormData): ZoneServiceInput | string {
   const weekdays = (name: string) =>
@@ -102,10 +135,10 @@ function zoneService(formData: FormData): ZoneServiceInput | string {
   const transitMaxDays = wholeNumber(text(formData, "transitMaxDays"));
   if (text(formData, "name").length < 2) return "Escriba el nombre de la zona.";
   if (fee === null || Number.isNaN(fee)) {
-    return "Escriba el costo de envío en colones, sin decimales (0 si es gratis).";
+    return "Escriba el costo de envío en colones enteros, sin céntimos, por ejemplo 1500 o 1 500 (0 si es gratis).";
   }
   if (threshold !== null && Number.isNaN(threshold)) {
-    return "Escriba el monto para envío gratis en colones, sin decimales, o déjelo vacío.";
+    return "Escriba el monto para envío gratis en colones enteros, sin céntimos, o déjelo vacío.";
   }
   if ([cutoffHour, transitMinDays, transitMaxDays].some(Number.isNaN)) {
     return "Escriba la hora de corte y los días de camino como números enteros.";
@@ -124,7 +157,7 @@ function zoneService(formData: FormData): ZoneServiceInput | string {
 }
 
 export async function createZone(_previous: ActionState, formData: FormData): Promise<ActionState> {
-  const values = typed(formData, ...ZONE_FIELDS);
+  const values = zoneValues(formData);
   const service = zoneService(formData);
   if (typeof service === "string") return { error: service, values };
   if (text(formData, "zoneId") === "") {
@@ -135,14 +168,14 @@ export async function createZone(_previous: ActionState, formData: FormData): Pr
     "none",
     async (api) => {
       const zone = await api.opsCreateZone(text(formData, "zoneId"), service);
-      return `Zona «${zone.name}» creada, apagada y sin distritos. Asígnele distritos en Distritos y enciéndala cuando esté lista.`;
+      return `Zona «${zone.name}» creada, apagada y sin distritos. ${feeSaid(zone)} Asígnele distritos en Distritos y enciéndala cuando esté lista.`;
     },
     values,
   );
 }
 
 export async function updateZone(_previous: ActionState, formData: FormData): Promise<ActionState> {
-  const values = typed(formData, ...ZONE_FIELDS);
+  const values = zoneValues(formData);
   const revision = wholeNumber(text(formData, "revision"));
   const service = zoneService(formData);
   if (Number.isNaN(revision)) return { error: GENERIC_ERROR, values };
@@ -152,7 +185,7 @@ export async function updateZone(_previous: ActionState, formData: FormData): Pr
     "districts",
     async (api) => {
       const zone = await api.opsUpdateZone(text(formData, "zoneId"), revision, service);
-      return `Zona «${zone.name}» guardada. Rige para los pedidos nuevos; los pedidos ya hechos conservan su fecha y su envío.`;
+      return `Zona «${zone.name}» guardada. ${feeSaid(zone)} Rige para los pedidos nuevos; los pedidos ya hechos conservan su fecha y su envío.`;
     },
     values,
   );
@@ -168,7 +201,7 @@ export async function setZoneActive(
   return operationsAction("/operacion", "districts", async (api) => {
     const zone = await api.opsSetZoneActive(text(formData, "zoneId"), on, revision);
     return on
-      ? `Zona «${zone.name}» encendida: sus direcciones ya pueden hacer pedidos.`
+      ? `Zona «${zone.name}» encendida: las direcciones de sus ${plural(zone.district_count, "distrito", "distritos")} ya pueden hacer pedidos.`
       : `Zona «${zone.name}» apagada: sus direcciones ya no pueden hacer pedidos. Pedidos abiertos que siguen su curso: ${zone.open_order_count}.`;
   });
 }
@@ -315,7 +348,7 @@ export async function endClosure(_previous: ActionState, formData: FormData): Pr
   return operationsAction("/operacion/cierres", "catalog", async (api) => {
     const closure = await api.opsEndZoneClosure(id.data, revision);
     return closure.state === "cancelled"
-      ? "Cierre terminado: no había cerrado ningún día ya pasado, así que la zona recibe entregas en todas esas fechas."
+      ? "Cierre cancelado: todavía no había empezado, así que la zona recibe entregas en esas fechas. Si fue un error, use «Volver a cerrar» en Cierres cancelados."
       : "Cierre terminado: la zona recibe entregas desde hoy. Para volver a cerrarla, cambie el último día.";
   });
 }
@@ -341,7 +374,7 @@ export async function updateSetting(
     return {
       error:
         unit === "minor"
-          ? "Escriba el monto en colones, sin decimales."
+          ? "Escriba el monto en colones enteros, sin céntimos, por ejemplo 150000 o 150 000."
           : "Escriba un número entero.",
       values,
     };
@@ -357,7 +390,8 @@ export async function updateSetting(
     "none",
     async (api) => {
       await api.opsUpdateSetting(key, value, expected);
-      return "Ajuste guardado. Rige desde ahora; queda en la auditoría con el valor anterior.";
+      const said = unit === "minor" ? colones(value) : value.toLocaleString("es-CR");
+      return `Ajuste guardado: ahora vale ${said}. Rige desde ahora; queda en la auditoría con el valor anterior.`;
     },
     values,
     (error) => {
@@ -394,7 +428,9 @@ export async function createLocation(
     "none",
     async (api) => {
       const location = await api.opsCreateLocation(warehouse.data, code, kind.data);
-      return `Ubicación ${location.code} creada. La bodega ya la puede elegir al recibir y guardar mercadería.`;
+      return location.kind === "pick"
+        ? `Ubicación de alisto ${location.code} creada. Las pantallas de la bodega guardan mercadería solo en ubicaciones de almacenaje; para recibir y guardar aquí, créela de almacenaje.`
+        : `Ubicación ${location.code} creada. La bodega ya la puede elegir al recibir y guardar mercadería.`;
     },
     values,
   );
@@ -448,7 +484,10 @@ export async function setLocationActive(
     undefined,
     (error) => {
       if (error.code === "location_has_stock") {
-        return `Esta ubicación tiene ${plural(count(error.detail), "unidad", "unidades")}. Muévalas a otra ubicación antes de desactivarla.`;
+        return `Esta ubicación tiene ${plural(count(error.detail), "unidad", "unidades")}. Se puede desactivar cuando quede vacía, cuando esas unidades salgan en pedidos: todavía no hay una pantalla para pasar mercadería de una ubicación a otra.`;
+      }
+      if (error.code === "location_has_picked_units") {
+        return `Hay ${plural(count(error.detail), "unidad sacada", "unidades sacadas")} de esta ubicación en paquetes que todavía se están alistando; si se cancela el pedido, vuelven aquí. Desactívela cuando esos paquetes estén empacados.`;
       }
       if (error.code === "location_has_open_tasks") {
         return `Hay ${plural(count(error.detail), "tarea de alisto abierta", "tareas de alisto abiertas")} en esta ubicación. Termínelas antes de desactivarla.`;

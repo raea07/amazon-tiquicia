@@ -143,9 +143,9 @@ function BuyBox({
           </View>
           <OfferFacts offer={featured} />
           {zone && !zone.active ? (
-            <Alert tone="warning" title="Todavía no entregamos en su zona">
+            <Alert tone="warning" title="Por ahora no entregamos en su zona">
               <Text variant="small" style={{ color: colors.palette.maiz[900] }}>
-                Por ahora llegamos al Gran Área Metropolitana.
+                Puede comprar para una dirección en otra zona.
               </Text>
               <TextLink href="/zona">Cambiar de zona</TextLink>
             </Alert>

@@ -257,8 +257,8 @@ async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParam
             Entregas fallidas
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-ink-muted">
-            Siguen en la lista de arriba para un nuevo intento. Si ya no se va a entregar,
-            devuélvalo a la bodega.
+            Siguen en la lista de arriba para un nuevo intento, también los que se quitaron de una
+            ruta. Si ya no se va a entregar, devuélvalo a la bodega.
           </p>
           <ul className="mt-3 flex flex-col gap-3">
             {failed.map((shipment) => (
@@ -270,7 +270,10 @@ async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParam
                   <span className="font-semibold">{shipment.tracking_code}</span> ·{" "}
                   {shipment.recipient_name}
                   <span className="block text-ink-muted">
-                    {shipment.order_number} · {shipment.attempt_count} intento(s)
+                    {shipment.order_number} ·{" "}
+                    {shipment.attempt_count === 0
+                      ? "quitado de una ruta, sin intento de entrega"
+                      : `${shipment.attempt_count} intento(s)`}
                   </span>
                 </span>
                 <ActionForm
