@@ -16,6 +16,7 @@ import {
   isRedirect,
   messageOf,
   redirectTo,
+  refreshShopCatalog,
   sessionApi,
   signInPath,
   typed,
@@ -123,6 +124,10 @@ export async function removeClosureDay(
     "/operacion/cierres",
     async (api) => {
       await api.opsRemoveZoneClosureDay(zone.data, day.data);
+      // Product pages keep their date about a minute: ask the shop to drop
+      // them, as every closure change does (operations-actions.ts), so what
+      // the message says is true at once.
+      await refreshShopCatalog();
       return "Día abierto de nuevo: la fecha de entrega que ve la tienda ya lo cuenta.";
     },
     values,

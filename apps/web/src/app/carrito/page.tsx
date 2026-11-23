@@ -1,4 +1,4 @@
-import type { CartAlternative, CartLine } from "@yuntera/db";
+import type { CartLine, DatedCartAlternative } from "@yuntera/db";
 import { ProductImage } from "@yuntera/next-kit/product-image";
 import { Alert, buttonClass, EmptyState, formatDate, formatPrice, Skeleton } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
@@ -51,12 +51,13 @@ async function Cart() {
   const quantityOf = new Map(items.map((item) => [item.offerId, item.quantity]));
   const unavailable = lines.filter((line) => !line.buyable).map((line) => line.offer_id);
   const hasUnavailable = unavailable.length > 0;
-  // Another shop may still sell what the shopper chose: say so, instead of "gone".
+  // Another shop may still sell what the shopper chose: say so, instead of
+  // "gone", with when it would arrive in the district the cart is priced for
+  // (the date that offer's product page gives for it).
   const alternativeOf = new Map(
-    (hasUnavailable ? await api.cartAlternatives(unavailable) : []).map((alt) => [
-      alt.offer_id,
-      alt,
-    ]),
+    (hasUnavailable ? await api.cartAlternatives(unavailable, location.postalCode) : []).map(
+      (alt) => [alt.offer_id, alt],
+    ),
   );
 
   return (
@@ -227,9 +228,9 @@ async function Cart() {
 
 /**
  * A line the shopper cannot buy as it is. When another shop sells the same
- * variant, say whose offer ran out, who else sells it and at what price, and
- * offer the swap; the product page lists every offer. Otherwise, say it is
- * not available and what to do.
+ * variant, say whose offer ran out, who else sells it, at what price and when
+ * it would arrive, and offer the swap; the product page lists every offer.
+ * Otherwise, say it is not available and what to do.
  */
 function UnavailableLine({
   line,
@@ -237,7 +238,7 @@ function UnavailableLine({
   quantity,
 }: {
   line: CartLine;
-  alternative: CartAlternative | undefined;
+  alternative: DatedCartAlternative | undefined;
   quantity: number;
 }) {
   if (!alternative) {
@@ -263,6 +264,13 @@ function UnavailableLine({
         {alternative.seller_name} lo vende a {formatPrice(alternative.price_minor)}
         {quantity > alternative.available ? ` (le quedan ${alternative.available})` : ""}.
       </p>
+      {alternative.promise ? (
+        <p className="mt-1 font-semibold" data-testid="cart-alternative-arrival">
+          {alternative.promise.earliest === alternative.promise.latest
+            ? `Llega el ${formatDate(alternative.promise.latest)}`
+            : `Llega entre el ${formatDate(alternative.promise.earliest)} y el ${formatDate(alternative.promise.latest)}`}
+        </p>
+      ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <form action={swapCartOffer}>
           <input type="hidden" name="from" value={line.offer_id} />

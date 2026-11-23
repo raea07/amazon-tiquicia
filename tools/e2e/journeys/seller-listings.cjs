@@ -254,6 +254,28 @@ const DESCRIPTION =
     "the cart does not say whose offer ran out and who else sells it",
   );
   check(!soldOut.includes("Ya no está disponible"), "the cart says the product is gone");
+  // When the other shop's offer would arrive (084600): the date its product
+  // page gives for the same district, read a moment later.
+  const arrival = await text(
+    visitor.locator("main ul > li").first().locator('[data-testid="cart-alternative-arrival"]'),
+  );
+  log("alternative arrives:", arrival);
+  check(
+    /^Llega (el|entre el) /.test(arrival),
+    "the cart does not say when the other offer arrives",
+  );
+  await visitor.goto(WEB + BOTTLE, { waitUntil: "networkidle" });
+  const visitorBuyBox = visitor.locator('aside[aria-label="Comprar"]');
+  check(
+    (await text(visitorBuyBox)).includes("Tienda Sendero"),
+    "Tienda Sendero's offer is not shown first",
+  );
+  const pageDate = await text(visitorBuyBox.locator("dd.text-success").first());
+  check(
+    arrival === `Llega ${pageDate}`,
+    `the cart's date (${arrival}) is not the product page's (${pageDate})`,
+  );
+  await visitor.goto(WEB + "/carrito", { waitUntil: "networkidle" });
   await visitor.screenshot({ path: SHOTS + "/sl2c-cart-sold-out.png", fullPage: true });
   await onPhone(visitorContext, WEB + "/carrito", "sl2d-cart-sold-out-390.png");
   await visitor.click('main button:has-text("Cambiar a la oferta de Tienda Sendero")');
