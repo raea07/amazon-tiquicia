@@ -285,8 +285,8 @@ begin
           case when v_ship.recalled_at is not null then 'Su paquete volvió a nuestros estantes sin salir de la bodega'
                else 'Su paquete regresó a nuestra bodega sin entregarse' end
           || case when v_refund is null then ''
-                  else '; le devolvemos ' || private.colones((v_refund ->> 'refund_minor')::bigint)
-                       || ' que pagó por sus productos' end,
+                  else '; le devolvemos lo que pagó por él: '
+                       || private.colones((v_refund ->> 'refund_minor')::bigint) end,
           (select auth.uid()));
 
   if not exists (select 1 from public.shipments s where s.order_id = v_order.id

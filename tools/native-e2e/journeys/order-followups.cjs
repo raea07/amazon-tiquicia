@@ -1,0 +1,221 @@
+// The shopper app and the warehouse app after migration 084200 (order
+// follow-ups), web export, at phone size, on a freshly seeded database.
+//
+// Central stops a packed parcel of the third demo shopper through the API, as
+// the console does. In the shopper app the order list says the order is being
+// cancelled (never "En camino") and the order page says how much comes back,
+// the delivery fee included, without the delivery code. In the warehouse app
+// the parcel reads "Nunca salió de la bodega"; checking it in says the
+// shopper gets the goods and the delivery fee back. The shopper's page then
+// gives the total refunded. Fails on any console error, uncaught exception
+// or 5xx.
+
+const { chromium, request } = require("playwright");
+
+const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
+const SHOP = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
+const WAREHOUSE = process.env.NATIVE_WAREHOUSE_URL || "http://127.0.0.1:3013";
+const API = process.env.API_URL || "http://127.0.0.1:54321";
+const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
+const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
+const SHOPPER = "comprador3@yuntera.example";
+const log = (...args) => console.log(...args);
+const squash = (text) => text.replace(/\s+/g, " ").trim();
+/** Colones as the apps write them (packages/core format). */
+const colones = (minor) =>
+  `₡${String(Math.floor(minor / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, " ")}${
+    minor % 100 ? `,${String(minor % 100).padStart(2, "0")}` : ""
+  }`;
+
+function check(condition, message) {
+  if (!condition) throw new Error(message);
+  log("  ok:", message);
+}
+
+/** Signs in through the API and returns a function that calls database functions as that person. */
+async function as(email) {
+  const ctx = await request.newContext();
+  const token = await ctx.post(`${API}/auth/v1/token?grant_type=password`, {
+    headers: { apikey: KEY },
+    data: { email, password: PASSWORD },
+  });
+  const { access_token } = await token.json();
+  const rpc = async (fn, args = {}) => {
+    const r = await ctx.post(`${API}/rest/v1/rpc/${fn}`, {
+      headers: { apikey: KEY, authorization: `Bearer ${access_token}` },
+      data: args,
+    });
+    const body = await r.json().catch(() => null);
+    if (r.status() >= 400)
+      throw new Error(`${fn} as ${email}: ${r.status()} ${JSON.stringify(body)}`);
+    return body;
+  };
+  rpc.dispose = () => ctx.dispose();
+  return rpc;
+}
+
+(async () => {
+  // ── 1. A paid order, packed, and stopped by Central ──
+  const buyer = await as(SHOPPER);
+  const address = (await buyer("my_addresses")).find((a) => a.is_default && a.zone_active);
+  const product = await buyer("get_product", { p_slug: "libreta-tapa-dura-a5" });
+  const offer = product.skus.flatMap((k) => k.offers).find((o) => o.fulfillment === "platform");
+  const placed = await buyer("place_order", {
+    p_items: [{ offer_id: offer.offer_id, quantity: 1 }],
+    p_address_id: address.id,
+    p_payment_method: "sinpe_movil",
+    p_idempotency_key: `native-order-followups-${Date.now()}`,
+  });
+  await buyer("confirm_sandbox_payment", { p_order_id: placed.order_id });
+  const bodega = await as("bodega@yuntera.example");
+  const warehouse = (await bodega("my_roles")).warehouses[0].id;
+  const board = await bodega("wms_board", { p_warehouse_id: warehouse });
+  const shipment = board.shipments.find((s) => s.order_number === placed.order_number);
+  await bodega("wms_start_picking", { p_shipment_id: shipment.shipment_id });
+  const detail = await bodega("wms_shipment", { p_shipment_id: shipment.shipment_id });
+  for (const task of detail.tasks) {
+    await bodega("wms_confirm_pick", {
+      p_task_id: task.task_id,
+      p_quantity: task.quantity,
+      p_location_id: task.location_id,
+      p_code: task.sku_code,
+    });
+  }
+  await bodega("wms_pack_shipment", {
+    p_shipment_id: shipment.shipment_id,
+    p_weight_grams: detail.expected_weight_grams || 1000,
+    p_package_count: 1,
+  });
+  await bodega.dispose();
+  const central = await as("central@yuntera.example");
+  await central("ops_recall_shipment", {
+    p_shipment_id: shipment.shipment_id,
+    p_reason: "El cliente pidió cancelar",
+  });
+  await central.dispose();
+  const order = await buyer("get_order", { p_order_number: placed.order_number });
+  check(order.shipping_minor > 0, `the order ${order.order_number} pays a delivery fee`);
+
+  const browser = await chromium.launch();
+  const errors = [];
+  const phone = async () => {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+      locale: "es-CR",
+    });
+    const page = await context.newPage();
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console: ${m.text().slice(0, 300)}`);
+    });
+    page.on("pageerror", (e) => errors.push(`pageerror: ${String(e).slice(0, 300)}`));
+    page.on("response", (r) => {
+      if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
+    });
+    return page;
+  };
+  const noSideways = async (page, where) =>
+    check(
+      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
+      `no sideways scrolling at 390 px: ${where}`,
+    );
+
+  // ── 2. The shopper app while the parcel waits ──
+  const shop = await phone();
+  const shopId = (id) => shop.getByTestId(id).filter({ visible: true }).first();
+  await shop.goto(`${SHOP}/ingresar?siguiente=%2Fpedidos`, { waitUntil: "networkidle" });
+  await shopId("sign-in-email").fill(SHOPPER);
+  await shopId("sign-in-password").fill(PASSWORD);
+  await shopId("sign-in-submit").click();
+  await shopId(`order-${order.order_number}`).waitFor();
+  const row = squash(await shopId(`order-${order.order_number}`).innerText());
+  log("   ", row);
+  check(
+    row.includes("Se está cancelando") && !row.includes("En camino"),
+    "the list says it is being cancelled",
+  );
+  await noSideways(shop, "order list");
+  await shop.screenshot({ path: `${SHOTS}/native-order-followups-01-list.png`, fullPage: true });
+  await shopId(`order-${order.order_number}`).click();
+  await shopId("order-stopping").waitFor();
+  const stopping = squash(await shopId("order-stopping").innerText());
+  log("   ", stopping);
+  check(
+    stopping.includes(`le devolvemos ${colones(order.total_minor)}, el envío incluido,`),
+    "the order page says how much comes back, the delivery fee included",
+  );
+  check(
+    (await shop.getByTestId("delivery-pin").count()) === 0,
+    "no delivery code for an order being cancelled",
+  );
+  check(!squash(await shop.locator("body").innerText()).includes("En camino"), "never En camino");
+  await noSideways(shop, "order page");
+  await shop.screenshot({ path: `${SHOTS}/native-order-followups-02-order.png`, fullPage: true });
+
+  // ── 3. The warehouse app checks it in ──
+  const floor = await phone();
+  const floorId = (id) => floor.getByTestId(id).filter({ visible: true }).first();
+  await floor.goto(`${WAREHOUSE}/`, { waitUntil: "networkidle" });
+  await floorId("sign-in-email").fill("bodega@yuntera.example");
+  await floorId("sign-in-password").fill(PASSWORD);
+  await floorId("sign-in-submit").click();
+  await floorId("warehouse-board").waitFor();
+  const parcelRow = floor
+    .getByTestId("returned-row")
+    .filter({ hasText: shipment.tracking_code })
+    .first();
+  await parcelRow.waitFor();
+  const parcelText = squash(await parcelRow.innerText());
+  log("   ", parcelText);
+  check(
+    parcelText.includes("Nunca salió de la bodega") &&
+      parcelText.includes("Central lo detuvo") &&
+      !parcelText.includes("0 intentos"),
+    "the board says the parcel never left the building",
+  );
+  await noSideways(floor, "warehouse board");
+  await floor.screenshot({ path: `${SHOTS}/native-order-followups-03-board.png`, fullPage: true });
+  await parcelRow.click();
+  await floorId("returned-submit").waitFor();
+  check(
+    squash(await floorId("returned-origin").innerText()).includes("Central lo detuvo"),
+    "and so does its page",
+  );
+  await floorId("returned-condition-resellable").click();
+  await floorId("returned-submit").click();
+  await floorId("returned-result").waitFor();
+  const result = squash(await floorId("returned-result").innerText());
+  log("   ", result);
+  check(
+    result.includes(`Al cliente se le devuelven ${colones(order.total_minor)}, el envío incluido.`),
+    "checked in: the shopper gets the goods and the delivery fee back",
+  );
+  await floor.screenshot({
+    path: `${SHOTS}/native-order-followups-04-checked-in.png`,
+    fullPage: true,
+  });
+
+  // ── 4. The shopper app afterwards ──
+  await shop.reload({ waitUntil: "networkidle" });
+  await shopId("refund-total").waitFor();
+  const total = squash(await shopId("refund-total").innerText());
+  log("   ", total);
+  check(
+    total ===
+      `En total le devolvemos ${colones(order.total_minor)}: todo lo que pagó, el envío incluido.`,
+    "the order page gives the total refunded",
+  );
+  await shop.screenshot({
+    path: `${SHOTS}/native-order-followups-05-refunded.png`,
+    fullPage: true,
+  });
+  await buyer.dispose();
+
+  await browser.close();
+  if (errors.length) throw new Error(`errors: ${errors.join(" | ")}`);
+  log("passed");
+})().catch((e) => {
+  console.error("FAILED:", e.message.slice(0, 700));
+  process.exit(1);
+});

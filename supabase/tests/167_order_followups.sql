@@ -400,8 +400,8 @@ begin
                               || ': no llegamos a intentar la entrega'),
     'fee: the order page says the fee comes back';
   assert exists (select 1 from public.order_events e where e.order_id = o.id and e.visible_to_customer
-                 and e.note = 'Su paquete volvió a nuestros estantes sin salir de la bodega; le devolvemos '
-                              || private.colones(o.items_total_minor) || ' que pagó por sus productos'),
+                 and e.note = 'Su paquete volvió a nuestros estantes sin salir de la bodega; le devolvemos lo que pagó por él: '
+                              || private.colones(o.items_total_minor)),
     'fee: and the goods'' amount, for a parcel that never left';
   assert exists (select 1 from private.outbox_events e where e.id > current_setting('t.events_from')::bigint
                  and e.topic = 'order.cancelled' and e.payload ->> 'order_id' = o.id::text
@@ -478,7 +478,7 @@ begin
          and (select status from public.payments where order_id = o.id order by created_at desc limit 1) = 'refunded',
     format('fee: C, removed from a driven route without an attempt, gives back the fee %s', v);
   assert exists (select 1 from public.order_events e where e.order_id = o.id and e.visible_to_customer
-                 and e.note like 'Su paquete regresó a nuestra bodega sin entregarse; le devolvemos ₡%'),
+                 and e.note like 'Su paquete regresó a nuestra bodega sin entregarse; le devolvemos lo que pagó por él: ₡%'),
     'fee: a parcel that went out reads "regresó"';
 end
 $$;
@@ -718,35 +718,43 @@ do $$ begin
   assert not exists (select 1 from public.districts d join public.cantons c on c.code = d.canton_code
                      where d.zone_id is not null and d.zone_id = c.zone_id),
     'districts: none keeps its canton''s zone as its own';
-  assert (select c.zone_id from public.districts d join public.cantons c on c.code = d.canton_code
-          where d.postal_code = '10111') = 'gam-core'
-         and (select zone_id from public.districts where postal_code = '10111') is null,
-    'fixture: San Sebastián follows its canton (gam-core)';
+end $$;
+-- San Sebastián as the seed has it, following its canton (on a used database
+-- staff may have moved it; this rolls back), and a zone that is not its canton's.
+update public.districts set zone_id = null, served = true where postal_code = '10111';
+select pg_temp.remember('canton_zone', (select c.zone_id from public.districts d
+  join public.cantons c on c.code = d.canton_code where d.postal_code = '10111'));
+select pg_temp.remember('other_zone', (select z.id from public.delivery_zones z
+  where z.id <> current_setting('t.canton_zone') and z.active order by z.sort, z.id limit 1));
+do $$ begin
+  assert current_setting('t.other_zone', true) is not null and current_setting('t.other_zone') <> '',
+    'fixture: another active zone to move San Sebastián to';
 end $$;
 select pg_temp.login('comprador3@yuntera.example');
 do $$
 declare
-  v jsonb;
   d jsonb;
+  v_canton text := current_setting('t.canton_zone');
+  v_other text := current_setting('t.other_zone');
 begin
-  perform public.ops_move_districts(array['10111'], 'gam-extended');
+  perform public.ops_move_districts(array['10111'], v_other);
   select e into d from jsonb_array_elements(public.ops_canton_districts('101') -> 'districts') e
   where e ->> 'postal_code' = '10111';
-  assert d ->> 'zone_id' = 'gam-extended' and (d ->> 'own_zone')::boolean,
+  assert d ->> 'zone_id' = v_other and (d ->> 'own_zone')::boolean,
     format('districts: moved away, it has a zone of its own %s', d);
   assert (select (c ->> 'own_zone_count')::integer from jsonb_array_elements(public.ops_district_cantons()) c
           where c ->> 'code' = '101') >= 1,
     'districts: the canton says it has one with its own zone';
   -- Not served, then back to its canton's zone: it follows its canton again.
   perform public.ops_move_districts(array['10111'], null);
-  perform public.ops_move_districts(array['10111'], 'gam-core');
+  perform public.ops_move_districts(array['10111'], v_canton);
   select e into d from jsonb_array_elements(public.ops_canton_districts('101') -> 'districts') e
   where e ->> 'postal_code' = '10111';
-  assert d ->> 'zone_id' = 'gam-core' and not (d ->> 'own_zone')::boolean and (d ->> 'served')::boolean,
+  assert d ->> 'zone_id' = v_canton and not (d ->> 'own_zone')::boolean and (d ->> 'served')::boolean,
     format('districts: moved back, it follows its canton %s', d);
   -- Assigned to its canton's zone while it follows it: nothing to change.
   begin
-    perform public.ops_move_districts(array['10111'], 'gam-core');
+    perform public.ops_move_districts(array['10111'], v_canton);
     raise exception 'districts: an unchanged move was accepted';
   exception when others then
     if sqlerrm <> 'district_unchanged' then raise; end if;
@@ -760,7 +768,7 @@ do $$ begin
   -- The audit says what it really holds after each step.
   assert (select array_agg(a.new_row ->> 'own_zone_id' order by a.id) from private.audit_log a
           where a.id > current_setting('t.audit_from')::bigint and a.action = 'district_zone' and a.row_key = '10111')
-         = array['gam-extended', 'gam-extended', null],
+         = array[current_setting('t.other_zone'), current_setting('t.other_zone'), null],
     format('districts: the audit trail %s', (select array_agg(a.new_row order by a.id) from private.audit_log a
           where a.id > current_setting('t.audit_from')::bigint and a.action = 'district_zone' and a.row_key = '10111'));
 end $$;

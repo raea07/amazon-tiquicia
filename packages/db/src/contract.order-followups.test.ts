@@ -13,7 +13,8 @@
  *
  * What it leaves: a throwaway shopper of its own (a new address each run)
  * with two cancelled and refunded orders, and a route of the second demo
- * driver, closed with every stop removed, whose ₡0 cash count it settles.
+ * driver, closed with every stop removed, with its ₡0 cash count open (not
+ * settled: contract.test.ts counts the seed's settled ones).
  * The seed's orders, routes and the first demo driver are not touched, so it
  * passes on a used database and twice in a row.
  */
@@ -245,7 +246,7 @@ describe.skipIf(!db.enabled)("order follow-ups (against a seeded database)", () 
   });
 
   afterAll(async () => {
-    // The route closed and its ₡0 cash count settled, whatever happened above.
+    // The route closed, whatever happened above.
     try {
       if (!routeId) return;
       const open = await pool.query<{ id: string; status: string }>(
@@ -270,12 +271,6 @@ describe.skipIf(!db.enabled)("order follow-ups (against a seeded database)", () 
           [routeId],
         );
       }
-      const settlement = await pool.query(
-        "select 1 from public.driver_settlements where route_id = $1 and status = 'open'",
-        [routeId],
-      );
-      if (settlement.rowCount)
-        await db.as(STAFF, "aal2").opsSettleRoute(routeId, 0, "Cierre del contrato");
     } finally {
       await pool?.end();
       await db.close();
