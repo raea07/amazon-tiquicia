@@ -48,11 +48,18 @@
 --     then the most free units, the most units, the code (units that came
 --     back from a parcel into the returns area are picked before a shelf
 --     that cannot fill the task). It first takes the order's stock rows
---     (stock_levels) FOR NO KEY UPDATE, so two releases of the same product
---     (two payments confirmed at once) are taken one after the other and
---     the later one counts the other's task as promised; a ledger row's
---     foreign key (KEY SHARE) does not wait for it. Then it takes the
---     candidate shelves FOR KEY SHARE before choosing, which waits for a
+--     (stock_levels) FOR NO KEY UPDATE, by product, shop and warehouse, so
+--     two releases of the same product (two payments confirmed at once) are
+--     taken one after the other and the later one counts the other's task
+--     as promised. Checkout, packing, a cancellation and a receipt of the
+--     same product write those rows too, so they wait for an open payment
+--     confirmation of it (milliseconds in practice); reads, picks and other
+--     products never wait. This needs READ COMMITTED, the level every
+--     caller runs in (the database default; no role or function sets
+--     another): the later release counts the earlier one's tasks only
+--     because its next statement sees what committed while it waited. Under
+--     REPEATABLE READ it would wait and still count from its snapshot. Then
+--     it takes the candidate shelves FOR KEY SHARE before choosing, which waits for a
 --     move or a count that holds one (FOR UPDATE) and is not blocked by
 --     picks, receipts or cancellations (their updates take FOR NO KEY
 --     UPDATE): a move and a release at the same moment are taken one after
@@ -113,7 +120,12 @@
 --     then stock rows; a release to picking takes the order's stock rows
 --     (product, shop, warehouse, the order place_order reserves them in),
 --     then its shelves KEY SHARE; none waits for anything a move or a
---     correction holds while holding something they want. The races are proved with
+--     correction holds while holding something they want. Every function
+--     that writes the stock rows of several products, or of one product
+--     from several shops, in one transaction takes them by product, shop
+--     and warehouse: checkout, a release, a pack, a cancellation, and the
+--     unpaid-order sweep, which takes the rows of all the orders it cancels
+--     first (section 2b), so none of them deadlocks with another. The races are proved with
 --     two real sessions in packages/db/src/contract.warehouse-stock-races.test.ts.
 --   * WHO. A worker of the warehouse (private.works_at) or operations staff.
 --     Reads carry the shop's trade name, never a shopper's data. The staff
@@ -326,18 +338,24 @@ $$;
 -- (such as units that came back into the returns area). The damaged,
 -- packing and dispatch areas only when no other location holds the
 -- product, switched on or off (their units still count as sellable, see
--- section 4).
+-- section 4), even when that location cannot fill the task: a short pick is
+-- reported and staff move the units to a shelf (wms_move_stock takes them
+-- out of those areas), which is preferred to sending a picker to units that
+-- may be damaged or already set aside at a packing or dispatch station.
+-- Runs in READ COMMITTED only (every caller does; see the header).
 create or replace function private.release_order_to_fulfillment(p_order_id uuid) returns void
 language plpgsql security definer
 set search_path = ''
 as $$
 begin
   -- Two releases of the same product wait for each other here, so the
-  -- second sees the first's task when it counts what is promised. The
+  -- second sees the first's task when it counts what is promised (READ
+  -- COMMITTED: its next statement reads what the first committed). The
   -- shop's stock rows, in the order place_order reserves them (product,
   -- shop, warehouse) and before any shelf, as a correction and every
-  -- receipt take them. NO KEY UPDATE: a ledger row's foreign key (KEY SHARE)
-  -- never waits for it.
+  -- receipt take them; every writer of several stock rows takes them in
+  -- this order (section 2b). Checkout, packing, cancellations and receipts
+  -- of these products wait for this transaction; picks and reads do not.
   perform 1
   from public.stock_levels l
   where (l.warehouse_id, l.sku_id, l.seller_id) in (
@@ -397,6 +415,210 @@ begin
     );
 
   perform private.emit('order.released', jsonb_build_object('order_id', p_order_id));
+end;
+$$;
+
+-- ═══ 2b. Every writer of several stock rows takes them in one order ═══════
+-- The release above takes the order's stock rows by product, shop and
+-- warehouse, as place_order does. A function that takes the stock rows of
+-- several products, or of one product from several shops, in one
+-- transaction and in another order can hold one row the release wants while
+-- it waits for one the release holds: PostgreSQL then ends one of the two
+-- with a deadlock, and the shopper's payment confirmation fails. Three did:
+--
+--   * packing (private.consume_shipment_stock, from 20261121081100) and a
+--     cancellation (private.cancel_order_internal, from 20261121083400)
+--     sorted their reservations by product and warehouse only, so two
+--     shops' rows of the same product came in no fixed order. Both now sort
+--     by product, shop and warehouse; a cancellation also puts picked units
+--     back by product, shop and shelf. Nothing else changes in them.
+--   * the unpaid-order sweep (private.expire_unpaid_orders, from
+--     20261121081000) cancels every expired order in ONE transaction, in the
+--     order they were placed, so it took the stock rows of the first order's
+--     products before those of the next. It now takes the expired orders
+--     first (skipping any another session holds, as before), then the stock
+--     rows of all of them in one statement, by product, shop and warehouse,
+--     then cancels them one by one.
+
+create or replace function private.consume_shipment_stock(p_shipment_id uuid) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  r record;
+begin
+  for r in
+    select res.id, res.warehouse_id, res.sku_id, res.seller_id, res.quantity
+    from public.inventory_reservations res
+    join public.shipment_items si on si.order_item_id = res.order_item_id
+    join public.shipments s on s.id = si.shipment_id and s.origin_warehouse_id = res.warehouse_id
+    where si.shipment_id = p_shipment_id and res.status = 'active'
+    order by res.sku_id, res.seller_id, res.warehouse_id
+    for update of res
+  loop
+    update public.stock_levels
+    set on_hand = on_hand - r.quantity, reserved = reserved - r.quantity
+    where warehouse_id = r.warehouse_id and sku_id = r.sku_id and seller_id = r.seller_id;
+
+    update public.inventory_reservations
+    set status = 'consumed', resolved_at = now() where id = r.id;
+
+    insert into public.stock_movements
+      (warehouse_id, sku_id, seller_id, on_hand_delta, quantity, reason, reference_type,
+       reference_id, actor_id)
+    values
+      (r.warehouse_id, r.sku_id, r.seller_id, -r.quantity, r.quantity, 'ship', 'shipment',
+       p_shipment_id, (select auth.uid()));
+  end loop;
+end;
+$$;
+
+-- Unchanged from 20261121083400_payments.sql except the two sort orders
+-- (by product, shop and warehouse; by product, shop and shelf).
+create or replace function private.cancel_order_internal(p_order_id uuid, p_reason text) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  r record;
+  v_paid boolean;
+  v_refund_minor bigint := 0;
+  v_refund_id uuid;
+begin
+  perform 1 from public.orders where id = p_order_id for update;
+  if exists (
+    select 1 from public.shipments s
+    where s.order_id = p_order_id and s.status not in ('pending', 'picking', 'cancelled')
+  ) then
+    perform private.fail('too_late_to_cancel', 'packed');
+  end if;
+
+  -- Open returns of this order have nothing left to return.
+  update public.return_requests rr
+  set status = 'rejected', resolved_at = now(),
+      resolution_note = 'Cerrada: el pedido se canceló.'
+  from public.order_items i
+  where i.id = rr.order_item_id and i.order_id = p_order_id and rr.status in ('requested', 'approved');
+
+  -- Units already taken off a shelf go back to the shelf they came from.
+  for r in
+    select m.warehouse_id, m.sku_id, m.seller_id, m.from_location_id, m.reference_id,
+           sum(m.quantity)::integer as quantity
+    from public.stock_movements m
+    join public.shipments s on s.id = m.reference_id
+    where s.order_id = p_order_id and s.status = 'picking'
+      and m.reason = 'pick' and m.reference_type = 'shipment' and m.from_location_id is not null
+    group by m.warehouse_id, m.sku_id, m.seller_id, m.from_location_id, m.reference_id
+    order by m.sku_id, m.seller_id, m.from_location_id
+  loop
+    insert into public.bin_stock (location_id, sku_id, seller_id, quantity)
+    values (r.from_location_id, r.sku_id, r.seller_id, r.quantity)
+    on conflict (location_id, sku_id, seller_id)
+    do update set quantity = public.bin_stock.quantity + excluded.quantity;
+    insert into public.stock_movements
+      (warehouse_id, sku_id, seller_id, to_location_id, on_hand_delta, quantity, reason,
+       reference_type, reference_id, note, actor_id)
+    values
+      (r.warehouse_id, r.sku_id, r.seller_id, r.from_location_id, 0, r.quantity, 'putaway',
+       'shipment', r.reference_id, 'Pedido cancelado durante la preparación', (select auth.uid()));
+  end loop;
+
+  update public.pick_tasks t
+  set status = 'cancelled'
+  from public.shipments s
+  where s.id = t.shipment_id and s.order_id = p_order_id and t.status in ('open', 'in_progress', 'short');
+
+  update public.shipments
+  set status = 'cancelled'
+  where order_id = p_order_id and status in ('pending', 'picking');
+
+  for r in
+    select res.id, res.warehouse_id, res.sku_id, res.seller_id, res.quantity
+    from public.inventory_reservations res
+    join public.order_items i on i.id = res.order_item_id
+    where i.order_id = p_order_id and res.status = 'active'
+    order by res.sku_id, res.seller_id, res.warehouse_id
+    for update of res
+  loop
+    update public.stock_levels
+    set reserved = reserved - r.quantity
+    where warehouse_id = r.warehouse_id and sku_id = r.sku_id and seller_id = r.seller_id;
+    update public.inventory_reservations
+    set status = 'released', resolved_at = now() where id = r.id;
+  end loop;
+
+  update public.orders
+  set status = 'cancelled', cancelled_at = now(), cancel_reason = left(p_reason, 500)
+  where id = p_order_id;
+
+  select exists (
+    select 1 from public.payments where order_id = p_order_id and status = 'captured'
+  ) into v_paid;
+
+  if v_paid then
+    -- The refund is booked and registered now, in every mode, so it can
+    -- never be booked a second time by another path.
+    perform private.post_order_refund(p_order_id);
+    select id, amount_minor into v_refund_id, v_refund_minor
+    from private.refunds where order_id = p_order_id and reason = 'order_cancelled';
+    -- The register's trigger opened the refund's way back
+    -- (private.open_gateway_refund). Money that was never real is settled
+    -- already (the payment is refunded, the order too) and is confirmed at
+    -- commit; real money goes back through the gateway or by transfer, and
+    -- the payment and the order follow when it has gone.
+    if not exists (select 1 from private.gateway_refunds g
+                   where g.refund_id = v_refund_id and g.channel = 'simulated') then
+      perform private.emit('refund.requested', jsonb_build_object(
+        'order_id', p_order_id, 'refund_id', v_refund_id, 'reason', 'order_cancelled',
+        'amount_minor', v_refund_minor));
+    end if;
+  else
+    update public.payments
+    set status = 'cancelled'
+    where order_id = p_order_id and status in ('pending', 'authorized');
+  end if;
+
+  perform private.emit('order.cancelled',
+    jsonb_build_object('order_id', p_order_id, 'reason', p_reason));
+end;
+$$;
+
+-- Frees stock held by orders that were never paid. Run on a schedule
+-- (pg_cron, every five minutes).
+create or replace function private.expire_unpaid_orders() returns integer
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_minutes integer := (private.setting('reservation_minutes'))::integer;
+  v_orders uuid[];
+  v_order uuid;
+begin
+  select coalesce(array_agg(x.id order by x.placed_at, x.id), '{}') into v_orders
+  from (
+    select o.id, o.placed_at from public.orders o
+    where o.status = 'pending_payment'
+      and o.placed_at < now() - make_interval(mins => v_minutes)
+    order by o.placed_at
+    for update skip locked
+  ) x;
+
+  -- Every stock row these cancellations will write, in the order every
+  -- checkout, release, packing and cancellation takes them.
+  perform 1
+  from public.stock_levels l
+  where (l.warehouse_id, l.sku_id, l.seller_id) in (
+    select res.warehouse_id, res.sku_id, res.seller_id
+    from public.inventory_reservations res
+    join public.order_items i on i.id = res.order_item_id
+    where i.order_id = any(v_orders) and res.status = 'active')
+  order by l.sku_id, l.seller_id, l.warehouse_id
+  for no key update of l;
+
+  foreach v_order in array v_orders loop
+    perform private.cancel_order_internal(v_order, 'Pago no recibido a tiempo');
+  end loop;
+  return cardinality(v_orders);
 end;
 $$;
 
@@ -690,7 +912,10 @@ revoke all on function
   private.location_promised(uuid, uuid, uuid),
   private.location_picked_item(uuid, uuid, uuid),
   private.wms_location_json(uuid),
-  private.release_order_to_fulfillment(uuid)
+  private.release_order_to_fulfillment(uuid),
+  private.consume_shipment_stock(uuid),
+  private.cancel_order_internal(uuid, text),
+  private.expire_unpaid_orders()
 from public, anon, authenticated;
 
 revoke all on function
