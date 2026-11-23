@@ -81,3 +81,27 @@ export const cartUnits = (items: CartItem[]) =>
 /** A district's 5-digit postal code: province 1–7, then four digits. */
 export const isPostalCode = (value: string | null | undefined): value is string =>
   typeof value === "string" && /^[1-7]\d{4}$/.test(value);
+
+/**
+ * Swaps a line whose offer can no longer be bought for another shop's offer
+ * of the same variant (the one the cart proposed), keeping the quantity: the
+ * website's `swapCartOffer` (apps/web/src/app/cart-actions.ts). If that offer
+ * is already in the cart, the two lines become one, capped per line. Only
+ * ids and quantities change: prices are read fresh when the cart is shown and
+ * again when the order is placed, so a swap cannot change what anything costs.
+ */
+export function swapOffer(items: CartItem[], from: string, to: string): CartItem[] {
+  if (from === to || !UUID.test(from) || !UUID.test(to)) return items;
+  const line = items.find((item) => item.offerId === from);
+  if (!line) return items;
+  const existing = items.find((item) => item.offerId === to);
+  return existing
+    ? items
+        .filter((item) => item.offerId !== from)
+        .map((item) =>
+          item.offerId === to
+            ? { ...item, quantity: Math.min(item.quantity + line.quantity, MAX_UNITS_PER_LINE) }
+            : item,
+        )
+    : items.map((item) => (item.offerId === from ? { ...item, offerId: to } : item));
+}

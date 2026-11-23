@@ -18,6 +18,7 @@ import {
   parseCart,
   serializeCart,
   setQuantity,
+  swapOffer,
 } from "./cart";
 
 const CART_KEY = "yt_cart";
@@ -30,6 +31,8 @@ interface CartValue {
   /** Returns an error message, or null when the units were added. */
   add(offerId: string, quantity: number): string | null;
   setQuantity(offerId: string, quantity: number): void;
+  /** Puts another shop's offer of the same variant in a line's place (only when the shopper taps it). */
+  swap(fromOfferId: string, toOfferId: string): void;
   clear(): void;
   /** The district deliveries are estimated for, and whether the shopper chose it. */
   postalCode: string;
@@ -86,6 +89,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return null;
       },
       setQuantity: (offerId, quantity) => persist(setQuantity(itemsRef.current, offerId, quantity)),
+      swap: (from, to) => persist(swapOffer(itemsRef.current, from, to)),
       clear: () => persist([]),
       postalCode: location ?? DEFAULT_POSTAL_CODE,
       locationChosen: location !== null,
