@@ -419,7 +419,55 @@ const scenarios = [
       verify: summaries,
     },
   ),
+  // E10: not a product-row race, found while listing the writers of product rows:
+  // switching off a variant two shops sell (seller_set_variant_active) takes the
+  // product row, then the variant (sku) FOR UPDATE, then pauses the shop's offer;
+  // packing that offer's parcel takes the offer row (stock trigger), then a
+  // key-share lock on the variant (its ledger row). Products stay in stock.
+  // Forced: a third session holds the offer row FOR SHARE; the pack queues on it
+  // first, the seller 40 ms later (after taking the variant).
+  {
+    name: "E10 wms_pack_shipment [low] vs Tienda Sendero switching off variant Y (shared) natural",
+    products: ["low", "second"],
+    setup: async (h) => {
+      await fixture(h);
+      await h.layout(["low", "second"], { "W7-01": 200 });
+      const x = await h.cashInPicking(5, [["low", 1]], "all");
+      return { ...x, orders: [x.order] };
+    },
+    actors: (h, ctx, round) => [
+      {
+        name: "pack",
+        as: WORKER,
+        sql: "select public.wms_pack_shipment($1, 900, 1::smallint)",
+        args: [ctx.shipment],
+      },
+      {
+        name: "variant-off",
+        as: sellerUser,
+        sql: "select public.seller_set_variant_active($1, false)",
+        args: [h.offer("low").sku_id],
+        delayMs: round % 5,
+      },
+    ],
+    verify: async (h) => {
+      const bad = await summaries(h);
+      await h.q("update public.offers set status = 'active' where id = $1", [h.offer("low").id]);
+      await h.q("update public.skus set active = true where id = $1", [h.offer("low").sku_id]);
+      return bad;
+    },
+  },
 ];
+const e10 = scenarios[scenarios.length - 1];
+scenarios.push({
+  ...e10,
+  name: "E10 wms_pack_shipment [low] vs Tienda Sendero switching off variant Y (shared) forced",
+  actors: (h, ctx) => late(e10.actors(h, ctx, 0)),
+  options: (h) => ({
+    hold: { sql: "select 1 from public.offers where id = $1 for share", args: [h.offer("low").id] },
+    holdMs: 150,
+  }),
+});
 
 main("E", scenarios).catch((e) => {
   console.error(e);

@@ -122,7 +122,9 @@ Units already picked have left the shelf and are shown apart.
   statement. Without it a payment confirmation racing the sweep, or packing
   an order that holds one product from two shops, ended in a deadlock for
   one of the two (`contract.stock-lock-order-races.test.ts` makes each race
-  happen and fails without the fixed order).
+  happen and fails without the fixed order). The full order, with orders,
+  parcels, shelves, offers and product rows, is in
+  [the lock order](#the-lock-order-084400) below.
 - **Stock adds up**: a shop's on-hand units in a warehouse equal the units on
   all its locations plus those picked into parcels still being picked, after
   moves, counts, recalls and check-ins (`169_returned_stock.sql`, and the two
@@ -138,7 +140,9 @@ then seller):
    concurrent order for the same stock waits here and then reads what is really
    left, so the last unit cannot be promised twice, and because every checkout
    locks stock rows in the same order two of them cannot deadlock on stock
-   rows. They can still deadlock one level up, on product rows (see below).
+   rows. One level up, on product rows, two checkouts can still deadlock in
+   one case: when each takes offers of two shared products across zero in
+   opposite order (see [the lock order](#the-lock-order-084400)).
 2. If one location has **all** the units the line needs, take them from there
    (the fullest such location; ties by warehouse id). The line travels whole.
 3. Otherwise gather the line from the fullest locations first until it is
@@ -167,18 +171,123 @@ lock stock rows in the same sequence and cannot deadlock on them. Packing,
 cancellations, the release to picking and the unpaid-order sweep take stock
 rows in the same order (product, shop, warehouse).
 
-Product rows are not ordered yet. Every stock write also updates the offer's
-`available_quantity` and, through a trigger, the product's summary row, and
-one product row is shared by every variant of the product and every shop that
-sells it. Two transactions that write two such products in opposite order
-can deadlock on the product rows: two checkouts, or the sweep against a
-checkout, packing or a staff cancellation. A race harness measured 1 to 42
-deadlocks in 100 rounds (two checkouts: 40 in 100) on a fixture built to
-cross them. Nothing is half-written: the loser rolls back and the shopper,
-packer or staff member is told to try again; the sweep runs again five
-minutes later. The fix (taking the product rows in product-id order before
-the first stock write, or skipping the summary update when nothing changes)
-is recorded as open in `STATUS.md`.
+### The lock order (084400)
+
+Every session of the API runs in READ COMMITTED (the database default; no
+role or function sets another level). Two functions rely on it: the release
+to picking (it counts the other release's task after waiting for it) and the
+listing summary (it computes from what the other refresh committed after
+waiting for the product row). Under REPEATABLE READ both would wait and then
+still read from their snapshot.
+
+**The one order.** A transaction that takes several of these rows takes them
+in this order:
+
+1. the warehouse row (`FOR NO KEY UPDATE`; only moves and counts take it:
+   every other stock writer takes only a key-share lock on it, through its
+   ledger row, which does not wait for them);
+2. the location row (`FOR SHARE`; moves and counts);
+3. the order row (`FOR UPDATE`);
+4. its parcel (shipment) row;
+5. its open pick tasks;
+6. stock rows (`stock_levels`), by product, shop and warehouse. Each stock
+   row written takes, through triggers, its offer row
+   (`refresh_offer_availability`) and, **only when that offer crosses zero**
+   (out of stock, or back in stock), its product row
+   (`refresh_product_summary`);
+7. shelf rows (`bin_stock`), by product, shop and location.
+
+A reservation is taken after the order row by whoever owns the order:
+packing takes them before the stock rows, a cancellation after; both hold
+the order row first, so the two never meet.
+
+| Writer                                                  | What it takes, in order                                                                                                                                                                                                                                    |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Checkout (`place_order`)                                | stock rows of every line (`FOR UPDATE`), the offers (`FOR SHARE`, id order); per line by product and shop: the order line (key-share on product, variant, shop), the stock row's update (offer; product if it crosses zero); a cash order is then released |
+| Release to picking (payment confirmation, a cash order) | order (confirmation), stock rows (`FOR NO KEY UPDATE`), the candidate shelves (`FOR KEY SHARE`), new pick tasks                                                                                                                                            |
+| Start picking                                           | order, parcel, its tasks                                                                                                                                                                                                                                   |
+| Pick (`wms_confirm_pick`)                               | its task (`FOR UPDATE`), one shelf row                                                                                                                                                                                                                     |
+| Packing (`wms_pack_shipment`)                           | order, parcel, reservations (`FOR UPDATE`), stock rows (offer; product if it crosses zero)                                                                                                                                                                 |
+| Count (`wms_adjust_stock`)                              | warehouse, location, stock row (`FOR UPDATE`), shelf row (`FOR UPDATE`), then the writes (offer; product if it crosses zero)                                                                                                                               |
+| Move (`wms_move_stock`)                                 | warehouse, target location, both shelf rows (location id order); no stock row                                                                                                                                                                              |
+| Receipt (`wms_receive`)                                 | stock row (`FOR UPDATE`), its update (offer; product if it crosses zero), the shelf row                                                                                                                                                                    |
+| Returned parcel checked in                              | order, parcel, per line by product and shop: stock row (offer; product if it crosses zero), the returns location's shelf row                                                                                                                               |
+| Cancellation (`private.cancel_order_internal`)          | order, its open pick tasks, every stock row it writes (`FOR NO KEY UPDATE`), the shelves its picked units go back to, the tasks and parcels closed, reservations (`FOR UPDATE`), the stock rows' updates (offer; product if it crosses zero)               |
+| Unpaid-order sweep (`private.expire_unpaid_orders`)     | at most 200 expired orders, oldest first (`FOR UPDATE SKIP LOCKED`), the stock rows of all of them, then each cancellation as above                                                                                                                        |
+| Route start (`driver_start_route`)                      | the orders of its pending stops (id order), the route, each parcel, each order again (status)                                                                                                                                                              |
+| Stopping a parcel (`ops_recall_shipment`)               | order, parcel, then (if planned) the route, the stop, the parcel                                                                                                                                                                                           |
+
+Until 084400 the cancellation took a shelf row before the stock row (the
+opposite of a count, a receipt and a pick) and closed its pick tasks only
+after its shelves: a cancellation against a count or a receipt of the same
+product on the same shelf deadlocked, and against the picker confirming the
+order's other line it could leave the unit just picked off its shelf and
+never put back (on hand then exceeded the shelves). A route start took the
+route and its parcels before their orders, so staff stopping one of its
+parcels at that moment deadlocked with it.
+
+**Product rows.** One product row is shared by every variant of the product
+and every shop that sells it, and nothing takes product rows in one order
+across products. Two rules keep stock writers off them:
+
+- The summary (`offer_count`, `featured_offer_id`, `min_price_minor`,
+  `list_price_minor`, `in_stock`, `fulfilled_by_platform`,
+  `best_handling_days`) depends on whether an offer has units, never on how
+  many. An offer's update refreshes it only when an input really changed:
+  price, list price, status, fulfilment, handling days, condition, or the
+  units crossing between zero and more than zero (`offers_summary_trigger`);
+  an insert or a delete always refreshes. The refresh writes the row only
+  when a value differs. An ordinary sale, pack, receipt or release that
+  leaves an offer on the same side of zero does not touch the product row.
+- The refresh takes the product row `FOR NO KEY UPDATE` before it reads the
+  offers, so two refreshes of one product run one after the other and the
+  later one computes from what the earlier committed. Before, two checkouts
+  taking the last unit of two different offers of one product left it "in
+  stock" with a featured offer that had nothing to sell, until the next
+  change to one of its offers (race F).
+- A path that refreshes several products takes them in product id order
+  (`sellers_summary_trigger`: a shop approved, suspended or closed).
+
+What still can deadlock on product rows, each measured with forced rounds
+in `tools/races` (family E). The loser's transaction rolls back whole; the
+shopper, packer or staff member reads "Alguien más cambiaba lo mismo en ese
+momento, así que no se guardó nada. Inténtelo de nuevo." (`try_again`); the sweep runs again five minutes later:
+
+- two transactions that each take offers of two shared products across zero
+  in opposite order: two checkouts of last units, a cancellation that gives
+  last units back against a checkout of other last units, the sweep
+  releasing last units against either (E5);
+- a cancellation, packing or the sweep that takes one offer of a product
+  across zero and then writes another offer of the same product, against the
+  seller changing or pausing that second offer at that moment (the seller's
+  update takes the offer row, then the product row) (E6). A checkout does
+  not: it takes its offers `FOR SHARE` before anything, so the seller waits
+  for it (E6b);
+- a shop suspended or reinstated (its products in id order) against a
+  writer that takes two of its products across zero in the other order (E7).
+
+**Every statement that writes or locks `public.products`** (the definitions
+in force), the order its path takes, and what it means for stock writers.
+"Key share" is the lock an insert of a row that references the product, its
+variant or its shop takes (an order line, a ledger row, a reservation); a
+`FOR UPDATE` waits for it and blocks it.
+
+| Path                                                                                                                                                                                                                                                                  | On the product row                                                        | Before                                        | After                                                                 | Against a stock writer                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `private.refresh_product_summary` (offers, shops and variants triggers)                                                                                                                                                                                               | `FOR NO KEY UPDATE`, then `UPDATE` when a value differs                   | the offer, shop or variant row that changed   | nothing                                                               | same direction as a stock writer (offer, then product); the cases above                                                                                                                  |
+| `private.sellers_summary_trigger` (shop status)                                                                                                                                                                                                                       | each of the shop's products, id order                                     | the shop row                                  | nothing                                                               | E7                                                                                                                                                                                       |
+| `private.skus_summary_trigger` (variant switched)                                                                                                                                                                                                                     | one product                                                               | the variant row (and offers paused before it) | nothing                                                               | see `seller_set_variant_active`                                                                                                                                                          |
+| `private.refresh_product_signals` (nightly, 08:17 UTC)                                                                                                                                                                                                                | one `UPDATE` over every product whose 30-day units changed, in scan order | nothing                                       | nothing                                                               | could meet a writer holding one product row after crossing zero (not raced; runs at 02:17 Costa Rica time)                                                                               |
+| `private.reviews_rating_trigger`                                                                                                                                                                                                                                      | `FOR UPDATE`, `UPDATE`                                                    | the review row                                | nothing                                                               | never waits for a stock writer's rows                                                                                                                                                    |
+| `private.take_down_product`, `public.ops_restore_product`, `public.ops_correct_product`, `public.seller_archive_listing`, `public.ops_review_product`, `private.photos_touched`, `private.photo_listing`, `public.ops_review_photo_change`, `public.ops_remove_photo` | `FOR UPDATE` and/or `UPDATE`                                              | nothing a stock writer holds                  | audit, outbox, change-request and photo rows                          | no cycle (E8: staff taking a product down against a cancellation crossing zero)                                                                                                          |
+| `public.seller_update_listing`, `public.seller_unpublish_listing` (`private.own_listing`)                                                                                                                                                                             | `FOR UPDATE`                                                              | nothing                                       | the shop row `FOR UPDATE`, then variants or a change request          | the shop's `FOR UPDATE` waits for a writer's key share on the shop; a writer that then wants the product (crossing zero) makes a cycle (E9)                                              |
+| `public.seller_set_variant_active` (`private.own_listing`)                                                                                                                                                                                                            | `FOR UPDATE`                                                              | nothing                                       | the variant `FOR UPDATE`, the shop's offers of it paused, the variant | the variant's `FOR UPDATE` blocks a writer's key share on it (its ledger row): a cycle with packing even when nothing crosses zero (E10)                                                 |
+| `public.seller_add_offer`                                                                                                                                                                                                                                             | `FOR UPDATE`                                                              | the shop row `FOR UPDATE`                     | the variant `FOR UPDATE`, the offer inserted or updated               | by reading: as `seller_set_variant_active` (not raced)                                                                                                                                   |
+| `public.seller_create_listing`                                                                                                                                                                                                                                        | `INSERT` (a new row)                                                      | the shop row `FOR UPDATE`                     | variant, offer inserted                                               | nothing else holds a new row                                                                                                                                                             |
+| `public.ops_review_listing_edit`                                                                                                                                                                                                                                      | `FOR UPDATE`, `UPDATE`                                                    | the change request                            | offers below the fee floor paused, variants updated                   | product before offers, the opposite of a stock writer; a checkout holding those offers `FOR SHARE` and wanting a key share on the product could deadlock with it (by reading; not raced) |
+| `private.sellers_hand_over_on_close` (a shop closes)                                                                                                                                                                                                                  | the shop's listings `FOR UPDATE`, id order, `UPDATE`                      | the shop row                                  | change requests, photos, logos                                        | id order, as the summary refresh                                                                                                                                                         |
+| `public.ops_merge_brands`                                                                                                                                                                                                                                             | one `UPDATE` over every product of a brand, scan order                    | the brand rows                                | nothing                                                               | as the nightly signals (staff action, rare; not raced)                                                                                                                                   |
+| `private.refresh_product_search` (products trigger)                                                                                                                                                                                                                   | `UPDATE` of the same row                                                  | the row, held by the caller                   | nothing                                                               | none                                                                                                                                                                                     |
 
 ### Why this simple rule is enough for the pilot
 
@@ -251,17 +360,23 @@ gathered from both, one parcel each.
   stock ships with zero handling days from wherever it is. With several
   warehouses serving different zones that would need to become per-location.
 - **Reservations are released by a scheduled job.** Without a scheduler, unpaid
-  orders hold stock until the expiry function is called by hand.
+  orders hold stock until the expiry function is called by hand. Each run
+  cancels at most 200 expired orders, the oldest first (084400): a run holds
+  the stock rows of every order it cancels until it ends (about 2 ms an
+  order), and a checkout of one of those products waits for it. A backlog
+  larger than 200 is cleared over the next runs, five minutes apart.
 - **Bins are a suggestion.** A pick task proposes one location by the rule
   above; the associate may pick from another and say so, and that can take
   units another task waits for there. A line larger than the chosen
   location's free units still comes up short there. Bin quantities are only
   as good as the putaway and pick discipline behind them.
 - **A count cannot add a product that has no record on that location yet.**
-- **A cancellation and a count of the same product on the same shelf at the
-  same moment** can end with a deadlock for one of them
-  (`private.cancel_order_internal` takes the shelf row before the stock row);
-  the loser is told nothing was saved and to try again.
+- **Product rows are not taken in one order across products.** Writers that
+  take offers of two shared products across zero in opposite order, a
+  seller's offer change against a cancellation crossing zero on the same
+  product, and a shop's suspension against such a writer can still deadlock
+  (see [the lock order](#the-lock-order-084400)); the loser is told nothing
+  was saved and to try again.
 - **No safety stock, no reorder points, no forecasting.** Listed under
   "Later" in the [scope](../01-product/scope-by-app.md).
 
