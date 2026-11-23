@@ -1274,7 +1274,9 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     the check-in is refused. The next pick of the product goes there when no
     shelf has enough free units for it. A parcel stopped before it left tells
     the warehouse to put its units in the returns area (both warehouse apps
-    and the console now say so; they said "back to the shelves" before).
+    and the console now say so; they said "back to the shelves" before), and
+    the shopper's history says "Su paquete no llegó a salir de nuestra
+    bodega" (it said the parcel went back to our shelves).
   - Locks found when the streams were merged: starting a pick and packing now
     take the order's lock before the parcel's, as stopping a parcel does (a
     stop at the moment of packing deadlocked one caller before). Still open:
@@ -1290,12 +1292,29 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     location whose free units fill it (a review found 084300 sending an order
     of 3 to a shelf with 1 free while the returns area held 6; fixed and
     tested in `169_returned_stock`). A task is never split: when no single
-    location can fill it, it still comes up short there.
+    location can fill it, it still comes up short there. Among locations that
+    cannot fill it, a switched-on shelf, returns or receiving area comes
+    before a switched-off one, and a switched-off shelf still comes before the
+    damaged, packing and dispatch areas (a second review found the damaged
+    area winning; fixed and tested). Two payments of the same product
+    confirmed at the same moment could both send their task to a location
+    that fills only one (a review measured it in about 9 of 10 rounds; older
+    than wave 7). The second release now waits for the first on the shop's
+    stock row and counts its task; a two-session contract test proves the
+    wait. Not measured again over many rounds.
   - A move or count made on a screen left open while someone moved the
     product away or counted it to zero is refused, and the screen (field app
     and warehouse app) says at the top that nothing was saved and the product
-    is no longer there. Before this fix the refusal disappeared with the
-    product's row.
+    is no longer there, names picking, moving and correcting as the causes,
+    and for a move says to look the product up in «Buscar un producto».
+    Before this fix the refusal disappeared with the product's row. The
+    field page shows it only for a real product code that the location no
+    longer lists, so a shared link cannot say stock is gone when it is not.
+    The warehouse app shows it as an alert (announced at once on the web
+    export and Android) and announces it to VoiceOver on iPhones; that
+    announcement was not heard on a phone.
+  - The shopper app's sentence on why the delivery fee stays after an
+    attempt at the door is now checked by a native journey (web export only).
   - The database suites expect a freshly seeded database with nothing
     consuming its jobs: `140_invoicing` fails if the lane's invoice worker
     (started by `tools/dev/stack.sh up`) runs while the suites run, because
