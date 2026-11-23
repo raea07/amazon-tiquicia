@@ -54,6 +54,16 @@ export interface TemplateInput {
 const s = (value: unknown) => (typeof value === "string" ? value : "");
 const n = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 
+/**
+ * ", el envío incluido" when a refund's amount is the goods and the delivery
+ * fee booked together (20261121084600: one message for both, which carries
+ * `delivery_fee_minor`); nothing for any other refund.
+ */
+const feeIncluded = (v: Vars) =>
+  n(v.delivery_fee_minor) > 0 && n(v.amount_minor) > n(v.delivery_fee_minor)
+    ? ", el envío incluido"
+    : "";
+
 export const PAYMENT_METHOD: Record<string, string> = {
   card: "tarjeta",
   sinpe_movil: "SINPE Móvil",
@@ -373,7 +383,7 @@ export const TEMPLATES: Record<string, Template> = {
       greeting: hello(name),
       paragraphs: [
         amount
-          ? `Iniciamos el reembolso de ${amount} del pedido ${number}, por el mismo medio con que pagó.`
+          ? `Iniciamos el reembolso de ${amount} del pedido ${number}${feeIncluded(v)}, por el mismo medio con que pagó.`
           : `Iniciamos el reembolso del pedido ${number}, por el mismo medio con que pagó.`,
         "Según su banco, el dinero puede tardar unos días hábiles en verse en su cuenta. Le avisaremos cuando esté hecho.",
       ],
@@ -391,7 +401,7 @@ export const TEMPLATES: Record<string, Template> = {
       preheader: "El reembolso está hecho.",
       greeting: hello(name),
       paragraphs: [
-        `Hicimos el reembolso de ${amount} del pedido ${number}, por el mismo medio con que pagó.`,
+        `Hicimos el reembolso de ${amount} del pedido ${number}${feeIncluded(v)}, por el mismo medio con que pagó.`,
         "Si en unos días hábiles no lo ve en su cuenta, respóndanos a este correo.",
       ],
       action: { label: "Ver el pedido", url: orderUrl(v, links) },

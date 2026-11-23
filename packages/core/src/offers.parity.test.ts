@@ -7,7 +7,7 @@
  * alone. supabase/tests/155_seller_listings.sql replays offers.test.ts's cases
  * in the database.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { OFFER_ORDER_SQL } from "./offers";
@@ -19,11 +19,19 @@ import { OFFER_ORDER_SQL } from "./offers";
  */
 const FILES = ["20261121083600_seller_listings.sql", "20261121083700_console_catalogue.sql"];
 
+const MIGRATIONS = fileURLToPath(new URL("../../../supabase/migrations/", import.meta.url));
+
+/**
+ * Every migration, in order: a later one may redefine one of the functions
+ * (084600 redefines the cart's alternatives), and the definition in force is
+ * the last one.
+ */
+const ALL = readdirSync(MIGRATIONS)
+  .filter((file) => file.endsWith(".sql"))
+  .sort();
+
 function read(file: string): string {
-  return readFileSync(
-    fileURLToPath(new URL(`../../../supabase/migrations/${file}`, import.meta.url)),
-    "utf8",
-  );
+  return readFileSync(`${MIGRATIONS}${file}`, "utf8");
 }
 
 /** Every ORDER BY written between `-- BEGIN offer_order` and `-- END offer_order`. */
@@ -44,7 +52,7 @@ function marked(sql: string): string[] {
 /** The body of the last definition of a function across the files, in migration order. */
 function lastBody(name: string): string {
   let last = "";
-  for (const file of FILES) {
+  for (const file of ALL) {
     const sql = read(file);
     const pattern = new RegExp(
       `create or replace function ${name.replace(".", "\\.")}\\([\\s\\S]*?\\n\\$\\$;`,
@@ -62,7 +70,7 @@ describe("the offer order in SQL and TypeScript", () => {
   });
 
   it("is the same rule on both sides", () => {
-    for (const file of FILES)
+    for (const file of ALL)
       for (const order of marked(read(file))) expect(order).toBe(OFFER_ORDER_SQL);
   });
 
