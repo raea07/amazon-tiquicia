@@ -14,6 +14,7 @@
 
 import * as account from "./account";
 import { catalogueApi, catalogueErrors } from "./catalogue";
+import { catalogueFollowupsApi, catalogueFollowupsErrors } from "./catalogue-followups";
 import { followupsApi, followupsErrors } from "./followups";
 import { integrityApi, integrityErrors } from "./integrity";
 import { invoicingApi, invoicingErrors } from "./invoicing";
@@ -30,7 +31,7 @@ import { sellerListingsApi, sellerListingsErrors } from "./seller-listings";
 import type { Caller, Messages } from "./types";
 import { webFollowupsApi, webFollowupsErrors } from "./web-followups";
 
-// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, native-accounts and operations areas name their exports uniquely, so
+// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts and operations areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
 // would clash with each other, so their schemas and types are re-exported by
 // name.
@@ -58,6 +59,7 @@ export {
   waitText,
 } from "./account";
 export * from "./catalogue";
+export * from "./catalogue-followups";
 export * from "./followups";
 export * from "./integrity";
 export * from "./invoicing";
@@ -113,6 +115,7 @@ export const areaErrors = {
   ...invoicingFixesErrors,
   ...sellerListingsErrors,
   ...catalogueErrors,
+  ...catalogueFollowupsErrors,
   ...nativeAccountsErrors,
   ...operationsErrors,
 } as const satisfies Messages;
@@ -133,6 +136,8 @@ export const areaApi = (caller: Caller) => ({
   ...sellerListingsApi(caller),
   // Replaces the core searchProducts with one that also filters by brand.
   ...catalogueApi(caller),
+  // After catalogue: its brand list replaces the catalogue one.
+  ...catalogueFollowupsApi(caller),
   ...nativeAccountsApi(caller),
   ...operationsApi(caller),
   // Last: some of its methods replace core ones (see followups.ts).

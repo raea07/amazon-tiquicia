@@ -1,9 +1,10 @@
-import type { OpsBrand } from "@yuntera/db";
+import type { OpsBrandWithUse } from "@yuntera/db";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Badge, EmptyState, formatDate, SelectField, Skeleton, TextField } from "@yuntera/ui";
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { deleteBrand } from "@/app/brand-actions";
 import { createBrand, mergeBrands, renameBrand, setBrandVisible } from "@/app/catalogue-actions";
 import { CatalogueNav } from "@/components/catalogue-nav";
 import { CatalogueForm, CatalogueOutcome } from "@/components/catalogue-outcome";
@@ -77,6 +78,7 @@ async function Brands() {
                 // Only into a brand in the filter: into a hidden one, the moved
                 // products would leave the filter with it.
                 others={current.filter((other) => other.id !== brand.id && other.active)}
+                mergedIn={merged.filter((other) => other.merged_into?.id === brand.id).length}
               />
             ))}
           </ul>
@@ -107,7 +109,15 @@ async function Brands() {
   );
 }
 
-function BrandRow({ brand, others }: { brand: OpsBrand; others: OpsBrand[] }) {
+function BrandRow({
+  brand,
+  others,
+  mergedIn,
+}: {
+  brand: OpsBrandWithUse;
+  others: OpsBrandWithUse[];
+  mergedIn: number;
+}) {
   return (
     <li className="rounded-lg border border-border bg-surface p-4 text-sm" data-brand={brand.slug}>
       <div className="flex flex-wrap items-center gap-2">
@@ -223,6 +233,44 @@ function BrandRow({ brand, others }: { brand: OpsBrand; others: OpsBrand[] }) {
                 </CatalogueForm>
               </div>
             </details>
+          ) : null}
+
+          {brand.deletable ? (
+            <details>
+              <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+                Eliminar la marca
+              </summary>
+              <div className="mt-2">
+                <CatalogueForm
+                  action={deleteBrand}
+                  submit={`Eliminar «${brand.name}»`}
+                  variant="danger"
+                  size="sm"
+                  pendingLabel="Eliminando…"
+                >
+                  <input type="hidden" name="brandId" value={brand.id} />
+                  <p className="text-ink-muted">
+                    Ningún producto tiene esta marca. Se elimina
+                    {mergedIn === 0
+                      ? ""
+                      : mergedIn === 1
+                        ? ", con la marca que se unió a ella,"
+                        : `, con las ${mergedIn} marcas que se unieron a ella,`}{" "}
+                    y su dirección ?marca={brand.slug} queda libre para otra marca. No se puede
+                    deshacer.
+                  </p>
+                </CatalogueForm>
+              </div>
+            </details>
+          ) : brand.all_product_count > 0 ? (
+            <p className="text-ink-muted">
+              No se puede eliminar:{" "}
+              {brand.all_product_count === 1
+                ? "1 producto la tiene"
+                : `${brand.all_product_count} productos la tienen`}{" "}
+              (también cuentan los archivados y los borradores). Únala a otra marca o sáquela del
+              filtro.
+            </p>
           ) : null}
         </div>
       </details>

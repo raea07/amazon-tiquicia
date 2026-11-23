@@ -570,6 +570,25 @@ select pg_temp.denied('DTA-7', 'select * from public.zone_closure_periods');
 select pg_temp.denied('DTA-7', 'update public.warehouse_locations set active = false');
 select pg_temp.denied('DTA-7', 'update public.route_stops set status = ''skipped''');
 select pg_temp.denied('DTA-7', 'update public.routes set status = ''cancelled''');
+select pg_temp.denied('DTA-7', 'delete from public.delivery_zones where id = ''national''');
+select pg_temp.denied('DTA-7', 'delete from public.holidays');
+select pg_temp.denied('DTA-7', 'delete from public.zone_closures');
+select pg_temp.denied('DTA-7', $q$insert into public.warehouse_locations (warehouse_id, code, kind)
+                                  select id, 'Z-99-99-Z', 'storage' from public.warehouses limit 1$q$);
+select pg_temp.denied('DTA-7', 'update public.bin_stock set quantity = quantity + 1');
+reset role;
+-- Nor do warehouse workers put stock into a location directly (084000's
+-- trigger guards what the functions do; the grant guards the rest).
+select pg_temp.login('bodega@yuntera.example');
+select pg_temp.denied('DTA-7', 'update public.bin_stock set quantity = quantity + 1');
+select pg_temp.denied('DTA-7', 'update public.warehouse_locations set active = true');
+reset role;
+-- Brands are deleted through ops_delete_brand (084100), never directly.
+select pg_temp.staff_as('catalog');
+select pg_temp.login('comprador3@yuntera.example');
+select pg_temp.denied('DTA-7', 'delete from public.brands');
+select pg_temp.denied('DTA-7', 'update public.brands set merged_into_id = null');
+select pg_temp.denied('DTA-7', 'update public.products set brand_id = null');
 reset role;
 select pg_temp.staff_as('admin');
 select pg_temp.login('comprador3@yuntera.example');
