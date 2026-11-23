@@ -1376,3 +1376,96 @@ Catálogo). Chosen where the work offered a choice:
 - The commission spec in `packages/core/src/fees.ts` is keyed by the launch
   slugs of the departments; the live rate stays on the category row, so a
   renamed department keeps its rate while the spec keeps the old slug.
+
+## 41. Operations staff change zones, districts, the calendar, settings, locations and stuck routes through functions
+
+**Context.** The lockdown left delivery zones, holidays, zone closures,
+districts, settings, warehouse locations and stuck routes with no door: only
+an administrator in the database could change them. Each change touches
+promises already made to shoppers, so the rules must be decided once, in the
+database (migration 084000, console section Operación).
+
+**Decision.** One function per change, for operations staff and
+administrators (settings for administrators only), each audited without the
+free text staff type. Chosen where the work offered a choice:
+
+- **Districts can be "not served".** A district keeps its zone for the record
+  but has a `served` flag. A district not served reads like a switched-off
+  zone everywhere the shop asks (`list_districts`, `my_addresses`,
+  `delivery_estimate`, `checkout_quote`, `place_order` and seller pickup
+  points refuse it with `zone_not_served`). A saved address there stays saved
+  and is offered again when the district is served again; nothing is deleted.
+- **The shop always keeps at least one served district.** The last active
+  zone that serves a district cannot be switched off, a zone with no served
+  district cannot be switched on, and no district move may leave every active
+  zone without one. Zone switches and district moves take the same two locks
+  in the same order, so two staff at once cannot get around it (proved by
+  the parallel-session test `contract.operations-races.test.ts`).
+- **A holiday is refused on a day with routes and needs a confirmation on a
+  day with promised orders.** Routes would have to be moved by hand; promised
+  orders keep their promise and staff decide whether to tell the shoppers.
+  Holidays are added only for days after today and at most 730 days ahead.
+- **Overlapping closures of a zone are refused, not merged.** Staff change the
+  existing closure's end instead, so one period always says why the zone is
+  closed. A closure's days are written into the per-day table the delivery
+  promise already reads, so the promise and its parity test are unchanged.
+- **Every setting not on the operational list is protected.** Sixteen named
+  limits are editable within a range, against the value the administrator
+  saw. Everything else (payments, invoicing, the second factor, consent
+  versions, payouts, and limits whose numbers are written in app code or
+  texts) changes only through the deployment runbook, and a setting added
+  later is protected until someone adds it to the list.
+- **Lifecycle: `ready_for_dispatch → packed`.** A parcel planned on a route
+  but not yet with the driver goes back to packed when dispatch takes it off
+  the route; the same transition is in `packages/core/src/lifecycle.ts`, kept
+  equal by the parity test.
+- **A stop removed by staff shows the shopper "Entrega reprogramada".** A
+  parcel already with the driver goes to `delivery_failed` without counting an
+  attempt, without a message and with the status entry hidden; `attempt_count`
+  0 is how the shop, the native shop, dispatch and the staff order page tell it
+  from a failed attempt (`isRescheduledShipment`). The driver sees the stop as
+  "Omitida" with the sentence to bring the parcel back, and the route's count
+  leaves it out.
+
+**Consequences.**
+
+- A parcel that had a real failed attempt, went out again and was then
+  removed by staff has `attempt_count` 1, so the shopper still reads "No
+  pudimos entregarlo". Telling them apart would need the order to expose the
+  last stop's state.
+- There is still no screen to move stock between warehouse locations, nor to
+  edit or remove single-day closures made before periods existed; sign-in
+  limits are constants in functions, not settings.
+- A new zone gets its districts while it is off, and is switched on after.
+
+## 42. Brands are deleted only when nothing names them; product pages refuse what is not on sale at the helper
+
+**Context.** Brands could be created, renamed, hidden and merged (decision
+40), not deleted, so test brands stayed forever. And the rule that only a
+product on sale opens for the public lived only in the callers of
+`private.product_page_open`.
+
+**Decision.** (migration 084100)
+
+- **`ops_delete_brand`** deletes a brand that no product names in any status
+  (an archived listing counts: the foreign key would refuse it anyway); it is
+  refused with `brand_in_use` and the number of products, and the console
+  says to merge it or take it out of the filter instead. The brands merged
+  into it go with it (they exist only to point at it), its address and
+  earlier addresses become free, and an audit entry keeps what it was. A
+  brand merged away cannot be deleted on its own.
+- **Lock order.** The deletion takes the brands lock and the brand rows before
+  it counts, as merges do. Sellers never name a brand; the only other writer
+  of a product's brand is a staff correction, which now locks the brand it
+  gives before the product. A correction racing a deletion is therefore
+  either counted or told the brand is gone, never a foreign-key error (proved
+  in `contract.operations-races.test.ts`; without the lock the test fails with
+  the foreign-key error).
+- **`private.product_page_open`** refuses a product that is not active unless
+  the viewer is staff or a member of the shop that created it. Those two keep
+  their preview through `get_product`, which has no status filter of its own
+  and whose page body applies the same rule; every other caller already asked
+  for an active product.
+
+**Consequences.** The two test brands on the hosted preview can be removed
+from the console once 084100 is applied there.

@@ -258,13 +258,13 @@ Admin implies every role below. "Reach" is what the `ops_*` and other staff
 functions return to that role; the read policies name the same roles, but only
 as the second lock.
 
-| Role      | Reach                                                                                                                                                                                                                                                     |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, the dispatch board, routes, settlements, returns; approve or suspend sellers; zones and calendar have no function yet                                                        |
-| `support` | Orders and timelines (with the shopper's contact and address), sellers' private details, returns, complaints, content reports; cancel an order for a shopper; see which messages an order produced and resend a stuck one                                 |
-| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs; sees offers a fee change paused (`ops_fee_floor_breaches`, also `catalog`)                  |
-| `catalog` | All listings; approve or reject a listing, a listing edit and its photos; take down any photo; resolve content reports; categories, brands, search synonyms, review moderation, and correcting, taking down and putting back a published product (083700) |
-| `admin`   | All of the above, plus staff membership, the audit log and resetting a colleague's second factor (never their own); settings have no function yet                                                                                                         |
+| Role      | Reach                                                                                                                                                                                                                                                                                           |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, the dispatch board, routes, settlements, returns; approve or suspend sellers; the Operación tools of 084000 (zones, districts, holidays, closures, warehouse locations, stuck routes)                              |
+| `support` | Orders and timelines (with the shopper's contact and address), sellers' private details, returns, complaints, content reports; cancel an order for a shopper; see which messages an order produced and resend a stuck one                                                                       |
+| `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs; sees offers a fee change paused (`ops_fee_floor_breaches`, also `catalog`)                                                        |
+| `catalog` | All listings; approve or reject a listing, a listing edit and its photos; take down any photo; resolve content reports; categories, brands (deleting an unused one since 084100), search synonyms, review moderation, and correcting, taking down and putting back a published product (083700) |
+| `admin`   | All of the above, plus staff membership, the audit log and resetting a colleague's second factor (never their own); the operational settings (084000; every other setting is protected)                                                                                                         |
 
 Sensitive changes by staff — to staff membership, seller status and private
 details, drivers, warehouse assignments, settings, fees, payouts — are written
@@ -300,7 +300,7 @@ never copied into the log, only its id, the reason and the rating).
 | Change              | Function                                                                                                                                  | Rules                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Categories          | `ops_create_category`, `ops_update_category`, `ops_move_category`, `ops_shift_category`, `ops_set_category_active`, `ops_delete_category` | Three levels at most, no loops, names unique among siblings; an address is unique among categories and their old addresses and never a word the shop keeps (`buscar`, `carrito`…); a renamed address stays as a redirect (`category_redirect`); a move that would change the commission of a listed product is refused; only an unused category is deleted |
-| Brands              | `ops_create_brand`, `ops_update_brand`, `ops_set_brand_active`, `ops_merge_brands`                                                        | Names unique (accents and case ignored) including old names; a merge moves the products and keeps the old name for search and the old address for the filter                                                                                                                                                                                               |
+| Brands              | `ops_create_brand`, `ops_update_brand`, `ops_set_brand_active`, `ops_merge_brands`, `ops_delete_brand` (084100)                           | Names unique (accents and case ignored) including old names; a merge moves the products and keeps the old name for search and the old address for the filter; only a brand no product names, in any status, is deleted (`brand_in_use` with the count), with the brands merged into it, and its addresses are free again                                   |
 | Search synonyms     | `ops_add_search_synonym`, `ops_remove_search_synonym`, `ops_search_preview`                                                               | Stored folded with single spaces, as search reads them; refused when empty, too long, repeated, a word search ignores, or matching nearly every listing                                                                                                                                                                                                    |
 | Reviews             | `ops_reviews`, `ops_hide_review`, `ops_show_review`, `ops_hide_review_reply`, `ops_show_review_reply`                                     | A reason from a fixed list (never a low rating); the rating follows at once; open reports about it close as acted on; staff see of the reviewer only the shop's "María F."; the author reads why on their order (`my_order_reviews`)                                                                                                                       |
 | A published product | `ops_catalog_product`, `ops_correct_product`, `ops_take_down_product`, `ops_restore_product`                                              | Category and brand corrected with a reason the seller reads; refused while the seller's own edit waits, or when an offer would sell below the fees; a take-down is a rejection with a reason that can be put back, as it was (refused once the seller changed it); the seller is told (`product.staff_changed`)                                            |
@@ -308,6 +308,38 @@ never copied into the log, only its id, the reason and the rating).
 `ops_resolve_report` uses the same doors: acting on a product report is a
 take-down staff can undo, and acting on a review report hides the review with
 the reason closest to the report's.
+
+A product page opens (`private.product_page_open`, which `get_product` and the
+shop's other product reads ask) for everyone only while the product is on sale
+and its shop is active or another active shop sells it. A product that is not
+on sale (a draft, waiting for review, taken down, archived) opens only for
+staff and for members of the shop that created it, as their preview; since
+084100 the helper itself says so, not only its callers.
+
+## Operations staff
+
+Migration `20261121084000_console_operations.sql` gives operations staff (and
+administrators; support, finance and catalogue staff get `forbidden`) a door
+for the operational data that had none after the lockdown. Settings are for
+administrators only. Every function needs the second step like everything
+else (none is on `check_request`'s short list). Each change is audited: zones,
+holidays, closed days and settings by the audit triggers on their tables;
+districts, closure periods, warehouse locations, route stops and routes by an
+entry the function writes, with codes and statuses only, never the free text
+staff typed (a stop holds the recipient's name and phone).
+
+| Change              | Function                                                                                             | Rules                                                                                                                                                                                                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Delivery zones      | `ops_delivery_zones`, `ops_create_zone`, `ops_update_zone`, `ops_set_zone_active`, `ops_delete_zone` | Edits carry the zone's revision (`zone_changed_meanwhile`); a new zone starts off; the shop always keeps a served district (`zone_last_active`, `zone_has_no_districts`); only an unused zone is deleted                                                        |
+| Districts           | `ops_district_cantons`, `ops_canton_districts`, `ops_district_move_preview`, `ops_move_districts`    | 1 to 60 at a time, to a zone or to "not served"; a move that would leave nothing served is refused (`districts_none_served`)                                                                                                                                    |
+| Holidays            | `ops_holidays`, `ops_add_holiday`, `ops_remove_holiday`                                              | Days after today, at most 730 ahead; refused on a day with routes, confirmed on a day with promised orders                                                                                                                                                      |
+| Zone closures       | `ops_zone_closures`, `ops_open_zone_closure`, `ops_change_zone_closure_end`, `ops_end_zone_closure`  | A period of at most 31 days from today; an overlapping closure of the same zone is refused; edits carry a revision                                                                                                                                              |
+| Settings (admin)    | `ops_settings`, `ops_update_setting`                                                                 | Only the 16 operational limits, within their range and against the value the administrator saw; every other key is protected (`setting_protected`)                                                                                                              |
+| Warehouse locations | `ops_warehouse_locations`, `ops_create_location`, `ops_rename_location`, `ops_set_location_active`   | Storage and picking locations of a Yuntera warehouse only; not switched off while holding stock, named in an open pick task, with units picked from it in a parcel being picked, or as the last active one; a trigger keeps stock out of a location that is off |
+| Stuck routes        | `ops_open_routes`, `ops_remove_route_stop`, `ops_close_route`                                        | Only a pending stop is removed (kept as skipped, with who and why); a route closes only with no stop out; no delivery code, name or phone is read or returned                                                                                                   |
+
+Seller pickup points (`seller_save_location`) follow the same "not served"
+rule since 084000.
 
 ## Access that ends at once
 

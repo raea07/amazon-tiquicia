@@ -1363,6 +1363,72 @@ only on a database with data. The suites should pass as here. The JavaScript-
 off behaviour of point 8 is the framework's streaming, the same in
 production.
 
+### Migrations 084000 and 084100
+
+Two migrations merged on 23 November 2026, **not applied to the hosted preview
+yet** (it has the 37 up to `083900`). Apply them in filename order, in one
+sitting, then redeploy the four web apps together:
+
+1. `20261121084000_console_operations.sql`: the console's Operación section
+   (zones, districts, holidays, zone closures, warehouse locations, stuck
+   routes, and the operational settings for administrators). Redefines
+   `private.shipment_transition_allowed` (adds `ready_for_dispatch → packed`),
+   `private.zone_for_postal_code`, `delivery_estimate`, `list_districts`,
+   `my_addresses`, `checkout_quote` and `seller_save_location` (a district not
+   served reads like a switched-off zone); their grants are unchanged.
+2. `20261121084100_catalogue_followups.sql`: `ops_delete_brand`, the brand
+   list with `all_product_count` and `deletable`, `ops_correct_product`
+   locking the brand first, and `private.product_page_open` refusing a product
+   not on sale (except to staff and its own shop).
+
+What they change in a database that already has data, once: existing zones
+get revision 1, every district stays served (`districts.served` defaults to
+true), existing single-day `zone_closures` rows keep `period_id` null and are
+shown read-only, the new route and stop columns stay null. Nothing is
+rewritten and nothing needs a worker. No new secret or environment variable:
+the console's district refresh reuses `SHOP_REFRESH_KEY`.
+
+Do this in order.
+
+1. **Check the starting point**: `remote-db.sh status` lists 37 applied files
+   and these two pending, and nothing else pending.
+2. **Apply the two** with `remote-db.sh push`; `status` then lists 39 files.
+3. **Check what they left**:
+
+   ```sql
+   select count(*) filter (where not served) from public.districts;                  -- 0
+   select id, active, revision from public.delivery_zones order by id;                -- as before, revision 1
+   select has_function_privilege('anon', 'public.ops_delete_brand(uuid)', 'execute'); -- false
+   select has_function_privilege('authenticated', 'public.ops_delete_brand(uuid)', 'execute'); -- true
+   ```
+
+4. **Run the suites** with `remote-db.sh test`: all 30 files, among them
+   `165_console_operations.sql` and `166_catalogue_followups.sql`; the same two
+   `skipped` rows as before and no other.
+5. **Redeploy the four web apps together** (step 7). The shop's refresh
+   endpoint must understand the new `districts` scope (`x-refresh-scope`,
+   comma-separated scopes) before the console sends it; until the shop is
+   redeployed, the district list keeps its days-long cache after a zone or
+   district change. The console's Operación section and brand deletion, the
+   field app's route count and the shop's "Entrega reprogramada" need the new
+   code.
+6. **The shopper app in the stores' test tracks (`3f251c3`) keeps working**:
+   every function it calls was called with that commit's own client and
+   schemas against a local database with both migrations, as a visitor and
+   as the demo shopper, including a district not served and a stop removed by
+   staff, and every answer parsed. It shows a removed stop as "Entrega
+   fallida" until it is rebuilt (the new code says "Entrega reprogramada").
+7. **A smoke test**: Operación at 1280 and 390 px; a holiday added on a
+   promised day and removed; a district moved and moved back; Catálogo →
+   Marcas, delete the two test brands of 22 November ("Prueba Dos", which
+   takes "Prueba Uno", merged into it, with it); the shop's district list
+   after a zone change (the refresh scope).
+
+**Not verified anywhere but locally:** real PostgREST passing the `int[]`,
+`text[]` and `jsonb` arguments of the new functions (only the local API
+stand-in was used), and the parallel-session behaviour on the hosted database
+(the race tests ran locally).
+
 ## 4. Confirm the database is what the migrations say
 
 Write these to a file and run it with `remote-db.sh sql <project-reference>

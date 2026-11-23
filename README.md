@@ -189,11 +189,11 @@ tools/dev/stack.sh native 1
 tools/dev/stack.sh native-e2e 1
 ```
 
-That runs the eight native journeys, each on a freshly seeded database: `shop`
+That runs the nine native journeys, each on a freshly seeded database: `shop`
 (including a return), `seller` (including a price below the fees and a
 seller's second step), `driver` (including a stretch without signal, a
 suspension that hands the route back to Central and a delivery code locked
-and released), `warehouse` (picking by scan, refused receipts and a returned
+and released), `driver-removed-stop` (a stop Central took off the route), `warehouse` (picking by scan, refused receipts and a returned
 parcel) and `staff` (the right and wrong kinds of account for the three staff
 apps), and the account screens of each app: `accounts-shop` (deletion, the
 password reset and change, the second step inside the app, reporting a
