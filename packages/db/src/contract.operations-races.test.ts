@@ -365,10 +365,11 @@ describe.skipIf(!db.enabled)(
         expect(result).toEqual({ first: "", second: "location_has_stock", waited: true });
         expect(await stockInLocationsOff()).toBe(before);
 
-        // Emptied again; then the switch-off first: the stock waits, then is refused.
+        // Emptied again; then the switch-off first: the stock waits, then is
+        // refused (with its own code since 20261121084300_warehouse_stock.sql).
         await removeStock(location, stock);
         result = await race(switchOff, adjust);
-        expect(result).toEqual({ first: "", second: "location_not_found", waited: true });
+        expect(result).toEqual({ first: "", second: "location_inactive", waited: true });
         expect(await stockInLocationsOff()).toBe(before);
         const { rows: inside } = await db.query<{ n: string }>(
           "select coalesce(sum(quantity), 0) as n from public.bin_stock where location_id = $1",

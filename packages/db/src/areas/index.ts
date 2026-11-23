@@ -29,9 +29,10 @@ import * as peoplePayouts from "./people-payouts";
 import { photosApi, photosErrors } from "./photos";
 import { sellerListingsApi, sellerListingsErrors } from "./seller-listings";
 import type { Caller, Messages } from "./types";
+import { warehouseStockApi, warehouseStockErrors } from "./warehouse-stock";
 import { webFollowupsApi, webFollowupsErrors } from "./web-followups";
 
-// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts and operations areas name their exports uniquely, so
+// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts, operations and warehouse-stock areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
 // would clash with each other, so their schemas and types are re-exported by
 // name.
@@ -98,6 +99,7 @@ export type {
 export * from "./photos";
 export * from "./seller-listings";
 export type { Caller, Messages } from "./types";
+export * from "./warehouse-stock";
 export * from "./web-followups";
 
 export const areaErrors = {
@@ -118,6 +120,7 @@ export const areaErrors = {
   ...catalogueFollowupsErrors,
   ...nativeAccountsErrors,
   ...operationsErrors,
+  ...warehouseStockErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -140,6 +143,8 @@ export const areaApi = (caller: Caller) => ({
   ...catalogueFollowupsApi(caller),
   ...nativeAccountsApi(caller),
   ...operationsApi(caller),
+  // Replaces the core wmsFindSku and wmsAdjustStock (see warehouse-stock.ts).
+  ...warehouseStockApi(caller),
   // Last: some of its methods replace core ones (see followups.ts).
   ...followupsApi(caller),
 });

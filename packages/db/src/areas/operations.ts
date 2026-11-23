@@ -642,8 +642,8 @@ export const operationsErrors = {
   },
   location_has_stock: {
     "es-CR":
-      "Esta ubicación tiene mercadería. Se puede desactivar cuando quede vacía, cuando esas unidades salgan en pedidos.",
-    en: "This location holds goods. It can be switched off once it is empty, when those units leave in orders.",
+      "Esta ubicación tiene mercadería. Para desactivarla, vacíela primero: en la app de bodega abra la ubicación (Bodega, Ubicaciones) y mueva cada producto a otro estante con «Mover».",
+    en: "This location holds goods. To switch it off, empty it first: in the warehouse app open the location (Bodega, Ubicaciones) and move each product to another shelf with “Mover”.",
   },
   location_has_picked_units: {
     "es-CR":
