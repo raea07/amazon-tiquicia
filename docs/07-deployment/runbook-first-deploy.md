@@ -1698,8 +1698,10 @@ Rica day.
 
 ### Migrations 084200 and 084300
 
-Two migrations of wave 7, merged on 23 November 2026 at `717048f`. Apply them
-in filename order, in one sitting, then redeploy the four web apps together:
+Two migrations of wave 7, merged on 23 November 2026 at `717048f` and
+**applied to the hosted preview the same day** (it now has 41; what was done
+is in the next section). Apply them in filename order, in one sitting, then
+redeploy the four web apps together:
 
 1. `20261121084200_order_followups.sql` (19 functions): the delivery fee is
    refunded as its own refund row (reason `delivery_fee`) when receiving a
@@ -1807,17 +1809,198 @@ Do this in order.
 7. **The shopper app in the stores' test tracks (`3f251c3`) keeps working**:
    `my_orders` keeps its first eleven columns, `get_order` only gains fields
    and answers no delivery code for an order whose parcels are all coming
-   back. It shows a stopped parcel as its old build reads `returning`.
+   back. That build shows the order's own status and the parcel's: a stopped
+   parcel reads "Preparando su pedido" with the parcel "De regreso" (and, in
+   the list, the promised date); a parcel coming back after a real attempt
+   reads "En camino"; once checked in, "Reembolsado" or "Cancelado" with the
+   parcel "Devuelto". It shows no delivery code for any of them.
 8. **A smoke test**: a paid order stopped before it left (goods and delivery
    fee refunded as two rows), a cash order stopped (nothing refunded), a real
    attempt at the door (fee kept), a district moved and moved back (its own
    zone empty again), and a location's move and count corrections, each
-   undone.
+   undone. A route whose last stop ends is completed by itself; there is
+   nothing to close, only its cash count to settle in Liquidaciones.
 
-**Verified only locally before the preview:** the lock order under parallel
-sessions (the race tests in `packages/db`, which never run against a hosted
-database), and the deadlock message every app shows ("nothing was saved, try
-again"), which needs two sessions colliding on purpose.
+**Not verified on a hosted database:** the lock order under parallel sessions
+(the race tests in `packages/db` run only locally), and the deadlock message
+every app shows ("nothing was saved, try again"), which needs two sessions
+colliding on purpose. `returns_location_missing` was not met on the preview:
+SJO1 has `DEV-01` switched on.
+
+### What was done on the preview, 23 November 2026, afternoon
+
+Both migrations, `084200` and `084300`, in one sitting (19:46 to 20:40 UTC),
+in the order above. Vercel CLI 65.12.1, Playwright in headless Chromium, the
+Management API through the network proxy; worktree at `717048f` (this section
+was written first, at `04db98b`, before anything was applied).
+
+1. **Recorded first** (19:48). `status`: 39 applied, these two pending,
+   nothing else. Row counts of all 141 tables (16 325 rows); every row of
+   `app_settings` (31 keys, values and `updated_at`); the three zones; no
+   district with a zone of its own; the 14 holidays; 0 `zone_closures` rows
+   and one cancelled closure period; SJO1's 20 locations and their 27 shelf
+   rows (`DEV-01` on, holding 2 coffee and 1 headphones); every
+   `stock_levels` row with on hand, reserved and on hand minus its shelves;
+   9 open pick tasks; orders, shipments and payments by status; the 7 rows
+   of `private.refunds`; 38 ledger transactions, none unbalanced;
+   YT-101282 and YT-101283 in full (cancelled, ₡4 950 refunded each, the
+   ₡1 500 fee kept, payment `partially_refunded`); `my_orders` with 11
+   columns; owner `postgres`, definer, `search_path=""`, execute for
+   `postgres` only and the definition's md5 of the four private functions;
+   the sweep's job `expire-unpaid-orders` (`*/5 * * * *`, `select
+   private.expire_unpaid_orders()`, last five runs succeeded, "1 row");
+   `reservation_minutes` 30 and no order in `pending_payment`; 0 table
+   privileges of the app roles; 18 accounts (11 demo, 7 deleted and
+   anonymised), 0 second factors; `vault.secrets` holds
+   `auth_limit_caller_digest` only; no Edge Function; 111 audit rows; 35
+   functions a visitor may execute.
+2. **Read-only checks.** No district stores its canton's zone (so none was
+   cleared and no audit entry was written). SJO1 has `DEV-01` switched on.
+   No order is behind or ahead of its parcels. No open pick task names a
+   location with too few units. No closed day outside a period. Nothing
+   depends on `my_orders` or the five-argument `wms_adjust_stock` (no view,
+   policy, function body or dependency; only their grants to `postgres`,
+   `service_role` and `authenticated`). `default_transaction_isolation` is
+   `read committed` from the server default; no database or role setting
+   (`authenticator`, `authenticated`, `anon`, `postgres`) changes it; the
+   scheduled jobs run as `postgres`.
+3. **`push`** applied both at the first try in 3.4 s (19:51:33 to
+   19:51:37); `status` lists 41. No platform difference; no file was edited.
+   The first `my_orders` call as `comprador`, 0.7 s after the push, already
+   answered 13 columns, and `get_order` carried `recalled` and `can_recall`:
+   no "function not found" was seen.
+4. **What they left** (19:53). `app_settings`, zones, holidays, closures,
+   districts, orders, shipments and payments by status, refunds, the ledger,
+   stock levels, shelves and the open pick tasks identical (the tasks as a
+   set). `my_orders` has 13 columns and is executable by `authenticated`,
+   not `anon`; `wms_adjust_stock` exists once, with six arguments, for
+   `authenticated` only. The eight indexes of the two files exist; the
+   three new `shipments` columns exist and are null everywhere. The guard:
+   0 table privileges, 0 write policies, row-level security on all 98
+   tables; the 33 functions of the two files each exist once, owner
+   `postgres`, `search_path=""`, none executable by PUBLIC or `anon`, every
+   public one by `authenticated`, no private one by an app role; two are not
+   definers (`shipment_transition_allowed`, `colones`: pure helpers). The
+   list a visitor may execute is the same 35 (no difference);
+   `authenticated` 275 → 282 (the 7 new public functions). The four private
+   functions have new md5s with the same owner, definer, empty search path
+   and execute for `postgres` only. The sweep's job is unchanged and its
+   first run after the push (19:55:00) succeeded with "1 row". A token after
+   sign-out still gets `400 session_ended`. The runbook's checks give the
+   expected answers.
+5. **Suites**: the first run hit a Management API outage: every request from
+   19:54:12 to 19:54:19 answered Cloudflare's `502 Bad gateway` (11 suites
+   and a snapshot), the rest passed. Run again at 19:55:29: all 33 pass; the
+   only `skipped` rows are `125_followups` `net_grants` and part 2 of
+   `100_notifications`. Row counts before and after identical except the
+   scheduler's history. No test had to change.
+6. **Redeploy**, one at a time from the repository root with `vercel deploy
+   --prod --yes --token dummy`, 26 to 37 s each: web
+   `dpl_EDTU6BQSdu3TGyZQG6NHfGwdF7kK` (ready 19:57:32), vende
+   `dpl_4p2CRFjWoUjBe6yV5BKmoaKrx2Wo`, central
+   `dpl_8KH7CwAqqqFtNRAhidpMCJggArAP`, campo
+   `dpl_42pgkvCv9WSk5327gk7utHuACSWR` (ready 19:59:08). Without a bypass all
+   12 addresses tried answer `302` to `vercel.com/sso-api`. **The window**
+   (19:51 to 19:59): the old apps' 39 pages (the shop's orders list and order
+   pages, which read the recreated `my_orders`; the console's Operación
+   pages; the field app as driver and warehouse lead) loaded against the new
+   database with no error, as before the push.
+7. **The Android build of `3f251c3`**: its read calls (as on 23 November,
+   morning) with that commit's own client and schemas, as a visitor and as
+   `comprador` and `comprador3`: 72 and 75 calls before the smoke test, 77
+   and 64 after it with the orders of point 8, 0 parse failures. What it
+   shows is in step 7 above.
+8. **Smoke test** through bypass secrets made and revoked, sent to the four
+   `vercel.app` hosts only, failing on console errors, page errors, failed
+   requests and 5xx. Orders were placed through the API the way the apps
+   call it, except YT-101552 (through the shop's checkout).
+   - **Shop** at 1280 and 390 px as `comprador3`: home, the district
+     picker, the coffee's promise ("Llega el miércoles, 25 de noviembre"),
+     the cart, checkout (nothing chosen, "simulados"), YT-101552 paid by
+     the simulation, its four-digit code on the shopper's page, the list,
+     sign-out with no cookie left.
+   - **Stopped before it left** (YT-101552, ₡6 450): picked from A-01-01-A
+     and packed in the field app; the console's confirmation read "Confirmo:
+     el paquete YT501778 del pedido YT-101552 no sale y vuelve a la zona de
+     devoluciones de la bodega. Cuando la bodega lo reciba, se le devuelven
+     al cliente ₡6 450, productos y envío, por el mismo medio con que pagó,
+     y el pedido queda cancelado." While it came back the shopper read "Se
+     está cancelando", "Detuvimos su pedido en nuestra bodega: ya no saldrá
+     hacia usted" and "Este paquete no saldrá de nuestra bodega", no code and
+     no "En camino"; the field app "Nunca salió de la bodega … guarde las
+     unidades en la zona de devoluciones"; staff the reason in the history
+     (the person is in `recalled_by` and the audit log). The sentence "Su
+     paquete no llegó a salir de nuestra bodega" appears in the history only
+     at check-in, not while the parcel comes back. Checked in: two refund
+     rows (`parcel_returned` ₡4 950, `delivery_fee` ₡1 500), both
+     simulated; the order `refunded` (through `cancelled`), the payment
+     `refunded`; every ledger transaction sums to zero, the shipping revenue
+     and its IVA went back; "En total le devolvemos ₡6 450: todo lo que
+     pagó, el envío incluido." The unit landed on `DEV-01` and was moved back
+     to A-01-01-A with the location page's form. No electronic document
+     exists (simulated money gets none; the invoice jobs ended `done`); 9
+     messages wait as `pending` jobs, none sent.
+   - **Cash order stopped** (YT-101553): the confirmation said "No se cobró
+     nada todavía"; no refund promised or made; cancelled, payment
+     `cancelled`; the unit moved back.
+   - **A real attempt** (route R-1646 of `repartidor2`, built in Despacho
+     with only our two parcels ticked): YT501780's stop removed while the
+     route was only assigned; the driver read "No recoja este paquete:
+     volvió a Despacho." before and after starting. YT501781 failed at the
+     door ("No había nadie"), the route then completed by itself; sent back
+     from Despacho, checked in: one refund (₡4 950), fee kept, "El envío
+     (₡1 500) no se devuelve porque fuimos a entregarlo a su dirección."
+     YT501780 (packed again) stopped from the console and checked in: goods
+     and fee refunded. The shoppers' codes never appeared to the driver or
+     staff. The ₡0 cash count was settled in Liquidaciones.
+   - **District** 10111 moved to GAM extendida (the console: "Zona propia,
+     no la del cantón"; the coffee's page for 10111: "Envío ₡2 000") and back
+     (its own zone empty, "Sigue la zona del cantón", "Envío ₡1 500"), one
+     audit entry each. The console's refresh call to the shop answered `302`
+     again (two error lines).
+   - **Cierres**: no closed day outside a period, so nothing to offer.
+   - **Warehouse stock** (field app, 390 px): figures equal the database's;
+     a move of 1 charger to B-01-01-A and back; a count +1 and −1 (25 s
+     apart); a stale count refused ("La cantidad en el estante cambió
+     mientras usted contaba…"); a move above the free units refused, the
+     number kept; a move into `DEV-01` and a count into the switched-off
+     Z-99-98-Z (both forced by editing the form, the screen offers neither)
+     refused in words, what was typed kept; "Ya no está en esta ubicación"
+     after a second session moved all 29 cutting boards away, then back. A
+     first try of the forced count landed on A-02-02-A (the page put its own
+     location back before sending) and was counted back within 20 s.
+   - **Seller centre**: TecnoCasa's "Historial de existencias" lists the
+     corrections with their reasons, no staff name, no shelf, no move;
+     Cafetal's lists the returns; `cafetal` reading TecnoCasa's history gets
+     `forbidden`. The console's Ubicaciones lists every move and correction
+     with who.
+   - **Unpaid order** YT-101551 (SINPE Móvil, placed 20:01:39): the sweep
+     cancelled it at 20:35:00 ("Pago no recibido a tiempo"), the
+     reservation released, the free units back, nothing refunded.
+   - **New pages** at 1280 and 390 px (16 pages, 160 checks): one `h1`,
+     `lang` `es-CR`, no code on screen, every field labelled, no sideways
+     scroll.
+9. **Afterwards** (20:37). Vercel since the deployments: 2 error lines on
+   the console (the two refresh `302`s), nothing on the other three. The
+   scheduled jobs all succeeded. Advisors: security 319 (312; the 7 new
+   functions); performance 102 (103): unindexed foreign keys 89 → 83 (the
+   four of `084000`, `pick_tasks.location_id` and
+   `stock_movements.seller_id` gone), unused indexes 14 → 19 (the five new
+   ones). The bypass secrets were revoked; each project lists none and all
+   12 addresses redirect to the login. Against point 1: everything
+   identical except the orders of the test, the route, and two shelf rows
+   holding 0 units (charger on B-01-01-A, cutting board on B-01-02-A);
+   every shelf holds the units it held.
+
+What this round left on the preview, on purpose: YT-101551 to YT-101555 of
+`comprador3` (see point 8) with their refunds, ledger rows, stock movements
+and planned messages; route R-1646, completed, and its settled ₡0 cash count;
+four count corrections of the charger and the moves of the test in the stock
+history; the two 0-unit shelf rows; 6 audit entries; sessions of demo
+accounts left to expire.
+
+**For production**: the same order. The read-only checks of point 2 matter
+only on a database with data; check the isolation level before the push.
 
 ## 4. Confirm the database is what the migrations say
 
