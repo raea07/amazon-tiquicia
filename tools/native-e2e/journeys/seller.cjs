@@ -47,6 +47,8 @@ function check(condition, message) {
 let authRefusals = false;
 // While a refusal from the database is expected (a 400 the browser logs).
 let dbRefusals = false;
+// While the journey itself makes the listing-edits read fail (a 503 it answers).
+let editsDown = false;
 
 /** A call to Auth's HTTP API (setting up the authenticator app, as the website does). */
 async function auth(method, path, data, token) {
@@ -137,10 +139,12 @@ function colones(text) {
       // A wrong second-step code: Auth answers 422 and the browser logs it.
       if (authRefusals && /status of 422/.test(m.text())) return;
       if (dbRefusals && /status of 400/.test(m.text())) return;
+      if (editsDown && /status of 503/.test(m.text())) return;
       errors.push(`${name} console: ${m.text().slice(0, 300)}`);
     });
     page.on("pageerror", (e) => errors.push(`${name} pageerror: ${String(e).slice(0, 300)}`));
     page.on("response", (r) => {
+      if (editsDown && r.status() === 503 && /\/rpc\/seller_listing_edits\b/.test(r.url())) return;
       if (r.status() >= 500) errors.push(`${name} HTTP ${r.status()} ${r.url()}`);
     });
     page.on("response", async (r) => {
@@ -253,6 +257,35 @@ function colones(text) {
   check((await textOf("stat-to-pack")) === "1", "and shows it as the figure to deal with");
   await noSideways("home");
   await shotFull("03-home-today");
+
+  // 3b. When part of what Inicio adds cannot be read (the listing edits
+  // answer 503 here), the summary never says nothing more is pending: it
+  // says what it knows, that the rest could not be checked, and "Revisar de
+  // nuevo" asks again.
+  editsDown = true;
+  const failEdits = (route) =>
+    route.fulfill({ status: 503, contentType: "application/json", body: '{"message":"down"}' });
+  await page.route("**/rest/v1/rpc/seller_listing_edits", failEdits);
+  await page.reload({ waitUntil: "networkidle" });
+  await visible("seller-overview").getByText("Ferretería El Higuerón").first().waitFor();
+  const partial = await settledText(visible("today-summary"), /No pudimos revisar/, {
+    what: "the home screen's summary when the listing edits cannot be read",
+  });
+  log("   ", partial);
+  check(
+    partial ===
+      "Hoy tiene 1 paquete por empacar. No pudimos revisar si tiene algo más pendiente; toque «Revisar de nuevo».",
+    "a read that failed is said, next to what is known (never 'nada pendiente')",
+  );
+  await shotFull("03b-home-part-unread");
+  await page.unroute("**/rest/v1/rpc/seller_listing_edits", failEdits);
+  editsDown = false;
+  await visible("today-retry").click();
+  await settledText(visible("today-summary"), "Hoy tiene 1 paquete por empacar.", {
+    what: "the home screen's summary after asking again",
+  });
+  await visible("today-retry").waitFor({ state: "hidden" });
+  check(true, "'Revisar de nuevo' reads it again and the warning goes");
 
   // 4. Change a price and a stock count
   await tab("Productos").click();

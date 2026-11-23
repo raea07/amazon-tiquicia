@@ -3,6 +3,7 @@ import { useApiQuery } from "@yuntera/expo-kit/data";
 import {
   Alert,
   Badge,
+  Button,
   Card,
   ErrorState,
   formatPrice,
@@ -32,7 +33,8 @@ export default function HomeScreen() {
   });
   // Read by Productos and Cuenta too (same keys, so one request): a published
   // listing whose change was refused, and the bank-account request. Inicio
-  // does not wait for them, and leaves them out if they cannot be read.
+  // does not wait for them; if one cannot be read it says so and offers to
+  // ask again, instead of saying nothing is pending.
   const edits = useApiQuery(
     shopKey(shop.id, "listing-edits"),
     (api) => api.sellerListingEdits(shop.id),
@@ -53,12 +55,22 @@ export default function HomeScreen() {
   const todo = todayItems(counts, edits.data, payout.data);
   const has = (key: string) => todo.some((item) => item.key === key);
   const rejectedEdits = (edits.data ?? []).filter((e) => e.edit_status === "rejected").length;
+  const loadingTodo = edits.isLoading || payout.isLoading;
+  const incompleteTodo = edits.isError || payout.isError;
+  const askAgain = () => {
+    if (edits.isError) void edits.refetch();
+    if (payout.isError) void payout.refetch();
+  };
 
   return (
     <Screen
       edges={["left", "right"]}
       refreshing={overview.isRefetching}
-      onRefresh={() => void overview.refetch()}
+      onRefresh={() => {
+        void overview.refetch();
+        void edits.refetch();
+        void payout.refetch();
+      }}
     >
       <View testID="seller-overview" style={{ gap: 20 }}>
         <Stack gap={2}>
@@ -99,8 +111,20 @@ export default function HomeScreen() {
         <Stack gap={3}>
           <Text variant="heading">Por atender</Text>
           <Text testID="today-summary" aria-live="polite">
-            {todaySentence(todo, { loading: edits.isLoading || payout.isLoading })}
+            {todaySentence(todo, { loading: loadingTodo, incomplete: incompleteTodo })}
           </Text>
+          {incompleteTodo && !loadingTodo ? (
+            <Button
+              variant="secondary"
+              block
+              loading={edits.isFetching || payout.isFetching}
+              loadingLabel="Revisando…"
+              onPress={askAgain}
+              testID="today-retry"
+            >
+              Revisar de nuevo
+            </Button>
+          ) : null}
           <StatGrid>
             <Stat
               label="Pedidos por empacar"

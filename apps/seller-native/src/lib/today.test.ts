@@ -58,8 +58,25 @@ describe("todayItems", () => {
     // What is already known is said; the rest joins it when it answers.
     const known = todayItems({ ...none, to_pack: 1 }, undefined, undefined, now);
     assert.equal(todaySentence(known, { loading: true }), "Hoy tiene 1 paquete por empacar.");
-    // A read that failed is left out, and then nothing pending is said.
-    assert.match(todaySentence(items, { loading: false }), /no tiene nada pendiente/);
+  });
+
+  it("never says nothing is pending when the edits or the bank request could not be read", () => {
+    const items = todayItems(none, undefined, undefined, now);
+    const failed = todaySentence(items, { incomplete: true });
+    assert.doesNotMatch(failed, /nada pendiente/);
+    assert.match(failed, /^No pudimos revisar todo lo que tiene pendiente\./);
+    assert.match(failed, /Revisar de nuevo/);
+    // What is known is still said, with the warning that the rest is missing.
+    const known = todayItems({ ...none, to_pack: 1 }, undefined, undefined, now);
+    assert.equal(
+      todaySentence(known, { incomplete: true }),
+      "Hoy tiene 1 paquete por empacar. No pudimos revisar si tiene algo más pendiente; toque «Revisar de nuevo».",
+    );
+    // While the other read is still loading, the loading words win.
+    assert.equal(
+      todaySentence(items, { loading: true, incomplete: true }),
+      "Cargando lo que tiene pendiente…",
+    );
   });
 
   it("counts the overview's figures as the web summary does", () => {

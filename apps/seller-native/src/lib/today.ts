@@ -20,8 +20,9 @@ export interface TodoItem {
  * state of the latest bank-account request (seller_payout_details): one
  * waiting for our call, or one refused in the last 30 days.
  *
- * `edits` and `payout` may be missing (still loading, or not readable by
- * this member); the list then leaves those lines out rather than waiting.
+ * `edits` and `payout` may be missing (still loading, or the read failed);
+ * the list then leaves those lines out rather than waiting, and
+ * `todaySentence` says so.
  */
 export function todayItems(
   counts: SellerOverview["counts"],
@@ -88,16 +89,25 @@ export function todayItems(
 
 /**
  * The sentence under "Por atender". `loading` is true while the listing
- * edits or the bank-account request are still being read: "nothing pending"
- * is only said once they have answered (or failed, and are left out).
+ * edits or the bank-account request are still being read, and `incomplete`
+ * once one of them failed: "nothing pending" is only said when both have
+ * answered. While one is loading what is known is said; when one failed the
+ * sentence says the rest could not be checked (Inicio offers to ask again).
  */
-export function todaySentence(items: TodoItem[], { loading = false } = {}): string {
-  if (items.length === 0)
-    return loading
-      ? "Cargando lo que tiene pendiente…"
-      : "Hoy no tiene nada pendiente. Cuando entre un pedido aparece aquí.";
+export function todaySentence(
+  items: TodoItem[],
+  { loading = false, incomplete = false } = {},
+): string {
+  if (items.length === 0) {
+    if (loading) return "Cargando lo que tiene pendiente…";
+    if (incomplete)
+      return "No pudimos revisar todo lo que tiene pendiente. Toque «Revisar de nuevo» para intentarlo otra vez.";
+    return "Hoy no tiene nada pendiente. Cuando entre un pedido aparece aquí.";
+  }
   const texts = items.map((item) => item.text);
   const list =
     texts.length === 1 ? texts[0] : `${texts.slice(0, -1).join(", ")} y ${texts[texts.length - 1]}`;
+  if (incomplete && !loading)
+    return `Hoy tiene ${list}. No pudimos revisar si tiene algo más pendiente; toque «Revisar de nuevo».`;
   return `Hoy tiene ${list}.`;
 }
