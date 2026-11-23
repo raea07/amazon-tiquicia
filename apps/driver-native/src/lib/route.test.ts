@@ -10,6 +10,7 @@ import {
   nextStop,
   progressLine,
   refusalMessage,
+  removedBeforeStart,
   skippedStopNote,
   summarise,
   withQueued,
@@ -197,8 +198,36 @@ describe("the day as the driver sees it", () => {
     );
     assert.ok(route);
     assert.equal(summarise(route).packages, 3);
-    assert.match(skippedStopNote("assigned"), /No recoja este paquete: volvió a Despacho\./);
-    assert.match(skippedStopNote("in_progress"), /Si lleva el paquete, devuélvalo a la bodega\./);
+    const removed = { status: "skipped" as const, completed_at: "2026-11-23T15:00:00.000+00:00" };
+    assert.match(
+      skippedStopNote({ status: "assigned", started_at: null }, removed),
+      /No recoja este paquete: volvió a Despacho\./,
+    );
+    assert.match(
+      skippedStopNote({ status: "in_progress", started_at: "2026-11-23T14:00:00+00:00" }, removed),
+      /Si lleva el paquete, devuélvalo a la bodega\./,
+    );
+  });
+
+  it("keeps saying not to collect a parcel removed before the start, once the route starts", () => {
+    const started = { status: "in_progress" as const, started_at: "2026-11-23T14:00:00+00:00" };
+    const before = { status: "skipped" as const, completed_at: "2026-11-23T13:59:59.5+00:00" };
+    const after = { status: "skipped" as const, completed_at: "2026-11-23T14:30:00+00:00" };
+    assert.equal(removedBeforeStart(started, before), true);
+    assert.equal(removedBeforeStart(started, after), false);
+    assert.match(skippedStopNote(started, before), /No recoja este paquete/);
+    assert.match(skippedStopNote(started, after), /devuélvalo a la bodega/);
+    // A stop still on the route was not removed at all.
+    assert.equal(
+      removedBeforeStart(
+        { status: "assigned", started_at: null },
+        {
+          status: "pending",
+          completed_at: null,
+        },
+      ),
+      false,
+    );
   });
 
   it("needs position sharing only while a started route has a stop to visit", () => {

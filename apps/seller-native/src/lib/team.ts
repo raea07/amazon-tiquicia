@@ -237,7 +237,11 @@ export function logoStatus(
 }
 
 /** The app does not write the description or upload a logo: this says where it is done. */
-export const SHOP_FACE_ELSEWHERE = `Para escribir la descripción o subir el logotipo, ingrese a ${apps.seller.name} desde el navegador (${apps.seller.host}), en «Tienda». Lo revisamos antes de mostrarlo.`;
+/**
+ * The app writes the description; the logo needs the phone's photo library,
+ * which the app does not ask for yet, so it is still uploaded on the web.
+ */
+export const SHOP_FACE_ELSEWHERE = `La aplicación todavía no sube imágenes. Para subir o cambiar el logotipo, ingrese a ${apps.seller.name} desde el navegador (${apps.seller.host}), en «Tienda». Lo revisamos antes de mostrarlo.`;
 
 export const SHOP_FACE_ADMIN_ONLY =
   "Solo la persona dueña o administradora de la tienda puede cambiar la descripción y el logotipo.";

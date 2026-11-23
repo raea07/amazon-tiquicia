@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import type { SearchInput } from "@yuntera/db";
+import type { CatalogSearchInput } from "@yuntera/db";
 import { useApi } from "@yuntera/expo-kit/auth";
+import { useApiQuery } from "@yuntera/expo-kit/data";
 import { colors, gutter, radius, space, touchTarget } from "@yuntera/expo-kit/theme";
 import { Button, EmptyState, ErrorState, LoadingState, Text } from "@yuntera/expo-kit/ui";
 import type { ReactElement } from "react";
@@ -14,7 +15,15 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  BRAND_EMPTY,
+  brandOptions,
+  brandSummary,
+  currentBrand,
+  showBrandFilter,
+} from "@/lib/brand-filter";
 import { ProductCard } from "./product";
+import { SelectSheet } from "./select-sheet";
 
 export const PAGE_SIZE = 24;
 
@@ -60,13 +69,22 @@ function Chip({
   );
 }
 
+/** The next state of a listing's options; `brand: null` takes the brand filter off. */
+export interface ListingChange {
+  sort?: SortKey;
+  inStock?: boolean;
+  brand?: string | null;
+}
+
 /**
- * Results with sort, the in-stock filter and endless paging, for search and
- * categories. The same options as the website's listing, in the same words.
+ * Results with sort, the in-stock and brand filters and endless paging, for
+ * search and categories. The same options as the website's listing, in the
+ * same words.
  */
 export function Listing({
   query,
   categorySlug,
+  brand,
   sort,
   inStock,
   onChange,
@@ -75,20 +93,30 @@ export function Listing({
 }: {
   query?: string;
   categorySlug?: string;
+  /** A brand's address (`?marca=`), already checked with parseBrand. */
+  brand?: string;
   sort: SortKey;
   inStock: boolean;
-  onChange: (next: { sort?: SortKey; inStock?: boolean }) => void;
+  onChange: (next: ListingChange) => void;
   header?: ReactElement;
   onClearQuery?: () => void;
 }) {
   const api = useApi();
+  // The brands of the category (or of the whole shop), with how many products
+  // each has: a staff change, so kept a few minutes like the category menu.
+  const brands = useApiQuery(
+    ["brands", categorySlug ?? ""],
+    (client) => client.listBrands(categorySlug ?? null),
+    { staleTime: 5 * 60_000 },
+  );
   const results = useInfiniteQuery({
-    queryKey: ["search", "listing", query ?? "", categorySlug ?? "", sort, inStock],
+    queryKey: ["search", "listing", query ?? "", categorySlug ?? "", brand ?? "", sort, inStock],
     initialPageParam: 0,
     queryFn: ({ pageParam }) => {
-      const input: SearchInput = {
+      const input: CatalogSearchInput = {
         query: query || null,
         categorySlug: categorySlug ?? null,
+        brandSlug: brand ?? null,
         sort,
         inStockOnly: inStock,
         limit: PAGE_SIZE,
@@ -103,11 +131,37 @@ export function Listing({
   });
   const products = results.data?.pages.flat() ?? [];
   const total = results.data?.pages[0]?.[0]?.total_count ?? 0;
+  const brandList = brands.data ?? [];
+  const chosenBrand = currentBrand(brandList, brand);
+  const clearBrand = () => onChange({ brand: null });
+
+  const brandFilter = showBrandFilter(brandList, brand) ? (
+    <View style={styles.brand} testID="brand-filter">
+      <SelectSheet
+        label="Marca"
+        value={chosenBrand?.slug ?? (brand && !brands.isPending ? brand : "")}
+        options={brandOptions(brandList)}
+        onChange={(slug) => onChange({ brand: slug || null })}
+        testID="brand"
+      />
+      {brand ? (
+        <View style={styles.brandSummary}>
+          <Text variant="small" aria-live="polite" testID="brand-summary">
+            {brandSummary(total, chosenBrand?.name)}
+          </Text>
+          <Button variant="ghost" onPress={clearBrand} testID="brand-clear">
+            {BRAND_EMPTY.clear}
+          </Button>
+        </View>
+      ) : null}
+    </View>
+  ) : null;
 
   const controls = (
     <View style={styles.controls}>
       {header}
-      {results.isSuccess && products.length > 0 ? (
+      {brandFilter}
+      {results.isSuccess && products.length > 0 && !brand ? (
         <Text variant="small" tint="muted" aria-live="polite">
           {total} {total === 1 ? "producto" : "productos"}
         </Text>
@@ -170,6 +224,17 @@ export function Listing({
             <LoadingState label="Cargando productos…" />
           ) : results.isError ? (
             <ErrorState error={results.error} onRetry={() => void results.refetch()} />
+          ) : brand ? (
+            <EmptyState
+              title={BRAND_EMPTY.title}
+              action={
+                <Button variant="secondary" onPress={clearBrand}>
+                  {BRAND_EMPTY.clear}
+                </Button>
+              }
+            >
+              {BRAND_EMPTY.body}
+            </EmptyState>
           ) : (
             <EmptyState
               title={
@@ -222,5 +287,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   chipOn: { backgroundColor: colors.palette.anil[900], borderColor: colors.palette.anil[900] },
+  brand: { gap: space[2] },
+  brandSummary: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] },
   more: { padding: space[4] },
 });

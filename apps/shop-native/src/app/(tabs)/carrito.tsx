@@ -1,4 +1,4 @@
-import type { CartLine } from "@yuntera/db";
+import type { CartAlternative, CartLine } from "@yuntera/db";
 import { useApiQuery } from "@yuntera/expo-kit/data";
 import { colors, space } from "@yuntera/expo-kit/theme";
 import {
@@ -19,11 +19,22 @@ import {
 } from "@yuntera/expo-kit/ui";
 import { Link, router } from "expo-router";
 import { StyleSheet, View } from "react-native";
+import { UnavailableLine } from "@/components/cart-alternative";
 import { ProductImage } from "@/components/product";
 import { QuantityStepper } from "@/components/quantity";
 import { useCart } from "@/lib/cart-context";
+import { unavailableFooter } from "@/lib/cart-wording";
 
-function Line({ line, quantity }: { line: CartLine; quantity: number }) {
+function Line({
+  line,
+  quantity,
+  alternative,
+}: {
+  line: CartLine;
+  quantity: number;
+  /** Another shop's offer of the same variant, for a line that cannot be bought. */
+  alternative: CartAlternative | undefined;
+}) {
   const cart = useCart();
   const max = Math.max(Math.min(line.available, 10), 1);
   return (
@@ -42,9 +53,7 @@ function Line({ line, quantity }: { line: CartLine; quantity: number }) {
             </Text>
           </>
         ) : (
-          <Alert tone="warning" title={line.title ?? "Producto no disponible"}>
-            Ya no está disponible. Quítelo para continuar con su compra.
-          </Alert>
+          <UnavailableLine line={line} alternative={alternative} quantity={quantity} />
         )}
         <View style={styles.lineActions}>
           {line.buyable ? (
@@ -92,6 +101,14 @@ export default function CartScreen() {
     { enabled: cart.items.length > 0 },
   );
 
+  // Another shop may still sell what the shopper chose: say so, instead of "gone".
+  const unavailable = (lines.data ?? []).filter((line) => !line.buyable).map((l) => l.offer_id);
+  const alternatives = useApiQuery(
+    ["cart-alternatives", unavailable],
+    (api) => api.cartAlternatives(unavailable),
+    { enabled: unavailable.length > 0 },
+  );
+
   if (!cart.ready) return <LoadingState />;
   if (cart.items.length === 0) {
     return (
@@ -109,7 +126,12 @@ export default function CartScreen() {
   if (quote.isError) return <ErrorState error={quote.error} onRetry={() => void quote.refetch()} />;
 
   const quantityOf = new Map(cart.items.map((item) => [item.offerId, item.quantity]));
-  const hasUnavailable = lines.data.some((line) => !line.buyable);
+  const hasUnavailable = unavailable.length > 0;
+  // While they load (or if they fail) the line says only that it is gone; the
+  // swap appears as soon as the answer does.
+  const alternativeOf = new Map(
+    (hasUnavailable ? (alternatives.data ?? []) : []).map((alt) => [alt.offer_id, alt]),
+  );
   const q = quote.data;
 
   return (
@@ -118,10 +140,13 @@ export default function CartScreen() {
       onRefresh={() => {
         void lines.refetch();
         void quote.refetch();
+        if (hasUnavailable) void alternatives.refetch();
       }}
       footer={
         hasUnavailable ? (
-          <Alert tone="warning">Quite los productos no disponibles para continuar.</Alert>
+          <Alert tone="warning" testID="cart-blocked">
+            {unavailableFooter(alternativeOf.size > 0)}
+          </Alert>
         ) : (
           <Button block size="lg" onPress={() => router.push("/pagar")} testID="cart-continue">
             Continuar con la compra
@@ -131,7 +156,12 @@ export default function CartScreen() {
     >
       <Stack gap={3}>
         {lines.data.map((line) => (
-          <Line key={line.offer_id} line={line} quantity={quantityOf.get(line.offer_id) ?? 1} />
+          <Line
+            key={line.offer_id}
+            line={line}
+            quantity={quantityOf.get(line.offer_id) ?? 1}
+            alternative={alternativeOf.get(line.offer_id)}
+          />
         ))}
       </Stack>
 

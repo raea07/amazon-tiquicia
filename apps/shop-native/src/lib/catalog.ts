@@ -1,9 +1,15 @@
 import { useApiQuery } from "@yuntera/expo-kit/data";
 import { useCart } from "./cart-context";
+import { CATEGORY_MENU_CACHE } from "./freshness";
 
-/** Categories change by staff action: kept for an hour. */
+/**
+ * The category menu. Staff hide and rename categories at any time (decision
+ * 40), so it is kept for minutes, not an hour, and read again whenever the
+ * app comes back to the screen (see lib/freshness.ts): no request on every
+ * screen, and a hidden category gone at the latest a few minutes later.
+ */
 export const useCategories = () =>
-  useApiQuery(["categories"], (api) => api.listCategories(), { staleTime: 60 * 60_000 });
+  useApiQuery(["categories"], (api) => api.listCategories(), CATEGORY_MENU_CACHE);
 
 /** The 494 districts change by deploy: kept for a day. */
 export const useDistricts = () =>

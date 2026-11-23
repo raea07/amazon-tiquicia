@@ -45,6 +45,12 @@ export interface ButtonProps extends Omit<PressableProps, "children" | "style"> 
   loading?: boolean;
   loadingLabel?: string;
   icon?: ReactNode;
+  /**
+   * Let the label take as many lines as it needs instead of at most two. For
+   * a label that names something the person must read whole, such as the
+   * shop an offer swaps to, at the narrowest phone width.
+   */
+  wrap?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -55,7 +61,8 @@ function ButtonBody({
   loading,
   loadingLabel,
   icon,
-}: Pick<ButtonProps, "children" | "icon" | "loading" | "loadingLabel"> & {
+  wrap = false,
+}: Pick<ButtonProps, "children" | "icon" | "loading" | "loadingLabel" | "wrap"> & {
   variant: ButtonVariant;
   size: ButtonSize;
 }) {
@@ -74,7 +81,7 @@ function ButtonBody({
         variant="bodyStrong"
         tint={look.text}
         style={size === "lg" ? { fontSize: fontSize.lg } : null}
-        numberOfLines={2}
+        numberOfLines={wrap ? undefined : 2}
         align="center"
       >
         {loading ? (loadingLabel ?? "Un momento…") : children}
@@ -102,6 +109,7 @@ export function Button({
   loading = false,
   loadingLabel,
   icon,
+  wrap,
   disabled,
   style,
   ...props
@@ -126,6 +134,7 @@ export function Button({
         loading={loading}
         loadingLabel={loadingLabel}
         icon={icon}
+        wrap={wrap}
       >
         {children}
       </ButtonBody>
@@ -141,6 +150,7 @@ export function LinkButton({
   size = "md",
   block = false,
   icon,
+  wrap,
   style,
   ...props
 }: Omit<ButtonProps, "loading" | "loadingLabel" | "onPress"> & { href: LinkProps["href"] }) {
@@ -153,7 +163,7 @@ export function LinkButton({
         style={StyleSheet.flatten([...frame(variant, size, block, false), style])}
         {...props}
       >
-        <ButtonBody variant={variant} size={size} icon={icon}>
+        <ButtonBody variant={variant} size={size} icon={icon} wrap={wrap}>
           {children}
         </ButtonBody>
       </Pressable>

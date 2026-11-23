@@ -33,6 +33,7 @@ import {
   SHOP_FACE_ELSEWHERE,
   type StatusText,
 } from "@/lib/team";
+import { ShopDescriptionForm } from "./shop-description";
 
 const longDay = (value: string) =>
   formatDate(value, { day: "numeric", month: "long", year: "numeric" });
@@ -336,11 +337,13 @@ function StatusAlert({
 
 /**
  * The shop's description and logo, as the seller centre's "Tienda" page shows
- * where they stand. A pending description can be withdrawn here; writing one
- * and uploading a logo are done in the seller centre, and the card says so.
+ * where they stand. The description is written, removed and withdrawn here;
+ * a logo is uploaded in the seller centre (the app does not use the phone's
+ * photos yet), and the card says so.
  */
 export function ShopFaceCard() {
   const shop = useShop();
+  const [sent, setSent] = useState<string | null>(null);
   const front = useApiQuery(shopKey(shop.id, "front"), (api) => api.sellerShopFront(shop.id), {
     personal: true,
   });
@@ -370,6 +373,25 @@ export function ShopFaceCard() {
             <WithdrawButton requestId={data.description_request.id} testID="shop-face-withdraw" />
           ) : null}
         </StatusAlert>
+      ) : null}
+      {/* Said while the request it describes is waiting; gone once withdrawn or decided. */}
+      <FormMessage
+        ok={data.description_request?.status === "pending" ? sent : null}
+        testID="shop-description-result"
+      />
+      {data.can_edit ? (
+        <ShopDescriptionForm
+          onSent={setSent}
+          // A new request, or a decision on one, starts the form afresh.
+          key={`${data.description_request?.id ?? "none"}:${data.description_request?.status ?? ""}`}
+          current={
+            data.description_request?.status === "pending" ||
+            data.description_request?.status === "rejected"
+              ? (data.description_request.proposed.description ?? "")
+              : (data.description ?? "")
+          }
+          hasDescription={Boolean(data.description)}
+        />
       ) : null}
       <Text variant="bodyStrong">Logotipo</Text>
       {logo.waiting ? <StatusAlert status={logo.waiting} testID="shop-face-logo-waiting" /> : null}

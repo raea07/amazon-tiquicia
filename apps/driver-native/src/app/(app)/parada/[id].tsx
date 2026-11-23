@@ -35,6 +35,7 @@ import {
   parcels,
   placeOf,
   type ShownStop,
+  skippedStopNote,
   wazeUrl,
   whatsappUrl,
 } from "@/lib/route";
@@ -455,7 +456,8 @@ export default function StopScreen() {
         </View>
       </Stack>
 
-      <Directions stop={stop} />
+      {/* A removed stop is not visited: no directions, no call to the customer. */}
+      {stop.status === "skipped" ? null : <Directions stop={stop} />}
 
       {stop.cod_amount_minor > 0 && open ? (
         <Alert
@@ -468,7 +470,18 @@ export default function StopScreen() {
         </Alert>
       ) : null}
 
-      {!open ? (
+      {stop.status === "skipped" ? (
+        // Staff took it off the route: nothing to do at the door, and what to
+        // do with the parcel depends on whether the route had started.
+        <Stack gap={3}>
+          <Alert tone="warning" title="Central quitó esta parada" testID="stop-closed">
+            {skippedStopNote(route, stop)}
+          </Alert>
+          <LinkButton href="/" variant="secondary" block>
+            Volver a Mi ruta
+          </LinkButton>
+        </Stack>
+      ) : !open ? (
         <Alert tone={stop.status === "delivered" ? "success" : "warning"} testID="stop-closed">
           {`${
             stop.status === "delivered"

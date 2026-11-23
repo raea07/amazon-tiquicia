@@ -5,8 +5,9 @@ import { Text } from "@yuntera/expo-kit/ui";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Listing, parseSort } from "@/components/listing";
+import { Listing, type ListingChange, parseSort } from "@/components/listing";
 import { SearchBox } from "@/components/search-box";
+import { parseBrand } from "@/lib/brand-filter";
 
 /**
  * Search, at /buscar?q=… like the website. The query and the options live in
@@ -14,8 +15,14 @@ import { SearchBox } from "@/components/search-box";
  * While typing, matching product names are offered as shortcuts.
  */
 export default function SearchScreen() {
-  const params = useLocalSearchParams<{ q?: string; orden?: string; disponibles?: string }>();
+  const params = useLocalSearchParams<{
+    q?: string;
+    orden?: string;
+    disponibles?: string;
+    marca?: string;
+  }>();
   const query = oneParam(params.q)?.trim().slice(0, 120) || undefined;
+  const brand = parseBrand(oneParam(params.marca));
   const sort = parseSort(oneParam(params.orden));
   const inStock = oneParam(params.disponibles) === "1";
   const [typing, setTyping] = useState("");
@@ -36,14 +43,16 @@ export default function SearchScreen() {
 
   return (
     <Listing
-      key={`${query ?? ""}|${sort}|${inStock}`}
+      key={`${query ?? ""}|${brand ?? ""}|${sort}|${inStock}`}
       query={query}
+      brand={brand}
       sort={sort}
       inStock={inStock}
-      onChange={(next) =>
+      onChange={(next: ListingChange) =>
         router.setParams({
           orden: (next.sort ?? sort) === "relevance" ? undefined : (next.sort ?? sort),
           disponibles: (next.inStock ?? inStock) ? "1" : undefined,
+          marca: next.brand === null ? undefined : (next.brand ?? brand),
         })
       }
       onClearQuery={() => router.setParams({ q: undefined })}

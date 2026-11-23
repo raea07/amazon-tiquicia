@@ -18,6 +18,7 @@ import { Link, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-
 import { useCallback } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { ProductThumb } from "@/components/parts";
+import { PausedOffers, usePausedOffers } from "@/components/paused-offers";
 import { createdFlash, flashFor } from "@/lib/flash";
 import { FULFILLMENT_LABEL, PRODUCT_STATUS } from "@/lib/labels";
 import { shopKey, useShop } from "@/lib/shops";
@@ -48,6 +49,7 @@ export default function ListingsScreen() {
     (api) => api.sellerListingEdits(shop.id),
     { personal: true },
   );
+  const paused = usePausedOffers();
 
   if (listings.isPending || edits.isPending)
     return <LoadingState label="Cargando sus productos…" />;
@@ -64,6 +66,7 @@ export default function ListingsScreen() {
       onRefresh={() => {
         void listings.refetch();
         void edits.refetch();
+        void paused.refetch();
       }}
     >
       <Stack gap={2}>
@@ -72,6 +75,9 @@ export default function ListingsScreen() {
       </Stack>
       <LinkButton href="/publicar" block testID="new-listing">
         Publicar un producto
+      </LinkButton>
+      <LinkButton href="/ofrecer" variant="secondary" block testID="offer-existing">
+        Vender uno que ya existe
       </LinkButton>
 
       {created === "revision" ? (
@@ -85,6 +91,8 @@ export default function ListingsScreen() {
           Nadie más lo ve todavía.
         </Alert>
       ) : null}
+
+      <PausedOffers />
 
       {listings.data.length === 0 ? (
         <EmptyState

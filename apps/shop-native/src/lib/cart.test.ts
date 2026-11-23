@@ -8,7 +8,40 @@ import {
   parseCart,
   serializeCart,
   setQuantity,
+  swapOffer,
 } from "./cart";
+
+describe("swapping a line for another shop's offer", () => {
+  const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+
+  it("changes the offer and keeps the quantity and the order of the lines", () => {
+    const items = [
+      { offerId: id(1), quantity: 2 },
+      { offerId: id(2), quantity: 1 },
+    ];
+    expect(swapOffer(items, id(1), id(3))).toEqual([
+      { offerId: id(3), quantity: 2 },
+      { offerId: id(2), quantity: 1 },
+    ]);
+  });
+
+  it("joins the two lines when that offer is already in the cart, capped per line", () => {
+    const items = [
+      { offerId: id(1), quantity: 6 },
+      { offerId: id(2), quantity: 7 },
+    ];
+    expect(swapOffer(items, id(1), id(2))).toEqual([
+      { offerId: id(2), quantity: MAX_UNITS_PER_LINE },
+    ]);
+  });
+
+  it("changes nothing for a line that is not there, the same offer, or nonsense", () => {
+    const items = [{ offerId: id(1), quantity: 1 }];
+    expect(swapOffer(items, id(9), id(2))).toBe(items);
+    expect(swapOffer(items, id(1), id(1))).toBe(items);
+    expect(swapOffer(items, id(1), "nope")).toBe(items);
+  });
+});
 
 const offer = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
