@@ -17,8 +17,8 @@ export default function RegisterPage() {
       <div className="mx-auto max-w-3xl">
         <h1 className="text-3xl font-bold">Venda en Yuntera</h1>
         <p className="mt-2 text-ink-muted">
-          Publique sus productos y nosotros nos encargamos del cobro y de la entrega; hoy entregamos en
-          el Gran Área Metropolitana. Sin mensualidad: solo paga una comisión cuando vende.
+          Publique sus productos y nosotros nos encargamos del cobro y de la entrega; hoy entregamos
+          en el Gran Área Metropolitana. Sin mensualidad: solo paga una comisión cuando vende.
         </p>
         <ol className="mt-6 grid gap-3 text-sm sm:grid-cols-3">
           {[

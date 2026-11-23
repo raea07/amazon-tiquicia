@@ -29,9 +29,9 @@ export default function HelpPage() {
           <h2 id="entregas">Entregas y zonas</h2>
           <p>
             Hoy entregamos con nuestros propios repartidores en el Gran Área Metropolitana, de lunes
-            a sábado; al elegir su distrito le decimos si llegamos ahí. Hoy, si pide antes de las 2 p. m.
-            en la zona central, lo recibe al día siguiente. La fecha exacta se muestra en cada producto y
-            antes de confirmar su compra.
+            a sábado; al elegir su distrito le decimos si llegamos ahí. Hoy, si pide antes de las 2
+            p. m. en la zona central, lo recibe al día siguiente. La fecha exacta se muestra en cada
+            producto y antes de confirmar su compra.
           </p>
           <ul>
             <li>
