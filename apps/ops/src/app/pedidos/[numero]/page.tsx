@@ -1,10 +1,14 @@
 import {
+  deliveryFeeComesBack,
+  isOrderBeingStopped,
+  isRescheduledOrder,
   isRescheduledShipment,
+  isStoppedShipment,
   ORDER_STATUS_LABEL,
   type OrderStatus,
   type ShipmentStatus,
 } from "@yuntera/core";
-import { ApiError } from "@yuntera/db";
+import { ApiError, type OrderDetailWithRecall } from "@yuntera/db";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import {
@@ -28,6 +32,7 @@ import { confirmPayment } from "@/app/actions";
 import { staffCancelOrder } from "@/app/integrity-actions";
 import { DeliveryCodePanel, ReturnedParcelForm } from "@/components/integrity-forms";
 import { NotificationLine } from "@/components/notification-list";
+import { RecallShipmentForm } from "@/components/order-recall-form";
 import { PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
 import {
   ATTEMPT_STATUS,
@@ -83,7 +88,17 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
         <header>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold">Pedido {order.order_number}</h1>
-            <OrderStatusBadge status={order.status} />
+            {/* What is happening, not the order's status alone: its parcels may
+                be off a route or stopped while the order still reads "shipped". */}
+            {isOrderBeingStopped(order.status, order.shipments) ? (
+              <Badge tone="warning">
+                Se está cancelando: espera que la bodega reciba el paquete
+              </Badge>
+            ) : isRescheduledOrder(order.status, order.shipments) ? (
+              <Badge tone="warning">Ningún paquete en camino: espera otra ruta</Badge>
+            ) : (
+              <OrderStatusBadge status={order.status} />
+            )}
           </div>
           <p className="mt-1 text-ink-muted">
             Realizado el {formatDateTime(order.placed_at)} · prometido para el{" "}
@@ -139,19 +154,34 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                     <span className="font-semibold">{shipment.tracking_code}</span>
                     <span className="ml-2 text-ink-muted">
                       {shipment.package_count} {shipment.package_count === 1 ? "bulto" : "bultos"}
-                      {isRescheduledShipment(shipment.status, shipment.attempt_count)
-                        ? " · quitado de una ruta, sin intento de entrega"
-                        : shipment.attempt_count > 0
-                          ? ` · ${shipment.attempt_count} ${shipment.attempt_count === 1 ? "intento" : "intentos"}`
-                          : ""}
+                      {isStoppedShipment(shipment.status, shipment.recalled)
+                        ? " · detenido antes de salir, sin intento de entrega"
+                        : isRescheduledShipment(shipment.status, shipment.attempt_count)
+                          ? " · quitado de una ruta, sin intento de entrega"
+                          : shipment.attempt_count > 0
+                            ? ` · ${shipment.attempt_count} ${shipment.attempt_count === 1 ? "intento" : "intentos"}`
+                            : ""}
                       {shipment.driver_first_name ? ` · ${shipment.driver_first_name}` : ""}
                     </span>
                   </span>
-                  {isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+                  {isStoppedShipment(shipment.status, shipment.recalled) ? (
+                    <Badge tone="warning">Detenido: vuelve a los estantes</Badge>
+                  ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
                     <Badge tone="warning">Quitado de una ruta: espera otra</Badge>
                   ) : (
                     <ShipmentStatusBadge status={shipment.status} />
                   )}
+                  {shipment.can_recall && canSee(staff.staff_role, ["ops"]) ? (
+                    <div className="w-full border-t border-border pt-3">
+                      <RecallShipmentForm
+                        shipmentId={shipment.id}
+                        trackingCode={shipment.tracking_code}
+                        orderNumber={order.order_number}
+                        onRoute={shipment.status === "ready_for_dispatch"}
+                        money={recallMoney(order, shipment.id)}
+                      />
+                    </div>
+                  ) : null}
                   {shipment.status === "returning" && canSee(staff.staff_role, ["ops"]) ? (
                     <div className="w-full border-t border-border pt-3">
                       <ReturnedParcelForm
@@ -331,15 +361,41 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
           <section className="rounded-lg border border-border bg-surface p-5 text-sm">
             <h2 className="text-lg font-bold">Cancelar el pedido</h2>
             <p className="mt-1 text-ink-muted">
-              Ya no se puede cancelar: hay un paquete empacado o en camino. Si el cliente no lo
-              quiere, que lo rechace en la entrega; al volver a bodega se recibe como devuelto y se
-              le reembolsa.
+              {order.shipments.some((shipment) => shipment.can_recall)
+                ? "Ya hay un paquete empacado. Para cancelar, deténgalo en «Paquetes»: vuelve a los estantes y, cuando la bodega lo reciba, se reembolsa y el pedido queda cancelado."
+                : "Ya no se puede cancelar: hay un paquete en camino. Si el cliente no lo quiere, que lo rechace en la entrega; al volver a bodega se recibe como devuelto y se le reembolsa."}
             </p>
           </section>
         ) : null}
       </aside>
     </div>
   );
+}
+
+/**
+ * What stopping this parcel does to the shopper's money, for the
+ * confirmation: its goods come back when the warehouse receives it, and the
+ * delivery fee too when it is the last parcel still to deliver and nobody
+ * went to the door (the database's rule, deliveryFeeComesBack).
+ */
+function recallMoney(order: OrderDetailWithRecall, shipmentId: string): string {
+  const paid = ["captured", "partially_refunded"].includes(order.payment?.status ?? "");
+  if (!paid) return "No se cobró nada todavía, así que no hay dinero que devolver.";
+  const shipment = order.shipments.find((s) => s.id === shipmentId);
+  const goods = order.items
+    .filter((item) => shipment?.item_ids?.includes(item.id))
+    .reduce((sum, item) => sum + item.line_total_minor, 0);
+  const last = order.shipments.every(
+    (s) =>
+      s.id === shipmentId ||
+      s.status === "cancelled" ||
+      s.status === "returned" ||
+      isStoppedShipment(s.status, s.recalled),
+  );
+  const fee = last && deliveryFeeComesBack(order.shipments) ? order.shipping_minor : 0;
+  return `Cuando la bodega lo reciba, se le devuelven al cliente ${formatPrice(goods + fee)}${
+    fee > 0 ? ", productos y envío," : " por los productos"
+  } por el mismo medio con que pagó${last ? ", y el pedido queda cancelado" : ""}.`;
 }
 
 async function OrderMessages({ orderNumber }: { orderNumber: string }) {

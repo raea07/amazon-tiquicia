@@ -255,11 +255,19 @@ async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParam
       {failed.length > 0 ? (
         <section aria-labelledby="fallidas">
           <h2 id="fallidas" className="text-xl font-bold">
-            Entregas fallidas
+            {failed.every((shipment) =>
+              isRescheduledShipment(shipment.status, shipment.attempt_count),
+            )
+              ? "Quitados de una ruta"
+              : failed.some((shipment) =>
+                    isRescheduledShipment(shipment.status, shipment.attempt_count),
+                  )
+                ? "Entregas fallidas o quitadas de una ruta"
+                : "Entregas fallidas"}
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-ink-muted">
-            Siguen en la lista de arriba para un nuevo intento, también los que se quitaron de una
-            ruta. Si ya no se va a entregar, devuélvalo a la bodega.
+            Siguen en la lista de arriba para salir otra vez. Si ya no se va a entregar, devuélvalo
+            a la bodega: allí se recibe y se le reembolsa al cliente.
           </p>
           <ul className="mt-3 flex flex-col gap-3">
             {failed.map((shipment) => (

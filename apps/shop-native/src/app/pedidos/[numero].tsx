@@ -1,10 +1,17 @@
 import {
+  deliveryFeeComesBack,
+  isOrderBeingStopped,
   isRescheduledOrder,
   isRescheduledShipment,
+  isStoppedShipment,
   ORDER_STATUS_LABEL,
   toCostaRicaTime,
 } from "@yuntera/core";
-import { ApiError, type OrderDetail, type OrderPayment } from "@yuntera/db";
+import {
+  ApiError,
+  type OrderDetailWithRecall as OrderDetail,
+  type OrderPayment,
+} from "@yuntera/db";
 import { useSession } from "@yuntera/expo-kit/auth";
 import { useApiQuery } from "@yuntera/expo-kit/data";
 import { oneParam, signInPath } from "@yuntera/expo-kit/paths";
@@ -177,6 +184,13 @@ export default function OrderScreen() {
   const withdrawalOpen = delivered && today <= o.withdrawal_deadline;
   const warrantyOpen = delivered && o.warranty_until !== null && today <= o.warranty_until;
   const awaitingPayment = o.status === "pending_payment";
+  // Staff stopped every parcel still to deliver before it left: the order is
+  // being cancelled, and its money goes back when the warehouse receives them.
+  const stopping = isOrderBeingStopped(o.status, o.shipments);
+  const paid = ["captured", "partially_refunded", "refunded"].includes(o.payment?.status ?? "");
+  const refunds = payment.data?.refunds ?? [];
+  const refundedSoFar = refunds.reduce((sum, refund) => sum + refund.amount_minor, 0);
+  const feeBack = deliveryFeeComesBack(o.shipments);
 
   return (
     <Screen refreshing={order.isRefetching} onRefresh={() => void order.refetch()}>
@@ -194,7 +208,9 @@ export default function OrderScreen() {
           Pedido {o.order_number}
         </Text>
         {/* Not "En camino" when no parcel is on its way to the shopper any more. */}
-        {isRescheduledOrder(o.status, o.shipments) ? (
+        {stopping ? (
+          <Badge tone="warning">Se está cancelando</Badge>
+        ) : isRescheduledOrder(o.status, o.shipments) ? (
           <Badge tone="info">Entrega reprogramada</Badge>
         ) : (
           <OrderStatusBadge status={o.status} />
@@ -212,9 +228,29 @@ export default function OrderScreen() {
       {payment.data?.money_in_review && !(awaitingPayment && payment.data.stage === "review") ? (
         <MoneyInReview payment={payment.data} />
       ) : null}
+      {stopping ? (
+        <Alert tone="warning" title="Estamos cancelando su pedido" testID="order-stopping">
+          {`Detuvimos su pedido antes de que saliera de nuestra bodega. ${
+            paid
+              ? `Cuando la bodega confirme que lo recibió, le devolvemos ${formatPrice(
+                  feeBack ? o.total_minor : o.items_total_minor,
+                )}${feeBack && o.shipping_minor > 0 ? ", el envío incluido," : ""} por el mismo medio con que pagó.`
+              : "No se le cobró nada, así que no hay nada que devolver."
+          }`}
+        </Alert>
+      ) : null}
       {payment.data ? <RefundList payment={payment.data} /> : null}
+      {refunds.length > 1 ? (
+        <Text variant="small" testID="refund-total">
+          {`En total le devolvemos ${formatPrice(refundedSoFar)}${
+            refundedSoFar === o.total_minor && o.shipping_minor > 0
+              ? ": todo lo que pagó, el envío incluido."
+              : "."
+          }`}
+        </Text>
+      ) : null}
 
-      {o.delivery_pin ? (
+      {o.delivery_pin && !stopping ? (
         <View style={styles.pin} testID="delivery-code">
           <Text variant="heading">Su código de entrega</Text>
           <Text
@@ -237,7 +273,7 @@ export default function OrderScreen() {
           <Text variant="bodyStrong" tint="success">
             Entregado el {formatDateTime(o.delivered_at)}
           </Text>
-        ) : o.status === "cancelled" || o.status === "refunded" ? null : (
+        ) : o.status === "cancelled" || o.status === "refunded" || stopping ? null : (
           <Text variant="bodyStrong" tint="success">
             {o.promise_earliest === o.promise_latest
               ? `Llega el ${formatDate(o.promise_latest)}`
@@ -255,7 +291,9 @@ export default function OrderScreen() {
                   ? `Paquete ${index + 1} de ${o.shipments.length}`
                   : "Paquete"}
               </Text>
-              {isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+              {isStoppedShipment(shipment.status, shipment.recalled) ? (
+                <Badge tone="warning">Detenido en la bodega</Badge>
+              ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
                 <Badge tone="info">Entrega reprogramada</Badge>
               ) : (
                 <ShipmentStatusBadge status={shipment.status} />
@@ -270,7 +308,12 @@ export default function OrderScreen() {
                 entrega.
               </Text>
             ) : null}
-            {isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
+            {isStoppedShipment(shipment.status, shipment.recalled) ? (
+              <Text variant="small">
+                Este paquete no saldrá de nuestra bodega. Le devolvemos lo que pagó por él cuando la
+                bodega confirme que lo recibió.
+              </Text>
+            ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
               <Text variant="small">
                 Reprogramamos la entrega de este paquete. Le avisaremos cuando vuelva a salir hacia
                 usted; si necesita cambiar algo, escríbanos.

@@ -158,8 +158,11 @@ export async function receiveReturnedParcel(
         state.data === "resellable"
           ? "Las unidades volvieron al inventario."
           : "Quedó registrado como dañado.";
-      return result.refund_minor > 0
-        ? `${stock} Se registró el reembolso de ${format(money(result.refund_minor))} al cliente.`
+      const refunded = result.refund_minor + result.delivery_fee_refund_minor;
+      return refunded > 0
+        ? `${stock} Se registró el reembolso de ${format(money(refunded))} al cliente${
+            result.delivery_fee_refund_minor > 0 ? ", el envío incluido: nadie fue a la puerta" : ""
+          }.`
         : stock;
     },
     values,

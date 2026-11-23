@@ -1,5 +1,7 @@
+import { isOrderBeingStopped, isRescheduledOrder } from "@yuntera/core";
 import { ProductImage } from "@yuntera/next-kit/product-image";
 import {
+  Badge,
   buttonClass,
   EmptyState,
   formatDate,
@@ -49,45 +51,58 @@ async function Orders() {
 
   return (
     <ul className="flex flex-col gap-3">
-      {orders.map((order) => (
-        <li key={order.order_number}>
-          <Link
-            href={`/pedidos/${order.order_number}` as Route}
-            className="flex gap-4 rounded-lg border border-border bg-surface p-4 hover:border-brand hover:shadow-sm"
-          >
-            <div className="size-16 shrink-0 overflow-hidden rounded-md bg-arena-100">
-              {order.first_image_path ? (
-                <ProductImage
-                  path={order.first_image_path}
-                  alt=""
-                  sizes="64px"
-                  className="size-full object-contain"
-                />
-              ) : null}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold">{order.order_number}</span>
-                <OrderStatusBadge status={order.status} />
+      {orders.map((order) => {
+        // Not "En camino" when no parcel is on its way to the shopper.
+        const stopping = isOrderBeingStopped(order.status, order.shipments);
+        const rescheduled = isRescheduledOrder(order.status, order.shipments);
+        return (
+          <li key={order.order_number}>
+            <Link
+              href={`/pedidos/${order.order_number}` as Route}
+              className="flex gap-4 rounded-lg border border-border bg-surface p-4 hover:border-brand hover:shadow-sm"
+            >
+              <div className="size-16 shrink-0 overflow-hidden rounded-md bg-arena-100">
+                {order.first_image_path ? (
+                  <ProductImage
+                    path={order.first_image_path}
+                    alt=""
+                    sizes="64px"
+                    className="size-full object-contain"
+                  />
+                ) : null}
               </div>
-              <p className="mt-1 truncate text-sm text-ink-muted">
-                {order.first_title}
-                {order.item_count > 1 ? ` y ${order.item_count - 1} más` : ""}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">{order.order_number}</span>
+                  {stopping ? (
+                    <Badge tone="warning">Se está cancelando</Badge>
+                  ) : rescheduled ? (
+                    <Badge tone="info">Entrega reprogramada</Badge>
+                  ) : (
+                    <OrderStatusBadge status={order.status} />
+                  )}
+                </div>
+                <p className="mt-1 truncate text-sm text-ink-muted">
+                  {order.first_title}
+                  {order.item_count > 1 ? ` y ${order.item_count - 1} más` : ""}
+                </p>
+                <p className="mt-1 text-sm text-ink-muted">
+                  {stopping
+                    ? "Le devolvemos el dinero cuando la bodega reciba el paquete."
+                    : order.delivered_at
+                      ? `Entregado el ${formatDate(order.delivered_at, { day: "numeric", month: "long" })}`
+                      : order.status === "cancelled" || order.status === "refunded"
+                        ? `Pedido el ${formatDate(order.placed_at, { day: "numeric", month: "long" })}`
+                        : `Llega el ${formatDate(order.promise_latest)}`}
+                </p>
+              </div>
+              <p className="shrink-0 font-display text-lg font-bold tabular-nums">
+                {formatPrice(order.total_minor)}
               </p>
-              <p className="mt-1 text-sm text-ink-muted">
-                {order.delivered_at
-                  ? `Entregado el ${formatDate(order.delivered_at, { day: "numeric", month: "long" })}`
-                  : order.status === "cancelled" || order.status === "refunded"
-                    ? `Pedido el ${formatDate(order.placed_at, { day: "numeric", month: "long" })}`
-                    : `Llega el ${formatDate(order.promise_latest)}`}
-              </p>
-            </div>
-            <p className="shrink-0 font-display text-lg font-bold tabular-nums">
-              {formatPrice(order.total_minor)}
-            </p>
-          </Link>
-        </li>
-      ))}
+            </Link>
+          </li>
+        );
+      })}
     </ul>
   );
 }

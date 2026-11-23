@@ -1,4 +1,4 @@
-import { ApiError, type ReturnedShipmentResult } from "@yuntera/db";
+import { ApiError, type ReturnedShipmentWithFee } from "@yuntera/db";
 import { messageOf } from "@yuntera/expo-kit/api";
 import { useApiMutation, useApiQuery } from "@yuntera/expo-kit/data";
 import { oneParam } from "@yuntera/expo-kit/paths";
@@ -20,22 +20,18 @@ import {
 } from "@yuntera/expo-kit/ui";
 import { Stack as Nav, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { plural } from "@/lib/floor";
+import { refundedText, returnedParcelBadge, returnedParcelDetails } from "@/lib/returned-parcel";
 import { keys, useWarehouse } from "@/lib/warehouse";
 
 type Condition = "resellable" | "damaged";
 
 /** What the worker is told once the parcel is checked in, as on the web's board. */
-function checkedInText(condition: Condition, result: ReturnedShipmentResult): string {
+function checkedInText(condition: Condition, result: ReturnedShipmentWithFee): string {
   const where =
     condition === "resellable"
       ? "Guarde las unidades en la zona de devoluciones: ya cuentan de nuevo en el inventario."
       : "Quedó registrado como dañado y no vuelve a la venta. Apártelo para revisión.";
-  const refund =
-    result.refund_minor > 0
-      ? ` Al cliente se le devuelven ${formatPrice(result.refund_minor)}.`
-      : "";
-  return `${where}${refund}`;
+  return `${where}${refundedText(result.refund_minor, result.delivery_fee_refund_minor, formatPrice)}`;
 }
 
 /**
@@ -115,17 +111,9 @@ export default function ReturnedParcelScreen() {
         <Text variant="title" testID="returned-title">
           {parcel.tracking_code}
         </Text>
-        <Badge tone="warning">De vuelta</Badge>
-        <Text tint="muted">
-          {`${plural(parcel.units, "unidad", "unidades")} en ${plural(
-            parcel.lines,
-            "línea",
-            "líneas",
-          )} · pedido ${parcel.order_number} · ${plural(
-            parcel.attempt_count,
-            "intento de entrega",
-            "intentos de entrega",
-          )}`}
+        <Badge tone="warning">{returnedParcelBadge(parcel)}</Badge>
+        <Text tint="muted" testID="returned-origin">
+          {returnedParcelDetails(parcel)}
         </Text>
       </Stack>
       <Stack gap={2}>
