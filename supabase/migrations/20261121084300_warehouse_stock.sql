@@ -41,7 +41,8 @@
 --     claimed them; after a move that left a shelf holding only its promised
 --     units, a new task could be sent there and come up short. It now names
 --     the switched-on location with the most free units first (then the most
---     units, then the code, as before). It also takes the candidate shelves
+--     units, then the code, as before), storage and picking shelves before
+--     any other kind of location. It also takes the candidate shelves
 --     FOR KEY SHARE before choosing, which waits for a move or a count that
 --     holds one (FOR UPDATE) and is not blocked by picks, receipts or
 --     cancellations (their updates take FOR NO KEY UPDATE): a move and a
@@ -63,6 +64,10 @@
 --         "insufficient stock");
 --       - units counted INTO a location that is switched off
 --         (`location_inactive`, before the trigger's "location not found");
+--       - units counted INTO the damaged, packing or dispatch areas
+--         (`count_not_shelf`): they would count as sellable and picking
+--         could be sent there. Only storage, picking, returns and receiving
+--         locations take units in; units may be counted out anywhere;
 --       - a product the shop does not sell (`offer_not_found`): before, any
 --         product could be counted into existence for any shop;
 --       - a location of a seller's own site (only Yuntera's warehouses have
@@ -297,7 +302,10 @@ $$;
 -- shelves it may choose from are taken FOR KEY SHARE first (so a move or a
 -- count holding one is waited for, and seen), and the location named is the
 -- switched-on one with the most free units (on the shelf minus what open
--- tasks already wait for), then the most units, then the code.
+-- tasks already wait for), then the most units, then the code. Storage and
+-- picking shelves come first, then the returns and receiving areas; the
+-- damaged, packing and dispatch areas only when nothing else holds the
+-- product (their units still count as sellable, see section 4).
 create or replace function private.release_order_to_fulfillment(p_order_id uuid) returns void
 language plpgsql security definer
 set search_path = ''
@@ -324,7 +332,10 @@ begin
           join public.warehouse_locations wl on wl.id = b.location_id
           where wl.warehouse_id = s.origin_warehouse_id
             and b.sku_id = i.sku_id and b.seller_id = i.seller_id and b.quantity > 0
-          order by wl.active desc,
+          order by case when wl.kind in ('storage', 'pick') then 0
+                        when wl.kind in ('returns', 'receiving') then 1
+                        else 2 end,
+                   wl.active desc,
                    b.quantity - private.location_promised(b.location_id, b.sku_id, b.seller_id) desc,
                    b.quantity desc, wl.code
           limit 1),
@@ -498,6 +509,11 @@ begin
   select * into v_location from public.warehouse_locations where id = p_location_id for share;
   if p_delta > 0 and not v_location.active then
     perform private.fail('location_inactive');
+  end if;
+  -- Units counted in are sellable at once and picking may be sent to them:
+  -- never in the damaged, packing or dispatch areas.
+  if p_delta > 0 and v_location.kind not in ('storage', 'pick', 'returns', 'receiving') then
+    perform private.fail('count_not_shelf');
   end if;
   select l.on_hand, l.reserved into v_on_hand, v_reserved from public.stock_levels l
   where l.warehouse_id = v_location.warehouse_id and l.sku_id = p_sku_id and l.seller_id = p_seller_id

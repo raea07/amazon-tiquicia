@@ -225,6 +225,11 @@ export const warehouseStockErrors = {
       "La cantidad en el estante cambió mientras usted contaba (alguien alistó, movió o corrigió). Vuelva a contar con la cantidad nueva.",
     en: "The quantity on the shelf changed while you were counting (someone picked, moved or corrected it). Count again with the new quantity.",
   },
+  count_not_shelf: {
+    "es-CR":
+      "En esta zona no se suman unidades: lo que se guarda aquí no se vende. Si están en buen estado, llévelas a un estante y cuéntelas allí; si no, avise a operaciones.",
+    en: "Units are not added in this area: what is kept here is not sold. If they are in good condition, take them to a shelf and count them there; if not, tell operations.",
+  },
   adjust_below_zero: {
     "es-CR": "No se pueden quitar más unidades de las que hay en la ubicación.",
     en: "You cannot take away more units than the location holds.",

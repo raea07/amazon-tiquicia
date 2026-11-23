@@ -195,6 +195,20 @@ select pg_temp.refused(format('select public.wms_adjust_stock(%L, %L, %L, 0, %L)
 -- A product this shop does not sell is never counted into existence.
 select pg_temp.refused(format('select public.wms_adjust_stock(%L, %L, %L, 10, %L)', current_setting('t.l1'),
   current_setting('t.sku'), current_setting('t.tecnocasa'), 'Conteo de otra tienda'), 'offer_not_found');
+-- Units counted in are sellable at once: never into the damaged, packing or
+-- dispatch areas (picking would be sent there).
+do $$
+declare
+  v_code text;
+begin
+  foreach v_code in array array['CUA-01', 'EMP-01', 'DES-R1'] loop
+    perform pg_temp.refused(format('select public.wms_adjust_stock(%L, %L, %L, 5, %L)',
+      (select id from public.warehouse_locations
+       where warehouse_id = current_setting('t.platform')::uuid and code = v_code),
+      current_setting('t.sku'), current_setting('t.seller'), 'Unidades contadas en la zona'),
+      'count_not_shelf');
+  end loop;
+end $$;
 -- The screen's number must still be the shelf's.
 do $$ begin
   assert pg_temp.refused_detail(format('select public.wms_adjust_stock(%L, %L, %L, 10, %L, 3)', current_setting('t.l1'),
@@ -400,6 +414,26 @@ do $$ begin
   assert (select location_id from public.pick_tasks where shipment_id = current_setting('t.ship_b')::uuid)
          = current_setting('t.l2')::uuid, 'picking: a shelf whose units are promised is passed over';
 end $$;
+
+-- Units in the damaged area still count as sellable (how they got there
+-- before this migration), but picking is never sent there while a shelf
+-- holds the product, even when the damaged area holds the most.
+savepoint damaged_area;
+select private.apply_stock_change(current_setting('t.platform')::uuid, current_setting('t.sku')::uuid,
+  current_setting('t.seller')::uuid, current_setting('t.f')::integer + 100, 'adjust',
+  (select id from public.warehouse_locations
+   where warehouse_id = current_setting('t.platform')::uuid and code = 'CUA-01'),
+  'cycle_count', null, 'Unidades de antes en la zona de dañados');
+select pg_temp.remember('order_d', pg_temp.place('stock168@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'stock-168-d')::text);
+select pg_temp.pay(current_setting('t.order_d')::uuid);
+do $$ begin
+  assert (select wl.kind from public.pick_tasks t
+          join public.warehouse_locations wl on wl.id = t.location_id
+          where t.shipment_id = pg_temp.shipment(current_setting('t.order_d')::uuid, 'platform'))
+         in ('storage', 'pick'), 'picking: never sent to the damaged area while a shelf holds the product';
+end $$;
+rollback to savepoint damaged_area;
 
 select pg_temp.login('bodega@yuntera.example');
 do $$
