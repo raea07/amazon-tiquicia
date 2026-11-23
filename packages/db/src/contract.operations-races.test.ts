@@ -380,6 +380,82 @@ describe.skipIf(!db.enabled)(
       }
     });
 
+    it("(iii) never deadlocks a stock write that holds the location against a staff change", async () => {
+      // A stock write (private.apply_stock_change, used by receipts, counts,
+      // picks and cancellations) first writes bin_stock, which takes the
+      // location (bin_stock_location_open, FOR SHARE, and the foreign key),
+      // and only then the ledger row, whose foreign key takes the warehouse
+      // (KEY SHARE). A staff change on the location takes the warehouse
+      // first, then the location. Here the stock write is held between its
+      // two writes, the staff call starts and waits on the location, then the
+      // stock write goes on: it must not wait for the staff call's lock on
+      // the warehouse (that would be a deadlock, 40P01, for one of them).
+      const staff = db.as(STAFF, "aal2");
+      const { rows } = await db.query<{ warehouse_id: string; sku_id: string; seller_id: string }>(
+        `select l.warehouse_id, b.sku_id, b.seller_id
+           from public.bin_stock b
+           join public.warehouse_locations l on l.id = b.location_id
+           join public.warehouses w on w.id = l.warehouse_id and w.kind = 'platform'
+          where b.quantity > 0 and l.kind = 'pick'
+          order by l.code, b.sku_id limit 1`,
+      );
+      const stock = rows[0];
+      expect(stock, "the seed has no stock in the platform warehouse").toBeDefined();
+      if (!stock) return;
+      const location = (await staff.opsCreateLocation(stock.warehouse_id, LOCATION, "storage")).id;
+
+      async function heldStockWrite(staffSql: string, staffArgs: unknown[]) {
+        const writer = await pool.connect();
+        const other = await session(STAFF);
+        try {
+          await writer.query("begin");
+          await writer.query(
+            "insert into public.bin_stock (location_id, sku_id, seller_id, quantity) values ($1, $2, $3, 1)",
+            [location, stock?.sku_id, stock?.seller_id],
+          );
+          const later = outcome(other.client.query(staffSql, staffArgs));
+          const waited = await waitsForLock(other.pid);
+          const ledger = await outcome(
+            writer.query(
+              `insert into public.stock_movements
+                 (warehouse_id, sku_id, seller_id, to_location_id, on_hand_delta, quantity, reason, note)
+               values ($1, $2, $3, $4, 1, 1, 'adjust', $5)`,
+              [stock?.warehouse_id, stock?.sku_id, stock?.seller_id, location, NOTE],
+            ),
+          );
+          // The stock write is undone: nothing of it is left behind.
+          await writer.query("rollback");
+          const staffOutcome = await later;
+          await other.client.query(staffOutcome ? "rollback" : "commit");
+          return { ledger, staff: staffOutcome, waited };
+        } finally {
+          await writer.query("rollback").catch(() => undefined);
+          await other.client.query("rollback").catch(() => undefined);
+          writer.release();
+          other.client.release();
+        }
+      }
+
+      try {
+        // Switched off while the stock write is held: it waits, then (the
+        // stock write undone) finds the location empty and is accepted.
+        let result = await heldStockWrite("select public.ops_set_location_active($1, false)", [
+          location,
+        ]);
+        expect(result).toEqual({ ledger: "", staff: "", waited: true });
+        await staff.opsSetLocationActive(location, true);
+
+        // Renamed while the stock write is held: the same.
+        result = await heldStockWrite("select public.ops_rename_location($1, 'Y-97-96-Z')", [
+          location,
+        ]);
+        expect(result).toEqual({ ledger: "", staff: "", waited: true });
+      } finally {
+        await removeTestLocation();
+        await db.query("delete from public.warehouse_locations where code = 'Y-97-96-Z'");
+      }
+    });
+
     /** The test adjustment taken back out, through the warehouse's own function. */
     async function removeStock(location: string, stock: { sku_id: string; seller_id: string }) {
       await db.as(WAREHOUSE, "aal2").wmsAdjustStock({

@@ -290,6 +290,28 @@ select pg_temp.refused($q$select public.ops_create_zone('otra', 'Otra', 12, '{1}
 -- characters do not reach the screen.
 select pg_temp.refused(format($q$select public.ops_create_zone('otra', %L, 12, '{1}', '{1}', 1, 1, 0)$q$,
   '  ' || chr(8203) || chr(8203) || '  '), 'zone_name_invalid');
+-- Hangul fillers count as letters but draw nothing; the Arabic letter mark,
+-- the grapheme joiner and tag characters are invisible too.
+select pg_temp.refused(format($q$select public.ops_create_zone('otra', %L, 12, '{1}', '{1}', 1, 1, 0)$q$,
+  chr(12644) || chr(12644) || chr(12644)), 'zone_name_invalid');
+select pg_temp.refused(format($q$select public.ops_create_zone('otra', %L, 12, '{1}', '{1}', 1, 1, 0)$q$,
+  chr(65440) || chr(4447) || chr(4448) || chr(1564) || chr(847) || chr(917601) || chr(917602)), 'zone_name_invalid');
+-- No-break and other Unicode spaces count as spaces: trimmed and collapsed
+-- (the helper itself, which only the owner may run).
+reset role;
+do $$
+begin
+  if private.clean_label(chr(160) || chr(160) || 'Zona' || chr(8195) || chr(12288) || 'Sur' || chr(160))
+     <> 'Zona Sur' then
+    raise exception 'clean_label kept Unicode spaces: %', private.clean_label(
+      chr(160) || chr(160) || 'Zona' || chr(8195) || chr(12288) || 'Sur' || chr(160));
+  end if;
+  if private.clean_label('Zona' || chr(12644) || 'Sur') <> 'ZonaSur' then
+    raise exception 'clean_label kept a Hangul filler';
+  end if;
+end;
+$$;
+select pg_temp.login('comprador3@yuntera.example');
 select pg_temp.refused($q$select public.ops_create_zone('otra', '-- 12 --', 12, '{1}', '{1}', 1, 1, 0)$q$, 'zone_name_invalid');
 do $$
 declare

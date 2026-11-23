@@ -238,15 +238,20 @@ as $$
 $$;
 
 -- A short name or reason as staff typed it, for showing: control characters
--- become spaces, invisible ones (zero-width, direction marks, soft hyphens)
--- go, and spaces are collapsed as in private.clean_text.
+-- and the other Unicode spaces (no-break, en, em, ideographic …) become
+-- spaces; invisible ones go: zero-width characters, direction marks (also
+-- the Arabic letter mark), soft hyphens, the combining grapheme joiner, the
+-- Mongolian vowel separator, Khmer inherent vowels, tag characters and the
+-- Hangul fillers (which count as letters but draw nothing). Then spaces are
+-- collapsed as in private.clean_text.
 create or replace function private.clean_label(p_text text) returns text
 language sql immutable
 set search_path = ''
 as $$
   select private.clean_text(regexp_replace(
-    regexp_replace(coalesce(p_text, ''), '[\x01-\x1F\x7F-\x9F]', ' ', 'g'),
-    '[\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]', '', 'g'));
+    regexp_replace(coalesce(p_text, ''),
+      '[\x01-\x1F\x7F-\x9F\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]', ' ', 'g'),
+    '[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFEFF\uFFA0\U000E0000-\U000E007F]', '', 'g'));
 $$;
 
 -- At least two letters: a name someone can read.
@@ -1591,7 +1596,7 @@ begin
   v_code := private.location_code(p_code);
   perform 1 from public.warehouses w
   where w.id = p_warehouse_id and w.kind = 'platform' and w.active
-  for update;
+  for no key update;
   if not found then
     perform private.fail('warehouse_not_found');
   end if;
@@ -1630,7 +1635,8 @@ begin
   if not found then
     perform private.fail('location_not_found');
   end if;
-  perform 1 from public.warehouses w where w.id = wl.warehouse_id for update;
+  -- NO KEY UPDATE, not UPDATE, on the warehouse (see ops_set_location_active).
+  perform 1 from public.warehouses w where w.id = wl.warehouse_id for no key update;
   select * into wl from public.warehouse_locations where id = p_location_id for update;
   if wl.kind not in ('storage', 'pick') then
     perform private.fail('location_not_editable');
@@ -1676,8 +1682,13 @@ begin
     perform private.fail('location_not_found');
   end if;
   -- The warehouse's row first: two staff switching off its last two
-  -- locations are taken one after the other.
-  perform 1 from public.warehouses w where w.id = wl.warehouse_id for update;
+  -- locations are taken one after the other. NO KEY UPDATE, not UPDATE: it
+  -- still excludes another staff change, but not the KEY SHARE that every
+  -- stock write takes on the warehouse through its foreign keys. A stock
+  -- write holds the location (bin_stock_location_open) before it reaches the
+  -- ledger row that references the warehouse; with UPDATE here the two
+  -- would wait for each other and one would end in a deadlock error.
+  perform 1 from public.warehouses w where w.id = wl.warehouse_id for no key update;
   select * into wl from public.warehouse_locations where id = p_location_id for update;
   if wl.kind not in ('storage', 'pick') then
     perform private.fail('location_not_editable');
