@@ -1365,9 +1365,10 @@ production.
 
 ### Migrations 084000 and 084100
 
-Two migrations merged on 23 November 2026, **not applied to the hosted preview
-yet** (it has the 37 up to `083900`). Apply them in filename order, in one
-sitting, then redeploy the four web apps together:
+Two migrations merged on 23 November 2026 and **applied to the hosted preview
+the same day** (it now has 39; what was done is in the next section). Apply
+them in filename order, in one sitting, then redeploy the four web apps
+together:
 
 1. `20261121084000_console_operations.sql`: the console's Operación section
    (zones, districts, holidays, zone closures, warehouse locations, stuck
@@ -1424,10 +1425,276 @@ Do this in order.
    takes "Prueba Uno", merged into it, with it); the shop's district list
    after a zone change (the refresh scope).
 
-**Not verified anywhere but locally:** real PostgREST passing the `int[]`,
-`text[]` and `jsonb` arguments of the new functions (only the local API
-stand-in was used), and the parallel-session behaviour on the hosted database
-(the race tests ran locally).
+**Not verified anywhere but locally:** the parallel-session behaviour on the
+hosted database (the race tests ran locally only). Real PostgREST passing the
+new functions' `smallint[]`, `text[]` and `jsonb` arguments was verified on the
+preview on 23 November (a zone's weekdays, a district move, a setting).
+
+### What was done on the preview, 23 November 2026
+
+Both migrations, `084000` and `084100`, in one sitting (05:03 to 06:07 UTC),
+in the order above. Vercel CLI 65.12.1, Playwright in headless Chromium, the
+Management API through the network proxy; worktree at `22248bd`. Costa Rica
+was still on 22 November until 06:00 UTC, so everything that compares delivery
+dates was recorded and compared before then.
+
+1. **Recorded first** (05:04). `status`: 37 applied, these two pending,
+   nothing else. Row counts of all 140 tables in `public`, `private`, `auth`,
+   `storage`, `vault`, `net`, `cron` and `supabase_migrations` (11 362 rows);
+   every row of `app_settings` (31 keys; `payments_mode` `"sandbox"`,
+   `require_staff_mfa` false, `invoicing_issuer.ready` false); the three zones
+   with every column (`gam-core` and `gam-extended` on, `national` off);
+   districts per zone 90 / 97 / 307, no district with its own zone; the 14
+   holidays (1 December 2026 to 25 December 2027); 0 `zone_closures` rows; the
+   19 locations of SJO1 with their stock (12 picking locations hold all but
+   one unit; `DEV-01` holds 1); one route not completed or cancelled, the
+   seed's R-1003 (21 November, `in_progress`, driver `repartidor`, stops
+   `arrived` and `pending`); 14 brands (two without products: "Prueba Dos"
+   and "Prueba Uno", merged into it); products 26 active, 1 archived, 1
+   pending review; 0 table privileges of `anon` or `authenticated` in `public`
+   and `private` (by `information_schema` and by `has_table_privilege`); the 7
+   scheduled jobs, every run succeeded; 16 accounts (11 demo, 5 deleted and
+   anonymised), 0 second factors; `vault.secrets` holds
+   `auth_limit_caller_digest` only; no Edge Function (`GET …/functions`
+   answers `[]`); 35 functions in `public` and `private` a visitor may execute
+   (the 17 API functions and the 18 helpers the read policies use).
+   `delivery_estimate` for 10101, 30101, 40101, 60101 and 70101 (handling 0)
+   and for three of them with handling 2, and `get_product` for the
+   headphones, the T-shirt and the coffee in 10101, 30101 and 60101.
+2. **Read-only checks.** No `zone_closures` row (so none gets `period_id`
+   null). One open route dated in the past: R-1003. No product that is not
+   active opens for a visitor today: `get_product` answers nothing for the
+   archived coffee maker (TecnoCasa) and the lamp waiting for review (Bazar
+   Nuevo). The old `private.product_page_open` did answer true for the
+   archived one as a visitor; only the caller's own status filter kept it
+   shut, which is what `084100` moves into the helper. Brands without
+   products: "Prueba Dos" and "Prueba Uno" (merged into "Prueba Dos").
+3. **`push`** applied both at the first try in 1.3 s (05:06:05 to 05:06:07);
+   `status` lists 39. No platform difference; no file was edited.
+4. **What they left** (05:06). `app_settings` identical; every zone has its
+   old values and revision 1; every district served and in its old zone;
+   holidays, closures and locations unchanged; the five estimates, the three
+   with handling 2 and the nine product promises byte-for-byte identical. The
+   guard: 98 tables (`zone_closure_periods` new), row-level security on all,
+   0 table privileges for the app roles (none on `zone_closure_periods`), 0
+   write policies, 59 read policies (the new staff read on
+   `zone_closure_periods`). All 60 functions the two files define or
+   redefine exist once, each with `search_path=""`, none executable by
+   PUBLIC; the 33 in `public` and 15 of the 27 private helpers are definers;
+   12 private helpers are not (`shipment_transition_allowed`, `cr_today`,
+   `weekday_set`, `clean_label`, `has_letters`, `order_is_open`,
+   `check_zone_service`, `check_closure_dates`, `operational_setting`,
+   `location_code`, `stop_not_removable`, `closure_audit_row`: pure checks
+   that only definer functions call; no app role may execute them). No
+   definer function anywhere lacks an empty search path; no non-definer
+   function in `public` is callable by an app role. Every `public` function
+   of the two files is granted to `authenticated`; of them only
+   `list_districts`, `delivery_estimate` and `checkout_quote` reach visitors,
+   as before. The list of functions a visitor may execute is the same 35
+   before and after; `authenticated` 249 → 275 (the 25 `ops_*` functions of
+   `084000` and `ops_delete_brand`). The trigger `bin_stock_location_open` is
+   on `bin_stock`. A token after sign-out still gets `400 session_ended` on
+   four personal functions. The scheduled jobs kept succeeding. The runbook's
+   own checks: 0 districts not served; `gam-core`/`gam-extended` on and
+   `national` off, all revision 1; `ops_delete_brand` not executable by
+   `anon`, executable by `authenticated`; `ready_for_dispatch → packed`
+   allowed; no route or stop has the new columns set.
+5. **Suites**: all 30 pass at the first run (05:07:29 to 05:08:24); the only
+   `skipped` rows are `125_followups` `net_grants` and part 2 of
+   `100_notifications`. Row counts before and after the run identical except
+   the scheduler's history. No test or file had to change.
+6. **Redeploy**, one at a time from the repository root with `vercel deploy
+   --prod --yes --token dummy`, 25 to 30 s each: web
+   `dpl_E5nMK89qecpVTarobq25j3bdnej1` (ready 05:12:58), vende
+   `dpl_3htsGubW83wZxQ64RTVvbNCCpTuE`, central
+   `dpl_6QfA8BiFAHqo9rvRwQgf96ELuePU`, campo
+   `dpl_GevmnYqM8eC3ez9MNqUiS5UL8gof` (ready 05:14:33). Without a bypass all
+   12 addresses tried (`/`, `/ingresar`, `/operacion` of each) answer `302`
+   to `vercel.com/sso-api`. **The window** (05:06 to 05:14): the old apps' 32
+   pages (the shop as a visitor and as `comprador`, the district picker and
+   checkout included; the seller centre; 12 console pages among them
+   `/tarifas`, `/bodegas`, `/despacho` and `/catalogo/marcas`, which reads
+   the redefined brand list; the field app as driver and warehouse lead)
+   loaded against the new database with no error; no action was tried.
+7. **The Android build of `3f251c3`.** Worked out from that commit
+   (`apps/shop-native`, `packages/expo-kit`, `packages/db`): the read calls it
+   makes are `searchProducts` (home: `inStockOnly`+`limit`, and
+   `madeInCr`+`inStockOnly`+`limit`; listings: `query`, `categorySlug`,
+   `sort`, `inStockOnly`, `limit`, `offset`), `suggestProducts`,
+   `listCategories`, `listDistricts`, `getProduct(slug, postalCode)` (its
+   offers carry the promise), `cartLines`, `checkoutQuote`, `myRoles`,
+   `myProfile`, `myAddresses`, `myOrders(50)`, `getOrder`, `orderPayment`,
+   `myOrderReturns`. It never calls `delivery_estimate` or the
+   notification-settings read; both were called anyway. That commit's own
+   client and response schemas, after the push, as a visitor and as
+   `comprador`: 72 calls answered and parsed, 0 failures (the visitor's
+   personal calls refused `not_authenticated`, as before; the archived and
+   the pending product answer nothing to both). Run again with a district
+   not served and with a stop removed: see point 8.
+8. **Smoke test** through bypass secrets made and revoked as before, sent to
+   the four `vercel.app` hosts only, failing on console errors, page errors,
+   failed requests and 5xx.
+   - **Shop** at 1280 and 390 px (63 checks): home, menu, search with a brand
+     filter, the headphones' two offers, a shop page and an unknown one
+     (`404`), the district picker (10101 "Sí entregamos aquí", 60101 "por
+     ahora no entregamos"), the coffee's page in 10101 ("Llega el martes, 24
+     de noviembre"), the cart with IVA, checkout (nothing chosen,
+     "simulados"), SINPE Móvil paid by the simulation (YT-101281, 1280 px), its
+     four-digit code on the shopper's own page, sign-out with no cookie left.
+     The shopper then cancelled YT-101281: "Reembolsado", ₡5 400 "en modo de
+     prueba, sin dinero real".
+   - **Operación** at 1280 and 390 px (64 checks): zones, districts (with and
+     without a canton), holidays, closures, locations, routes, settings; none
+     scrolls sideways, each has one `h1`, `lang` `es-CR`, no status or error
+     code on screen, every field labelled; at 390 px no control under 44 px
+     (at 1280 px the small buttons are 36 px, as elsewhere on the desktop).
+   - **Zones**: "Zona Prueba" created ("creada, apagada y sin distritos",
+     not offered to be switched on); its fee typed "1.500,00" saved as
+     ₡1 500; "150,5" refused ("Escriba el costo de envío en colones enteros,
+     sin céntimos…") with "150,5" still in the field and the fee unchanged.
+     The switch-off confirmation of GAM central read, not confirmed:
+     "Direcciones guardadas en esta zona: 3 … Pedidos abiertos de la zona:
+     11"; of GAM extendida: 0 and 0. The Prueba zone deleted ("Zona borrada").
+   - **Districts**: 10111 San Sebastián (0 addresses, 0 open orders, as the
+     preview said) marked "No se entrega" at 05:22:21. `list_districts`
+     answered `zone_active` false at once. **The deployed shop's picker did
+     not follow**: 19 looks over 300 s, each in a fresh browser, still showed
+     "San Sebastián" without "(por ahora no entregamos)". The console's
+     refresh call was answered `302` (its log: "The shop did not refresh its
+     catalogue: HTTP 302, redirected to vercel.com"): the shop's Vercel login
+     stops the server-to-server call, so the shop keeps its district list
+     for the `days` cache life. Moved back to GAM central at 05:27:30 (same
+     `302`); the picker showed it served at the first look, because it had
+     never changed. To keep the owner from seeing a stale "not served", the
+     shop's district list had been loaded right after the redeploy, before
+     the change.
+   - **Holidays**: "Feriado Prueba" on 9 December 2026 (no route, nothing
+     promised) added ("La fecha de entrega que ve la tienda ya lo salta"),
+     listed, removed ("ya no es feriado"). No day ahead has a planned route,
+     so the route refusal could not be tried; on 24 November, with the box
+     unticked: "Ese día hay 5 pedidos abiertos con entrega prometida. Si de
+     todos modos es feriado, marque «Agregar aunque haya pedidos prometidos»
+     y vuelva a enviar: esos pedidos mantienen su fecha." Not confirmed;
+     nothing added.
+   - **Closures**: GAM extendida (0 open orders), 14 December, "Otro",
+     "Prueba de cierre de un día": saved, listed "Próximo"; an overlapping one
+     (13–14 December) refused ("Esa zona ya tiene un cierre en esas
+     fechas…"); its end moved to 15 December; ended ("Cierre cancelado:
+     ninguno de sus días había pasado…"). It is listed under "Cierres
+     cancelados (1)" with "Volver a cerrar", for 7 days, to staff only.
+   - **Settings** (31 listed, 15 protected): "Reclamos abiertos por cuenta" 5
+     → 6 with the box ticked, then back to 5. `payments_mode`,
+     `payment_gateway`, `invoicing_issuer`, `invoicing_policy` and
+     `require_staff_mfa` read "Protegido" with no input, button or form.
+     `ops_update_setting('payments_mode', "sandbox", "sandbox")` as `central`
+     straight to the API: `400 setting_protected`; the value stayed
+     `"sandbox"`.
+   - **Locations**: Z-99-99-Z (storage, SJO1) created; renamed Z-99-98-Z;
+     switched off ("la bodega ya no la ve"); listed "Desactivada" with "Volver
+     a activar" and no delete. The receiving form is drawn only for a line of
+     a waiting seller shipment and the preview has none, so it was **not seen
+     in the browser**; `wms_locations` as `bodega` (what the form lists)
+     offered Z-99-99-Z, then only Z-99-98-Z, then neither. No shipment was
+     created for it, because nothing in the product can cancel one.
+   - **Stuck routes**: the page lists R-1003 under "Rutas que no pueden
+     terminar (1)" ("Su día ya pasó"; stop 1 "En la puerta", "espere a que la
+     cierre"; stop 2 removable) and "Otras rutas abiertas (0)". R-1003 was not
+     touched. A route of our own, as `tools/e2e/lib/own-route.cjs` does but
+     with `repartidor2` (Luis, no route under way; `repartidor` has R-1003):
+     YT-101282 and YT-101283 of `comprador3` (the coffee, SINPE Móvil paid by
+     the simulation, through the API as the shopper), picked and packed as
+     `bodega` and planned by `central` through the API (the functions those
+     screens call), after 06:00 UTC so the route is dated 23 November: R-1533.
+     While only assigned, stop YT501481 removed in the console ("El paquete
+     vuelve a Despacho para otra ruta"): the parcel is `packed` and listed in
+     Despacho; the driver reads "0 de 1 entregadas · 1 omitida" and "Central
+     quitó esta parada de la ruta. No recoja este paquete: volvió a
+     Despacho." The driver started the route with the field app's own button;
+     stop YT501482 removed: `delivery_failed` with `attempt_count` 0; the
+     driver reads "Ruta terminada" and, on both stops, "Si lleva el paquete,
+     devuélvalo a la bodega."; the shopper's page reads "Entrega reprogramada"
+     in the heading and the parcel block ("Reprogramamos la entrega de este
+     paquete…") and no failure text; the staff order page reads "quitado de
+     una ruta, sin intento de entrega", "Quitado de una ruta: espera otra" and
+     the same in the history, with no status code. Its heading badge still
+     says "En camino" (the order's status), and the console's route card
+     labels the parcel "Entrega fallida". No outbox event about a failure
+     (only `shipment.scheduled` and one `shipment.out_for_delivery`), and no
+     message delivery planned for either order. The store build's client of
+     `3f251c3`, as `comprador3`, parsed both orders (65 calls, 0 failures).
+     Closed ("Ruta R-1533 cerrada. Su liquidación quedó abierta…"):
+     `completed`, both stops `skipped`. Then the orders as far as the product
+     lets them: `cancel_order` is refused to the shopper
+     (`too_late_to_cancel`/`in_preparation`) and to staff (`packed`,
+     `shipped`) once a parcel is packed, so each parcel went back to the
+     warehouse: YT501481 on a second short route (R-1534: started, its stop
+     removed, closed) and YT501482 directly, both `ops_return_shipment` and
+     checked in by `bodega` (`wms_receive_returned_shipment`): `returned`,
+     both orders `cancelled`, ₡4 950 each refunded in the simulation (the
+     goods; the ₡1 500 delivery fee stays charged, payment
+     `partially_refunded`), the two units on the returns shelf `DEV-01`. The
+     two ₡0 cash counts were settled in Liquidaciones. Every ledger
+     transaction of the three orders sums to zero. The driver page shared a
+     simulated position once (one `driver_positions` row).
+   - **District row**: moving 10111 back stored `zone_id = 'gam-core'` on the
+     district itself (before, it had none and followed its canton); no
+     console action clears it. It was put back with one guarded statement
+     through `remote-db.sh sql` (`update … set zone_id = null where
+     postal_code = '10111' and zone_id = 'gam-core'`, with an audit entry), so
+     no district has its own zone again, as before.
+   - **Brands**: "Prueba Dos" deleted with "Eliminar «Prueba Dos»" ("con la
+     marca que se había unido a ella. Sus direcciones quedan libres"); neither
+     brand is listed and no brand holds `prueba-uno` or `prueba-dos` as an
+     address or an earlier one (12 brands). Nimbo offers no delete and says
+     "No se puede eliminar"; `ops_delete_brand` on it straight to the API:
+     `brand_in_use` with detail 5.
+   - **Product pages** through `get_product`: the archived coffee maker opens
+     only for `vendedor` (TecnoCasa, its shop) and `central`; the lamp waiting
+     for review only for `central` (its shop's account is not a demo
+     account, so its own preview was not tried); a visitor, `comprador` and
+     `cafetal` get nothing for either; the coffee opens for all five. The
+     shop's pages answer `404`, `404`, `200` to a visitor.
+9. **Afterwards** (06:06). Vercel since the deployments: no runtime error or
+   warning on the shop, the seller centre or the field app; 9 error lines on
+   the console, all "The shop did not refresh its catalogue: HTTP 302,
+   redirected to vercel.com" (one per zone, district, holiday, closure and
+   brand change). The scheduled jobs all succeeded. Advisors against the
+   round before: security 312 findings (286): `authenticated` may execute 254
+   definer functions (228; the 26 new ones), `anon` 17 (17), RLS with no
+   policy 39 (39; `zone_closure_periods` has its staff read policy);
+   performance 103 (99): 89 unindexed foreign keys (85: the new "who" columns
+   `route_stops.removed_by`, `routes.closed_by`,
+   `zone_closure_periods.created_by` and `ended_early_by`), 14 unused indexes
+   (14). The bypass secrets were revoked; each project lists none and all 12
+   addresses redirect to the login again. Against point 1: `app_settings`
+   (key and value), zones (besides the new revision), districts, holidays,
+   closures, accounts (16), second factors (0), the digest, product statuses
+   and the guard identical; the estimates identical even after the date
+   changed; the visitor's 35 functions the same. One setting row has a new
+   `updated_at` (`max_open_complaints_per_account`, 5 → 6 → 5).
+
+What this round left on the preview, on purpose: YT-101281 of `comprador`
+(paid and cancelled in the simulation, refunded ₡5 400); YT-101282 and
+YT-101283 of `comprador3` (paid, packed, taken off routes, returned and
+cancelled, ₡4 950 each refunded in the simulation, ₡1 500 each kept as the
+delivery fee), with their refunds, ledger rows, stock movements (two units
+from `A-01-01-A` to `DEV-01`) and planned invoice jobs; routes R-1533 and
+R-1534 of `repartidor2`, completed with every stop removed, and their two ₡0
+cash counts, settled; the location Z-99-98-Z (created as Z-99-99-Z), switched
+off, since locations cannot be deleted; the closure of GAM extendida for 14 to
+15 December, cancelled, listed under "Cierres cancelados" to staff until 30
+November; 30 audit entries (one for the restored district) and 32 outbox
+events (messages only planned, none sent); 30 sessions of demo accounts
+left to expire. Deleted: the zone "Zona Prueba", the holiday "Feriado
+Prueba", the brands "Prueba Dos" and "Prueba Uno". Nothing named Prueba is
+visible to a visitor; a shopper sees the three orders in their own lists.
+
+**For production**: the same order, before the shop is opened to the
+public or with the shop reachable by the console's refresh call (no Vercel
+login in front of it), so a zone or district change reaches the shop's
+district list at once. The read-only checks of point 2 matter only on a
+database with data. Record and compare the delivery promises within one Costa
+Rica day.
 
 ## 4. Confirm the database is what the migrations say
 
