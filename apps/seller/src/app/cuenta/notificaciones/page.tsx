@@ -1,9 +1,9 @@
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { NotificationSettingsForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 import { saveShopNotificationSettings } from "@/app/notification-actions";
 import { requireShop } from "@/lib/shop";
@@ -13,11 +13,9 @@ export const metadata: Metadata = { title: "Notificaciones" };
 export default function ShopNotificationsPage() {
   return (
     <div className="shell py-8">
-      <p className="mb-3 text-sm">
-        <Link href="/cuenta" className="text-link underline">
-          ← Cuenta
-        </Link>
-      </p>
+      <BackLink href="/cuenta" className="mb-3">
+        Cuenta
+      </BackLink>
       <PageHeader title="Notificaciones">
         Cómo le avisamos de pedidos nuevos, pedidos cancelados y la revisión de sus productos.
       </PageHeader>

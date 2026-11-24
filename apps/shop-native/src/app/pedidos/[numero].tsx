@@ -1,5 +1,6 @@
 import {
   awaitingNewAttemptLine,
+  cancellationWords,
   deliveryFeeComesBack,
   deliveryFeeKeptLine,
   isRescheduledShipment,
@@ -69,9 +70,12 @@ import { PAYMENT_LABEL, SHIPMENT_STATUS_LABEL } from "@/lib/labels";
 import { amountComingBack, refundedSoFar as refundedSoFarOf } from "@/lib/refund-outlook";
 import { returnNextStep, returnTitle } from "@/lib/returns";
 
-function describeEvent(event: OrderDetail["timeline"][number]): string {
+function describeEvent(event: OrderDetail["timeline"][number], order: OrderDetail): string {
   if (event.kind === "note") return event.note ?? "Nota";
   if (event.kind === "payment") return event.note ?? "Pago";
+  if (event.kind === "order_status" && event.to_status === "cancelled") {
+    return cancellationWords(order.cancel_reason, false).history;
+  }
   if (event.kind === "order_status" && event.to_status && event.to_status in ORDER_STATUS_LABEL) {
     return ORDER_STATUS_LABEL[event.to_status as keyof typeof ORDER_STATUS_LABEL]["es-CR"];
   }
@@ -258,6 +262,16 @@ export default function OrderScreen() {
         })
       : null;
 
+  // Why it was cancelled, and what to do next (the reason stored on the order;
+  // the web's words).
+  const why =
+    o.cancelled_at !== null && ["cancelled", "refunded"].includes(o.status) && !back
+      ? cancellationWords(
+          o.cancel_reason,
+          paid || refundedSoFar > 0 || o.payment?.status === "refunded",
+        )
+      : null;
+
   return (
     <Screen refreshing={pulling} onRefresh={readAgain}>
       <Nav.Screen options={{ title: o.order_number }} />
@@ -298,6 +312,11 @@ export default function OrderScreen() {
         </Text>
       </Stack>
 
+      {why ? (
+        <Alert tone="info" title={why.title} testID="order-cancel-reason">
+          {why.body}
+        </Alert>
+      ) : null}
       {awaitingPayment && payment.data && GATEWAY_STAGES.includes(payment.data.stage) ? (
         <GatewayPayment payment={payment.data} />
       ) : awaitingPayment && payment.data ? (
@@ -584,7 +603,7 @@ export default function OrderScreen() {
         <View style={styles.timeline}>
           {o.timeline.map((event) => (
             <View key={`${event.at}-${event.kind}-${event.to_status ?? ""}`} style={styles.event}>
-              <Text variant="smallStrong">{describeEvent(event)}</Text>
+              <Text variant="smallStrong">{describeEvent(event, o)}</Text>
               <Text variant="small" tint="muted">
                 {formatDateTime(event.at)}
               </Text>

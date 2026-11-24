@@ -1,4 +1,5 @@
 import { ApiError, type PayoutRun } from "@yuntera/db";
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { Stat } from "@yuntera/next-kit/shell";
@@ -14,7 +15,6 @@ import {
   TextField,
 } from "@yuntera/ui";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { markPayoutFailed, markPayoutPaid } from "@/app/people-actions";
@@ -28,11 +28,7 @@ type Payout = PayoutRun["payouts"][number];
 export default function PayoutRunPage({ params }: PageProps<"/pagos-vendedores/corridas/[id]">) {
   return (
     <div className="shell py-8">
-      <p className="text-sm">
-        <Link href="/pagos-vendedores" className="text-link underline">
-          ← Pagos a vendedores
-        </Link>
-      </p>
+      <BackLink href="/pagos-vendedores">Pagos a vendedores</BackLink>
       <div className="mt-3">
         <Suspense fallback={<Skeleton className="h-96" />}>
           <Run params={params} />

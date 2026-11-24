@@ -1,5 +1,6 @@
 import { isPhotoTemplate } from "@yuntera/core";
 import { ApiError, type CatalogMatch } from "@yuntera/db";
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { ProductImage } from "@yuntera/next-kit/product-image";
 import { messageOf, sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
@@ -21,11 +22,9 @@ export const metadata: Metadata = { title: "Vender un producto que ya existe" };
 export default function OfferOnExistingPage({ searchParams }: PageProps<"/productos/ofrecer">) {
   return (
     <div className="shell py-8">
-      <p className="text-sm">
-        <Link href="/productos" className="inline-flex min-h-11 items-center text-link underline">
-          ← Productos
-        </Link>
-      </p>
+      <BackLink href="/productos" className="py-3">
+        Productos
+      </BackLink>
       <PageHeader title="Vender un producto que ya existe">
         Si el producto ya está publicado en Yuntera, no lo publique otra vez: agregue su oferta y
         aparecerá en la misma página, junto a las de otras tiendas.

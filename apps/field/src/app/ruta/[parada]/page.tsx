@@ -1,4 +1,5 @@
-import { LOCKED_CODE_MESSAGE } from "@yuntera/core";
+import { LOCKED_CODE_MESSAGE, skippedStopNote } from "@yuntera/core";
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { Alert, buttonClass, formatPrice, Skeleton } from "@yuntera/ui";
@@ -15,11 +16,7 @@ export const metadata: Metadata = { title: "Parada" };
 export default function StopPage({ params }: PageProps<"/ruta/[parada]">) {
   return (
     <div className="shell max-w-2xl py-6">
-      <p className="text-sm">
-        <Link href="/ruta" className="text-link underline">
-          ← Mi ruta
-        </Link>
-      </p>
+      <BackLink href="/ruta">Mi ruta</BackLink>
       <div className="mt-3">
         <Suspense fallback={<Skeleton className="h-96" />}>
           <Stop params={params} />
@@ -94,7 +91,19 @@ async function Stop({ params }: Pick<PageProps<"/ruta/[parada]">, "params">) {
         </Alert>
       ) : null}
 
-      {!open ? (
+      {stop.status === "skipped" ? (
+        // Staff took it off the route: nothing to do at the door, and what to
+        // do with the parcel depends on whether the route had started (the
+        // route list's rule, packages/core route-stops.ts).
+        <div className="flex flex-col gap-3" data-testid="stop-closed">
+          <Alert tone="warning" title="Central quitó esta parada">
+            {skippedStopNote(route, stop)}
+          </Alert>
+          <Link href="/ruta" className={buttonClass({ variant: "secondary", block: true })}>
+            Volver a Mi ruta
+          </Link>
+        </div>
+      ) : !open ? (
         <Alert tone={stop.status === "delivered" ? "success" : "warning"}>
           {stop.status === "delivered"
             ? "Esta parada ya fue entregada."

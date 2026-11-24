@@ -47,6 +47,17 @@ const BUTTON_SIZE: Record<ButtonSize, string> = {
   lg: "min-h-12 px-6 text-lg",
 };
 
+/**
+ * A text link that is still a 44 px target for a finger: the back links at
+ * the top of a page ("← Pedidos") and a short link at the end of a sentence
+ * ("Presente un reclamo"). For a link in text-sm (20 px lines): it is 44 px
+ * tall, and its negative margin keeps the line, and so the layout, where it
+ * was.
+ */
+export function touchLinkClass(className?: string): string {
+  return cx("inline-flex min-h-11 -my-3 items-center text-link underline", className);
+}
+
 /** Class names for anything that should look like a button (a link, for instance). */
 export function buttonClass(
   options: { variant?: ButtonVariant; size?: ButtonSize; block?: boolean; className?: string } = {},

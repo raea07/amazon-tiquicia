@@ -21,7 +21,8 @@
     "./guard": "./src/guard.ts",
     "./product-image": "./src/product-image.tsx",
     "./shop-logo": "./src/shop-logo.tsx",
-    "./fiscal-document": "./src/fiscal-document.tsx"
+    "./fiscal-document": "./src/fiscal-document.tsx",
+    "./back-link": "./src/back-link.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -1,9 +1,9 @@
 import { ApiError } from "@yuntera/db";
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { Alert, Badge, formatDate, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { z } from "zod";
@@ -16,11 +16,7 @@ export const metadata: Metadata = { title: "Paquete" };
 export default function ShipmentPage({ params }: PageProps<"/bodega/paquete/[id]">) {
   return (
     <div className="shell max-w-2xl py-6">
-      <p className="text-sm">
-        <Link href="/bodega" className="text-link underline">
-          ← Bodega
-        </Link>
-      </p>
+      <BackLink href="/bodega">Bodega</BackLink>
       <div className="mt-3">
         <Suspense fallback={<Skeleton className="h-96" />}>
           <Shipment params={params} />

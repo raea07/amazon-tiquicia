@@ -1,7 +1,7 @@
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { NotificationSettingsForm } from "@yuntera/next-kit/client";
 import { Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 import { saveNotificationSettings } from "@/app/notification-actions";
 import { requireViewer } from "@/lib/session";
@@ -12,11 +12,7 @@ export const metadata: Metadata = { title: "Notificaciones", robots: { index: fa
 export default function NotificationsPage() {
   return (
     <div className="shell py-8">
-      <p className="text-sm">
-        <Link href="/cuenta" className="text-link underline">
-          ← Su cuenta
-        </Link>
-      </p>
+      <BackLink href="/cuenta">Su cuenta</BackLink>
       <h1 className="mt-3 text-3xl font-bold">Notificaciones</h1>
       <p className="mt-1 max-w-2xl text-ink-muted">
         Elija por dónde quiere que le avisemos de sus pedidos. Nunca le enviaremos su código de

@@ -1,3 +1,4 @@
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { Alert, Badge, buttonClass, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
@@ -11,11 +12,7 @@ export const metadata: Metadata = { title: "Buscar un producto" };
 export default function LookupPage({ searchParams }: PageProps<"/bodega/buscar">) {
   return (
     <div className="shell max-w-2xl py-6">
-      <p className="text-sm">
-        <Link href="/bodega" className="text-link underline">
-          ← Bodega
-        </Link>
-      </p>
+      <BackLink href="/bodega">Bodega</BackLink>
       <h1 className="mt-3 text-2xl font-bold">Buscar un producto</h1>
       <form action="/bodega/buscar" className="mt-4 flex gap-2">
         <label htmlFor="codigo" className="sr-only">

@@ -1,4 +1,5 @@
 import { ApiError, type SharedListingDetail as SellerListingDetail } from "@yuntera/db";
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { ListingChanges } from "@yuntera/next-kit/listing-changes";
 import { photoPreviews, sessionApi } from "@yuntera/next-kit/server";
 import { Alert, Badge, formatDateTime, Skeleton } from "@yuntera/ui";
@@ -23,11 +24,9 @@ export const metadata: Metadata = { title: "Editar producto" };
 export default function EditListingPage(props: PageProps<"/productos/[id]">) {
   return (
     <div className="shell py-8">
-      <p className="text-sm">
-        <Link href="/productos" className="inline-flex min-h-11 items-center text-link underline">
-          ← Productos
-        </Link>
-      </p>
+      <BackLink href="/productos" className="py-3">
+        Productos
+      </BackLink>
       <div className="mt-3">
         <Suspense fallback={<Skeleton className="h-96" />}>
           <EditListing {...props} />

@@ -1,3 +1,4 @@
+import { cartHasNothingToBuy, NOTHING_TO_BUY_NOTE } from "@yuntera/core";
 import type { CartLine, DatedCartAlternative } from "@yuntera/db";
 import { ProductImage } from "@yuntera/next-kit/product-image";
 import { Alert, buttonClass, EmptyState, formatDate, formatPrice, Skeleton } from "@yuntera/ui";
@@ -163,53 +164,62 @@ async function Cart() {
 
       <aside aria-label="Resumen" className="h-fit rounded-lg border border-border bg-surface p-5">
         <h2 className="text-lg font-bold">Resumen</h2>
-        <dl className="mt-4 space-y-2 text-sm">
-          <div className="flex justify-between">
-            <dt>Productos</dt>
-            <dd className="tabular-nums">{formatPrice(quote.items_total_minor ?? 0)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt>Envío {location.chosen ? "" : "(estimado)"}</dt>
-            <dd className="tabular-nums">
-              {quote.shipping_minor === 0
-                ? "Gratis"
-                : quote.shipping_minor != null
-                  ? formatPrice(quote.shipping_minor)
-                  : "—"}
-            </dd>
-          </div>
-          <div className="flex justify-between border-t border-border pt-2 text-base font-bold">
-            <dt>Total</dt>
-            <dd className="tabular-nums">
-              {quote.total_minor != null ? formatPrice(quote.total_minor) : "—"}
-            </dd>
-          </div>
-        </dl>
-        <p className="mt-2 text-xs text-ink-muted">
-          Incluye {formatPrice(quote.tax_included_minor ?? 0)} de IVA.
-        </p>
+        {/* Nothing in the cart can be bought: no total to pay and no date. */}
+        {cartHasNothingToBuy(lines) ? (
+          <p className="mt-3 text-sm" data-testid="cart-nothing-to-buy">
+            {NOTHING_TO_BUY_NOTE}
+          </p>
+        ) : (
+          <>
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <dt>Productos</dt>
+                <dd className="tabular-nums">{formatPrice(quote.items_total_minor ?? 0)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt>Envío {location.chosen ? "" : "(estimado)"}</dt>
+                <dd className="tabular-nums">
+                  {quote.shipping_minor === 0
+                    ? "Gratis"
+                    : quote.shipping_minor != null
+                      ? formatPrice(quote.shipping_minor)
+                      : "—"}
+                </dd>
+              </div>
+              <div className="flex justify-between border-t border-border pt-2 text-base font-bold">
+                <dt>Total</dt>
+                <dd className="tabular-nums">
+                  {quote.total_minor != null ? formatPrice(quote.total_minor) : "—"}
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-2 text-xs text-ink-muted">
+              Incluye {formatPrice(quote.tax_included_minor ?? 0)} de IVA.
+            </p>
 
-        {quote.promise ? (
-          <p className="mt-3 text-sm font-semibold text-success">
-            Llega el {formatDate(quote.promise.latest)}
-          </p>
-        ) : null}
-        {quote.issue === "zone_not_served" ? (
-          <Alert tone="warning" className="mt-3">
-            Por ahora no entregamos en la zona elegida.{" "}
-            <Link href="/zona?siguiente=/carrito" className="underline">
-              Cambiar de zona
-            </Link>
-          </Alert>
-        ) : null}
-        {!location.chosen ? (
-          <p className="mt-3 text-sm">
-            <Link href="/zona?siguiente=/carrito" className="text-link underline">
-              Elija su zona
-            </Link>{" "}
-            para ver el envío y la fecha exactos.
-          </p>
-        ) : null}
+            {quote.promise ? (
+              <p className="mt-3 text-sm font-semibold text-success">
+                Llega el {formatDate(quote.promise.latest)}
+              </p>
+            ) : null}
+            {quote.issue === "zone_not_served" ? (
+              <Alert tone="warning" className="mt-3">
+                Por ahora no entregamos en la zona elegida.{" "}
+                <Link href="/zona?siguiente=/carrito" className="underline">
+                  Cambiar de zona
+                </Link>
+              </Alert>
+            ) : null}
+            {!location.chosen ? (
+              <p className="mt-3 text-sm">
+                <Link href="/zona?siguiente=/carrito" className="text-link underline">
+                  Elija su zona
+                </Link>{" "}
+                para ver el envío y la fecha exactos.
+              </p>
+            ) : null}
+          </>
+        )}
 
         <div className="mt-5">
           {hasUnavailable ? (

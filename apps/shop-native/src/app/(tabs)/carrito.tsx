@@ -1,3 +1,4 @@
+import { cartHasNothingToBuy, NOTHING_TO_BUY_NOTE } from "@yuntera/core";
 import type { CartLine, DatedCartAlternative } from "@yuntera/db";
 import { useApiQuery } from "@yuntera/expo-kit/data";
 import { colors, space } from "@yuntera/expo-kit/theme";
@@ -209,46 +210,55 @@ export default function CartScreen() {
 
       <Card testID="cart-summary">
         <Text variant="heading">Resumen</Text>
-        <InfoRow label="Productos" value={formatPrice(q.items_total_minor ?? 0)} />
-        <InfoRow
-          label={cart.locationChosen ? "Envío" : "Envío (estimado)"}
-          value={
-            q.shipping_minor === 0
-              ? "Gratis"
-              : q.shipping_minor != null
-                ? formatPrice(q.shipping_minor)
-                : "—"
-          }
-        />
-        <View style={styles.total}>
-          <InfoRow
-            strong
-            label="Total"
-            value={q.total_minor != null ? formatPrice(q.total_minor) : "—"}
-          />
-        </View>
-        <Text variant="caption" tint="muted">
-          Incluye {formatPrice(q.tax_included_minor ?? 0)} de IVA.
-        </Text>
-        {q.promise ? (
-          <Text variant="smallStrong" tint="success">
-            Llega el {formatDate(q.promise.latest)}
+        {/* Nothing in the cart can be bought: no total to pay and no date. */}
+        {cartHasNothingToBuy(lines.data) ? (
+          <Text variant="small" testID="cart-nothing-to-buy">
+            {NOTHING_TO_BUY_NOTE}
           </Text>
-        ) : null}
-        {q.issue === "zone_not_served" ? (
-          <Alert tone="warning">
-            <Text variant="small" style={{ color: colors.palette.maiz[900] }}>
-              Por ahora no entregamos en la zona elegida.
+        ) : (
+          <>
+            <InfoRow label="Productos" value={formatPrice(q.items_total_minor ?? 0)} />
+            <InfoRow
+              label={cart.locationChosen ? "Envío" : "Envío (estimado)"}
+              value={
+                q.shipping_minor === 0
+                  ? "Gratis"
+                  : q.shipping_minor != null
+                    ? formatPrice(q.shipping_minor)
+                    : "—"
+              }
+            />
+            <View style={styles.total}>
+              <InfoRow
+                strong
+                label="Total"
+                value={q.total_minor != null ? formatPrice(q.total_minor) : "—"}
+              />
+            </View>
+            <Text variant="caption" tint="muted">
+              Incluye {formatPrice(q.tax_included_minor ?? 0)} de IVA.
             </Text>
-            <TextLink href="/zona">Cambiar de zona</TextLink>
-          </Alert>
-        ) : null}
-        {!cart.locationChosen ? (
-          <View>
-            <Text variant="small">Para ver el envío y la fecha exactos:</Text>
-            <TextLink href="/zona">Elija su zona</TextLink>
-          </View>
-        ) : null}
+            {q.promise ? (
+              <Text variant="smallStrong" tint="success">
+                Llega el {formatDate(q.promise.latest)}
+              </Text>
+            ) : null}
+            {q.issue === "zone_not_served" ? (
+              <Alert tone="warning">
+                <Text variant="small" style={{ color: colors.palette.maiz[900] }}>
+                  Por ahora no entregamos en la zona elegida.
+                </Text>
+                <TextLink href="/zona">Cambiar de zona</TextLink>
+              </Alert>
+            ) : null}
+            {!cart.locationChosen ? (
+              <View>
+                <Text variant="small">Para ver el envío y la fecha exactos:</Text>
+                <TextLink href="/zona">Elija su zona</TextLink>
+              </View>
+            ) : null}
+          </>
+        )}
       </Card>
     </Screen>
   );

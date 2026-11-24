@@ -1,4 +1,5 @@
 import type { WmsLocationItem } from "@yuntera/db";
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { Alert, Badge, Skeleton } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
@@ -15,11 +16,7 @@ export const metadata: Metadata = { title: "Ubicación" };
 export default function LocationPage({ searchParams }: PageProps<"/bodega/ubicacion">) {
   return (
     <div className="shell max-w-2xl py-6">
-      <p className="text-sm">
-        <Link href="/bodega/ubicaciones" className="text-link underline">
-          ← Ubicaciones
-        </Link>
-      </p>
+      <BackLink href="/bodega/ubicaciones">Ubicaciones</BackLink>
       <div className="mt-3">
         <Suspense fallback={<Skeleton className="h-96" />}>
           <Location searchParams={searchParams} />

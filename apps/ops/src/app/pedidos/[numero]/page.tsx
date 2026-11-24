@@ -9,6 +9,7 @@ import {
   type ShipmentStatus,
 } from "@yuntera/core";
 import { ApiError, type OrderDetailWithRecall } from "@yuntera/db";
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import {
@@ -48,11 +49,7 @@ export const metadata: Metadata = { title: "Pedido" };
 export default function OrderPage({ params }: PageProps<"/pedidos/[numero]">) {
   return (
     <div className="shell py-8">
-      <p className="text-sm">
-        <Link href="/pedidos" className="text-link underline">
-          ← Pedidos
-        </Link>
-      </p>
+      <BackLink href="/pedidos">Pedidos</BackLink>
       {/* Stopping a parcel removes its own form: the outcome is said at the bottom. */}
       <CatalogueOutcome>
         <div className="mt-3">

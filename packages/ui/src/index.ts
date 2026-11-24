@@ -26,5 +26,6 @@ export {
   TextAreaField,
   TextField,
   type Tone,
+  touchLinkClass,
   WheelGlyph,
 } from "./primitives";

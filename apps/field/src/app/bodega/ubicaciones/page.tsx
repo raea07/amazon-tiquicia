@@ -1,4 +1,5 @@
 import type { WmsStockLocation } from "@yuntera/db";
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { Badge, buttonClass, Skeleton } from "@yuntera/ui";
 import type { Metadata } from "next";
@@ -12,11 +13,7 @@ export const metadata: Metadata = { title: "Ubicaciones" };
 export default function LocationsPage() {
   return (
     <div className="shell max-w-2xl py-6">
-      <p className="text-sm">
-        <Link href="/bodega" className="text-link underline">
-          ← Bodega
-        </Link>
-      </p>
+      <BackLink href="/bodega">Bodega</BackLink>
       <h1 className="mt-3 text-2xl font-bold">Ubicaciones</h1>
       <p className="mt-1 text-sm text-ink-muted">
         Abra una ubicación para ver qué tiene, mover unidades a otro estante o corregir lo que

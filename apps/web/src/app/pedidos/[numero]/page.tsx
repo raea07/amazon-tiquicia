@@ -1,6 +1,7 @@
 import { brand } from "@yuntera/brand";
 import {
   awaitingNewAttemptLine,
+  cancellationWords,
   deliveryFeeComesBack,
   deliveryFeeKeptLine,
   isRescheduledShipment,
@@ -30,6 +31,7 @@ import {
   SHIPMENT_STATUS_LABEL,
   ShipmentStatusBadge,
   Skeleton,
+  touchLinkClass,
 } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
@@ -143,6 +145,15 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
         })
       : null;
 
+  // Why it was cancelled, and what to do next (the reason stored on the order).
+  const why =
+    order.cancelled_at !== null && ["cancelled", "refunded"].includes(order.status) && !back
+      ? cancellationWords(
+          order.cancel_reason,
+          paid || refundedSoFar > 0 || order.payment?.status === "refunded",
+        )
+      : null;
+
   return (
     <>
       {query.pago === "retorno" && payment.stage === "paid" ? (
@@ -183,6 +194,13 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div className="flex flex-col gap-6">
+          {why ? (
+            <div data-testid="order-cancel-reason">
+              <Alert tone="info" title={why.title}>
+                {why.body}
+              </Alert>
+            </div>
+          ) : null}
           {awaitingPayment && throughGateway ? <PaymentPanel payment={payment} /> : null}
           {awaitingPayment && !throughGateway ? (
             <PaymentInstructions order={order} payment={payment} />
@@ -442,7 +460,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
             <ol className="mt-3 space-y-2 border-l-2 border-border pl-4 text-sm">
               {order.timeline.map((event) => (
                 <li key={`${event.at}-${event.kind}-${event.to_status ?? ""}`}>
-                  <span className="font-medium">{describeEvent(event)}</span>
+                  <span className="font-medium">{describeEvent(event, order)}</span>
                   <span className="ml-2 text-ink-muted">{formatDateTime(event.at)}</span>
                 </li>
               ))}
@@ -522,7 +540,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
 
           <p className="text-sm text-ink-muted">
             ¿Algo no salió bien?{" "}
-            <Link href="/ayuda#reclamos" className="text-link underline">
+            <Link href="/ayuda#reclamos" className={touchLinkClass()}>
               Presente un reclamo
             </Link>
             .
@@ -585,9 +603,12 @@ function PaymentInstructions({ order, payment }: { order: OrderDetail; payment: 
   );
 }
 
-function describeEvent(event: OrderDetail["timeline"][number]): string {
+function describeEvent(event: OrderDetail["timeline"][number], order: OrderDetail): string {
   if (event.kind === "note") return event.note ?? "Nota";
   if (event.kind === "payment") return event.note ?? "Pago";
+  if (event.kind === "order_status" && event.to_status === "cancelled") {
+    return cancellationWords(order.cancel_reason, false).history;
+  }
   if (event.kind === "order_status" && event.to_status && event.to_status in ORDER_STATUS_LABEL) {
     return ORDER_STATUS_LABEL[event.to_status as keyof typeof ORDER_STATUS_LABEL]["es-CR"];
   }
