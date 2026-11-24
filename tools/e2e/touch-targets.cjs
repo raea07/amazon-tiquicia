@@ -74,8 +74,17 @@ function small() {
   for (const el of document.querySelectorAll(
     'a[href], button, [role="button"], summary, input[type="submit"], select',
   )) {
-    const box = el.getBoundingClientRect();
+    let box = el.getBoundingClientRect();
     if (box.width === 0 || box.height === 0) continue;
+    // A link stretched over its card (an absolute ::after filling the nearest
+    // positioned ancestor, as the shop's product cards do): the card is the target.
+    const after = getComputedStyle(el, "::after");
+    if (after.position === "absolute" && after.content !== "none") {
+      let holder = el.parentElement;
+      while (holder && getComputedStyle(holder).position === "static")
+        holder = holder.parentElement;
+      if (holder) box = holder.getBoundingClientRect();
+    }
     const style = getComputedStyle(el);
     if (style.visibility === "hidden" || style.display === "none") continue;
     if (box.height >= 43.5) continue;

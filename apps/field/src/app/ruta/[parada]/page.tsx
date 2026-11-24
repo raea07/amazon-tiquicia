@@ -140,7 +140,7 @@ async function Stop({ params }: Pick<PageProps<"/ruta/[parada]">, "params">) {
           </section>
 
           <details className="rounded-lg border border-border bg-surface p-5">
-            <summary className="cursor-pointer font-semibold">No se pudo entregar</summary>
+            <summary className="cursor-pointer py-2.5 font-semibold">No se pudo entregar</summary>
             <div className="mt-4">
               <FailForm stopId={stop.stop_id} />
             </div>

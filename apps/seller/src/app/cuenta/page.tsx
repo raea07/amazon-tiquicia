@@ -3,7 +3,7 @@ import type { SellerShopChanges, ShopChangeKind } from "@yuntera/db";
 import { AccountSecuritySection } from "@yuntera/next-kit/account";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
-import { Alert, Badge, formatDate, Skeleton } from "@yuntera/ui";
+import { Alert, Badge, formatDate, Skeleton, touchLinkClass } from "@yuntera/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -89,7 +89,7 @@ async function Account() {
           </Item>
         </dl>
         <p className="mt-4 text-sm">
-          <Link href="/cuenta/notificaciones" className="text-link underline">
+          <Link href="/cuenta/notificaciones" className={touchLinkClass()}>
             Notificaciones: correo, WhatsApp y publicidad
           </Link>
         </p>

@@ -225,16 +225,19 @@ async function Product({ params, searchParams }: PageProps<"/p/[slug]">) {
 
 function Breadcrumbs({ product }: { product: ProductPage }) {
   return (
-    <nav aria-label="Ruta" className="text-sm text-ink-muted">
-      <ol className="flex flex-wrap items-center gap-1.5">
+    <nav aria-label="Ruta" className="-my-3 text-sm text-ink-muted">
+      <ol className="flex flex-wrap items-center gap-x-1.5">
         <li>
-          <Link href="/" className="hover:underline">
+          <Link href="/" className="inline-flex min-h-11 items-center hover:underline">
             Inicio
           </Link>
         </li>
         {product.breadcrumbs.map((crumb) => (
           <li key={crumb.slug} className="before:mr-1.5 before:content-['/']">
-            <Link href={`/c/${crumb.slug}` as Route} className="hover:underline">
+            <Link
+              href={`/c/${crumb.slug}` as Route}
+              className="inline-flex min-h-11 items-center hover:underline"
+            >
               {crumb.name_es}
             </Link>
           </li>

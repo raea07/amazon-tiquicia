@@ -134,7 +134,7 @@ async function Overview() {
             <li key={status}>
               <Link
                 href={`/pedidos?estado=${status}` as Route}
-                className="inline-flex min-h-9 items-center gap-2 rounded-full border border-border bg-surface px-3 hover:border-border-strong"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-3 hover:border-border-strong"
               >
                 {ORDER_STATUS_LABEL[status as OrderStatus]?.["es-CR"] ?? status}
                 <span className="font-semibold tabular-nums">{count}</span>

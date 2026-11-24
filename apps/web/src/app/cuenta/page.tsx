@@ -112,7 +112,7 @@ async function Account() {
           className="mt-5 rounded-lg border border-border bg-surface p-5"
           open={addresses.length === 0}
         >
-          <summary className="cursor-pointer font-semibold text-link">
+          <summary className="cursor-pointer py-2.5 font-semibold text-link">
             Agregar una dirección
           </summary>
           <div className="mt-4">

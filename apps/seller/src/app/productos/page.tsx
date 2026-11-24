@@ -170,7 +170,7 @@ async function Listings({ searchParams }: Pick<PageProps<"/productos">, "searchP
               </td>
               <td className="min-w-72">
                 <details>
-                  <summary className="cursor-pointer font-semibold tabular-nums">
+                  <summary className="cursor-pointer py-3 font-semibold tabular-nums">
                     {formatPrice(listing.price_minor)}
                     {listing.offer_status === "paused" ? (
                       <span className="ml-2 font-normal text-ink-muted">· en pausa</span>

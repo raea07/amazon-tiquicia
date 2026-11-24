@@ -4,6 +4,7 @@ import {
   REVIEW_HIDE_REASONS,
   type ReviewFilter,
 } from "@yuntera/db";
+import { BackLink } from "@yuntera/next-kit/back-link";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import {
@@ -77,14 +78,7 @@ async function Reviews({ searchParams }: Pick<PageProps<"/catalogo/resenas">, "s
   return (
     <div className="flex flex-col gap-5">
       {single ? (
-        <p className="text-sm">
-          <Link
-            href="/catalogo/resenas"
-            className="inline-flex min-h-11 items-center text-link underline"
-          >
-            ← Todas las reseñas
-          </Link>
-        </p>
+        <BackLink href="/catalogo/resenas">Todas las reseñas</BackLink>
       ) : (
         <nav aria-label="Filtrar reseñas">
           <ul className="flex flex-wrap gap-2 text-sm">
