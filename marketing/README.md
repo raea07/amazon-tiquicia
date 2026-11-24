@@ -2,9 +2,10 @@
 
 **What it is.** The words and the specifications for Yuntera's first marketing and sales pieces, in Spanish (usted) and English side by side. Written 24 November 2026. No piece is designed yet.
 **Conclusion 1.** No piece may be printed, posted or sent before the trademark search is done and `yuntera.cr` is registered (gate G1). The brand book says so in section 15.
-**Conclusion 2.** The seller pieces are useful first: seller interviews and visits can start once G1 and G2 are met. Shopper pieces wait for real payments and a public shop.
-**Conclusion 3.** Every claim here is checked against `STATUS.md` of 23 November 2026. A claim that depends on something not yet live names its gate.
-**The owner must decide** the five questions at the end of this file. The answers change words in several pieces.
+**Conclusion 2.** The seller pieces come first. Seller interviews may start in week 1 without printed material; visits, written yeses and print under the name wait for G1 and G2. Shopper pieces wait for real payments and a public shop.
+**Conclusion 3.** Every claim here is checked against `STATUS.md` of 23 November 2026 and the code. A claim that depends on something not yet live names its gate. A claim the product cannot keep today is not made.
+**Conclusion 4.** The first print run before the launch costs about ₡38,000–₡92,000, and the shopper flyer at the launch ₡30,000–₡60,000 more (assumptions; no price list was found; get 2 quotes).
+**The owner must decide** the three questions at the end of this file, and 12 more in the pieces. Seven questions that the pieces depend on are asked once, in the strategy documents, and listed at the end.
 
 ---
 
@@ -15,9 +16,10 @@
 | [messaging.md](messaging.md) | The message house: one sentence for the company; problem, promise, proofs, objection and answer for each audience; words to use and to avoid | Everyone who writes for Yuntera | Final text; the native copy editors still read it |
 | [sales/seller-pitch.md](sales/seller-pitch.md) | Five-minute visit, one-minute message, one-page leave-behind, ten-slide deck, objections, price sheet, the seller's first week | Owner and the first sales agent | Final text; the leave-behind and deck wait for the design |
 | [sales/partner-and-investor-brief.md](sales/partner-and-investor-brief.md) | One-page brief and ten-slide outline for a partner (chamber, producers' network, bank) and for an investor | Owner | Final text; facts to re-check on the day it is used |
+| [flyers/parcel-card.md](flyers/parcel-card.md) | Card in every parcel: returns, the delivery code, complaints | Warehouse, at packing | Waits for the design and G1, G2, G4, G6, G9, G12; the only shopper piece allowed in the closed pilot |
 | [flyers/shoppers-first-zones.md](flyers/shoppers-first-zones.md) | Door and counter flyer for shoppers in the first delivery cantons | Owner, sellers | Waits for the design and for gates G3, G4, G6, G7 |
 | [flyers/shops.md](flyers/shops.md) | Flyer left with shops on a visit | Owner, sales agent | Waits for the design and G1, G2 |
-| [flyers/makers-at-a-fair.md](flyers/makers-at-a-fair.md) | Flyer and stand poster for makers and producers at a fair | Owner | Waits for the design and G1, G2, G8 |
+| [flyers/makers-at-a-fair.md](flyers/makers-at-a-fair.md) | Flyer, stand poster and sign-up card for makers and producers at a fair | Owner | Waits for the design and G1, G2, G8 |
 | [flyers/drivers.md](flyers/drivers.md) | Notice to recruit drivers | Owner | Waits for the design and G11 (the lawyer's answer on how drivers are engaged) |
 | [social/launch-calendar.md](social/launch-calendar.md) | Four weeks of posts on Facebook, Instagram, TikTok and WhatsApp Status | Owner or a contractor | Final text; pictures wait for the design; starts at the open launch |
 | [messages/seller-outreach.md](messages/seller-outreach.md) | WhatsApp and e-mail texts to sellers, first contact and follow-up, with the consent rules | Owner, sales agent | Final text; usable after G1, G2, G9 |
@@ -36,17 +38,18 @@ A gate is a fact that must be true before a piece that depends on it is used. Ea
 | Gate | What must be true | Why | Source |
 | --- | --- | --- | --- |
 | **G1 Name** | The trademark search at the Registro Nacional is done and clear; `yuntera.cr` is registered | "Do not print, advertise or sign contracts under the name until that search is done" | `docs/brand/brand-book.md` §15; `STATUS.md`, "What needs you" 1 |
+| **G1b Handles** | The Facebook, Instagram and TikTok names are reserved, and the WhatsApp Business number is set up | A post or a QR code cannot point to an account that does not exist | `docs/brand/brand-book.md` §15 ("reserve the social handles") |
 | **G2 Legal identity** | The company exists; its legal name, cédula jurídica and address are known | Every marketing message must name its sender (Ley 8642 art. 44); every shop page must name the merchant | `docs/05-security-compliance/compliance-costa-rica.md` §1; market research §7.4 |
 | **G3 Public shop** | The shop opens on a stranger's phone without the Vercel login | Today every address is behind a login | `STATUS.md`, "In one paragraph" |
 | **G4 Payments live** | The ONVO contract is signed and `payments_mode` is `live` | The preview simulates payments | `STATUS.md`, "Not built" |
 | **G5 Invoices live** | Yuntera is registered with Hacienda as an electronic issuer | No document has reached Hacienda | `STATUS.md`, "Not built" |
 | **G6 Complaint route** | The shop's complaint form calls `file_complaint`, and the help page's answer time matches `customer-service.md` (1 working day to acknowledge, 5 to answer) | The help page says "2 días hábiles" and only offers e-mail | Support research §1.2 |
-| **G7 Zone set** | The pilot cantons are chosen and every other district is marked not served in **Operación** | A flyer names cantons; the shop must agree | `docs/02-architecture/decisions.md` 41; go-to-market draft §2.3 |
-| **G8 Warehouse open** | A storage space exists, with drop-off appointments | Stock to the warehouse is the seller offer | `docs/06-operations/logistics-playbook.md`, "Inbound" |
+| **G7 Zone set** | The pilot cantons are chosen and every other district is marked not served in **Operación** | A flyer names cantons; the shop must agree | `docs/02-architecture/decisions.md` 41; go-to-market §2.3 |
+| **G8 Warehouse open** | A storage space exists, and someone receives drop-offs on the day agreed with the seller | Stock to the warehouse is the seller offer. Drop-off appointments are a proposal, not built: the seller centre asks only for a date | `docs/06-operations/logistics-playbook.md`, "Inbound"; `inventory.sql` (`expected_on`) |
 | **G9 Contact channels** | The WhatsApp Business number and the support mailbox exist | `ayuda@yuntera.cr` does not exist yet | `docs/brand/brand-book.md` §15 |
-| **G10 Commercial messages** | A commercial template and a one-step unsubscribe page are built | The worker refuses every marketing message today | `docs/06-operations/notifications.md`; `STATUS.md`, "Not built" |
+| **G10 Commercial messages** | A commercial template, a one-step unsubscribe page and a recorded WhatsApp commercial consent are built | The worker refuses every marketing message today; commercial consent covers e-mail only | `docs/06-operations/notifications.md`; `privacy.md`; `STATUS.md`, "Not built" |
 | **G11 Driver basis** | The lawyer has said in writing how drivers are engaged, and an INS work-risk policy covers them | Employment status is unsettled; no driver rides without INS cover | Compliance §7 |
-| **G12 Lawyer read it** | The lawyer has read the piece's legal lines (warranty, withdrawal, refunds) | Advertising promises are enforceable (Decreto 37899-MEIC art. 55 b) | Market research §7.4 |
+| **G12 Lawyer read it** | The lawyer has read the piece's legal lines (warranty, withdrawal, refunds, return costs, consent) | Advertising promises are enforceable (Decreto 37899-MEIC art. 55 b) | Market research §7.4 |
 
 G1 and G12 apply to every public piece.
 
@@ -58,35 +61,45 @@ G1 and G12 apply to every public piece.
 
 | Claim | May be said | Condition | Source |
 | --- | --- | --- | --- |
-| Order by 2 p.m., arrives the next delivery day, Monday to Saturday, in the central zone | Yes, naming the served cantons | G4, G7; the date shown in the shop is the promise | `geography_data.sql` (zone `gam-core`, cutoff 14, Monday to Saturday, 1 day); help page |
-| Delivery ₡1,500 in central GAM, free from ₡25,000 | Yes, with the zone beside the price | The amounts are working assumptions; re-check the console's zone before printing | `geography_data.sql`; `pricing-and-fees.md` |
+| For items in our warehouse, order Monday to Saturday by 2 p.m. and it usually arrives the next delivery day, in the named cantons; the exact date shows before paying | Yes, with "por lo general" and "la fecha exacta la ve antes de pagar" | G4, G7. A seller-shipped item adds handling days; a full day or a zone closure moves the date | `promise.ts` (handling days, processing days, capacity, closures); `geography_data.sql` (zone `gam-core`, cutoff 14); go-to-market §3 |
+| Delivery ₡1,500 in the named cantons, free from ₡25,000 | Yes, with the cantons beside the price | The amounts are working assumptions; re-check the console's zone before printing | `geography_data.sql`; `pricing-and-fees.md` |
 | Pay by SINPE Móvil or cash on delivery | Yes | G4 | `STATUS.md`, "What is built", Shop |
-| Pay by card | Only if cards are switched on at that moment | G4 | Go-to-market draft §3 |
-| Cash on delivery up to ₡150,000 | Yes, as "hasta ₡150 000" | Setting `cod_max_order_minor`; re-check | `foundation.sql` |
+| Pay by card | Only if cards are switched on at that moment | G4; the roll-out plan's decision 1 puts cards at the open launch | Roll-out plan, decision 1 |
+| Cash on delivery up to a limit | Yes, as "hasta ₡[límite vigente]" | Read the setting `cod_max_order_minor` in the console on the print day. Today ₡150,000; the roll-out plan proposes ₡50,000 for the pilot (its decision 2) | `foundation.sql`; roll-out plan, decision 2 |
 | A four-digit delivery code that only the shopper sees | Yes | Built | `STATUS.md`, "How the new parts work" |
-| 8 business days to return, counted from delivery, without a reason | Yes, in the help page's words | G12 | Help page; compliance §1 |
+| 8 business days to return, counted from delivery, without a reason, except perishables, opened personal-use goods and made-to-measure goods | Yes, always with the exceptions | G12 | Help page; compliance §1 |
 | Refund within 8 calendar days by the same means of payment | Yes | G4, G12; cash orders: for the lawyer to confirm | Customer service; compliance §9 q2 |
 | At least 30 business days of legal warranty | Yes, as the law's minimum, never as "garantía Yuntera" | G12 | Help page; art. 55 h |
 | If the promised date is missed, the shopper can cancel and get everything back | Yes, in the help page's words | G12 | Help page |
 | Sellers see every fee before they list | Yes | Built (itemised fee preview) | `STATUS.md`, Seller centre |
 | No monthly fee, no listing fee in the pilot | Yes | Pilot schedule | `pricing-and-fees.md`, "Not charged in the Pilot" |
 | Commission 8% to 15% by category, warehouse fee ₡900 to ₡4,900 | Yes, as "tarifas del piloto" | They are assumptions in the code; say "piloto" | `fees.ts`; `catalog_reference.sql` |
-| Paid 10 days after delivery, from ₡5,000, by bank transfer | Yes, "por transferencia" | Transfers are made by hand | `people_payouts.sql`; `STATUS.md` |
+| Payment fee | Only as a range (SINPE Móvil 1.5%–2%; card 3.9%–4.25% plus a fixed part) until a gateway is contracted. A worked sale may use the schedule's figure if it says so | G4 | `pricing-and-fees.md` ("quote sellers a range, not a figure"); fact sheet §5 |
+| Money available 10 days after delivery, from ₡5,000, then paid by bank transfer in the next payout run | Yes, "queda disponible … y se lo transferimos en el pago [semanal] siguiente" | Runs are started by hand; the cadence is decision 3 below | `people_payouts.sql`; `STATUS.md`, "Paying sellers" |
 | Sellers see only the buyer's first name and district | Yes | Built | CLAUDE.md; `STATUS.md` |
-| We publish good and bad reviews | Yes | Built | Brand book §4; compliance §1 |
+| We publish good and bad reviews; staff remove only those with personal data, insults or nothing to do with the product | Yes, with the exception | Built (review moderation with reasons) | Compliance §1; `STATUS.md`, Internal console |
 | How results are ordered is published | Yes | Built (help page) | Help page |
 | Yuntera issues a factura electrónica for its fees and for delivery | Only after G5 | G5 | `STATUS.md`, Electronic invoices |
+| A seller can credit the IVA on Yuntera's fees | Only after G5, and only to a seller the accountant has confirmed for | G5; accountant | Compliance §3 |
 
 ### What may not be said, and why
 
 | Do not say | Why |
 | --- | --- |
-| Any share of Costa Ricans who buy online ("80%", "48.5%", "18%") | Three sources disagree; statistics in advertising need identified, checkable sources (Decreto 37899-MEIC art. 55 g) |
+| Any share of Costa Ricans who buy online | Follow go-to-market decision 3; until it is answered, use no figure. Three sources disagree (80%, 48.5%, 18%), and statistics in advertising need identified, checkable sources (Decreto 37899-MEIC art. 55 g) |
 | "Garantía Yuntera", "garantizado" | Allowed only for terms better than the legal warranty, stated in the advert (art. 55 h) |
-| "Envío gratis" without "desde ₡25 000" and the zone | Misleading by omission (art. 55 c) |
-| "Todo el país", "en minutos", "el mismo día", "automático" | Not true: one zone, next delivery day, payouts by hand |
+| "Envío gratis" without "desde ₡25 000" and the cantons | Misleading by omission (art. 55 c) |
+| "Todo el país", "toda la GAM", "en minutos", "el mismo día", "automático" | Not true: named cantons, next delivery day, payouts by hand |
+| "Le llega mañana" or the next delivery day with no condition | `promise.ts` adds handling days for seller-shipped items and skips full or closed days |
+| "Sin dar explicaciones" without the legal exceptions | The help page excludes perishables, opened personal-use goods and made-to-measure goods; an advert's terms are enforceable (art. 55 b) |
+| "Reserve una hora para traer el producto", "le confirmamos el espacio", "con foto" of damage | Not built: the seller gives only a date; receiving records damaged units without a photo (`inventory.sql`) |
+| "Le avisamos al comprador si usted está en el Régimen Simplificado" | The shop does not show it today (`sellers.tax_regime` is not read in `apps/web`); compliance §3 requires it |
+| A return-cost rule as settled policy | `fees-and-settlement.md` calls today's split "a policy written by an engineer, not a decision" (open questions 30–32) |
+| "Le pagamos el día 10" or "a los 10 días" as a payment date | The money becomes available on day 10; the transfer goes in the next run, started by hand |
+| "Nunca para pedidos ya hechos" about a fee change | Fees are computed when a payment is captured; a cash order placed before a change and delivered after it pays the new fee (`finance.sql`, `fixes.sql`) |
+| "Cuatro aplicaciones de teléfono" as built and running | Three have never been built for a phone; the shopper app is in test tracks only (`STATUS.md`) |
 | "Más barato que …", any comparison with a named competitor's price | No sourced, current comparison; Amazon Bazaar is cheaper on small imported goods |
-| A discount, a free-delivery window, a first-order gift | Only with start and end dates, the quantity if limited, every restriction and the former price (art. 55 i, j; MEIC found these missing in 31% of 26 digital adverts in June 2026) |
+| A discount, a free-delivery window, a first-order gift | Only with start and end dates, the quantity if limited, every restriction and the former price (art. 55 i, j). MEIC found breaches in 31% of 26 digital adverts in June 2026; the commonest (40% of breaches) was no stated duration (El Observador, 17 Jun 2026) |
 | A draw, raffle or contest | Needs a reglamento, a notary or sworn declaration and the winner published nationally (art. 59); paid entry may need the JPS, for the lawyer to confirm |
 | "Descargue la app" | The shopper app is only in test tracks; seller, driver and warehouse apps have not run on a phone |
 | Anything in English about the shop's screens being in English | The interface is Spanish only (`STATUS.md`, "Later") |
@@ -101,47 +114,67 @@ Every customer piece carries the English beside the Spanish so the owner, a part
 
 ### Money and dates
 
-- Colones first, as the brand book writes them: `₡25 000` in Spanish copy, `₡25,000` in English copy (decision 4 below).
-- US dollars appear only in the investor brief, at **₡450 per US$**, the banks' selling rate of 18 November 2026 (market research §6.4). Re-check on the day of use.
+- Colones first, as the brand book writes them: `₡25 000` in Spanish copy, `₡25,000` in English copy (decision 1 below).
+- US dollars appear only in the investor brief, at **₡450 per US$**, the banks' selling rate of 18 November 2026 (market research §6.4), as in the go-to-market and team documents. The pricing proposal uses ₡449 from the same day; the ₡1 difference changes no figure here. Re-check on the day of use.
 - Dates as people say them: _lunes 7 de diciembre_.
 
 ---
 
-## Order to produce things in
+## What the owner does, in order
 
-| Step | What | Who | Done when |
+Week numbers count from week 1 of the roll-out plan (the week the lawyer and the accountant are engaged, its decision 4). All are estimates.
+
+| Step | When | What | Who | Done when |
+| --- | --- | --- | --- | --- |
+| 1 | Week 1 | Answer the decisions in this pack and the seven listed at the end | Owner | Answers written at the end of each file |
+| 2 | Week 1 | Order the trademark search and register `yuntera.cr` | Owner | Search requested; domain receipt |
+| 3 | Week 1 | Start seller interviews, without printed material and without asking for a written yes | Owner | 10 interviews in the visit log (seller pitch §8) |
+| 4 | Week 1–2 | Copy editors (Costa Rican Spanish, English) read `messaging.md` and `sales/seller-pitch.md` | Copy editors | Comments returned and applied |
+| 5 | When G1 is met | Reserve the social names; set up the WhatsApp Business number (G1b, G9) | Owner | Names and number in hand |
+| 6 | Week 2–4 | Lawyer reads every line marked G12 | Lawyer | Written note per file |
+| 7 | When G1 and G2 are met | Seller leave-behind and shop flyer designed; 2 print quotes | Design team; owner | Proof approved |
+| 8 | After step 7 | Seller visits under the name, with the talk track | Owner | Visit log kept |
+| 9 | After step 7 | Seller deck designed | Design team | Deck file approved |
+| 10 | Before the pilot's first order | Parcel card designed and printed | Design team; owner | Cards at the packing bench |
+| 11 | When G8 is met and a fair is chosen | Fair flyer, poster and sign-up card | Design team; owner | Proof approved |
+| 12 | After G11 | Driver notice | Owner; design team | Lawyer's note on file |
+| 13 | At the open launch, after G3, G4, G6, G7 | Shopper flyer and social calendar | Owner | Shop opens on a stranger's phone; payments live |
+| 14 | The week it is used | Partner and investor brief, every figure re-read | Owner | Every figure re-read on its source |
+
+### What printing costs
+
+No price list from a Costa Rican print shop was found. Every figure below is an **assumption**, to replace with 2 written quotes before step 7.
+
+| Piece | First run | Assumed cost | Basis |
 | --- | --- | --- | --- |
-| 1 | Owner answers the five decisions below | Owner | Answers written at the end of this file |
-| 2 | Native Costa Rican Spanish copy editor and native English copy editor read `messaging.md` and `sales/seller-pitch.md` | Copy editors | Comments returned and applied |
-| 3 | Lawyer reads every line marked G12 | Lawyer | Written note per file |
-| 4 | Gates G1 and G2 met | Owner, lawyer | Search result in writing; company data known |
-| 5 | Seller leave-behind and shop flyer designed; 2 print quotes | Design team; owner | Proof approved |
-| 6 | Seller visits start with the talk track | Owner | Visit list kept (seller pitch §8) |
-| 7 | Seller deck designed | Design team | Deck file approved |
-| 8 | Fair flyer and poster designed, once a fair date is set | Design team; owner | Proof approved |
-| 9 | Driver notice, after G11 | Owner; design team | Lawyer's note on file |
-| 10 | Shopper flyer and social calendar, after G3, G4, G6, G7 | Owner | Shop opens on a stranger's phone; payments live |
-| 11 | Partner and investor brief, re-checked the week it is used | Owner | Every figure re-read on its source |
+| Shop flyer (media carta, both sides) | 200 | ₡12,000–₡24,000 | Go-to-market §4.1: ₡30,000–₡60,000 per 500 flyers |
+| Seller leave-behind (carta, both sides) | 100 | ₡10,000–₡25,000 | Same basis, larger sheet (assumption) |
+| Parcel card | 300 | ₡6,000–₡18,000 | Go-to-market §5: ₡20–₡60 a card |
+| Fair flyers and 1 poster | 150 + 1 | ₡10,000–₡25,000 | Same basis (assumption) |
+| Shopper flyer, at the open launch | 500 | ₡30,000–₡60,000 | Go-to-market §4.1 |
+| **First run before the launch** (first four rows) | | **about ₡38,000–₡92,000** | Sum |
 
 ---
 
 ## How results are measured
 
-The product does not record where a customer came from (no "¿Cómo nos conoció?" field, no campaign tag; go-to-market draft §1). Until it does, each piece carries its own code, and the owner counts by hand in one spreadsheet every Saturday.
+The product does not record where a customer came from (no "¿Cómo nos conoció?" field, no campaign tag; go-to-market §1). Until it does, each piece carries its own code, and the owner counts by hand in one spreadsheet every Saturday.
 
 - **A WhatsApp link with a pre-written first line.** Each piece's QR code opens `wa.me/[número]?text=...` with a code in the text, for example "Hola, vengo del volante VENDE-1". The person sends it; the code arrives with the message. This needs nothing built.
 - **A code to say out loud** at a fair or on the phone, printed beside the QR.
 - **Codes are never personal.** They name the piece and the place, never a person.
+- **The spreadsheet holds counts, not people.** Count returning shoppers by order number pairs, never by name, e-mail or phone.
 
 Code list:
 
 | Code | Piece |
 | --- | --- |
+| PAQUETE-1 | Parcel card |
 | COMPRA-1 | Shopper flyer, door to door |
 | COMPRA-2 | Shopper flyer, left on a seller's counter |
 | VENDE-1 | Shop flyer |
 | VENDE-2 | Seller leave-behind (one page) |
-| FERIA-[month] | Fair flyer and poster, for example FERIA-DIC |
+| FERIA-[month] | Fair flyer and poster, for example FERIA-MAR |
 | RUTA-1 | Driver notice |
 | RED-[week]-[post] | Social posts, for example RED-S1-03 |
 | SOCIO-1 | Partner brief |
@@ -150,22 +183,30 @@ Code list:
 
 ## Decisions for the owner
 
-1. **Which cantons do the shopper pieces name?**
-   - A. Cluster A, East: San José Central, Montes de Oca, Curridabat, Goicoechea, Moravia. **(recommended)** It matches the go-to-market draft's recommendation, so the pieces and the zone switch agree.
-   - B. Cluster B, West: Escazú, Santa Ana, Belén.
-   - C. Cluster C, North: Heredia Central, Santo Domingo, San Pablo, Flores.
-2. **Do the seller pieces offer the 6-month price lock and free set-up of the first 20 products?**
-   - A. Yes, with a dated join-by line. **(recommended)** It is the pricing proposal's recommended offer (decision 4A there) and costs staff time, not margin.
-   - B. No offer; fees only.
-3. **Do the launch posts include a free-delivery window?**
-   - A. No offer in the first four weeks. **(recommended)** The go-to-market draft recommends no offer, and a missing date or stock line is the commonest breach MEIC found.
-   - B. Yes, the pricing proposal's 14 days of free delivery in central GAM, with the dates in every post.
-4. **How do amounts look in English copy?**
+1. **How do amounts look in English copy?**
    - A. `₡25,000` in English, `₡25 000` in Spanish. **(recommended)** English readers expect the comma; the amount is the same.
    - B. `₡25 000` in both, as the English research recommends for the screens.
-5. **Who answers the WhatsApp number printed on the pieces?**
-   - A. The owner, Monday to Saturday, with the hours printed. **(recommended)** The customer-service document sets those days, and a number nobody answers breaks the first promise.
-   - B. A sales agent for sellers and the owner for shoppers, on two numbers.
+2. **Who answers the WhatsApp number printed on the pieces, and the comments on the posts?**
+   - A. The owner, Monday to Saturday, with the hours printed, for both, for the first four weeks of the launch. **(recommended)** The customer-service document sets those days, an unanswered number breaks the first promise, and early comments are product research.
+   - B. A sales agent for sellers and the owner for shoppers, on two numbers; a contractor for the comments.
+3. **How often are sellers paid?**
+   - A. One payout run a week, on a fixed weekday printed in the seller pieces. **(recommended)** A printed day lets a seller check the promise, and ONVO's US$3 per payout costs about ₡5,800 a month weekly against about ₡35,000 daily (pricing proposal §2.2).
+   - B. Twice a week.
+   - C. Whenever finance has time, with no day printed.
+
+### Decisions asked elsewhere that change these pieces
+
+Each is asked once, in the document named. Until it is answered, the pieces keep the bracket.
+
+| Question | Asked in | What it changes here |
+| --- | --- | --- |
+| Which cantons the pilot serves | Go-to-market, decision 1 | Every `[cantones]` |
+| Whether marketing quotes how many Costa Ricans buy online | Go-to-market, decision 3 | The first "may not be said" row |
+| Offer for the first sellers (price lock to a fixed date, 20 products set up) | Pricing proposal, decision 4 | The offer line in the leave-behind, shop flyer and deck |
+| Offer for shoppers at the open launch (14 days of free delivery) | Pricing proposal, decision 5 | The launch posts; the shopper flyer's own decision |
+| Card fee | Pricing proposal, decision 2 | The card line of the price sheet |
+| Cards in the pilot; cash-on-delivery limit | Roll-out plan, decisions 1 and 2 | "[Tarjeta, si está activa]"; "hasta ₡[límite vigente]" |
+| How drivers are engaged, whose vehicle, the first hire | Team structure, decisions 1 and 2 | The driver notice's blanks and when it is posted |
 
 ---
 
@@ -177,9 +218,10 @@ Code list:
 | Pilot fees stay as in `2026-11-assumptions` | Seller pieces | `fees.ts` and the console's **Cobros** section (mode and fees) before printing |
 | A pre-written WhatsApp link (`wa.me/...?text=`) is enough to count responses | Every piece | Test one link on two phones before printing |
 | Print shops in Costa Rica work in carta, media carta and tabloide | Flyers | Two print quotes |
+| Printing costs in the table above | Budget | Two print quotes |
 
 ## Sources
 
-- Repository: `STATUS.md` (23 November 2026); `docs/brand/brand-book.md` §3, §4, §8, §15; `docs/01-product/pricing-and-fees.md`; `packages/core/src/fees.ts`; `supabase/migrations/20261121080300_geography_data.sql`, `20261121080000_foundation.sql`, `20261121082300_people_payouts.sql`, `20261121080450_catalog_reference.sql`; `apps/web/src/app/ayuda/page.tsx`; `docs/05-security-compliance/compliance-costa-rica.md`, `privacy.md`; `docs/06-operations/customer-service.md`, `notifications.md`; `docs/02-architecture/decisions.md` 41.
-- Pack research, read 24 November 2026: market research (`/root/yuntera-audit/strategy-pack/research/market.md`) §6.4 and §7.4, citing Decreto 37899-MEIC arts. 55 and 59 (consolidated print of 7 January 2026, https://www.micitt.go.cr/sites/default/files/marco_juridico_legal/), Ley 8642 art. 44 (https://www.sutel.go.cr/sites/default/files/normativas/ley_general_de_telecomunicaciones.pdf) and Infobae, 17 June 2026 (MEIC inspection); support research (`support-and-it.md`) §1.2; English research (`english.md`) §7.
-- Pack drafts read for consistency on 24 November 2026: go-to-market strategy and pricing strategy proposal (other writers' work in progress).
+- Repository: `STATUS.md` (23 November 2026); `docs/brand/brand-book.md` §3, §4, §8, §15; `docs/01-product/pricing-and-fees.md`; `docs/04-algorithms/fees-and-settlement.md` ("Returning part of an order"); `packages/core/src/fees.ts`, `promise.ts`; `supabase/migrations/20261121080300_geography_data.sql`, `20261121080000_foundation.sql`, `20261121080500_inventory.sql`, `20261121080800_finance.sql`, `20261121082300_people_payouts.sql`, `20261121082400_fixes.sql`, `20261121080450_catalog_reference.sql`; `apps/web/src/app/ayuda/page.tsx`; `docs/05-security-compliance/compliance-costa-rica.md`, `privacy.md`; `docs/06-operations/customer-service.md`, `notifications.md`, `logistics-playbook.md`; `docs/02-architecture/decisions.md` 41.
+- Pack research, read 24 November 2026: market research (`/root/yuntera-audit/strategy-pack/research/market.md`) §6.4 and §7.4, citing Decreto 37899-MEIC arts. 55 and 59 (consolidated print of 7 January 2026, https://www.micitt.go.cr/sites/default/files/marco_juridico_legal/), Ley 8642 art. 44 (https://www.sutel.go.cr/sites/default/files/normativas/ley_general_de_telecomunicaciones.pdf); El Observador, 17 June 2026, https://observador.cr/meic-detecta-incumplimientos-en-31-de-los-anuncios-digitales-por-el-dia-del-padre/ (MEIC inspection: 31% of adverts with a breach; no duration 40% of breaches, quantities 20%, former price 20%), re-read 24 November 2026; support research (`support-and-it.md`) §1.2; English research (`english.md`) §7.
+- Strategy documents read for consistency on 24 November 2026: go-to-market, roll-out plan and team structure (`docs/00-strategy/`, other writers' work in progress) and the pricing strategy proposal.

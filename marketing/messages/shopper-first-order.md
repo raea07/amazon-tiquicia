@@ -6,7 +6,7 @@
 **Conclusion 3.** "¿Cómo nos conoció?" is asked once, after the first delivery, to count which channel works until the product records it.
 **The owner must decide** the question at the end (whether the check-in asks for a review).
 
-**Gates:** G4 and G9 before any message about a real order. G10 before message 7 (the marketing e-mail). G12 for the refund lines.
+**Gates:** G4 and G9 before any message about a real order. G10 before messages 6 and 7 (the invitations to buy again). G12 for the refund and return lines.
 
 ---
 
@@ -27,7 +27,7 @@ Not written here; listed so nobody duplicates them. Sources: `packages/notificat
 | --- | --- | --- |
 | An answer to a shopper who wrote | None beyond their message | Ley 8642 art. 44 covers direct sales, not answers (for the lawyer to confirm) |
 | About an order: a delay, a check-in, "¿cómo nos conoció?" | None; it concerns their order. No offer inside | Customer-service targets; the same reading |
-| An invitation to buy (again) | Prior consent for that channel. In the product, the commercial box covers e-mail only ("por correo"); for WhatsApp, a written yes kept with the date | Art. 44; `privacy.md`, "Comunicaciones comerciales" |
+| An invitation to buy (again) | Prior consent for that channel, recorded in the product. The commercial box covers e-mail only ("por correo"); a WhatsApp consent needs its own box and log first (G10) | Art. 44; `privacy.md`, "Comunicaciones comerciales" |
 | Marketing e-mail after a purchase | Allowed for **similar** products with a free opt-out, under art. 44's exception; the product's rule is stricter and requires the unticked box | Art. 44; `notifications.md` |
 
 Always: name the sender, give a way to stop, never ask for or write the delivery code, an address, a card number or an ID number (CLAUDE.md privacy rules; help page).
@@ -42,7 +42,7 @@ Only to friends, family and sellers' customers who agreed to test the pilot (roa
 
 | Español (usted) | English |
 | --- | --- |
-| Hola, [nombre]. Soy [nombre], de Yuntera. Como hablamos, aquí está el enlace para el piloto: [enlace]. Entregamos en [cantones]; si pide antes de las 2 de la tarde, le llega el siguiente día de entrega, de lunes a sábado. Paga con SINPE Móvil o en efectivo al recibir. Es una compra real: si algo no funciona, cuénteme aquí. Si prefiere que no le escriba más, dígamelo. | Hello, [name]. I'm [name], from Yuntera. As we discussed, here is the link for the pilot: [link]. We deliver in [cantons]; if you order before 2 p.m., it arrives the next delivery day, Monday to Saturday. You pay by SINPE Móvil or cash on delivery. It is a real purchase: if anything doesn't work, tell me here. If you'd rather I don't write again, just say so. |
+| Hola, [nombre]. Soy [nombre], de Yuntera. Como hablamos, aquí está el enlace para el piloto: [enlace]. Entregamos en [cantones]; si pide de lunes a sábado antes de las 2 de la tarde, por lo general le llega el siguiente día de entrega, y la fecha exacta la ve antes de pagar. Paga con SINPE Móvil o en efectivo al recibir. Es una compra real: si algo no funciona, cuénteme aquí. Si prefiere que no le escriba más, dígamelo. | Hello, [name]. I'm [name], from Yuntera. As we discussed, here is the link for the pilot: [link]. We deliver in [cantons]; if you order Monday to Saturday before 2 p.m., it usually arrives the next delivery day, and you see the exact date before you pay. You pay by SINPE Móvil or cash on delivery. It is a real purchase: if anything doesn't work, tell me here. If you'd rather I don't write again, just say so. |
 
 ### 2. Answers before the first order (to a shopper who wrote)
 
@@ -50,9 +50,9 @@ Only to friends, family and sellers' customers who agreed to test the pilot (roa
 | --- | --- | --- |
 | ¿Entregan en mi zona? | Entregamos en [cantones]. Al escribir su distrito en la tienda le decimos si llegamos ahí. Si todavía no llegamos, se lo dice antes de pagar. | We deliver in [cantons]. When you enter your district in the shop, it tells you if we go there. If we don't yet, it says so before you pay. |
 | ¿Cuánto cuesta el envío? | ₡1 500 en [cantones]; gratis en pedidos desde ₡25 000. Lo ve en el producto, antes de pagar. | ₡1,500 in [cantons]; free on orders from ₡25,000. You see it on the product, before you pay. |
-| ¿Cuándo me llega? | Si pide antes de las 2 de la tarde, el siguiente día de entrega, de lunes a sábado. La fecha exacta sale en el producto y antes de confirmar. | If you order before 2 p.m., the next delivery day, Monday to Saturday. The exact date shows on the product and before you confirm. |
+| ¿Cuándo me llega? | Si pide de lunes a sábado antes de las 2 de la tarde, por lo general el siguiente día de entrega. La fecha exacta sale en el producto y antes de confirmar. | If you order Monday to Saturday before 2 p.m., usually the next delivery day. The exact date shows on the product and before you confirm. |
 | ¿Cómo pago con SINPE Móvil? | Al confirmar el pedido, la página del pedido le muestra los pasos para pagar. Pague solo desde esa página; nunca le pediremos una transferencia por mensaje a otro número. | When you confirm the order, the order page shows you how to pay. Pay only from that page; we will never ask you by message for a transfer to another number. |
-| ¿Y si no me gusta? | Tiene 8 días hábiles desde que recibe para devolverlo, sin dar explicaciones. Lo pide en la página del pedido y el reembolso llega en un máximo de 8 días naturales. | You have 8 business days from delivery to return it, no reason needed. Ask on the order page; the refund arrives within 8 calendar days. |
+| ¿Y si no me gusta? | Tiene 8 días hábiles desde que recibe para devolverlo, sin dar explicaciones, salvo perecederos, artículos de uso personal abiertos y hechos a la medida. Lo pide en la página del pedido y el reembolso llega en un máximo de 8 días naturales. | You have 8 business days from delivery to return it, no reason needed, except perishables, opened personal items and made-to-measure goods. Ask on the order page; the refund arrives within 8 calendar days. |
 
 "Pague solo desde esa página" matches the payment design: the order page's pay step, the gateway's word, never a receipt photo (`STATUS.md`, Payments). The SINPE Móvil steps themselves are on the order page; do not copy them into messages, because they depend on the gateway's set-up.
 
@@ -72,7 +72,7 @@ If the delay is not Yuntera's fault, drop "Fue culpa nuestra" and do not blame a
 | --- | --- |
 | Hola, [nombre]. Soy [nombre], de Yuntera. Ayer le entregamos su primer pedido. ¿Llegó todo bien? Si algo no está bien, dígame aquí y lo resolvemos. Una pregunta, si me permite: ¿cómo supo de Yuntera? | Hello, [name]. I'm [name], from Yuntera. We delivered your first order yesterday. Did everything arrive well? If anything is wrong, tell me here and we'll sort it out. One question, if I may: how did you hear about Yuntera? |
 
-Write the answer (the channel, never the person's words with their name) in the Saturday spreadsheet. Ask it once per shopper.
+Write only the channel in the Saturday spreadsheet, never the person's name, words or contact. Ask it once per shopper.
 
 ### 5. When the shopper reports a problem
 
@@ -82,15 +82,15 @@ Write the answer (the channel, never the person's words with their name) in the 
 
 For an order paid in cash, the refund route (SINPE Móvil with the shopper's written agreement) is for the lawyer to confirm (compliance §9, question 2); until then say "le explico cómo le devolvemos el dinero" and follow `customer-service.md`.
 
-### 6. Invitation to order again (marketing: only with consent)
+### 6. Invitation to order again (marketing: held until G10)
 
-Only to a shopper who said yes to WhatsApp offers, in writing, with the date kept. Not to everyone who bought.
+Not used until the product records a WhatsApp commercial consent (G10). A yes kept by hand outside the product cannot meet `privacy.md`: consent is saved only by `set_my_commercial_consent` with its wording version, can be withdrawn from any message and from the account, and is deleted with the account. Then only to a shopper whose recorded consent covers WhatsApp. Not to everyone who bought.
 
 | Español (usted) | English |
 | --- | --- |
-| Publicidad. Hola, [nombre]. Soy [nombre], de Yuntera. Esta semana [tienda] publicó [producto] en Yuntera: [enlace]. Entregamos en [cantones] el siguiente día de entrega si pide antes de las 2 de la tarde. Si no quiere recibir estos mensajes, responda BAJA. | Advertising. Hello, [name]. I'm [name], from Yuntera. This week [shop] listed [product] on Yuntera: [link]. We deliver in [cantons] the next delivery day if you order before 2 p.m. If you don't want these messages, reply BAJA. |
+| Publicidad. Hola, [nombre]. Soy [nombre], de Yuntera. Esta semana [tienda] publicó [producto] en Yuntera: [enlace]. Si pide de lunes a sábado antes de las 2 de la tarde, por lo general le llega el siguiente día de entrega en [cantones]. Si no quiere recibir estos mensajes, responda BAJA. | Advertising. Hello, [name]. I'm [name], from Yuntera. This week [shop] listed [product] on Yuntera: [link]. If you order Monday to Saturday before 2 p.m., it usually arrives the next delivery day in [cantons]. If you don't want these messages, reply BAJA. |
 
-BAJA, ALTO and NO MAS are the opt-out words planned for the product (`STATUS.md`, "What needs you" 7.1). A BAJA by hand goes in the log at once and the person is not written to again.
+BAJA, ALTO and NO MAS are the opt-out words planned for the product (`STATUS.md`, "What needs you" 7.1). Once G10 is met, the product's suppression list holds them.
 
 ---
 
@@ -103,7 +103,7 @@ Sent from the product, never by hand, because only the product records consent, 
 | | Español (usted) | English |
 | --- | --- | --- |
 | Subject | Publicidad: lo nuevo en Yuntera esta semana | Advertising: what's new on Yuntera this week |
-| Body | Hola, [nombre]: Estas tiendas publicaron productos nuevos esta semana: [lista de 3 tiendas y productos, con enlace]. Recuerde: si pide antes de las 2 de la tarde, le llega el siguiente día de entrega en [cantones]. El envío es gratis desde ₡25 000. | Hello, [name]: These shops listed new products this week: [list of 3 shops and products, with links]. Remember: order before 2 p.m. and it arrives the next delivery day in [cantons]. Delivery is free from ₡25,000. |
+| Body | Hola, [nombre]: Estas tiendas publicaron productos nuevos esta semana: [lista de 3 tiendas y productos, con enlace]. Recuerde: si pide de lunes a sábado antes de las 2 de la tarde, por lo general le llega el siguiente día de entrega en [cantones]. El envío es gratis desde ₡25 000 en esos cantones. | Hello, [name]: These shops listed new products this week: [list of 3 shops and products, with links]. Remember: order Monday to Saturday before 2 p.m. and it usually arrives the next delivery day in [cantons]. Delivery is free from ₡25,000 in those cantons. |
 | Footer | Recibe este correo porque aceptó recibir ofertas de Yuntera el [fecha]. Darse de baja: [enlace de un solo paso]. [Nombre legal], cédula jurídica [número], [dirección]. | You receive this e-mail because you agreed to Yuntera offers on [date]. Unsubscribe: [one-step link]. [Legal name], legal ID [number], [address]. |
 
 Any offer inside it follows art. 55 (dates, quantity, restrictions, former price).
@@ -115,7 +115,7 @@ Any offer inside it follows art. 55 (dates, quantity, restrictions, former price
 | Measure | Where |
 | --- | --- |
 | "¿Cómo nos conoció?" answers by channel | Saturday spreadsheet |
-| Second orders within 60 days by pilot shoppers | By hand until the product has a report (go-to-market draft §6, number 6) |
+| Second orders within 60 days by pilot shoppers | By hand until the product has a report (go-to-market §6, number 6), counted by order-number pairs from the console, never by name, e-mail or phone |
 | Problems reported in the check-in | Written as a case once the console's support desk exists (task 46); until then, the spreadsheet |
 | Opt-outs | Log; the product's suppression list once G10 is met |
 

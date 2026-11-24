@@ -1,7 +1,7 @@
 # Seller outreach and follow-up messages
 
 **What it is.** The WhatsApp and e-mail texts a person at Yuntera sends to a shop: the first reply, the follow-ups, the yes, and the stop. With the consent rules that apply to marketing messages in Costa Rica.
-**Conclusion 1.** Yuntera never writes first to a shop that has not asked. First contact is a visit, a call made by the owner, or a reply to a shop that wrote (a QR, a fair sheet, a referral the shop itself acted on).
+**Conclusion 1.** Yuntera never writes first to a shop that has not asked. First contact is a visit, a call made by the owner, or a reply to a shop that wrote (a QR, a fair sign-up card, a referral the shop itself acted on).
 **Conclusion 2.** Every message names the sender and offers a way to stop. A "no" or silence after two follow-ups ends the conversation.
 **Conclusion 3.** These are sent by hand from the WhatsApp Business app and a normal mailbox; the product sends no marketing message yet (gate G10).
 **The owner must decide** the question at the end (how many follow-ups).
@@ -26,7 +26,7 @@ The rules this file follows:
 
 | # | Rule | How it is checked |
 | --- | --- | --- |
-| 1 | Write only to a shop that asked: it wrote first, ticked the fair sheet's box, or said "escríbame" on a visit or call | The visit log has the date and the words |
+| 1 | Write only to a shop that asked: it wrote first, ticked the box on a fair sign-up card, or said "escríbame" on a visit or call | The visit log has the date and the words |
 | 2 | Never use bought, scraped or partner-supplied lists | No list exists to use |
 | 3 | First line names the person and Yuntera; the footer gives the legal name | Every text below |
 | 4 | Every message says how to stop; "no", "BAJA" or "no me escriba" ends it at once | The log marks "no contactar" with the date |
@@ -45,13 +45,13 @@ Using the "Publicidad" prefix: a reply to a shop that asked for information is a
 
 | Español (usted) | English |
 | --- | --- |
-| Buenas, [nombre]. Soy [nombre], de Yuntera. Gracias por escribirnos. En resumen: usted nos manda el producto una vez y nosotros lo guardamos, lo empacamos, lo entregamos en [cantones] y cobramos por SINPE Móvil o contra entrega. Sin mensualidad: paga una comisión cuando vende. ¿Le mando la hoja con todas las tarifas y un ejemplo de lo que recibiría? | Hello, [name]. I'm [name], from Yuntera. Thank you for writing. In short: you send us the product once and we store it, pack it, deliver it in [cantons] and collect by SINPE Móvil or cash on delivery. No monthly fee: you pay a commission when you sell. Shall I send you the sheet with every fee and an example of what you would receive? |
+| Buenas, [nombre]. Soy [nombre], de Yuntera. Gracias por escribirnos. En resumen: usted nos manda el producto una vez y nosotros lo guardamos, lo empacamos, lo entregamos en [cantones] y le cobramos al cliente por usted, por SINPE Móvil o contra entrega. Sin mensualidad: paga una comisión cuando vende. ¿Le mando la hoja con todas las tarifas y un ejemplo de lo que recibiría? | Hello, [name]. I'm [name], from Yuntera. Thank you for writing. In short: you send us the product once and we store it, pack it, deliver it in [cantons] and collect from the customer for you, by SINPE Móvil or cash on delivery. No monthly fee: you pay a commission when you sell. Shall I send you the sheet with every fee and an example of what you would receive? |
 
 ### 2. The fee sheet, after a yes
 
 | Español (usted) | English |
 | --- | --- |
-| Aquí está. [Adjunte la hoja en PDF.] Lo más importante: comisión del 8% al 15% según la categoría, bodega desde ₡900 por unidad, cobro por SINPE Móvil 1,5%, más IVA sobre esos cargos. En una venta de ₡20 000 en Hogar pagada por SINPE Móvil, usted recibe ₡15 367. Le pagamos por transferencia 10 días después de la entrega. Todavía no hemos hecho una venta real: buscamos cinco tiendas para el piloto. ¿Quiere que le cuente los pasos? Si prefiere que no le escriba más, dígamelo. | Here it is. [Attach the PDF sheet.] The essentials: commission 8% to 15% by category, warehouse from ₡900 a unit, SINPE Móvil collection 1.5%, plus IVA on those fees. On a ₡20,000 home sale paid by SINPE Móvil, you receive ₡15,367. We pay you by transfer 10 days after delivery. We have not made a real sale yet: we are looking for five shops for the pilot. Would you like me to explain the steps? If you'd rather I don't write again, just say so. |
+| Aquí está. [Adjunte la hoja en PDF.] Lo más importante: comisión del 8% al 15% según la categoría, bodega desde ₡900 por unidad, cobro por SINPE Móvil desde 1,5%, más IVA sobre esos cargos. En una venta de ₡20 000 en Hogar pagada por SINPE Móvil, usted recibe ₡15 367. Su dinero queda disponible 10 días después de la entrega y se lo transferimos en el pago [semanal] siguiente. Todavía no hemos hecho una venta real: buscamos cinco tiendas para el piloto. ¿Quiere que le cuente los pasos? Si prefiere que no le escriba más, dígamelo. | Here it is. [Attach the PDF sheet.] The essentials: commission 8% to 15% by category, warehouse from ₡900 a unit, SINPE Móvil collection from 1.5%, plus IVA on those fees. On a ₡20,000 home sale paid by SINPE Móvil, you receive ₡15,367. Your money becomes available 10 days after delivery and we transfer it in the next [weekly] payout. We have not made a real sale yet: we are looking for five shops for the pilot. Would you like me to explain the steps? If you'd rather I don't write again, just say so. |
 
 ### 3. First follow-up, 5 working days after message 2 with no answer
 
@@ -69,9 +69,9 @@ Using the "Publicidad" prefix: a reply to a shop that asked for information is a
 
 | Español (usted) | English |
 | --- | --- |
-| ¡Qué bueno! Estos son los pasos: 1. Regístrese en [vende.yuntera.cr] con la cédula de la tienda y una cuenta IBAN a su nombre. 2. Publique sus productos; antes de publicar verá cada cargo. 3. Reserve una hora para traer el producto a la bodega en [lugar]; cada unidad necesita su código de barras. Lo contamos y se lo confirmamos en un día hábil. Si se traba en algún paso, escríbame aquí. | Great! These are the steps: 1. Register at [vende.yuntera.cr] with the shop's ID and an IBAN account in its name. 2. List your products; before you list, you will see every fee. 3. Book a time to bring the product to the warehouse in [place]; every unit needs its barcode. We count it and confirm within one working day. If you get stuck at any step, write to me here. |
+| ¡Qué bueno! Estos son los pasos: 1. Regístrese en [vende.yuntera.cr] con la cédula de la tienda y una cuenta IBAN [a nombre de la tienda]. 2. Publique sus productos; antes de publicar verá cada cargo. 3. Avísenos qué día trae el producto a la bodega en [lugar] y coordinamos la hora por aquí; cada unidad necesita su código de barras. Nuestra meta es contarlo y ponerlo a la venta en un día hábil. Si se traba en algún paso, escríbame aquí. | Great! These are the steps: 1. Register at [vende.yuntera.cr] with the shop's ID and an IBAN account [in the shop's name]. 2. List your products; before you list, you will see every fee. 3. Tell us which day you will bring the product to the warehouse in [place] and we will agree the time here; every unit needs its barcode. Our aim is to count it and put it on sale within one working day. If you get stuck at any step, write to me here. |
 
-This message holds the piece's one exclamation (brand book §3: one, for good news).
+This message holds the piece's one exclamation (brand book §3: one, for good news). The bracket on the account holder follows seller pitch decision 1; until it is answered, write "a su nombre o al de la tienda". Drop-off appointments are not built (the seller centre asks only for a date), and one working day is the playbook's target, not a promise (`logistics-playbook.md`, Inbound).
 
 ### 6. When the shop says no or asks to stop
 
@@ -85,14 +85,14 @@ Then mark "no contactar" in the visit log with the date. Do not reply again unle
 
 ## E-mail
 
-For shops that gave an e-mail address with consent (fair sheet, or asked on a call). Plain text; no tracking pixels; no attachment other than the fee sheet.
+For shops that gave an e-mail address with consent (fair sign-up card, or asked on a call). Plain text; no tracking pixels; no attachment other than the fee sheet.
 
 ### A. Reply with the fee sheet
 
 | | Español (usted) | English |
 | --- | --- | --- |
 | Subject | Las tarifas de Yuntera que nos pidió | The Yuntera fees you asked for |
-| Body | Buenos días, [nombre]: Gracias por su interés en vender en Yuntera. Le adjunto la hoja con todas las tarifas del piloto y un ejemplo de venta. En resumen: usted nos manda el producto una vez, y nosotros lo guardamos, lo empacamos, lo entregamos en [cantones] y cobramos. No hay mensualidad ni costo por publicar. En una venta de ₡20 000 en Hogar pagada por SINPE Móvil, usted recibe ₡15 367; le pagamos por transferencia 10 días después de la entrega. Todavía no hemos hecho una venta real. Buscamos cinco tiendas para un piloto cerrado. Si quiere participar, responda a este correo o escríbanos al [WhatsApp]. Saludos, [nombre], Yuntera | Good morning, [name]: Thank you for your interest in selling on Yuntera. Attached is the sheet with every pilot fee and an example sale. In short: you send us the product once, and we store it, pack it, deliver it in [cantons] and collect the money. There is no monthly fee and no listing fee. On a ₡20,000 home sale paid by SINPE Móvil, you receive ₡15,367; we pay you by transfer 10 days after delivery. We have not made a real sale yet. We are looking for five shops for a closed pilot. If you would like to take part, reply to this e-mail or write to us at [WhatsApp]. Regards, [name], Yuntera |
+| Body | Buenos días, [nombre]: Gracias por su interés en vender en Yuntera. Le adjunto la hoja con todas las tarifas del piloto y un ejemplo de venta. En resumen: usted nos manda el producto una vez, y nosotros lo guardamos, lo empacamos, lo entregamos en [cantones] y le cobramos al cliente por usted. No hay mensualidad ni costo por publicar. En una venta de ₡20 000 en Hogar pagada por SINPE Móvil, usted recibe ₡15 367; su dinero queda disponible 10 días después de la entrega y se lo transferimos en el pago [semanal] siguiente. Todavía no hemos hecho una venta real. Buscamos cinco tiendas para un piloto cerrado. Si quiere participar, responda a este correo o escríbanos al [WhatsApp]. Saludos, [nombre], Yuntera | Good morning, [name]: Thank you for your interest in selling on Yuntera. Attached is the sheet with every pilot fee and an example sale. In short: you send us the product once, and we store it, pack it, deliver it in [cantons] and collect the money from the customer for you. There is no monthly fee and no listing fee. On a ₡20,000 home sale paid by SINPE Móvil, you receive ₡15,367; your money becomes available 10 days after delivery and we transfer it in the next [weekly] payout. We have not made a real sale yet. We are looking for five shops for a closed pilot. If you would like to take part, reply to this e-mail or write to us at [WhatsApp]. Regards, [name], Yuntera |
 | Footer | Le escribimos porque nos lo pidió el [fecha] en [lugar o canal]. Si no quiere recibir más correos nuestros, responda "BAJA" y no le escribimos más. [Nombre legal], cédula jurídica [número], [dirección]. | We are writing because you asked us to on [date] at [place or channel]. If you don't want more e-mails from us, reply "BAJA" and we won't write again. [Legal name], legal ID [number], [address]. |
 
 ### B. Follow-up (once, 5 working days later)
@@ -113,7 +113,7 @@ For shops that gave an e-mail address with consent (fair sheet, or asked on a ca
 | Yes after message 2, 3 or 4 | Visit log |
 | Registrations and shops active with stock | Console, **Vendedores** |
 | Stops ("no", "BAJA") | Visit log, "no contactar" |
-| Done when | Five shops active with stock (roadmap phase 0 exit) |
+| Done when | Five shops active with stock before the first invited order (our own working target; the roadmap's phase 0 exit asks only for 5 sellers who said yes) |
 
 ## Decision for the owner
 
@@ -134,4 +134,4 @@ For shops that gave an e-mail address with consent (fair sheet, or asked on a ca
 
 - Ley 8642, Ley General de Telecomunicaciones, art. 44, https://www.sutel.go.cr/sites/default/files/normativas/ley_general_de_telecomunicaciones.pdf (read 24 November 2026 by the market research, §7.4).
 - Repository: `docs/05-security-compliance/privacy.md` ("Comunicaciones comerciales"); `docs/06-operations/notifications.md` ("Preferences and consent", "Not built"); `packages/notifications/whatsapp/seller_new_order.json`; `docs/brand/brand-book.md` §3, §4; `docs/01-product/pricing-and-fees.md`; `docs/06-operations/logistics-playbook.md` (Inbound); `STATUS.md`.
-- Go-to-market strategy draft (this pack, 24 November 2026), §4 (contact a shop in person, by a call, or in reply).
+- Go-to-market strategy draft (24 November 2026), §4 (contact a shop in person, by a call, or in reply). `supabase/migrations/20261121080500_inventory.sql` (inbound notice with a date only).

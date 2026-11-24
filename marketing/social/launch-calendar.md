@@ -4,29 +4,29 @@
 **Conclusion 1.** The posts teach how Yuntera works (cutoff, paying, the delivery code, returns) instead of announcing a price; nothing in them is a promotion unless the owner chooses one.
 **Conclusion 2.** Week 3 and 4 add sellers: half the posts recruit shops, because a marketplace with few shops cannot keep the shopper.
 **Conclusion 3.** Each post's code counts replies by hand until the product records where a shopper came from.
-**The owner must decide** the two questions at the end (the start day, and who posts and answers).
+**The owner must decide** the question at the end (the start day). Who posts and answers is README decision 2; a launch offer is the pricing proposal's decision 5.
 
-**Gates:** G1 to G4, G6, G7, G9, G12 before day 1. The closed pilot has no public posts (go-to-market draft §7.1); this calendar starts on the open-launch day, called **L**. Paid boosting waits for the pilot's exit test and then a ₡25,000 test (market research §7.2).
+**Gates:** G1, G1b, G2 to G4, G6, G7, G9, G12 before day 1. The closed pilot has no public posts (go-to-market §7.1); this calendar starts on the open-launch day, called **L**. Paid boosting waits for the pilot's exit test and then a ₡25,000 test (market research §7.2).
 
 ---
 
 ## Why these networks
 
-| Network | Reach among adults with a mobile phone | Use here |
+| Network | Reach | Use here |
 | --- | --- | --- |
-| WhatsApp | 96% | Status updates to people who saved the number; replies to people who write first |
-| Facebook | 80% | Main feed post, three a week |
-| TikTok | 58% (35–54 year-olds about as much as 18–34) | One short video a week |
-| Instagram | 47% | The same posts as Facebook, square; stories on launch days |
-| YouTube | 77% | Not used in the first four weeks: no video production planned beyond TikTok's |
+| WhatsApp | 96% of adults with a mobile phone | Status updates to people who saved the number; replies to people who write first |
+| Facebook | 80%, same base | Main feed post, three a week |
+| TikTok | 58% (35–54 year-olds about as much as 18–34); base not stated | One short video a week |
+| Instagram | 47%; base not stated | The same posts as Facebook, square; stories on launch days |
+| YouTube | 77% of adults with a mobile phone | Not used in the first four weeks: no video production planned beyond TikTok's |
 
-Source: CICOM-UCR, "Nuestras apps de cada día 2025", phone survey of 792 adults, August 2025 (market research §7.1, verified). Shown to the owner, never printed in a post.
+Sources: WhatsApp, Facebook and YouTube from the CICOM-UCR phone survey of 792 adults with a mobile phone, August 2025 (UCR, 27 May 2026). TikTok and Instagram from the UCR Mediápolis page on CICOM 2025, which does not state its population (market research §7.1). The two are not the same base. Shown to the owner, never printed in a post.
 
 ## Rules for every post
 
 1. One fact per post, and it must be true on the day it is posted. Re-read the zone in the console the morning of each post.
 2. Name the cantons whenever delivery is mentioned. Never "toda la GAM".
-3. No offer, discount, draw or contest unless the owner decides otherwise (decision 2). If one is added, the post states start and end dates, quantity if limited, every restriction and the former price (Decreto 37899-MEIC art. 55 i, j).
+3. No offer, discount, draw or contest unless the owner chooses one (shopper offer: pricing proposal, decision 5; draws: go-to-market, decision 5). If one is added, the post states start and end dates, quantity if limited, every restriction and the former price (Decreto 37899-MEIC art. 55 i, j).
 4. No customer, seller or driver shown or quoted without written permission, kept on file.
 5. Replies to comments: within the customer-service targets, in usted; anything about an order moves to WhatsApp or the order page. Never ask for, or write, a delivery code, an address or a phone number in a comment.
 6. A paid partnership or a post a seller paid for says so; Ley 10946 (from about June 2027) adds advertising transparency, and today's rule is for the lawyer to confirm.
@@ -40,8 +40,8 @@ FB = Facebook, IG = Instagram, TT = TikTok, WA = WhatsApp Status. Days count fro
 
 | Code | Day | Network | Aim | Español (usted) | English | Picture brief |
 | --- | --- | --- | --- | --- | --- | --- |
-| RED-S1-01 | L+0 | FB, IG, WA | Announce, with the cantons | Desde hoy entregamos en [cantones]. Tiendas de Costa Rica, con repartidores propios. Pida antes de las 2 de la tarde y le llega el siguiente día de entrega, de lunes a sábado. | From today we deliver in [cantons]. Costa Rican shops, with our own drivers. Order before 2 p.m. and it arrives the next delivery day, Monday to Saturday. | Outline map of the cantons with their names, the logo; no photograph |
-| RED-S1-02 | L+1 | TT | Show the order path | (Voz) Así funciona: busca, ve la fecha y el total antes de pagar, paga con SINPE Móvil o al recibir, y el repartidor le pide su código. | (Voice) Here's how: search, see the date and total before you pay, pay by SINPE Móvil or on delivery, and the driver asks for your code. | 20–30 s screen recording of the shop on a phone with demo products only; captions on screen in Spanish |
+| RED-S1-01 | L+0 | FB, IG, WA | Announce, with the cantons | Desde hoy entregamos en [cantones]. Tiendas de Costa Rica, con repartidores propios. Pida de lunes a sábado antes de las 2 de la tarde y, por lo general, le llega el siguiente día de entrega. La fecha exacta la ve antes de pagar. | From today we deliver in [cantons]. Costa Rican shops, with our own drivers. Order Monday to Saturday before 2 p.m. and it usually arrives the next delivery day. You see the exact date before you pay. | Outline map of the cantons with their names, the logo; no photograph |
+| RED-S1-02 | L+1 | TT | Show the order path | (Voz) Así funciona: usted busca, ve la fecha y el total antes de pagar, paga con SINPE Móvil o al recibir, y el repartidor le pide su código. | (Voice) Here's how it works: you search, see the date and total before you pay, pay by SINPE Móvil or on delivery, and the driver asks for your code. | 20–30 s screen recording of the shop on a phone with demo products only; captions on screen in Spanish |
 | RED-S1-03 | L+2 | FB, IG | The cutoff | ¿Lo ocupa para el jueves? Pídalo el miércoles antes de las 2 de la tarde. La fecha exacta aparece en cada producto antes de pagar. | Need it by Thursday? Order on Wednesday before 2 p.m. The exact date shows on every product before you pay. | A wall clock at 1:45 p.m. beside a phone; plain background |
 | RED-S1-04 | L+4 | FB, IG, WA | Delivery charge, plainly | Envío en [cantones]: ₡1 500. Gratis en pedidos desde ₡25 000. Lo ve en el producto, no al final. | Delivery in [cantons]: ₡1,500. Free on orders from ₡25,000. You see it on the product, not at the end. | The two amounts large, the cantons below |
 
@@ -49,7 +49,7 @@ FB = Facebook, IG = Instagram, TT = TikTok, WA = WhatsApp Status. Days count fro
 
 | Code | Day | Network | Aim | Español (usted) | English | Picture brief |
 | --- | --- | --- | --- | --- | --- | --- |
-| RED-S2-01 | L+7 | FB, IG | SINPE Móvil and cash | Pague con SINPE Móvil o en efectivo al recibir, hasta ₡150 000. [Con tarjeta también, si está activa.] Los precios ya incluyen el IVA. | Pay by SINPE Móvil or cash when it arrives, up to ₡150,000. [By card too, if switched on.] Prices already include IVA. | The words "SINPE Móvil" and "Contra entrega" as text, no bank logos |
+| RED-S2-01 | L+7 | FB, IG | SINPE Móvil and cash | Pague con SINPE Móvil o en efectivo al recibir, hasta ₡[límite vigente]. [Con tarjeta también, si está activa.] Los precios ya incluyen el IVA. | Pay by SINPE Móvil or cash when it arrives, up to ₡[current limit]. [By card too, if switched on.] Prices already include IVA. | The words "SINPE Móvil" and "Contra entrega" as text, no bank logos |
 | RED-S2-02 | L+8 | TT | The delivery code | (Voz) El repartidor le pide un código de cuatro dígitos. Lo ve solo usted, en su pedido. Dígaselo cuando tenga el paquete en la mano. Nadie de Yuntera se lo va a pedir por teléfono ni por mensaje. | (Voice) The driver asks for a four-digit code. Only you see it, on your order. Tell them when the parcel is in your hands. Nobody from Yuntera will ask for it by phone or message. | A hand receiving a parcel at a gate; the code shown on screen as "• • • •", never real digits |
 | RED-S2-03 | L+9 | FB, IG, WA | Safety against fake messages | Si alguien le escribe diciendo ser de Yuntera y le pide su código de entrega o una transferencia a otro número, no responda. Escríbanos al [número]. | If someone writes claiming to be Yuntera and asks for your delivery code or a transfer to another number, don't reply. Write to us at [number]. | Plain text card with the real number in large type |
 | RED-S2-04 | L+11 | FB, IG | Señas | Para entregarle usamos el pin del mapa y sus propias señas: "portón negro, casa esquinera". No necesita número de casa. | To deliver we use the map pin and your own directions: "black gate, corner house". You don't need a house number. | A phone showing the address form with a pin and an invented señas line |
@@ -58,8 +58,8 @@ FB = Facebook, IG = Instagram, TT = TikTok, WA = WhatsApp Status. Days count fro
 
 | Code | Day | Network | Aim | Español (usted) | English | Picture brief |
 | --- | --- | --- | --- | --- | --- | --- |
-| RED-S3-01 | L+14 | FB, IG | Withdrawal | Tiene 8 días hábiles desde que recibe para devolver, sin dar explicaciones. La ley los cuenta desde la compra; nosotros, desde la entrega. Lo pide en la página de su pedido. | You have 8 business days from delivery to return it, no reason needed. The law counts from the purchase; we count from delivery. Ask for it on your order page. | A calendar with 8 working days marked from a delivery day |
-| RED-S3-02 | L+15 | TT | Sellers: how it works | (Voz) ¿Tiene una tienda? Traiga su producto una vez. Lo guardamos, lo empacamos, lo entregamos y cobramos. Usted ve cada cargo antes de publicar. | (Voice) Do you have a shop? Bring your product once. We store it, pack it, deliver it and collect. You see every fee before you list. | A box going onto a labelled shelf; a phone showing the seller centre's fee preview with demo data |
+| RED-S3-01 | L+14 | FB, IG | Withdrawal | Tiene 8 días hábiles desde que recibe para devolver, sin dar explicaciones. La ley los cuenta desde la compra; nosotros, desde la entrega. No aplica a perecederos, artículos de uso personal abiertos ni hechos a la medida. Lo pide en la página de su pedido. | You have 8 business days from delivery to return it, no reason needed. The law counts from the purchase; we count from delivery. It does not apply to perishables, opened personal items or made-to-measure goods. Ask for it on your order page. | A calendar with 8 working days marked from a delivery day |
+| RED-S3-02 | L+15 | TT | Sellers: how it works | (Voz) ¿Tiene una tienda? Traiga su producto una vez. Lo guardamos, lo empacamos, lo entregamos y le cobramos al cliente por usted. Usted ve cada cargo antes de publicar. | (Voice) Do you have a shop? Bring your product once. We store it, pack it, deliver it and collect from the customer for you. You see every fee before you list. | A box going onto a labelled shelf; a phone showing the seller centre's fee preview with demo data |
 | RED-S3-03 | L+16 | FB, IG, WA | Refund time and the missed date | Si devuelve, el reembolso llega en un máximo de 8 días naturales, por el mismo medio con que pagó. Y si no cumplimos la fecha prometida, puede cancelar y le devolvemos todo. | If you return it, the refund arrives within 8 calendar days, by the same means you paid. And if we miss the promised date, you can cancel and we refund everything. | Plain text card, two lines |
 | RED-S3-04 | L+18 | FB | Sellers: the fees | Para tiendas: sin mensualidad ni costo por publicar. Comisión del 8% al 15% según la categoría, solo cuando vende, más bodega desde ₡900 por unidad. En una venta de ₡20 000 en Hogar pagada por SINPE Móvil, usted recibe ₡15 367. | For shops: no monthly fee and no listing fee. A commission of 8% to 15% by category, only when you sell, plus a warehouse fee from ₡900 a unit. On a ₡20,000 home sale paid by SINPE Móvil, you receive ₡15,367. | The worked statement as a receipt |
 
@@ -67,10 +67,10 @@ FB = Facebook, IG = Instagram, TT = TikTok, WA = WhatsApp Status. Days count fro
 
 | Code | Day | Network | Aim | Español (usted) | English | Picture brief |
 | --- | --- | --- | --- | --- | --- | --- |
-| RED-S4-01 | L+21 | FB, IG | Reviews policy | Publicamos todas las reseñas de compras verificadas, buenas y malas. | We publish every review from a verified purchase, good and bad. | A review card with stars, demo text |
+| RED-S4-01 | L+21 | FB, IG | Reviews policy | Publicamos las reseñas buenas y las malas de compras verificadas. Solo quitamos las que traen datos personales, insultos o nada que ver con el producto. | We publish good and bad reviews from verified purchases. We remove only those with personal data, insults or nothing to do with the product. | A review card with stars, demo text |
 | RED-S4-02 | L+22 | TT | The warehouse | (Voz) Así llega su pedido: lo buscamos en su estante, lo escaneamos para no mandar otro producto, lo empacamos y sale en la ruta de la mañana. | (Voice) This is how your order gets to you: we find it on its shelf, scan it so we don't send the wrong product, pack it, and it leaves on the morning route. | Hands scanning a product at a shelf; no faces needed; no customer label readable |
 | RED-S4-03 | L+23 | FB, IG, WA | A shop on Yuntera (only with permission) | [Nombre de la tienda], en [cantón], vende [producto] en Yuntera. Vea su tienda: [enlace a /tienda/…]. | [Shop name], in [canton], sells [product] on Yuntera. See their shop: [link to /tienda/…]. | The shop's own photo of its product, with written permission |
-| RED-S4-04 | L+25 | FB, IG | How results are ordered | ¿Por qué ve primero una oferta? Por precio total, existencias y fecha de publicación. Nadie paga por salir primero. Las reglas están en Ayuda. | Why do you see one offer first? Total price, stock and when it was listed. Nobody pays to come first. The rules are in Help. | Two offers side by side on a phone, demo data |
+| RED-S4-04 | L+25 | FB, IG | How results are ordered | ¿Por qué ve primero una oferta? Por existencias, precio total y fecha de publicación. Nadie paga por salir primero. Las reglas están en Ayuda. | Why do you see one offer first? Total price, stock and when it was listed. Nobody pays to come first. The rules are in Help. | Two offers side by side on a phone, demo data |
 
 ## Picture production
 
@@ -86,14 +86,11 @@ One shoot day before L, by the owner or a contractor: the gate handover, the she
 | Seller registrations after RED-S3-02, S3-04 | Console, **Vendedores**, `pending` | Weekly |
 | Done when | 16 posts out, every comment answered within the targets, the Saturday sheet filled 4 times | End of week 4 |
 
-## Decisions for the owner
+## Decision for the owner
 
 1. **Which day is L?**
    - A. A Monday, so week 1 runs Monday to Saturday with deliveries every day. **(recommended)** The first post promises the next delivery day; a Saturday launch would push the first deliveries past Sunday.
    - B. Whatever day payments go live.
-2. **Who posts and answers comments?**
-   - A. The owner for the four weeks, 30 minutes morning and evening. **(recommended)** Comments are product research in the first weeks, as the roadmap says of support.
-   - B. A contractor, with this file and the customer-service targets.
 
 ## Assumptions to verify
 
@@ -107,4 +104,4 @@ One shoot day before L, by the owner or a contractor: the gate handover, the she
 
 - Market research of 24 November 2026: CICOM-UCR 2025 via https://www.ucr.ac.cr/noticias/2026/5/27/un-estudio-desmonta-mitos-sobre-el-uso-de-las-plataformas-digitales-en-costa-rica.html and https://mediapolis.ucr.ac.cr/confianza-y-consumo/habitos-y-practicas-de-consumo/ (§7.1); advertising costs not found and the ₡25,000 test (§7.2); Decreto 37899-MEIC art. 55, Ley 10946 (§7.4).
 - Repository: `supabase/migrations/20261121080300_geography_data.sql`, `20261121080000_foundation.sql`; `apps/web/src/app/ayuda/page.tsx`; `docs/brand/brand-book.md` §4; `docs/01-product/pricing-and-fees.md`; `docs/06-operations/customer-service.md`; `STATUS.md`.
-- Go-to-market strategy draft (this pack, 24 November 2026), §5 and §7.
+- Go-to-market strategy draft (24 November 2026), §5, §7 and decision 5; pricing proposal draft, decision 5; roll-out plan draft, decision 2 (cash limit). Help page (return exceptions); compliance §1 and `STATUS.md`, Internal console (review moderation).
