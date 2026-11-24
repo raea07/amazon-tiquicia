@@ -234,12 +234,12 @@ Home pickup costs ₡1,500 for 1 to 3 parcels, ₡1,700 for 4 to 6, ₡1,900 for
 
 ### 2.4 Free-delivery thresholds
 
-| Who                                   | Free from                          | Speed and payment                                                        | Source                        | Confidence            |
-| ------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ | ----------------------------- | --------------------- |
+| Who                                   | Free from                          | Speed and payment                                                        | Source                                                                         | Confidence            |
+| ------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | --------------------- |
 | Amazon Bazaar, Costa Rica             | ₡10,000                            | Two weeks or less; international cards only; free returns within 15 days | El Financiero, article of 9 Nov 2025, read 24 Nov 2026; terms may have changed | Verified, a year old  |
-| Amazon, Costa Rica                    | US$35 on eligible orders           | Days to weeks                                                            | Repository fact sheet         | Medium                |
-| Mercado Libre Mexico, Chile, Colombia | MXN 299; CLP 19,990; COP 60,000    | —                                                                        | Seller blogs                  | Research, third party |
-| **Yuntera today**                     | **₡25,000** (₡35,000 extended GAM) | Next delivery day; SINPE Móvil, card or cash                             | `delivery_zones`              | Repository            |
+| Amazon, Costa Rica                    | US$35 on eligible orders           | Days to weeks                                                            | Repository fact sheet                                                          | Medium                |
+| Mercado Libre Mexico, Chile, Colombia | MXN 299; CLP 19,990; COP 60,000    | —                                                                        | Seller blogs                                                                   | Research, third party |
+| **Yuntera today**                     | **₡25,000** (₡35,000 extended GAM) | Next delivery day; SINPE Móvil, card or cash                             | `delivery_zones`                                                               | Repository            |
 
 **Where Yuntera sits.** Its threshold is 2.5 times Amazon Bazaar's. It is faster, takes SINPE Móvil and cash, and has a local claim route. Bazaar's speed and payment terms are the comparison to make, not the threshold.
 
@@ -254,7 +254,7 @@ The seller's real alternative is Instagram or WhatsApp, a SINPE Móvil payment a
 | Route                                                    | Seller's cost, IVA included | Without IVA a registered seller deducts |
 | -------------------------------------------------------- | --------------------------: | --------------------------------------: |
 | Personal SINPE Móvil, shopper pays the courier           |   ₡0 plus the seller's time |                                      ₡0 |
-| Tilopay SINPE Móvil (2% + US$0.35), shopper pays courier |              ₡557.15 (2.8%) |    ₡557.15 (Tilopay's IVA is not stated) |
+| Tilopay SINPE Móvil (2% + US$0.35), shopper pays courier |              ₡557.15 (2.8%) |   ₡557.15 (Tilopay's IVA is not stated) |
 | Yuntera, warehouse, SINPE Móvil (the pilot case)         |              ₡4,633 (23.2%) |                          ₡4,100 (20.5%) |
 | Yuntera, seller ships, card (order B, later)             |           ₡3,796.80 (19.0%) |                          ₡3,360 (16.8%) |
 
@@ -311,7 +311,7 @@ The ₡20,000 and ₡8,000 rows at 25 stops match `business-model.md` (₡2,334 
 |          10 |                                   ₡23,042 |                                ₡33,917 |
 |          20 |                                    ₡4,292 |                                ₡15,167 |
 |          25 |                                      ₡542 |                                ₡11,417 |
-|          30 |                 Every basket in tier pequeño |                                 ₡8,917 |
+|          30 |              Every basket in tier pequeño |                                 ₡8,917 |
 
 **Break-even commission** on a ₡20,000 basket: 13.8% at 10 stops, 2.6% at 20, 0.3% at 25. On a ₡15,000 basket: 18.4%, 3.4% and 0.4%.
 
@@ -337,34 +337,34 @@ Average order assumed ₡20,000, warehouse, SINPE Móvil, Hogar. The founder is 
 
 The founder-run pilot follows the staffing in the team-structure and go-to-market proposals: the founder drives, packs and answers customers, a backup person covers 8 days a month (₡150,600, team-structure §5), and the warehouse is 20 m². The launch team also follows team structure: one driver, one warehouse associate and one sales agent, with the founder on customer service. A customer-service person joins at about 60 orders a day.
 
-|                                               | Pilot, founder-run | Pilot, hired staff | Early launch | Full core zone |
-| --------------------------------------------- | -----------------: | -----------------: | -----------: | -------------: |
-| Orders a day (26 days)                        |                 10 |                 10 |           25 |             60 |
-| Orders a month                                |                260 |                260 |          650 |          1,560 |
-| Stops per driver-day                          |  10 (founder)      |      10 (1 driver) | 25 (1 driver) | 30 (2 drivers) |
-| Revenue before IVA                            |         ₡1,411,132 |         ₡1,411,132 |   ₡3,527,830 |     ₡8,466,791 |
-| Per-order costs (gateway, packaging, returns) |           ₡167,050 |           ₡167,050 |     ₡417,625 |     ₡1,002,300 |
-| Drivers                                       | Fuel ₡174,850; vehicle ₡312,000–₡520,000 | ₡1,170,000 | ₡1,170,000 | ₡2,340,000 |
-| Warehouse workers                             |  Backup ₡150,600   |       ₡519,195 (1) | ₡519,195 (1) | ₡1,038,390 (2) |
-| Sales agent                                   |       ₡0 (founder) |       ₡0 (founder) |     ₡584,132 |       ₡584,132 |
-| Customer service                              |       ₡0 (founder) |       ₡0 (founder) | ₡0 (founder) |       ₡564,587 |
-| Rent                                          |    ₡89,800 (20 m²) |  ₡449,000 (100 m²) |     ₡449,000 | ₡898,000 (200 m²) |
-| Software, accounting, insurance               |           ₡300,000 |           ₡300,000 |     ₡300,000 |       ₡400,000 |
-| **Result for the month**                      | **₡8,800 to ₡216,800** |   **−₡1,194,113** |  **₡87,878** | **₡1,639,382** |
-| **Per order**                                 |      **₡34 to ₡834** |        **−₡4,593** |    **₡135** |     **₡1,051** |
+|                                               |                       Pilot, founder-run | Pilot, hired staff |  Early launch |    Full core zone |
+| --------------------------------------------- | ---------------------------------------: | -----------------: | ------------: | ----------------: |
+| Orders a day (26 days)                        |                                       10 |                 10 |            25 |                60 |
+| Orders a month                                |                                      260 |                260 |           650 |             1,560 |
+| Stops per driver-day                          |                             10 (founder) |      10 (1 driver) | 25 (1 driver) |    30 (2 drivers) |
+| Revenue before IVA                            |                               ₡1,411,132 |         ₡1,411,132 |    ₡3,527,830 |        ₡8,466,791 |
+| Per-order costs (gateway, packaging, returns) |                                 ₡167,050 |           ₡167,050 |      ₡417,625 |        ₡1,002,300 |
+| Drivers                                       | Fuel ₡174,850; vehicle ₡312,000–₡520,000 |         ₡1,170,000 |    ₡1,170,000 |        ₡2,340,000 |
+| Warehouse workers                             |                          Backup ₡150,600 |       ₡519,195 (1) |  ₡519,195 (1) |    ₡1,038,390 (2) |
+| Sales agent                                   |                             ₡0 (founder) |       ₡0 (founder) |      ₡584,132 |          ₡584,132 |
+| Customer service                              |                             ₡0 (founder) |       ₡0 (founder) |  ₡0 (founder) |          ₡564,587 |
+| Rent                                          |                          ₡89,800 (20 m²) |  ₡449,000 (100 m²) |      ₡449,000 | ₡898,000 (200 m²) |
+| Software, accounting, insurance               |                                 ₡300,000 |           ₡300,000 |      ₡300,000 |          ₡400,000 |
+| **Result for the month**                      |                   **₡8,800 to ₡216,800** |    **−₡1,194,113** |   **₡87,878** |    **₡1,639,382** |
+| **Per order**                                 |                          **₡34 to ₡834** |        **−₡4,593** |      **₡135** |        **₡1,051** |
 
 Staff costs here replace the per-order pick, pack and support figures of section 3.2, so nothing is counted twice. The sales agent is Agente de ventas ₡419,755.80 × 1.3916 (MTSS 2026 list; team structure rounds it to ₡584,100). The founder-run vehicle line is the 3.1 assumption for vehicle, insurance and phone × 26 days. The go-to-market lean budget (₡450,000 to ₡942,000 a month, its §9) shows cash out without revenue; this table nets the revenue. Use one warehouse size per stage: 20 m² in the pilot, 100 m² from the launch.
 
 What moves the result at early launch (650 orders):
 
-| Change                                                                                     | Result for the month | Break-even        |
-| ------------------------------------------------------------------------------------------ | -------------------: | ----------------- |
-| As above, ₡20,000 basket                                                                   |              ₡87,878 | 632 orders, 24 a day |
-| ₡15,000 basket                                                                             |            −₡302,120 | 723 orders, 28 a day |
-| ₡30,000 basket (delivery free)                                                             |              ₡19,673 | 646 orders, 25 a day |
-| Mixed baskets: 30% at ₡8,000, 40% at ₡20,000, 30% at ₡35,000 (70% under ₡25,000; average ₡20,900) | −₡193,882 | 695 orders, 27 a day |
-| Wages 20% above the minimum (driver labour, associate, sales agent)                        |            −₡245,705 | 702 orders, 27 a day |
-| Each ₡500,000 a month of founder pay or marketing                                          |            −₡412,122 | about 105 more orders, 4 more a day |
+| Change                                                                                            | Result for the month | Break-even                          |
+| ------------------------------------------------------------------------------------------------- | -------------------: | ----------------------------------- |
+| As above, ₡20,000 basket                                                                          |              ₡87,878 | 632 orders, 24 a day                |
+| ₡15,000 basket                                                                                    |            −₡302,120 | 723 orders, 28 a day                |
+| ₡30,000 basket (delivery free)                                                                    |              ₡19,673 | 646 orders, 25 a day                |
+| Mixed baskets: 30% at ₡8,000, 40% at ₡20,000, 30% at ₡35,000 (70% under ₡25,000; average ₡20,900) |            −₡193,882 | 695 orders, 27 a day                |
+| Wages 20% above the minimum (driver labour, associate, sales agent)                               |            −₡245,705 | 702 orders, 27 a day                |
+| Each ₡500,000 a month of founder pay or marketing                                                 |            −₡412,122 | about 105 more orders, 4 more a day |
 
 - A mix of baskets with a higher average earns less than one ₡20,000 basket. The ₡8,000 orders and the free-delivery orders both pull it down.
 - **Cash timing.** On SINPE Móvil, the gateway pays out the next working day and sellers are paid from 10 days after delivery (`STATUS.md`). So Yuntera holds sellers' money for about two weeks. That money is the sellers', not working capital; whether holding it needs SUGEF registration is **for the lawyer to confirm** (payments research, point c). The cash Yuntera needs is the sum of its monthly losses and one-off costs until the month breaks even. Card withholdings (section 1.6) add to it from the open launch.
@@ -376,18 +376,18 @@ What moves the result at early launch (650 orders):
 
 ### 4.1 Launch prices
 
-| Fee                     | Proposal for the pilot and the launch                         | Reason                                                                                |
-| ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Commission by category  | **Keep the table** (decision 1)                               | Inside the published range; density, not commission, decides the margin               |
-| ₡150 floor              | Keep                                                          | Covers handling on very cheap items                                                   |
-| Fulfilment tiers        | Keep ₡900 / ₡1,400 / ₡2,400 / ₡4,900                          | Sobre covers its ₡700 of pick, pack and packaging; time the real minutes in the pilot |
-| Storage                 | None in the pilot (decision 6)                                | A seller who is testing should not pay for standing still                             |
-| SINPE Móvil fee         | Keep 1.5%                                                     | Equals ONVO's SINPE Móvil price as a third party reports it; confirm in the contract  |
-| Card fee                | **Set from the gateway's written answer before cards go on** (decision 2) | The 1.95% cap may make 3.9% wrong, and the seller centre promises no markup |
-| Cash on delivery        | Keep 2.0% + ₡300 to the seller; nothing extra for the shopper | Measure refusals and deposit trips before changing it                                 |
-| Delivery charge         | Keep ₡1,500 central, ₡2,000 extended                          | Already below the cost of a stop at 25 stops (₡1,327 before IVA against ₡1,800)       |
-| Free-delivery threshold | **Keep ₡25,000 and ₡35,000** (decision 3)                     | Lowering it loses about ₡1,305 on every order in between                              |
-| Notice of a fee change  | 30 days (decision 7)                                          | `pricing-and-fees.md` already proposes it                                             |
+| Fee                     | Proposal for the pilot and the launch                                     | Reason                                                                                |
+| ----------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Commission by category  | **Keep the table** (decision 1)                                           | Inside the published range; density, not commission, decides the margin               |
+| ₡150 floor              | Keep                                                                      | Covers handling on very cheap items                                                   |
+| Fulfilment tiers        | Keep ₡900 / ₡1,400 / ₡2,400 / ₡4,900                                      | Sobre covers its ₡700 of pick, pack and packaging; time the real minutes in the pilot |
+| Storage                 | None in the pilot (decision 6)                                            | A seller who is testing should not pay for standing still                             |
+| SINPE Móvil fee         | Keep 1.5%                                                                 | Equals ONVO's SINPE Móvil price as a third party reports it; confirm in the contract  |
+| Card fee                | **Set from the gateway's written answer before cards go on** (decision 2) | The 1.95% cap may make 3.9% wrong, and the seller centre promises no markup           |
+| Cash on delivery        | Keep 2.0% + ₡300 to the seller; nothing extra for the shopper             | Measure refusals and deposit trips before changing it                                 |
+| Delivery charge         | Keep ₡1,500 central, ₡2,000 extended                                      | Already below the cost of a stop at 25 stops (₡1,327 before IVA against ₡1,800)       |
+| Free-delivery threshold | **Keep ₡25,000 and ₡35,000** (decision 3)                                 | Lowering it loses about ₡1,305 on every order in between                              |
+| Notice of a fee change  | 30 days (decision 7)                                                      | `pricing-and-fees.md` already proposes it                                             |
 
 ### 4.2 Introductory offers
 
@@ -416,7 +416,7 @@ How offers end: each offer names its end date in its own text. The owner names o
 
 | Revenue                                                  | When                       | What must be true first                                                                                                                                                   |
 | -------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Storage fee for slow stock                               | Public launch              | Measured cost per shelf space; a built charge (not built today); 30 days' notice; a free period of at least 90 days; named as excluded in the price-lock text              |
+| Storage fee for slow stock                               | Public launch              | Measured cost per shelf space; a built charge (not built today); 30 days' notice; a free period of at least 90 days; named as excluded in the price-lock text             |
 | Sponsored results                                        | Roadmap phase 3            | Enough searches per category to sell; labelled "Patrocinado"; ranking rules published; checked against Ley 10946 (in force from about June 2027) by the lawyer; not built |
 | Seller subscription (lower commission for a monthly fee) | After the launch           | Sellers with steady monthly sales; a benefit worth paying for; Amazon charges US$39.99 a month (verified) as a reference; not built                                       |
 | Shopper membership (free delivery for a monthly fee)     | After repeat rate is known | 60-day repeat rate measured; order frequency known (`business-model.md`); not built                                                                                       |
@@ -454,13 +454,13 @@ No Costa Rican study of price perception was found. These are common retail prac
 
 Words for customers (Spanish uses the product's money format):
 
-| Where                     | Español (usted)                                                                                                                  | English                                                                                                             |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Cart, below the threshold | Le faltan ₡6 500 para que el envío sea gratis.                                                                                   | You are ₡6 500 away from free delivery.                                                                             |
-| Launch offer banner       | Envío gratis en todos los pedidos a [cantones] del [fecha de inicio] al [fecha de fin]. Sin monto mínimo. Vea los cantones incluidos: [enlace]. | Free delivery on every order to [cantons] from [start date] to [end date]. No minimum. See which cantons are included: [link]. |
-| Seller pitch              | Si vende un artículo de hogar de ₡20 000, lo guardamos en nuestra bodega y el cliente paga con SINPE Móvil, usted recibe ₡15 367. Antes de publicar le mostramos lo que recibe en su categoría. | If you sell a ₡20 000 home item, we keep it in our warehouse and the customer pays by SINPE Móvil, you receive ₡15 367. Before you list, we show you what you receive in your category. |
+| Where                     | Español (usted)                                                                                                                                                                                           | English                                                                                                                                                                                             |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cart, below the threshold | Le faltan ₡6 500 para que el envío sea gratis.                                                                                                                                                            | You are ₡6 500 away from free delivery.                                                                                                                                                             |
+| Launch offer banner       | Envío gratis en todos los pedidos a [cantones] del [fecha de inicio] al [fecha de fin]. Sin monto mínimo. Vea los cantones incluidos: [enlace].                                                           | Free delivery on every order to [cantons] from [start date] to [end date]. No minimum. See which cantons are included: [link].                                                                      |
+| Seller pitch              | Si vende un artículo de hogar de ₡20 000, lo guardamos en nuestra bodega y el cliente paga con SINPE Móvil, usted recibe ₡15 367. Antes de publicar le mostramos lo que recibe en su categoría.           | If you sell a ₡20 000 home item, we keep it in our warehouse and the customer pays by SINPE Móvil, you receive ₡15 367. Before you list, we show you what you receive in your category.             |
 | Seller price lock         | Si se une antes del [fecha], sus tarifas no suben antes del [fecha fija]. Si bajan, usted paga la tarifa más baja. No incluye un cargo por almacenaje prolongado, que se anunciaría con 30 días de aviso. | If you join before [date], your fees do not rise before [fixed date]. If they fall, you pay the lower fee. This does not include a charge for long storage, which would be announced 30 days ahead. |
-| Fee change notice         | Sus tarifas cambian el [fecha]. Los pedidos pagados antes de esa fecha conservan las tarifas actuales. Un pedido contra entrega se cobra con la tarifa del día en que se entrega. | Your fees change on [date]. Orders paid before that date keep the current fees. A cash-on-delivery order is charged at the fee of the day it is delivered. |
+| Fee change notice         | Sus tarifas cambian el [fecha]. Los pedidos pagados antes de esa fecha conservan las tarifas actuales. Un pedido contra entrega se cobra con la tarifa del día en que se entrega.                         | Your fees change on [date]. Orders paid before that date keep the current fees. A cash-on-delivery order is charged at the fee of the day it is delivered.                                          |
 
 The seller figure ₡15 367 is the pilot's typical sale (section 1.6): Hogar, tier pequeño, SINPE Móvil at 1.5%. It changes by category: a Moda seller receives less, an Electrónica seller more. `pricing-and-fees.md` says to quote sellers a range until a gateway is contracted; at a 2% SINPE Móvil rate, the same sale pays ₡15 254. So print "₡15 254 a ₡15 367" until the contract, or the single figure after it. If fees change, the line changes. The price-lock and launch-window wording are **for the lawyer to confirm**.
 
@@ -496,17 +496,17 @@ There is no console screen for seller fees, and no database function to change t
 
 ## 6. Plan
 
-| Step                                                                                                                                        | Who                                    | Done when                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------------- |
-| 1. Owner answers the seven questions in section 7                                                                                           | Owner                                  | Answers recorded in `docs/02-architecture/decisions.md`                       |
-| 2. Show the pilot's typical sale and orders A and C to 10 to 15 target sellers; ask what they net today                                      | Owner or the seller-recruitment person | Notes for each seller: accepted, refused, the reason                          |
+| Step                                                                                                                                                                             | Who                                    | Done when                                                                     |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------------- |
+| 1. Owner answers the seven questions in section 7                                                                                                                                | Owner                                  | Answers recorded in `docs/02-architecture/decisions.md`                       |
+| 2. Show the pilot's typical sale and orders A and C to 10 to 15 target sellers; ask what they net today                                                                          | Owner or the seller-recruitment person | Notes for each seller: accepted, refused, the reason                          |
 | 3. Get written quotes: gateway contract rate and its answer on the 1.95% card cap, Correos small-business authorisation, an INS work-risk quote, warehouse rent for 50 to 200 m² | Owner                                  | Quotes filed; section 3.1 updated                                             |
-| 4. Payroll quote per role                                                                                                                   | Accountant                             | A written quote per role                                                      |
-| 5. Confirm the law points in section 4.4 (payment-method offers, free-delivery window, price lock wording)                                  | Lawyer                                 | A written answer per point                                                    |
-| 6. Point the parity test at the newest fee migration and add category rates to it                                                           | Developer                              | The test fails when a category rate differs between SQL and code              |
-| 7. During the pilot, record stops per driver-day, minutes per pick and pack, basket values, cash refusals and contacts per order            | Owner (operations lead once hired)     | A weekly sheet with each number                                               |
-| 8. After 4 weeks of pilot data, re-run sections 3.2 and 3.3 with measured numbers                                                           | Owner with the developer               | This document updated; a new fee schedule proposed only if the numbers say so |
-| 9. Announce any new schedule 30 days before it applies, then apply its migration on that date                                                | Owner with the developer               | Message sent to every seller; the migration applied on the announced date     |
+| 4. Payroll quote per role                                                                                                                                                        | Accountant                             | A written quote per role                                                      |
+| 5. Confirm the law points in section 4.4 (payment-method offers, free-delivery window, price lock wording)                                                                       | Lawyer                                 | A written answer per point                                                    |
+| 6. Point the parity test at the newest fee migration and add category rates to it                                                                                                | Developer                              | The test fails when a category rate differs between SQL and code              |
+| 7. During the pilot, record stops per driver-day, minutes per pick and pack, basket values, cash refusals and contacts per order                                                 | Owner (operations lead once hired)     | A weekly sheet with each number                                               |
+| 8. After 4 weeks of pilot data, re-run sections 3.2 and 3.3 with measured numbers                                                                                                | Owner with the developer               | This document updated; a new fee schedule proposed only if the numbers say so |
+| 9. Announce any new schedule 30 days before it applies, then apply its migration on that date                                                                                    | Owner with the developer               | Message sent to every seller; the migration applied on the announced date     |
 
 ---
 
@@ -551,24 +551,24 @@ There is no console screen for seller fees, and no database function to change t
 
 ## Assumptions to verify
 
-| Assumption                                       | Range                                                 | How to verify                                            |
-| ------------------------------------------------ | ----------------------------------------------------- | -------------------------------------------------------- |
-| Driver-day ₡45,000                               | ₡40,400 to ₡48,400                                    | Payroll quote, vehicle quote, fuel log for 4 pilot weeks |
-| Stops per driver-day                             | 8 to 30                                               | Pilot route records                                      |
-| Pick and pack 12 minutes an order                | 6 to 20 minutes                                       | Time 50 pilot orders                                     |
-| Packaging ₡200                                   | ₡100 to ₡400                                          | Supplier invoices                                        |
-| Returns allowance ₡120 an order                  | ₡60 to ₡300                                           | Pilot returns and failed deliveries                      |
-| Support ₡150 an order                            | ₡75 to ₡400                                           | Contacts per 100 orders in the pilot                     |
+| Assumption                                       | Range                                                                                    | How to verify                                                   |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Driver-day ₡45,000                               | ₡40,400 to ₡48,400                                                                       | Payroll quote, vehicle quote, fuel log for 4 pilot weeks        |
+| Stops per driver-day                             | 8 to 30                                                                                  | Pilot route records                                             |
+| Pick and pack 12 minutes an order                | 6 to 20 minutes                                                                          | Time 50 pilot orders                                            |
+| Packaging ₡200                                   | ₡100 to ₡400                                                                             | Supplier invoices                                               |
+| Returns allowance ₡120 an order                  | ₡60 to ₡300                                                                              | Pilot returns and failed deliveries                             |
+| Support ₡150 an order                            | ₡75 to ₡400                                                                              | Contacts per 100 orders in the pilot                            |
 | Gateway rates (ONVO list prices)                 | Cards 1.95% (the cap) to 4.25% + US$0.35; SINPE Móvil 1.5% to 2%; IVA on the fee unknown | The signed contract and the gateway's written answer on the cap |
-| Exchange rate ₡449                               | ₡440 to ₡520                                          | Central bank rate on the contract date                   |
-| Rent ₡449,000 for 100 m²                         | ₡359,000 to ₡629,000                                  | Three listings near the first sellers                    |
-| Software, accounting, insurance ₡300,000 a month | ₡200,000 to ₡500,000                                  | Quotes                                                   |
-| Average basket ₡20,000                           | ₡8,000 to ₡35,000                                     | Pilot order data; no Costa Rican source publishes one    |
-| 70% of launch orders under ₡25,000               | 50% to 90%                                            | Pilot order data                                         |
-| 3 parcels per seller pickup                      | 1 to 10                                               | Pilot pickup records                                     |
-| Cash-handling cost                               | Unknown                                               | Pilot: minutes at the door, deposit trips, refusals      |
-| Employer multiplier 1.3916                       | 1.36 to 1.45 (about 1.377 with no INA at pilot size)  | Accountant; INS work-risk rate by activity               |
-| Founder's vehicle in the pilot                   | ₡12,000 to ₡20,000 a day                              | Insurance quote; fuel and repair log                     |
+| Exchange rate ₡449                               | ₡440 to ₡520                                                                             | Central bank rate on the contract date                          |
+| Rent ₡449,000 for 100 m²                         | ₡359,000 to ₡629,000                                                                     | Three listings near the first sellers                           |
+| Software, accounting, insurance ₡300,000 a month | ₡200,000 to ₡500,000                                                                     | Quotes                                                          |
+| Average basket ₡20,000                           | ₡8,000 to ₡35,000                                                                        | Pilot order data; no Costa Rican source publishes one           |
+| 70% of launch orders under ₡25,000               | 50% to 90%                                                                               | Pilot order data                                                |
+| 3 parcels per seller pickup                      | 1 to 10                                                                                  | Pilot pickup records                                            |
+| Cash-handling cost                               | Unknown                                                                                  | Pilot: minutes at the door, deposit trips, refusals             |
+| Employer multiplier 1.3916                       | 1.36 to 1.45 (about 1.377 with no INA at pilot size)                                     | Accountant; INS work-risk rate by activity                      |
+| Founder's vehicle in the pilot                   | ₡12,000 to ₡20,000 a day                                                                 | Insurance quote; fuel and repair log                            |
 
 ---
 
