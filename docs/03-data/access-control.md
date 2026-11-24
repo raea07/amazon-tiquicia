@@ -353,6 +353,14 @@ operations staff), and the shop's stock history (`seller_stock_history`: a
 member of the shop, or operations or support staff). All are granted to
 `authenticated` only; none to visitors.
 
+Migration `084500` adds the count of a product a location does not list
+(`wms_count_candidates`, `wms_count_into_location`): a worker of the
+location's warehouse or operations staff, granted to `authenticated` only.
+Migration `084600` re-creates `cart_alternatives` with an optional district
+and grants it again to visitors and signed-in users, as before; the new
+`private.refund_announcement` is granted to no app role. Migration `084400`
+changes no grant.
+
 ## Access that ends at once
 
 Every check reads the row that grants the access, on every call, so taking
@@ -512,7 +520,7 @@ name it here and in the test, and say why in the pull request.
 - `auth_limit_reserve` (the apps' limit on sign-in, sign-up, account e-mails,
   codes and refreshes, asked before anyone is signed in; it takes only keyed
   hashes, see [Limits on signing in](#limits-on-signing-in))
-- `cart_alternatives` (for a cart line that can no longer be bought, another shop's offer of the same variant: public data of a product a shopper can open)
+- `cart_alternatives` (for a cart line that can no longer be bought, another shop's offer of the same variant and, given a district, when it would arrive: public data of a product a shopper can open)
 - `cart_lines`
 - `category_redirect` (where an old category address points now, for the
   shop's permanent redirect)
