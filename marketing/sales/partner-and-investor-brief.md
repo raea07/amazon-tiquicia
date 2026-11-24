@@ -98,7 +98,7 @@ English is the working language; Spanish headings help a Costa Rican reader. For
 | **Cómo gana / how it earns** | A commission of 8%–15% on each sale (inside the 8%–15% Amazon publishes for general goods), a warehouse fee per unit, a payment fee set at about the gateway's published price (no contract yet), and the shopper's delivery charge (₡1,500 in the core zone, free from ₡25,000). All amounts are pilot assumptions. |
 | **Lo construido / what is built** | Four web apps (shop, seller centre, staff console, driver and warehouse app); four phone apps written, tested in a browser at phone size, none yet run on a real phone; payments and electronic invoicing as code against test fakes; 33 database test files and 27 browser journeys passing; a hosted preview with demo data (`STATUS.md`, 23 Nov 2026). |
 | **Lo que falta / what is missing** | No real sale. No app tested on a real phone. No legal entity, gateway contract or tax registration yet. No trademark search. No seller signed. Paid marketing waits for the pilot's results. |
-| **Lo que decide el modelo / what decides the model** | Three numbers, measured in a closed pilot of about 100 orders: margin per order (planning estimate ₡2,334 on a ₡20,000 order, ₡394 on ₡8,000), delivered stops per driver-day (at an assumed ₡45,000 driver-day, an own driver beats Correos' 451-or-more tier at about 24–26 stops before IVA, and at about 22–23 if the IVA on Correos cannot be credited; for the accountant to confirm), and the share of shoppers who order again within 60 days. |
+| **Lo que decide el modelo / what decides the model** | Three numbers, measured in a closed pilot of about 100 orders: margin per order (planning estimate ₡2,334 on a ₡20,000 order, ₡394 on ₡8,000), delivered stops per driver-day (at an assumed ₡45,000 driver-day, an own driver beats Correos' 451-or-more tier at about 24–26 stops before IVA, and at about 22 if the IVA on Correos cannot be credited; for the accountant to confirm), and the share of shoppers who order again within 60 days. |
 | **El mes / the month** | [From the pricing proposal §3.3 and the go-to-market budget §9, once they agree: the result at three volumes, the break-even in orders a day, and the budget level chosen (go-to-market decision 4). Until both documents use the same staffing, leave this row out.] |
 | **Plan / plan** | Closed pilot: 5 shops, 3–5 cantons, invited shoppers, about 100 orders. Open launch, canton by canton, only if margin per order is positive and a third of pilot shoppers reorder unasked (roadmap). |
 | **Lo que buscamos / the ask** | [Owner to set: amount, form, use of funds.] |
@@ -145,7 +145,7 @@ Screenshots: only demo data from the preview, never a real person's data; check 
 | --- | --- |
 | A partner will host a 30-minute talk at no cost | Ask the first two partners |
 | The end-of-pilot report is something partners value | Ask in the first meeting |
-| An own driver beats Correos at about 24–26 stops a day (22–23 without IVA credit) | Measure stops per driver-day and the real driver-day cost in the pilot; ask Correos for authorisation and the pickup price |
+| An own driver beats Correos at about 24–26 stops a day (about 22 without IVA credit) | Measure stops per driver-day and the real driver-day cost in the pilot; ask Correos for authorisation and the pickup price |
 
 ## Sources
 
