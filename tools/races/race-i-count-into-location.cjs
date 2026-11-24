@@ -27,6 +27,9 @@
  *       worker's count (3 units): one count, never the sum;
  *   I7  wms_receive_returned_shipment of a recalled parcel of 2 units of the
  *       same product into the returns area DEV-01 vs the count into DEV-01.
+ *   I8  the harness's own shared product Y: a count into W7-02 that takes
+ *       Tienda Sendero's offer across zero vs the shop switching the shared
+ *       variant off (it pauses that offer); see the block above it below.
  *
  * Allowed outcomes: both succeed, or the count is refused with
  * count_already_listed because the other writer put units there first (I1,

@@ -500,11 +500,12 @@ scenarios.push({
 });
 
 // E10b: a checkout of the shared variant Y (place_order: the offer FOR SHARE,
-// then its stock row and reservation, which take a key-share lock on the
-// variant) against Tienda Sendero switching that variant off (the product,
-// the variant, then its offer). Forced: a third session holds the variant's
-// offer FOR SHARE; the seller queues on it first (holding the variant), the
-// checkout starts 40 ms late.
+// then its order line, which takes a key-share lock on the product) against
+// Tienda Sendero switching that variant off. Before 084400 took the shop's
+// offers first, the seller took the product FOR UPDATE and then waited on
+// the offer the checkout held: 6 to 17 in 100 natural, every forced round.
+// Forced: a third session holds the variant's offer FOR SHARE; the seller
+// queues on it first, the checkout starts 40 ms late.
 const e10b = {
   name: "E10b place_order [low] vs Tienda Sendero switching off variant Y (shared) natural",
   products: ["low", "second"],
