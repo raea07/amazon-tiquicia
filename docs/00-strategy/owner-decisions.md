@@ -3,7 +3,7 @@
 **What this is.** Every question the strategy documents, the marketing pieces and the November research ask the owner, each asked once, in the order the answers are needed. Written 24 November 2026.
 **How to answer.** Reply like "D4 A, D10 D". "ok" accepts every recommended option of one group, for example "ok before the pilot". An answer is recorded in `docs/02-architecture/decisions.md`.
 **Where they come from.** [Go-to-market](go-to-market.md), [roll-out plan](rollout-plan.md), [team structure](team-structure.md), [pricing strategy](pricing-strategy.md), the [marketing pieces](../../marketing/README.md) and the research in [market and costs](../research/market-and-costs-2026-11.md), [support and system-health tools](../research/support-and-system-health-tools.md) and [English translation](../research/english-translation-plan.md). Those documents point here instead of asking.
-**Count.** 54 numbers: 3 already decided, 6 needed now, 2 the builders do unless you object, 31 before the pilot with real money, 10 before the open launch, 2 later. A number never changes once given, so the list is not in number order.
+**Count.** 54 numbers: 4 already decided, 5 needed now, 2 the builders do unless you object, 31 before the pilot with real money, 10 before the open launch, 2 later. A number never changes once given, so the list is not in number order.
 
 Amounts are colones a month unless stated, from the document named; US dollars at ₡450. Every amount is an estimate or an assumption, as its source says. Questions for the lawyer and the accountant are separate: they are in [compliance](../05-security-compliance/compliance-costa-rica.md) §9 and §10 and in [open questions](../08-open-questions.md) 67 to 82. A decision that waits on one names it.
 
@@ -13,9 +13,11 @@ Amounts are colones a month unless stated, from the document named; US dollars a
 
 **D1. Where do support and system-health tools live?** Decided 24 November 2026: inside the staff console, as the areas Casos, Salud del sistema and Versiones. WhatsApp stays in the WhatsApp Business app for now. From: support research §3.3, question 1. Waits on it: the support desk build.
 
-**D2. How is system health watched?** Decided 24 November 2026: a Salud del sistema page in the console, plus a free error tracker and a free uptime monitor that send alerts to the owner's phone, with personal data removed. Cost now ₡0. From: support research §3.3, question 2. Which error tracker is D50. Waits on it: roll-out phase 1, step 1.
+**D2. How is system health watched?** Decided 24 November 2026: a Salud del sistema page in the console, plus a free error tracker and a free uptime monitor that send alerts to the owner's phone, with personal data removed. Cost now ₡0. From: support research §3.3, question 2. The tracker is Sentry (D50). Waits on it: roll-out phase 1, step 1.
 
-**D3. Do new Android test builds reach testers without a click?** Decided 23 November 2026: yes, from the first Android release on; until then builds stay drafts. From: `STATUS.md`, "What needs you", item 11, step 7; [store testing](../07-deployment/store-testing.md) §7. Changing the build setting is the builders' work.
+**D3. Do new Android test builds reach testers without a click?** Decided 23 November 2026: yes, from the first Android release on. The owner made that first release on 23 November 2026, and the build setting was changed on 24 November 2026. Google may refuse such a build before its first review of the app (not verified); the build then arrives as a draft. From: `STATUS.md`, "What needs you", item 11, step 7; [store testing](../07-deployment/store-testing.md) §7. Changing the build setting is the builders' work.
+
+**D50. Which error tracker?** Decided 24 November 2026: Sentry, on its free plan, in the owner's existing account. Only projects whose names start with yuntera are created there; names, phones, e-mails and addresses are removed before anything is sent; alerts arrive by e-mail. The four websites come first; the phone apps follow with their next version. Cost ₡0 now; US$26 a month on a yearly plan (₡11,700) once a second developer joins (support research §2.4). From: support research §3.3, question 5. Waits on it: the error-tracking build.
 
 ---
 
@@ -27,13 +29,6 @@ Amounts are colones a month unless stated, from the document named; US dollars a
 - B. This week, with the advisers found later. Some work may have to be redone once they answer.
 
 Cost: lawyer's first package ₡1,000,000–₡3,000,000 once, accountant ₡100,000–₡300,000 a month (go-to-market §9, assumptions). Waits on it: every week number in the roll-out plan, go-to-market §7 and the marketing owner steps.
-
-**D50. Which error tracker?** From: support research §3.3, question 5.
-
-- A. Sentry, on its free plan first. **(recommended)** It covers the web and phone apps and includes 1 uptime and 1 cron monitor.
-- B. Better Stack for uptime and logs, and no error tracker yet. Crashes in the apps go unseen.
-
-Cost of A: ₡0 now; US$26 a month on a yearly plan (₡11,700) once a second developer joins (support research §2.4). Waits on it: roll-out phase 1, step 1.
 
 **D6. Which apps get English first?** From: English research §7, question 1.
 
