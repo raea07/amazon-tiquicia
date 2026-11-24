@@ -1,7 +1,7 @@
 import { ORDER_STATUS_LABEL, type OrderStatus } from "@yuntera/core";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader, Stat } from "@yuntera/next-kit/shell";
-import { Alert, formatPrice, Skeleton } from "@yuntera/ui";
+import { Alert, formatPrice, Skeleton, touchLinkClass } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -24,7 +24,7 @@ export default function HomePage() {
 
 function More({ href, children }: { href: Route; children: React.ReactNode }) {
   return (
-    <Link href={href} className="text-link underline">
+    <Link href={href} className={touchLinkClass()}>
       {children}
     </Link>
   );

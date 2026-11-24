@@ -21,24 +21,36 @@ export function Footer() {
 
         <nav aria-label="Ayuda">
           <h2 className="text-sm font-bold text-ink">Ayuda</h2>
-          <ul className="mt-3 space-y-2 text-sm text-ink-muted">
+          <ul className="mt-1 text-sm text-ink-muted">
             <li>
-              <Link href="/ayuda#entregas" className="hover:text-ink hover:underline">
+              <Link
+                href="/ayuda#entregas"
+                className="inline-flex min-h-11 items-center hover:text-ink hover:underline"
+              >
                 Entregas y zonas
               </Link>
             </li>
             <li>
-              <Link href="/ayuda#devoluciones" className="hover:text-ink hover:underline">
+              <Link
+                href="/ayuda#devoluciones"
+                className="inline-flex min-h-11 items-center hover:text-ink hover:underline"
+              >
                 Devoluciones y garantía
               </Link>
             </li>
             <li>
-              <Link href="/ayuda#pagos" className="hover:text-ink hover:underline">
+              <Link
+                href="/ayuda#pagos"
+                className="inline-flex min-h-11 items-center hover:text-ink hover:underline"
+              >
                 Medios de pago
               </Link>
             </li>
             <li>
-              <Link href="/ayuda#reclamos" className="hover:text-ink hover:underline">
+              <Link
+                href="/ayuda#reclamos"
+                className="inline-flex min-h-11 items-center hover:text-ink hover:underline"
+              >
                 Presentar un reclamo
               </Link>
             </li>
@@ -47,24 +59,36 @@ export function Footer() {
 
         <nav aria-label="Yuntera">
           <h2 className="text-sm font-bold text-ink">{brand.name}</h2>
-          <ul className="mt-3 space-y-2 text-sm text-ink-muted">
+          <ul className="mt-1 text-sm text-ink-muted">
             <li>
-              <Link href="/ayuda#como-ordenamos" className="hover:text-ink hover:underline">
+              <Link
+                href="/ayuda#como-ordenamos"
+                className="inline-flex min-h-11 items-center hover:text-ink hover:underline"
+              >
                 Cómo ordenamos los resultados
               </Link>
             </li>
             <li>
-              <Link href="/ayuda#terminos" className="hover:text-ink hover:underline">
+              <Link
+                href="/ayuda#terminos"
+                className="inline-flex min-h-11 items-center hover:text-ink hover:underline"
+              >
                 Términos y condiciones
               </Link>
             </li>
             <li>
-              <Link href="/ayuda#privacidad" className="hover:text-ink hover:underline">
+              <Link
+                href="/ayuda#privacidad"
+                className="inline-flex min-h-11 items-center hover:text-ink hover:underline"
+              >
                 Privacidad
               </Link>
             </li>
             <li>
-              <Link href="/ayuda/eliminar-cuenta" className="hover:text-ink hover:underline">
+              <Link
+                href="/ayuda/eliminar-cuenta"
+                className="inline-flex min-h-11 items-center hover:text-ink hover:underline"
+              >
                 Eliminar su cuenta
               </Link>
             </li>

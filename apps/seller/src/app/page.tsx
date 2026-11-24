@@ -1,6 +1,6 @@
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader, Stat } from "@yuntera/next-kit/shell";
-import { Alert, Badge, buttonClass, formatPrice, Skeleton } from "@yuntera/ui";
+import { Alert, Badge, buttonClass, formatPrice, Skeleton, touchLinkClass } from "@yuntera/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -91,7 +91,7 @@ async function Dashboard({ searchParams }: Pick<PageProps<"/">, "searchParams">)
             value={counts.to_pack}
             tone={counts.to_pack > 0 ? "warning" : undefined}
             hint={
-              <Link href="/pedidos" className="text-link underline">
+              <Link href="/pedidos" className={touchLinkClass()}>
                 Ver pedidos
               </Link>
             }
@@ -101,7 +101,7 @@ async function Dashboard({ searchParams }: Pick<PageProps<"/">, "searchParams">)
             value={counts.offers_out_of_stock}
             tone={counts.offers_out_of_stock > 0 ? "warning" : undefined}
             hint={
-              <Link href="/inventario" className="text-link underline">
+              <Link href="/inventario" className={touchLinkClass()}>
                 Ver inventario
               </Link>
             }
@@ -111,7 +111,7 @@ async function Dashboard({ searchParams }: Pick<PageProps<"/">, "searchParams">)
             value={counts.listings_rejected}
             tone={counts.listings_rejected > 0 ? "danger" : undefined}
             hint={
-              <Link href="/productos" className="text-link underline">
+              <Link href="/productos" className={touchLinkClass()}>
                 Ver el motivo
               </Link>
             }
@@ -135,7 +135,7 @@ async function Dashboard({ searchParams }: Pick<PageProps<"/">, "searchParams">)
             label="Por cobrar"
             value={formatPrice(overview.payable_minor)}
             hint={
-              <Link href="/pagos" className="text-link underline">
+              <Link href="/pagos" className={touchLinkClass()}>
                 Ver el detalle
               </Link>
             }

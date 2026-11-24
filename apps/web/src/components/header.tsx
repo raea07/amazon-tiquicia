@@ -125,12 +125,12 @@ async function CategoryBar() {
   );
   return (
     <nav aria-label="Categorías" className="border-t border-border">
-      <ul className="shell flex gap-1 overflow-x-auto py-1 text-sm">
+      <ul className="shell flex gap-1 overflow-x-auto py-0.5 text-sm">
         {categories.map((category) => (
           <li key={category.slug} className="shrink-0">
             <Link
               href={`/c/${category.slug}` as Route}
-              className="inline-flex min-h-10 items-center rounded-md px-3 text-ink-muted hover:bg-surface-muted hover:text-ink"
+              className="inline-flex min-h-11 items-center rounded-md px-3 text-ink-muted hover:bg-surface-muted hover:text-ink"
             >
               {category.name_es}
             </Link>
