@@ -198,6 +198,10 @@ async function as(email) {
       "the summary shows no total to pay and no date",
     );
     check(shown.includes("quítelo"), "the summary says what to do");
+    check(
+      !shown.includes("El total cambia") && !shown.includes("Continuar con la compra"),
+      "the summary says what to do once, and speaks of no total",
+    );
     check((await overflow(visitor)) <= 0, "the cart fits 390 px");
     await visitor.screenshot({ path: SHOTS + "/cr4-cart-nothing-to-buy.png", fullPage: true });
   } finally {

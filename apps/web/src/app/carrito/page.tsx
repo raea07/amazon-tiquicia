@@ -221,19 +221,22 @@ async function Cart() {
           </>
         )}
 
-        <div className="mt-5">
-          {hasUnavailable ? (
-            <Alert tone="warning">
-              {alternativeOf.size > 0 || alternativesUnread
-                ? "Cambie o quite los productos que ya no están disponibles para continuar. El total cambia cuando lo haga."
-                : "Quite los productos no disponibles para continuar. El total cambia cuando lo haga."}
-            </Alert>
-          ) : (
-            <Link href="/pagar" className={buttonClass({ size: "lg", block: true })}>
-              Continuar con la compra
-            </Link>
-          )}
-        </div>
+        {/* With nothing to buy, the note above already says what to do. */}
+        {cartHasNothingToBuy(lines) ? null : (
+          <div className="mt-5">
+            {hasUnavailable ? (
+              <Alert tone="warning">
+                {alternativeOf.size > 0 || alternativesUnread
+                  ? "Cambie o quite los productos que ya no están disponibles para continuar. El total cambia cuando lo haga."
+                  : "Quite los productos no disponibles para continuar. El total cambia cuando lo haga."}
+              </Alert>
+            ) : (
+              <Link href="/pagar" className={buttonClass({ size: "lg", block: true })}>
+                Continuar con la compra
+              </Link>
+            )}
+          </div>
+        )}
       </aside>
     </div>
   );
