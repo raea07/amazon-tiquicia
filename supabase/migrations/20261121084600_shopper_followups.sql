@@ -51,6 +51,17 @@
 --      top-level transaction id that inserted the row (pg_current_xact_id(),
 --      the same inside a function's exception block). Rows booked before
 --      this migration have none and are announced alone, as they were.
+--
+--   3. STAFF'S OWN WORDS FOR A CANCELLATION STAY WITH STAFF.
+--      public.get_order sent the shopper `cancel_reason` as stored, and
+--      when staff cancel that is what they typed (it may name a colleague
+--      or a case). The shopper's pages never show it, but the answer
+--      reached the phone and anyone calling the API. Now the shopper gets
+--      it only when it is one of the three sentences the database writes
+--      itself (the sweep, a return, the shopper's own cancellation), and
+--      null otherwise; staff get it as stored. The field stays (the store
+--      build of 3f251c3 reads it as a string or null). Nothing else of
+--      get_order changes.
 
 -- ═══ 1. The delivery date of a cart alternative ════════════════════════════
 
@@ -412,7 +423,140 @@ begin
 end;
 $$;
 
--- ═══ 4. Grants ═════════════════════════════════════════════════════════════
+-- ═══ 4. The cancellation reason a shopper reads ═══════════════════════════
+
+-- One order in full. Replaces the version in 20261121084200_order_followups.sql;
+-- one change: `cancel_reason` (header, point 3).
+create or replace function public.get_order(p_order_number text) returns jsonb
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  o public.orders%rowtype;
+  v_is_owner boolean;
+  v_is_staff boolean := private.has_staff_role('ops', 'support', 'finance');
+  v_is_ops boolean := private.has_staff_role('ops');
+begin
+  select * into o from public.orders where order_number = p_order_number;
+  v_is_owner := found and o.user_id = (select auth.uid());
+  if not found or not (v_is_owner or v_is_staff) then
+    -- The same answer whether the order does not exist or belongs to someone else.
+    perform private.fail('order_not_found');
+  end if;
+
+  return jsonb_build_object(
+    'id', o.id,
+    'order_number', o.order_number,
+    'status', o.status,
+    'placed_at', o.placed_at,
+    'confirmed_at', o.confirmed_at,
+    'delivered_at', o.delivered_at,
+    'cancelled_at', o.cancelled_at,
+    -- Since 084600: to the shopper, only a reason the database writes itself
+    -- (packages/core/src/cancellation.ts, CANCEL_REASON); what staff typed
+    -- when they cancelled is an internal note and reaches staff only.
+    'cancel_reason', case when v_is_staff
+                            or o.cancel_reason in ('Pago no recibido a tiempo',
+                                                   'Los paquetes regresaron sin entregarse',
+                                                   'Cancelado por el cliente')
+                          then o.cancel_reason end,
+    'items_total_minor', o.items_total_minor,
+    'shipping_minor', o.shipping_minor,
+    'discount_minor', o.discount_minor,
+    'total_minor', o.total_minor,
+    'tax_included_minor', o.tax_included_minor,
+    'payment_method', o.payment_method,
+    'promise_earliest', o.promise_earliest,
+    'promise_latest', o.promise_latest,
+    'withdrawal_deadline', o.withdrawal_deadline,
+    'warranty_until', o.warranty_until,
+    -- The code is shown while there is still something to hand over, and only
+    -- to the shopper. It is their proof against a parcel being marked
+    -- delivered without them, so nobody on the platform's side may read it:
+    -- not the driver, and not staff looking at the order.
+    -- Since 084200, also not while every parcel left to deliver is on its way
+    -- back to the warehouse (returning): nobody will ask for it.
+    'delivery_pin', case when v_is_owner
+                          and o.status in ('confirmed', 'processing', 'partially_shipped', 'shipped')
+                          and (exists (select 1 from public.shipments s where s.order_id = o.id
+                                       and s.status in ('pending', 'picking', 'packed', 'ready_for_dispatch',
+                                                        'out_for_delivery', 'delivery_failed'))
+                               or not exists (select 1 from public.shipments s where s.order_id = o.id
+                                              and s.status <> 'cancelled'))
+                         then (select c.code from private.delivery_codes c where c.order_id = o.id) end,
+    'can_cancel', v_is_staff and o.status in ('pending_payment', 'payment_review', 'confirmed', 'processing')
+                  and not exists (select 1 from public.shipments s where s.order_id = o.id
+                                  and s.status not in ('pending', 'picking', 'cancelled'))
+                  or (o.status in ('pending_payment', 'payment_review', 'confirmed')
+                      and not exists (select 1 from public.shipments s
+                                      where s.order_id = o.id and s.status <> 'pending')),
+    'address', jsonb_build_object(
+      'recipient_name', o.ship_recipient_name, 'phone', o.ship_phone,
+      'postal_code', o.ship_postal_code, 'senas', o.ship_senas,
+      'lat', o.ship_lat, 'lng', o.ship_lng, 'plus_code', o.ship_plus_code,
+      'district', (select d.name from public.districts d where d.postal_code = o.ship_postal_code),
+      'canton', (select c.name from public.districts d join public.cantons c on c.code = d.canton_code
+                 where d.postal_code = o.ship_postal_code)),
+    'payment', (
+      select jsonb_build_object(
+        'method', p.method, 'status', p.status, 'amount_minor', p.amount_minor,
+        'provider', p.provider, 'sinpe_reference', p.sinpe_reference, 'captured_at', p.captured_at)
+      from public.payments p where p.order_id = o.id order by p.created_at desc limit 1),
+    'items', (
+      select jsonb_agg(jsonb_build_object(
+        'id', i.id, 'title', i.title, 'variant_name', i.variant_name, 'image_path', i.image_path,
+        'product_slug', (select pr.slug from public.products pr where pr.id = i.product_id),
+        'seller_name', (select s.trade_name from public.sellers s where s.id = i.seller_id),
+        'unit_price_minor', i.unit_price_minor, 'quantity', i.quantity,
+        'line_total_minor', i.line_total_minor, 'fulfillment', i.fulfillment,
+        'review', (select jsonb_build_object('rating', r.rating, 'title', r.title, 'body', r.body)
+                   from public.reviews r where r.order_item_id = i.id),
+        'returned_quantity', (select coalesce(sum(rr.quantity), 0) from public.return_requests rr
+                              where rr.order_item_id = i.id and rr.status <> 'rejected')
+      ) order by i.line_total_minor desc, i.id)
+      from public.order_items i where i.order_id = o.id),
+    'shipments', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', s.id, 'tracking_code', s.tracking_code, 'status', s.status,
+        'package_count', s.package_count, 'attempt_count', s.attempt_count,
+        'promise_latest', s.promise_latest, 'delivered_at', s.delivered_at,
+        'item_ids', (select jsonb_agg(si.order_item_id) from public.shipment_items si
+                     where si.shipment_id = s.id),
+        -- How many of each line travel in it (a line can be split over parcels).
+        'units', (select coalesce(jsonb_agg(jsonb_build_object('order_item_id', si.order_item_id,
+                                                               'quantity', si.quantity)
+                                            order by si.order_item_id), '[]'::jsonb)
+                  from public.shipment_items si where si.shipment_id = s.id),
+        -- While a parcel is on the road the shopper sees who is bringing it:
+        -- a first name, nothing more.
+        'driver_first_name', (
+          select split_part(d.full_name, ' ', 1)
+          from public.route_stops rs
+          join public.routes r on r.id = rs.route_id
+          join public.drivers d on d.id = r.driver_id
+          where rs.shipment_id = s.id and r.status = 'in_progress' and s.status = 'out_for_delivery'
+          limit 1),
+        'recalled', s.recalled_at is not null,
+        -- What ops_recall_shipment accepts: packed or ready in a Yuntera
+        -- warehouse, and not on a route being driven.
+        'can_recall', v_is_ops and s.status in ('packed', 'ready_for_dispatch')
+          and exists (select 1 from public.warehouses w where w.id = s.origin_warehouse_id and w.kind = 'platform')
+          and not exists (select 1 from public.route_stops rs join public.routes r on r.id = rs.route_id
+                          where rs.shipment_id = s.id and rs.status in ('pending', 'arrived')
+                            and r.status = 'in_progress')
+      ) order by s.created_at, s.id)
+      from public.shipments s where s.order_id = o.id), '[]'::jsonb),
+    'timeline', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'at', e.created_at, 'kind', e.kind, 'from_status', e.from_status,
+        'to_status', e.to_status, 'note', e.note) order by e.created_at, e.id)
+      from public.order_events e
+      where e.order_id = o.id and (e.visible_to_customer or v_is_staff)), '[]'::jsonb)
+  );
+end;
+$$;
+
+-- ═══ 5. Grants ═════════════════════════════════════════════════════════════
 
 revoke all on function private.refund_announcement(uuid, boolean) from public, anon, authenticated;
 

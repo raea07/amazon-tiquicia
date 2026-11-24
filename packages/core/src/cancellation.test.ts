@@ -26,6 +26,18 @@ describe("the reasons the database writes on a cancelled order", () => {
     expect(SQL).toContain(`'${CANCEL_REASON.shopper}'`);
   });
 
+  it("are the only reasons public.get_order gives the shopper (084600)", () => {
+    const file = readdirSync(MIGRATIONS).find((f) =>
+      f.includes("_shopper_followups.sql"),
+    );
+    const sql = readFileSync(`${MIGRATIONS}${file}`, "utf8");
+    const listed = sql.match(/o\.cancel_reason in \(([^)]*)\)/)?.[1] ?? "";
+    const sentences = [...listed.matchAll(/'([^']*)'/g)]
+      .map((m) => m[1])
+      .sort();
+    expect(sentences).toEqual(Object.values(CANCEL_REASON).sort());
+  });
+
   it("are recognised, with surrounding spaces, and anything else is staff's own note", () => {
     expect(cancelReasonKind("Pago no recibido a tiempo")).toBe("unpaid");
     expect(cancelReasonKind(" Los paquetes regresaron sin entregarse ")).toBe(
