@@ -1,11 +1,12 @@
 import { Link, type LinkProps } from "expo-router";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
   RefreshControl,
   ScrollView,
+  type ScrollViewInstance,
   type StyleProp,
   StyleSheet,
   View,
@@ -32,6 +33,7 @@ export function Screen({
   footer,
   edges = ["bottom", "left", "right"],
   padded = true,
+  scrollRef,
   testID,
 }: {
   children: ReactNode;
@@ -41,10 +43,13 @@ export function Screen({
   footer?: ReactNode;
   edges?: Edge[];
   padded?: boolean;
+  /** The scrolling view, for a screen that brings an answer at its top into view. */
+  scrollRef?: Ref<ScrollViewInstance>;
   testID?: string;
 }) {
   const body = scroll ? (
     <ScrollView
+      ref={scrollRef}
       style={styles.fill}
       contentContainerStyle={[padded ? styles.padded : null, styles.grow]}
       keyboardShouldPersistTaps="handled"
