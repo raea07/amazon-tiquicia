@@ -151,16 +151,20 @@ async function as(email) {
     .first()
     .getAttribute("href");
   const warehouseHeight = await height(toWarehouse);
-  // The heading under it stays where it was: the link's extra height is outside the line.
-  const headingTop = (await worker.locator("h1").first().boundingBox())?.y ?? 0;
+  // The line around it stays one line of text: the link's extra height is outside it,
+  // so nothing under it moves.
+  const lineHeight = await height(worker.locator("p:has(> a[data-back-link])"));
   await worker.goto(`${FIELD}${firstLocation}`, { waitUntil: "networkidle" });
   const locationsHeight = await height(
     worker.locator("a[data-back-link]", { hasText: "← Ubicaciones" }),
   );
-  log("back links:", { warehouseHeight, locationsHeight, headingTop });
+  log("back links:", { warehouseHeight, locationsHeight, lineHeight });
   check(warehouseHeight >= 44, `'← Bodega' is ${warehouseHeight} px tall, not 44`);
   check(locationsHeight >= 44, `'← Ubicaciones' is ${locationsHeight} px tall, not 44`);
-  check(headingTop > 0 && headingTop < 120, `the page's heading did not move down: ${headingTop}`);
+  check(
+    lineHeight > 0 && lineHeight <= 24,
+    `the back link's line is ${lineHeight} px, one line of text`,
+  );
   await worker.screenshot({ path: SHOTS + "/cr2-location-back-link.png" });
 
   const staff = await (await phone()).newPage();
