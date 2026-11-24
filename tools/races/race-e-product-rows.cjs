@@ -26,6 +26,7 @@
  * offer at its last unit, or a release that brings one back from zero), and
  * the writers of product rows that are not stock writers:
  *   E5  two checkouts that each take the last unit of an offer of X and of Y, in opposite order;
+ *   E5b the same with a staff cancellation giving back [x1, low] as one of the two;
  *   E6  a staff cancellation that gives back the last units of x1 and x2 against the seller pausing x2
  *       (offer row, then product row);
  *   E6b a checkout of the last units of x1 and x2 against the seller pausing x2;
@@ -34,7 +35,9 @@
  *   E8  a staff cancellation giving back [x1, low] against catalogue staff taking product X down;
  *   E9  a checkout of the last units of [x1, low] against Tienda Sendero sending an edit of product X
  *       for review (seller_update_listing: product FOR UPDATE, then the shop FOR UPDATE).
- * After every round of E5-E9 each fixture product's stored summary must equal one
+ *   E10 packing against a seller switching off a variant two shops sell (not product rows);
+ *   E11 staff merging the brand of X and Y against a checkout of the last units of two of their offers.
+ * After every round of E5-E11 each fixture product's stored summary must equal one
  * computed from scratch (lib.cjs summaryCheck).
  */
 "use strict";
@@ -262,6 +265,33 @@ const scenarios = [
     ],
     verify: summaries,
   }),
+  // E5b: the E5 mechanism with a cancellation as one of the two writers. A paid
+  // order holds the last units of x1 and low; staff cancel it (giving back x1,
+  // then low: X then Y, both crossing back above zero) while a checkout takes
+  // the last units of second and x2 (Y then X, both crossing to zero).
+  ...both("E5b staff cancel giving back [x1, low] vs place_order of the last units [second, x2]", {
+    products: P,
+    setup: (h) =>
+      paidAtZero(h, P, [
+        ["x1", 1],
+        ["low", 1],
+      ]),
+    actors: (h, ctx) => [
+      staffCancel(ctx),
+      {
+        ...h.placeArgs(
+          7,
+          [
+            ["x2", 1],
+            ["second", 1],
+          ],
+          "card",
+        ),
+        name: "place-YX",
+      },
+    ],
+    verify: summaries,
+  }),
   ...both("E6 staff cancel giving back the last units of [x1, x2] vs the seller pausing x2", {
     products: ["x1", "x2"],
     setup: (h) =>
@@ -468,6 +498,88 @@ scenarios.push({
     holdMs: 150,
   }),
 });
+
+// E11: staff merging two brands (public.ops_merge_brands: one UPDATE of every
+// product of the brand, in scan order) while a checkout takes the last units
+// of [x1, low] (X then Y) or [second, x2] (Y then X): the checkout holds the
+// first product row it took across zero and wants the second. Found by an
+// independent review of wave 8 (its family X4) and brought in here. Products X
+// and Y are put on a fresh brand A each round; the merge moves them to B.
+// Forced: a third session holds product X (or Y) FOR SHARE; the actor named
+// queues on it first, the other starts 40 ms late.
+const holdY = (h) => ({
+  hold: {
+    sql: "select 1 from public.products where id = $1 for share",
+    args: [h.offer("low").product_id],
+  },
+  holdMs: 150,
+});
+for (const pair of [
+  ["x1", "low"],
+  ["second", "x2"],
+]) {
+  const label = `E11 ops_merge_brands of X and Y vs place_order of the last units [${pair.join(", ")}]`;
+  const def = {
+    products: P,
+    setup: async (h, round) => {
+      await fixture(h);
+      await h.layout(P, { "W7-01": 1 });
+      const tag = `${Date.now()}-${round}`;
+      const brand = async (k) =>
+        (
+          await h.q("insert into public.brands (slug, name) values ($1, $2) returning id", [
+            `carrera-marca-${k}-${tag}`,
+            `Marca ${k.toUpperCase()} de la carrera ${tag}`,
+          ])
+        ).rows[0].id;
+      const a = await brand("a");
+      const b = await brand("b");
+      await h.q("update public.products set brand_id = $1 where id = any($2)", [
+        a,
+        [h.offer("x1").product_id, h.offer("low").product_id],
+      ]);
+      return { a, b, orders: [] };
+    },
+    actors: (h, ctx) => [
+      {
+        ...h.placeArgs(
+          6,
+          pair.map((k) => [k, 1]),
+          "card",
+        ),
+        name: "checkout",
+      },
+      {
+        name: "merge",
+        as: STAFF,
+        sql: "select public.ops_merge_brands($1, $2)",
+        args: [ctx.a, ctx.b],
+      },
+    ],
+    verify: summaries,
+  };
+  scenarios.push({
+    ...def,
+    name: `${label} natural`,
+    actors: (h, ctx, round) =>
+      def
+        .actors(h, ctx)
+        .map((a, i) => (i === round % 2 ? { ...a, delayMs: Math.floor(round / 2) % 5 } : a)),
+  });
+  for (const [tag, hold, first] of [
+    ["forced X, checkout first", holdX, 0],
+    ["forced X, merge first", holdX, 1],
+    ["forced Y, checkout first", holdY, 0],
+  ]) {
+    scenarios.push({
+      ...def,
+      name: `${label} ${tag}`,
+      actors: (h, ctx) =>
+        def.actors(h, ctx).map((a, i) => (i !== first ? { ...a, delayMs: 40 } : a)),
+      options: hold,
+    });
+  }
+}
 
 main("E", scenarios).catch((e) => {
   console.error(e);

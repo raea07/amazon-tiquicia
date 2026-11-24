@@ -36,11 +36,16 @@ function args() {
   const url = process.argv[2];
   const rounds = Number(process.argv[3] || 100);
   const only = process.argv[4] ? new RegExp(process.argv[4]) : null;
-  if (!url || !/^postgres(ql)?:\/\/[^@]*@(127\.0\.0\.1|localhost)[:/]/.test(url)) {
+  const json = process.argv[5] || null;
+  const local = localUrl(url);
+  if (!local.ok) {
     console.error(
-      "usage: node <race>.cjs postgres://...@127.0.0.1:5432/<db> [rounds] [scenario-regex]",
+      "usage: node <race>.cjs postgres://...@127.0.0.1:5432/<db> [rounds] [scenario-regex] [jsonl-file]",
     );
-    console.error("Only a local database (127.0.0.1 or localhost) is accepted.");
+    console.error(`Refusing: ${local.why}.`);
+    console.error(
+      "Only a local database (127.0.0.1 or localhost), with no query string, is accepted.",
+    );
     process.exit(2);
   }
   if (!laneDatabase(url)) {
@@ -53,7 +58,43 @@ function args() {
     console.error("are refused: each round cancels open orders and rewrites shelves.");
     process.exit(2);
   }
-  return { url, rounds, only };
+  return { url, rounds, only, json };
+}
+
+/**
+ * The URL names a local server and nothing else can redirect the client: a
+ * postgres: URL whose host is 127.0.0.1 or localhost, with no query string
+ * (node-postgres honours ?host=, ?port=, ?options= and more, which would
+ * override the host checked here) and no fragment. The pool is then built
+ * from these parsed parts only (poolConfig), never from the raw string.
+ */
+function localUrl(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return { ok: false, why: "not a URL" };
+  }
+  if (!["postgres:", "postgresql:"].includes(u.protocol))
+    return { ok: false, why: "not a postgres: URL" };
+  if (!["127.0.0.1", "localhost"].includes(u.hostname))
+    return { ok: false, why: `host ${u.hostname || "(none)"} is not local` };
+  if (u.search || url.includes("?")) return { ok: false, why: "the URL has a query string" };
+  if (u.hash || url.includes("#")) return { ok: false, why: "the URL has a fragment" };
+  return { ok: true, url: u };
+}
+
+/** Connection settings from the checked URL's parts only. */
+function poolConfig(url) {
+  const { ok, url: u } = localUrl(url);
+  if (!ok || !laneDatabase(url)) throw new Error("refusing a database that is not a lane's own");
+  return {
+    host: u.hostname,
+    port: Number(u.port || 5432),
+    user: decodeURIComponent(u.username || "postgres"),
+    password: decodeURIComponent(u.password || ""),
+    database: decodeURIComponent(u.pathname.replace(/^\//, "")),
+  };
 }
 
 /** The database name of a URL is a lane's own: yuntera_lane1..19, optionally _suffix. Never lane 0's. */
@@ -72,7 +113,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 class Harness {
   constructor(url) {
     this.url = url;
-    this.pool = new pg.Pool({ connectionString: url, max: 30 });
+    this.pool = new pg.Pool({ ...poolConfig(url), max: 30 });
     this.ids = new Map();
     this.offers = new Map(); // key -> {id, sku_id, seller_id, sku_code, slug}
     this.loc = new Map();
@@ -247,6 +288,22 @@ class Harness {
   async teardown() {
     try {
       await this.cancelAll();
+      // The harness's own products leave the catalogue (archived, offers
+      // paused), so a lane used for journeys afterwards does not list them.
+      // ownFixture() puts them back on the next run. Everything else the run
+      // made (its shoppers, orders, shelves W7-01..03, a second shop's offer)
+      // stays: reset the lane's database after a run (README, Safety).
+      if (this.fixtureProducts) {
+        await this.q(
+          `update public.offers o set status = 'paused' from public.skus k
+            where k.id = o.sku_id and k.product_id = any($1::uuid[]) and o.status = 'active'`,
+          [this.fixtureProducts],
+        );
+        await this.q(
+          "update public.products set status = 'archived' where id = any($1::uuid[]) and status = 'active'",
+          [this.fixtureProducts],
+        );
+      }
       for (const [key, value] of Object.entries(this.savedSettings)) {
         if (value !== null)
           await this.q("update public.app_settings set value = $2::jsonb where key = $1", [
@@ -337,18 +394,26 @@ class Harness {
         [k.id, k.product, k.code, k.variant],
       );
     }
+    // Tienda Sendero's own warehouse, for the offer it ships itself (family H).
+    this.sellerWarehouseId = (
+      await one(
+        "select id from public.warehouses where seller_id = $1 and kind = 'seller' and active order by code limit 1",
+        [sendero],
+      )
+    ).id;
     for (const o of FIXTURE.offers) {
       const seller = o.shop === "sendero" ? sendero : cafetal;
+      const fulfillment = o.fulfillment || "platform";
       await this.q(
         `insert into public.offers (id, sku_id, seller_id, price_minor, fulfillment, handling_days, status, created_at)
-         values ($1, $2, $3, $4, 'platform', 0, 'active', $5)
+         values ($1, $2, $3, $4, $6::public.fulfillment_type, $7, 'active', $5)
          on conflict (id) do update set status = 'active', price_minor = excluded.price_minor, list_price_minor = null`,
-        [o.id, o.sku, seller, o.price, o.created],
+        [o.id, o.sku, seller, o.price, o.created, fulfillment, fulfillment === "seller" ? 1 : 0],
       );
       await this.q(
         `insert into public.stock_levels (warehouse_id, sku_id, seller_id, on_hand) values ($1, $2, $3, 0)
          on conflict do nothing`,
-        [this.warehouseId, o.sku, seller],
+        [fulfillment === "seller" ? this.sellerWarehouseId : this.warehouseId, o.sku, seller],
       );
       const k = FIXTURE.skus.find((x) => x.id === o.sku);
       this.offers.set(o.key, {
@@ -358,9 +423,46 @@ class Harness {
         sku_code: k.code,
         slug: `${o.key}@${o.shop}`,
         product_id: k.product,
+        fulfillment,
       });
     }
     this.fixtureProducts = FIXTURE.products.map((p) => p.id);
+  }
+
+  /**
+   * A seller-fulfilled offer's stock in the shop's own warehouse set to
+   * `units` free (on_hand = units + active reservations, reserved = active
+   * reservations), after every open harness order is cancelled. Direct
+   * writes as the owner. Seller warehouses have no shelves.
+   */
+  async sellerStock(key, units) {
+    await this.cancelAll();
+    const o = this.offer(key);
+    await this.q(
+      `update public.stock_levels l
+          set reserved = x.active, on_hand = $4 + x.active
+         from (select coalesce(sum(r.quantity), 0)::int as active from public.inventory_reservations r
+                where r.warehouse_id = $1 and r.sku_id = $2 and r.seller_id = $3 and r.status = 'active') x
+        where l.warehouse_id = $1 and l.sku_id = $2 and l.seller_id = $3`,
+      [this.sellerWarehouseId, o.sku_id, o.seller_id, units],
+    );
+  }
+
+  /** The stock row of an offer in the warehouse it ships from, with its offer's available units. */
+  async stockOf(key) {
+    const o = this.offer(key);
+    const warehouse = o.fulfillment === "seller" ? this.sellerWarehouseId : this.warehouseId;
+    return (
+      await this.q(
+        `select l.on_hand, l.reserved,
+                (select coalesce(sum(r.quantity), 0)::int from public.inventory_reservations r
+                  where r.warehouse_id = l.warehouse_id and r.sku_id = l.sku_id and r.seller_id = l.seller_id
+                    and r.status = 'active') as active,
+                (select f.available_quantity from public.offers f where f.id = $4) as available
+           from public.stock_levels l where l.warehouse_id = $1 and l.sku_id = $2 and l.seller_id = $3`,
+        [warehouse, o.sku_id, o.seller_id, o.id],
+      )
+    ).rows[0];
   }
 
   /**
@@ -533,7 +635,9 @@ class Harness {
       const deadline = Date.now() + 10000;
       for (;;) {
         const { rows } = await ctl.query(
-          "select count(*)::int as n from pg_locks where locktype = 'advisory' and objid = $1 and not granted",
+          `select count(*)::int as n from pg_locks
+            where locktype = 'advisory' and objid = $1 and not granted
+              and database = (select oid from pg_database where datname = current_database())`,
           [BARRIER],
         );
         if (rows[0].n >= actors.length || Date.now() > deadline) break;
@@ -662,12 +766,14 @@ class Harness {
  *   product Y  (id ...0a): one variant (SKU ...0102), sold by Tienda Sendero ("low") and by
  *              Cafetal Los Santos ("second");
  *   product Z  (id ...0c): one variant (SKU ...0201), sold by Tienda Sendero ("z1", the cheaper)
- *              and by Cafetal Los Santos ("z2").
+ *              and by Cafetal Los Santos ("z2");
+ *   product W  (id ...0d): one variant (SKU ...0301), which Tienda Sendero ships ITSELF from its
+ *              own warehouse ("ws", fulfilment 'seller'; family H).
  *
  * So by SKU, x1 < y < x2: a writer of [x1, low] takes X then Y, a writer of
  * [second, x2] takes Y then X (family E). By product id Y < X: a walk over a
  * shop's products in id order takes Y then X, the opposite of [x1, low].
- * Every offer is warehouse-fulfilled from SJO1.
+ * Every other offer is warehouse-fulfilled from SJO1.
  */
 const FX = (n) => `e8000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
 const FIXTURE = {
@@ -675,12 +781,14 @@ const FIXTURE = {
     { id: FX(0x0b), slug: "carrera-producto-x", title: "Producto X de la carrera" },
     { id: FX(0x0a), slug: "carrera-producto-y", title: "Producto Y de la carrera" },
     { id: FX(0x0c), slug: "carrera-producto-z", title: "Producto Z de la carrera" },
+    { id: FX(0x0d), slug: "carrera-producto-w", title: "Producto W de la carrera" },
   ],
   skus: [
     { id: FX(0x0101), product: FX(0x0b), code: "CARRERA-X1", variant: "Uno" },
     { id: FX(0x0102), product: FX(0x0a), code: "CARRERA-Y", variant: "" },
     { id: FX(0x0103), product: FX(0x0b), code: "CARRERA-X2", variant: "Dos" },
     { id: FX(0x0201), product: FX(0x0c), code: "CARRERA-Z", variant: "" },
+    { id: FX(0x0301), product: FX(0x0d), code: "CARRERA-W", variant: "" },
   ],
   offers: [
     {
@@ -730,6 +838,15 @@ const FIXTURE = {
       shop: "cafetal",
       price: 1500000,
       created: "2026-01-02T00:00:00Z",
+    },
+    {
+      key: "ws",
+      id: FX(0x1301),
+      sku: FX(0x0301),
+      shop: "sendero",
+      price: 1100000,
+      created: "2026-01-01T00:00:00Z",
+      fulfillment: "seller",
     },
   ],
 };
@@ -835,7 +952,7 @@ class Tally {
 
 /** Runs each scenario `rounds` times and prints one line per scenario (and a JSON summary). */
 async function main(family, scenarios) {
-  const { url, rounds, only } = args();
+  const { url, rounds, only, json } = args();
   const h = new Harness(url);
   const lines = [];
   const db = url.replace(/^.*\//, "");
@@ -877,9 +994,21 @@ async function main(family, scenarios) {
   } finally {
     await h.teardown();
   }
-  const out = process.env.RACE_JSON;
+  const out = json;
   if (out)
     require("node:fs").appendFileSync(out, `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`);
 }
 
-module.exports = { Harness, Tally, main, pg, SHOPPER, STAFF, WORKER, sleep, laneDatabase };
+module.exports = {
+  Harness,
+  Tally,
+  main,
+  pg,
+  SHOPPER,
+  STAFF,
+  WORKER,
+  sleep,
+  laneDatabase,
+  localUrl,
+  poolConfig,
+};

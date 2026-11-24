@@ -5,7 +5,7 @@
  * writer starts while it waits, then the third session lets go. Without the
  * fixes in 084400 each of these ended with a deadlock (40P01) for one of the
  * two, or with a wrong listing or a unit lost; the 100-round runs are in
- * tools/races (families C, E, F and G).
+ * tools/races (families C, E, F, G and H).
  *
  *   (i)   a sale that leaves an offer in stock (5 units to 4) never waits for
  *         its product's row: the summary depends on whether an offer has
@@ -18,12 +18,16 @@
  *         the stock row; a count takes the stock row first);
  *   (iv)  a staff cancellation of a half-picked order against the picker
  *         confirming its other line: the unit picked comes back too;
- *   (v)   staff stopping a parcel while its driver starts the route.
+ *   (v)   staff stopping a parcel while its driver starts the route;
+ *   (vi)  staff cancelling an order while the shop packs the parcel it ships
+ *         itself (seller_mark_packed took the parcel and the stock row before
+ *         the order).
  *
- * Fixtures are this file's own: two products with chosen ids (X with two
- * variants, Z sold by two shops), a shelf in SJO1, a shopper, a driver of its
+ * Fixtures are this file's own: three products with chosen ids (X with two
+ * variants, Z sold by two shops, W which Tienda Sendero ships itself from its
+ * own warehouse), a shelf in SJO1, a shopper, a driver of its
  * own (so the demo driver's day is untouched) and, for (v), two packed cash
- * orders planned on one route. Races (i), (iii) and (v) are rolled back;
+ * orders planned on one route. Races (i), (iii), (v) and (vi) are rolled back;
  * (ii) and (iv) commit and are undone after each round. At the end the
  * route's parcels are stopped and checked back in and the route is closed;
  * the file's cancelled orders are deleted. The suite passes on a used
@@ -44,14 +48,16 @@ const SHOPPER2 = "carrera-producto-2@yuntera.example";
 const DRIVER = "carrera-conductor@yuntera.example";
 const STAFF = "central@yuntera.example";
 const WORKER = "bodega@yuntera.example";
+const SELLER = "sendero@yuntera.example";
 const SHELF = "C8-01";
 const ROUNDS = 3;
 
 const id = (n: number) => `c8000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
 const PRODUCT_X = id(0x0a);
 const PRODUCT_Z = id(0x0b);
-const SKU = { x1: id(0x101), x2: id(0x102), z: id(0x103) };
-const OFFER = { x1: id(0x201), x2: id(0x202), z1: id(0x203), z2: id(0x204) };
+const PRODUCT_W = id(0x0c);
+const SKU = { x1: id(0x101), x2: id(0x102), z: id(0x103), w: id(0x104) };
+const OFFER = { x1: id(0x201), x2: id(0x202), z1: id(0x203), z2: id(0x204), ws: id(0x205) };
 
 type Session = { client: pg.PoolClient; pid: number };
 
@@ -64,6 +70,7 @@ describe.skipIf(!db.enabled)(
     let shelfId = "";
     let sendero = "";
     let cafetal = "";
+    let senderoWarehouse = "";
 
     beforeAll(async () => {
       pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 8 });
@@ -99,7 +106,7 @@ describe.skipIf(!db.enabled)(
       );
       const { rows } = await db.query<{ email: string; id: string }>(
         "select email, id from auth.users where email = any($1)",
-        [[SHOPPER, SHOPPER2, DRIVER, STAFF, WORKER]],
+        [[SHOPPER, SHOPPER2, DRIVER, STAFF, WORKER, SELLER]],
       );
       for (const row of rows) users.set(row.email, row.id);
 
@@ -114,6 +121,12 @@ describe.skipIf(!db.enabled)(
       cafetal = (
         await one<{ id: string }>("select id from public.sellers where slug = 'cafetal-los-santos'")
       ).id;
+      senderoWarehouse = (
+        await one<{ id: string }>(
+          "select id from public.warehouses where seller_id = $1 and kind = 'seller' and active order by code limit 1",
+          [sendero],
+        )
+      ).id;
       shelfId = (
         await one<{ id: string }>(
           `insert into public.warehouse_locations (warehouse_id, code, kind, active) values ($1, $2, 'storage', true)
@@ -127,6 +140,7 @@ describe.skipIf(!db.enabled)(
       for (const [pid, slug, title] of [
         [PRODUCT_X, "carrera-contrato-producto-x", "Producto X de la prueba de contrato"],
         [PRODUCT_Z, "carrera-contrato-producto-z", "Producto Z de la prueba de contrato"],
+        [PRODUCT_W, "carrera-contrato-producto-w", "Producto W de la prueba de contrato"],
       ]) {
         await db.query(
           `insert into public.products (id, slug, title, description, category_id, brand_id, status, created_by_seller_id)
@@ -139,6 +153,7 @@ describe.skipIf(!db.enabled)(
         [SKU.x1, PRODUCT_X, "CARRERA-C-X1"],
         [SKU.x2, PRODUCT_X, "CARRERA-C-X2"],
         [SKU.z, PRODUCT_Z, "CARRERA-C-Z"],
+        [SKU.w, PRODUCT_W, "CARRERA-C-W"],
       ]) {
         await db.query(
           `insert into public.skus (id, product_id, code, weight_grams, length_cm, width_cm, height_cm)
@@ -164,6 +179,18 @@ describe.skipIf(!db.enabled)(
           [warehouseId, sku, seller],
         );
       }
+      // W: Tienda Sendero ships it itself, from its own warehouse.
+      await db.query(
+        `insert into public.offers (id, sku_id, seller_id, price_minor, fulfillment, handling_days, status)
+         values ($1, $2, $3, 1100000, 'seller', 1, 'active')
+         on conflict (id) do update set status = 'active'`,
+        [OFFER.ws, SKU.w, sendero],
+      );
+      await db.query(
+        `insert into public.stock_levels (warehouse_id, sku_id, seller_id, on_hand) values ($1, $2, $3, 0)
+         on conflict do nothing`,
+        [senderoWarehouse, SKU.w, sendero],
+      );
       await cleanUp();
     });
 
@@ -217,7 +244,9 @@ describe.skipIf(!db.enabled)(
       await db.query("delete from public.stock_levels where sku_id = any($1)", [skus]);
       await db.query("delete from public.offers where id = any($1)", [Object.values(OFFER)]);
       await db.query("delete from public.skus where id = any($1)", [skus]);
-      await db.query("delete from public.products where id = any($1)", [[PRODUCT_X, PRODUCT_Z]]);
+      await db.query("delete from public.products where id = any($1)", [
+        [PRODUCT_X, PRODUCT_Z, PRODUCT_W],
+      ]);
       await db.query("delete from public.drivers where user_id = $1", [users.get(DRIVER)]);
     }
 
@@ -625,6 +654,57 @@ describe.skipIf(!db.enabled)(
           route,
         ]);
       }
+    });
+
+    it("(vi) staff cancelling an order while the shop packs the parcel it ships itself", async () => {
+      await cleanUp();
+      await db.query(
+        "update public.stock_levels set on_hand = 10, reserved = 0 where warehouse_id = $1 and sku_id = $2 and seller_id = $3",
+        [senderoWarehouse, SKU.w, sendero],
+      );
+      const placed = await run(
+        SHOPPER,
+        `${placeSql} as r`,
+        await placeArgs([[OFFER.ws, 1]], "cash_on_delivery"),
+      );
+      const order = (placed as { r: { order_id: string } }).r.order_id;
+      const parcel =
+        (
+          await db.query<{ id: string }>(
+            "select id from public.shipments where order_id = $1 and origin_warehouse_id = $2 and status = 'pending'",
+            [order, senderoWarehouse],
+          )
+        ).rows[0]?.id ?? "";
+      expect(parcel, "fixture: a parcel waiting at the shop").not.toBe("");
+      for (let round = 0; round < ROUNDS; round++) {
+        const holder = await session(null);
+        const cancel = await session(STAFF);
+        const pack = await session(SELLER);
+        try {
+          // The cancellation queues on the order first; the shop's pack starts
+          // while it waits (before 084400 the pack took the parcel and the
+          // stock row, then waited for the order behind the cancellation,
+          // which then wanted the parcel).
+          await holder.client.query("select 1 from public.orders where id = $1 for update", [
+            order,
+          ]);
+          const cancelling = outcome(
+            cancel.client.query("select public.cancel_order($1, 'Prueba de contrato')", [order]),
+          );
+          expect(await waitsForLock(cancel.pid), `round ${round}: cancellation waited`).toBe(true);
+          const packing = outcome(
+            pack.client.query("select public.seller_mark_packed($1, 900, 1::smallint)", [parcel]),
+          );
+          expect(await waitsForLock(pack.pid), `round ${round}: pack waited`).toBe(true);
+          await holder.client.query("rollback");
+          expect(await cancelling, `round ${round}: cancellation`).toBe("");
+          await cancel.client.query("rollback");
+          expect(await packing, `round ${round}: pack`).toBe("");
+        } finally {
+          await finish(holder, cancel, pack);
+        }
+      }
+      await cleanUp();
     });
   },
 );

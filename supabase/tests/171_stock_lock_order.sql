@@ -3,7 +3,8 @@
 -- a cancellation still puts picked units back; the unpaid-order sweep cancels
 -- at most 200 orders a run, the oldest first, and loses none; a route starts
 -- with the orders of its parcels locked first and still refuses the wrong
--- caller; who may call what.
+-- caller; packing (by the warehouse or by a shop) never writes the product
+-- row; a shop's own packing still refuses the wrong callers; who may call what.
 --
 -- The races themselves (two sessions at once) are in tools/races and in
 -- packages/db/src/contract.stock-product-races.test.ts; this suite checks, in
@@ -154,6 +155,11 @@ begin
                  and not has_function_privilege('anon', p.oid, 'execute')
           from pg_proc p where p.oid = 'public.driver_start_route(uuid)'::regprocedure),
     'who_may_call: driver_start_route is for signed-in callers only';
+  assert (select p.prosecdef and 'search_path=""' = any (p.proconfig)
+                 and has_function_privilege('authenticated', p.oid, 'execute')
+                 and not has_function_privilege('anon', p.oid, 'execute')
+          from pg_proc p where p.oid = 'public.seller_mark_packed(uuid, integer, smallint)'::regprocedure),
+    'who_may_call: seller_mark_packed is for signed-in callers only';
 end $$;
 
 -- ═══ 2. The summary is refreshed only when an input changes ═══════════════
@@ -593,6 +599,116 @@ end $$;
 select pg_temp.act('central@yuntera.example');
 select pg_temp.refused(format($q$select public.ops_recall_shipment(%L, 'Prueba ciento setenta')$q$, current_setting('t.ship_r')),
                        'shipment_not_recallable');
+select pg_temp.logout();
+
+-- ═══ 7. Packing never takes an offer across zero ══════════════════════════
+
+-- Packing turns a reservation into units leaving the building: on hand and
+-- reserved both go down by the same amount, so what shoppers can buy does not
+-- move and the product row is not written (the documents say packing cannot
+-- meet a product row). Warehouse packing first, of a1.
+select pg_temp.count(pg_temp.fx(101), current_setting('t.sendero')::uuid, 3);
+select pg_temp.remember('o_packw', pg_temp.buy(pg_temp.fx(201), 1, 'cash_on_delivery', 't171-pack-w')::text);
+select pg_temp.remember('avail_a1', (select available_quantity::text from public.offers where id = pg_temp.fx(201)));
+select pg_temp.remember('xmin_a', pg_temp.xmin(pg_temp.fx(10)));
+select pg_temp.pack((select id from public.shipments where order_id = current_setting('t.o_packw')::uuid));
+do $$ begin
+  assert (select status from public.shipments where order_id = current_setting('t.o_packw')::uuid) = 'packed',
+    'pack: packed';
+  assert (select available_quantity::text from public.offers where id = pg_temp.fx(201)) = current_setting('t.avail_a1'),
+    'pack: what shoppers can buy did not move';
+  assert pg_temp.xmin(pg_temp.fx(10)) = current_setting('t.xmin_a'), 'pack: the product row was not written';
+  assert pg_temp.stored(pg_temp.fx(10)) = pg_temp.expected(pg_temp.fx(10)), 'pack: summary right';
+end $$;
+
+-- ═══ 8. A shop packs its own parcel with the order locked first ═══════════
+
+-- Product C (...0c, variant c1) which Tienda Sendero ships itself from its own
+-- warehouse; 10 units counted there by the shop. seller_mark_packed is
+-- redefined in 084400 (the order locked before the parcel): the wrong callers
+-- are still refused and change nothing; the shop packs it; what it leaves
+-- behind is as before.
+do $$
+declare
+  v_like public.products%rowtype;
+begin
+  select * into strict v_like from public.products where slug = 'balon-futbol-sendero-5';
+  insert into public.products (id, slug, title, description, category_id, brand_id, status, created_by_seller_id)
+  values (pg_temp.fx(12), 'prueba-171-producto-c', 'Producto C de la prueba 171', 'Prueba.', v_like.category_id,
+          v_like.brand_id, 'active', current_setting('t.sendero')::uuid);
+  insert into public.skus (id, product_id, code, variant_name, weight_grams, length_cm, width_cm, height_cm)
+  values (pg_temp.fx(104), pg_temp.fx(12), 'T171-C1', '', 500, 20, 15, 10);
+  insert into public.offers (id, sku_id, seller_id, price_minor, fulfillment, handling_days, status, created_at)
+  values (pg_temp.fx(205), pg_temp.fx(104), current_setting('t.sendero')::uuid, 1100000, 'seller', 1, 'active',
+          '2026-01-01');
+  perform pg_temp.remember('wh_sendero', (select id::text from public.warehouses
+    where seller_id = current_setting('t.sendero')::uuid and kind = 'seller' and active order by code limit 1));
+end $$;
+select pg_temp.act('sendero@yuntera.example');
+select public.seller_set_stock(current_setting('t.wh_sendero')::uuid, pg_temp.fx(104), 10);
+select pg_temp.logout();
+select pg_temp.remember('o_own', pg_temp.buy(pg_temp.fx(205), 1, 'cash_on_delivery', 't171-own-pack')::text);
+select pg_temp.remember('s_own', (select id::text from public.shipments
+  where order_id = current_setting('t.o_own')::uuid and origin_warehouse_id = current_setting('t.wh_sendero')::uuid));
+create function pg_temp.own_stock() returns text
+language sql stable as $$
+  select format('%s/%s/%s', l.on_hand, l.reserved, (select available_quantity from public.offers where id = pg_temp.fx(205)))
+  from public.stock_levels l
+  where l.warehouse_id = current_setting('t.wh_sendero')::uuid and l.sku_id = pg_temp.fx(104)
+    and l.seller_id = current_setting('t.sendero')::uuid
+$$;
+do $$ begin
+  assert (select status from public.shipments where id = current_setting('t.s_own')::uuid) = 'pending',
+    'own pack: fixture, the parcel waits at the shop';
+  assert pg_temp.own_stock() = '10/1/9', format('own pack: fixture stock %s', pg_temp.own_stock());
+end $$;
+select pg_temp.remember('xmin_c', pg_temp.xmin(pg_temp.fx(12)));
+
+-- The wrong callers: a visitor, the shopper, another shop's member, warehouse staff.
+select pg_temp.login_anon();
+select pg_temp.refused(format('select public.seller_mark_packed(%L, 900, 1::smallint)', current_setting('t.s_own')), 'forbidden');
+reset role;
+select pg_temp.act('prueba-171@yuntera.example');
+select pg_temp.refused(format('select public.seller_mark_packed(%L, 900, 1::smallint)', current_setting('t.s_own')), 'shipment_not_found');
+select pg_temp.act('vendedor@yuntera.example');
+select pg_temp.refused(format('select public.seller_mark_packed(%L, 900, 1::smallint)', current_setting('t.s_own')), 'shipment_not_found');
+select pg_temp.act('bodega@yuntera.example');
+select pg_temp.refused(format('select public.seller_mark_packed(%L, 900, 1::smallint)', current_setting('t.s_own')), 'shipment_not_found');
+-- The right caller with a wrong package is refused too.
+select pg_temp.act('sendero@yuntera.example');
+select pg_temp.refused(format('select public.seller_mark_packed(%L, 0, 1::smallint)', current_setting('t.s_own')), 'invalid_package');
+select pg_temp.logout();
+do $$ begin
+  assert (select status from public.shipments where id = current_setting('t.s_own')::uuid) = 'pending',
+    'own pack: refused callers changed nothing';
+  assert pg_temp.own_stock() = '10/1/9', 'own pack: refused callers left the stock';
+end $$;
+
+-- The shop packs it: one unit leaves its stock, the reservation is consumed,
+-- the order moves on, what shoppers can buy and the product row do not move.
+select pg_temp.act('sendero@yuntera.example');
+select public.seller_mark_packed(current_setting('t.s_own')::uuid, 900, 1::smallint);
+-- Packing it again is refused.
+select pg_temp.refused(format('select public.seller_mark_packed(%L, 900, 1::smallint)', current_setting('t.s_own')),
+                       'invalid_shipment_state');
+select pg_temp.logout();
+do $$ begin
+  assert (select status = 'packed' and weight_grams = 900 and packed_at is not null
+          from public.shipments where id = current_setting('t.s_own')::uuid), 'own pack: packed';
+  assert pg_temp.own_stock() = '9/0/9', format('own pack: stock %s after packing', pg_temp.own_stock());
+  assert (select r.status from public.inventory_reservations r join public.order_items i on i.id = r.order_item_id
+          where i.order_id = current_setting('t.o_own')::uuid) = 'consumed', 'own pack: reservation consumed';
+  assert exists (select 1 from public.stock_movements m where m.reference_id = current_setting('t.s_own')::uuid
+                 and m.reason = 'ship' and m.on_hand_delta = -1), 'own pack: the ledger row';
+  assert (select status from public.orders where id = current_setting('t.o_own')::uuid) = 'processing',
+    'own pack: the order is being prepared';
+  assert pg_temp.xmin(pg_temp.fx(12)) = current_setting('t.xmin_c'), 'own pack: the product row was not written';
+  assert pg_temp.stored(pg_temp.fx(12)) = pg_temp.expected(pg_temp.fx(12)), 'own pack: summary right';
+end $$;
+-- Once packed, the order cannot be cancelled any more.
+select pg_temp.act('central@yuntera.example');
+select pg_temp.refused(format($q$select public.cancel_order(%L, 'Prueba ciento setenta')$q$, current_setting('t.o_own')),
+                       'too_late_to_cancel');
 select pg_temp.logout();
 
 select 'ok' as stock_lock_order;

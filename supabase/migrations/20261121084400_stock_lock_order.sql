@@ -26,9 +26,11 @@
 --         input of the summary really changed: price_minor, list_price_minor,
 --         status, fulfillment, handling_days, condition, or available_quantity
 --         crossing between zero and more than zero. INSERT and DELETE refresh
---         as before. An ordinary sale (10 units to 9), a pack, a receipt or a
---         release that leaves an offer on the same side of zero no longer
---         touches the product row at all;
+--         as before. An ordinary sale (10 units to 9), a receipt or a
+--         release that leaves an offer on the same side of zero, and every
+--         pack (packing lowers on hand and reserved together, so what
+--         shoppers can buy does not move), no longer touches the product row
+--         at all;
 --       - private.refresh_product_summary writes the row only when a value
 --         differs.
 --     No lock was added to place_order, packing, cancellation or any other
@@ -57,6 +59,10 @@
 --   * PRODUCTS IN ONE ORDER WHERE ONE PATH REFRESHES SEVERAL:
 --     private.sellers_summary_trigger (a shop approved, suspended or closed)
 --     walked the shop's products in no order; it now goes by product id.
+--     This is a convention, not a measured fix: no race found depends on it
+--     (with or without it a shop's suspension against a writer crossing zero
+--     on two of its products deadlocks the same, E7, and taking it out fails
+--     no test). It gives every multi-product path one order to follow.
 --     private.skus_summary_trigger refreshes one product and is unchanged.
 --   * ONE LOCK ORDER FOR STOCK, ORDERS AND SHELVES. Worked out from every
 --     stock writer (the table is in docs/04-algorithms/sourcing-and-inventory.md):
@@ -73,17 +79,30 @@
 --
 --     A reservation is taken after the order row by the function that owns
 --     the order (packing takes them before the stock rows, a cancellation
---     after; both hold the order row first, so they never meet). Every
---     function follows it except private.cancel_order_internal, which put
---     picked units back on their shelves BEFORE it took the stock rows and
---     closed the pick tasks after the shelves: a cancellation against a count
---     or a receipt of the same product on the same shelf deadlocked (race C3
---     at 717048f: 6, 9 and 39 in 100 natural rounds, every forced round), and
---     a pick of the order's other line at that moment could leave a unit
---     picked and never put back (race C4: 43 in 100 natural rounds, every
---     forced round; on hand then exceeds the shelves). With this migration 0. It now takes, after the order, its open pick tasks and then
---     every stock row it will write (by product, shop and warehouse) before
---     any shelf. Nothing else changes in it.
+--     after; both hold the order row first, so they never meet: race H1, a
+--     cancellation against a shop packing its own parcel of the same order,
+--     0 with this migration).
+--
+--     Two functions did not follow it:
+--       - private.cancel_order_internal put picked units back on their
+--         shelves BEFORE it took the stock rows and closed the pick tasks
+--         after the shelves: a cancellation against a count or a receipt of
+--         the same product on the same shelf deadlocked (race C3 at 717048f:
+--         6, 9 and 39 in 100 natural rounds, every forced round), and a pick
+--         of the order's other line at that moment could leave a unit picked
+--         and never put back (race C4: 43 in 100 natural rounds, every forced
+--         round; on hand then exceeds the shelves). It now takes, after the
+--         order, its open pick tasks and then every stock row it will write
+--         (by product, shop and warehouse) before any shelf. Nothing else
+--         changes in it. With this migration 0;
+--       - public.seller_mark_packed (a shop packing a parcel it ships itself)
+--         took the parcel and the stock rows before the order (the order came
+--         last, in private.sync_order_status): the shopper or staff cancelling
+--         the order at that moment deadlocked with it (race H1 at eaca8ad,
+--         this branch before the fix: staff 18 and the shopper 17 in 100
+--         natural rounds, every forced round). It now takes the order first,
+--         as wms_pack_shipment does since 084200. Nothing else changes in it.
+--         With this migration 0.
 --   * THE SWEEP IS CAPPED. private.expire_unpaid_orders took every expired
 --     order and held their stock rows for its whole run (about 2 ms an order:
 --     0.4 s for 200, 2 s for 1000; the hosted API's statement timeout is 8 s
@@ -105,26 +124,32 @@
 --     shipment_not_recallable, "it is on its way"). ops_recall_shipment is
 --     unchanged.
 --
--- WHAT STILL CAN DEADLOCK ON PRODUCT ROWS (measured with tools/races, with
--- this migration, natural / forced rounds of 100;
+-- WHAT STILL CAN DEADLOCK ON PRODUCT ROWS (measured with tools/races on a
+-- local database of a shared machine, with this migration, natural / forced
+-- rounds of 100;
 -- the loser rolls back whole and the person reads "nothing was saved, try
 -- again", try_again; the sweep runs again five minutes later):
 --   - two transactions that EACH take an offer of two shared products across
 --     zero (out of stock, or back in stock), in opposite order. Measured for
 --     two checkouts of last units (E5: 33 / 63; before this migration 26 /
 --     74, and then the summary was also wrong in 42 / 26 rounds); by the same
---     mechanism, not raced separately: a cancellation, packing or the sweep
---     against such a checkout;
---   - a staff cancellation, packing or the sweep giving back (or taking) the
---     last unit of one offer of a product and then writing another offer of
+--     mechanism, not raced separately: a cancellation or the sweep against
+--     such a checkout (packing never takes an offer across zero);
+--   - a staff cancellation or the sweep giving back the last unit of one
+--     offer of a product and then writing another offer of
 --     the same product, against the seller changing or pausing that second
 --     offer at that moment (offer row, then product row) (E6). A checkout
---     does not deadlock with it: place_order takes its offers FOR SHARE first,
+--     does not deadlock with it: place_order takes its offers FOR SHARE before it writes a stock row,
 --     so the seller waits (E6: 22 / 100, before 20 / 100; E6b: 0 / 0);
 --   - a shop suspended or reinstated (its products in product-id order)
 --     against a writer that takes two of its products across zero in the
 --     other order (E7: 3 / 100; before this migration, when its walk had
---     no order, 1 / 100).
+--     no order, 1 / 100);
+--   - staff merging two brands (public.ops_merge_brands: one UPDATE of every
+--     product of the brand, in scan order) against a checkout that holds one
+--     of those products after taking its offer across zero and wants another
+--     (E11, measured by an independent review and here: natural 0 for a checkout of [x1, low] and 8 for [second, x2] in 100 rounds; forced up to 21 and 55 in 100, depending on which session waits first). Not changed
+--     here; the function is outside this migration.
 -- And, not on product rows: packing against a seller switching off a variant
 -- two shops sell (seller_set_variant_active takes the variant FOR UPDATE,
 -- which waits for the key share packing's ledger row takes on it) (E10:
@@ -480,7 +505,56 @@ begin
 end;
 $$;
 
--- ═══ 5. Grants (unchanged: replacing a function keeps them) ═══════════════
+-- ═══ 5. A shop packs its own parcel with the order locked first ═══════════
+
+-- Unchanged from 20261121081100_fulfillment.sql except that the order is
+-- locked before the parcel, as wms_pack_shipment does since
+-- 20261121084200_order_followups.sql (the parcel is read first without a
+-- lock, to find its order and check the caller; a parcel's order and shop
+-- never change).
+create or replace function public.seller_mark_packed(
+  p_shipment_id uuid,
+  p_weight_grams integer,
+  p_package_count smallint default 1
+) returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_ship public.shipments%rowtype;
+begin
+  select * into v_ship from public.shipments where id = p_shipment_id;
+  if not found or v_ship.seller_id is null or not private.is_seller_member(v_ship.seller_id) then
+    perform private.fail('shipment_not_found');
+  end if;
+  -- The order first, then the parcel, its reservations and its stock rows,
+  -- as every function that changes a parcel or an order does. Before, it took
+  -- the parcel and the stock rows first and the order last (in
+  -- private.sync_order_status), so the shopper or staff cancelling the order
+  -- at that moment deadlocked with it.
+  perform 1 from public.orders where id = v_ship.order_id for update;
+  select * into v_ship from public.shipments where id = p_shipment_id for update;
+  if v_ship.status <> 'pending' then
+    perform private.fail('invalid_shipment_state', v_ship.status::text);
+  end if;
+  if not private.order_is_payable_for_fulfilment(v_ship.order_id) then
+    perform private.fail('order_not_ready');
+  end if;
+  if p_weight_grams is null or p_weight_grams <= 0 or p_package_count < 1 then
+    perform private.fail('invalid_package');
+  end if;
+
+  update public.shipments set status = 'picking' where id = p_shipment_id;
+  perform private.consume_shipment_stock(p_shipment_id);
+  update public.shipments
+  set status = 'packed', packed_at = now(), weight_grams = p_weight_grams,
+      package_count = p_package_count
+  where id = p_shipment_id;
+  perform private.sync_order_status(v_ship.order_id);
+end;
+$$;
+
+-- ═══ 6. Grants (unchanged: replacing a function keeps them) ═══════════════
 
 revoke all on function
   private.refresh_product_summary(uuid),
@@ -492,3 +566,6 @@ from public, anon, authenticated;
 
 revoke all on function public.driver_start_route(uuid) from public, anon;
 grant execute on function public.driver_start_route(uuid) to authenticated;
+
+revoke all on function public.seller_mark_packed(uuid, integer, smallint) from public, anon;
+grant execute on function public.seller_mark_packed(uuid, integer, smallint) to authenticated;

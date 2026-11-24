@@ -12,20 +12,33 @@ must never regress are kept as contract tests in
 The harness started as an independent review's scripts for wave 7 and was
 brought into the repository in wave 8 (migration
 `20261121084400_stock_lock_order.sql`), with families E made deterministic and
-F, G and parts of C added.
+F, G, H and parts of C added (E11 and G2 come from an independent review
+of wave 8).
 
 ## Safety
 
 - Only a local database is accepted: the URL must point at `127.0.0.1` or
-  `localhost`, and the database must be a lane's own: `yuntera_lane1` to
-  `yuntera_lane19`, or such a name followed by `_<word>` (a lane's scratch
-  copy, such as `yuntera_lane12_pre`). Lane 0's database (`yuntera_local`) and
-  every other name are refused.
+  `localhost`, have no query string and no fragment (node-postgres would let
+  `?host=`, `?port=` or `?options=` override the host the guard checked), and
+  the database must be a lane's own: `yuntera_lane1` to `yuntera_lane19`, or
+  such a name followed by `_<word>` (a lane's scratch copy, such as
+  `yuntera_lane12_pre`). Lane 0's database (`yuntera_local`) and every other
+  name are refused. The connection is built from the checked parts of the
+  URL only. `node tools/races/guard-check.cjs` checks the guard against a list
+  of URLs it must accept and refuse; `run-all.sh` runs it first.
 - Each round cancels every open order of the harness's shoppers and rewrites
   the shelves of the products it uses (direct writes as the database owner).
   Run it only against a database nothing else uses, with the lane's stack
   **down** (`tools/dev/stack.sh down <lane>`), so no worker consumes the events.
-- Never run two scripts against the same database at once.
+- Never run two scripts against the same database at once. Two lanes may
+  run at once: the barrier counts only its own database's waiters.
+- **Reset the lane's database after a run** (`pnpm db:local:reset` with the
+  lane's variables) before using it for journeys or tests. At the end the
+  harness archives its own products (X, Y, Z, W) and pauses their offers, so
+  the catalogue does not list them, and puts back the limits it raised; it
+  leaves its shoppers (`carrera-w7-*`) with their addresses and orders, the
+  shelves W7-01..03, the second shop's warehouse offer it may add to a seed
+  product, and the per-round brands of E11.
 - The passwords in the examples are the local lane defaults.
 
 ## Running
@@ -43,6 +56,7 @@ F, G and parts of C added.
    ```bash
    node tools/races/race-c-sort-keys.cjs "$DATABASE_URL" 100
    node tools/races/race-c-sort-keys.cjs "$DATABASE_URL" 100 'C3'     # scenarios matching a regex
+   node tools/races/race-h-seller-pack.cjs "$DATABASE_URL" 100 . out.jsonl   # and the table as JSON lines
    tools/races/run-all.sh "$DATABASE_URL" 100 head                     # every family, into tools/races/results/
    FAMILIES="E F G" tools/races/run-all.sh "$DATABASE_URL" 100 head /some/dir
    ```
@@ -62,17 +76,18 @@ F, G and parts of C added.
 
 ## The families
 
-| File                         | Family | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ---------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `race-a-known-deadlocks.cjs` | A      | The stock-row deadlocks of wave 7 stay gone: a payment confirmation against the unpaid-order sweep, against packing and against a staff cancellation of one product from two shops; checkout against packing and the sweep.                                                                                                                                                                                                                                                                   |
-| `race-b-sweep.cjs`           | B      | The sweep (`private.expire_unpaid_orders`) against itself, against paying or cancelling an order of its set or outside it, against every stock writer; a large backlog (200 and 1000 expired orders over 20 products, timed, with a checkout and a payment started 20 ms after the sweep); odd expired orders. From 084400 a run cancels at most 200 orders, the oldest: B5 then checks that what it cancelled is the oldest part, the rest still wait for payment, and later runs take them. |
-| `race-c-sort-keys.cjs`       | C      | Cancellations (`private.cancel_order_internal`) of one product from two shops on one shelf, half picked; C3 a cancellation of a picked order against a count, a receipt and a pick on the same shelf (natural and forced); C4 a cancellation against the picker confirming the order's other line (natural and forced): never a unit picked and not put back.                                                                                                                                 |
-| `race-d-confirm-table.cjs`   | D      | Payment confirmations against each other and every stock writer, on three shelf layouts: never a pick task promised more than its shelf holds.                                                                                                                                                                                                                                                                                                                                                |
-| `race-e-product-rows.cjs`    | E      | Product rows (one level above stock rows). E1 to E4 and E2: the sweep, checkouts, packing and a cancellation of two products that stay in stock, in opposite order: they must never touch a product row. E5 to E9: offers that cross zero, and the other writers of product rows (a seller pausing an offer, a shop suspended, staff taking a product down, a seller sending an edit for review). After every round each product's stored summary must equal one computed from scratch.       |
-| `race-f-stale-summary.cjs`   | F      | The listing summary is never left stale by two writers of different offers of one product at once (two checkouts of the last units, a cancellation and a checkout).                                                                                                                                                                                                                                                                                                                           |
-| `race-g-recall-route.cjs`    | G      | Staff stopping a parcel (`ops_recall_shipment`) at the moment its driver starts the route (`driver_start_route`): either the stop wins (the parcel comes back, its stop is gone, the route starts without it) or the start wins (the stop is refused in plain words); never a deadlock, never a parcel coming back that its stop says to deliver.                                                                                                                                             |
-| `lib.cjs`                    |        | The harness: fixture, sessions acting as demo users, the barrier, the checks.                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `run-all.sh`                 |        | Every family against one database, one after another.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| File                         | Family | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ---------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `race-a-known-deadlocks.cjs` | A      | The stock-row deadlocks of wave 7 stay gone: a payment confirmation against the unpaid-order sweep, against packing and against a staff cancellation of one product from two shops; checkout against packing and the sweep.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `race-b-sweep.cjs`           | B      | The sweep (`private.expire_unpaid_orders`) against itself, against paying or cancelling an order of its set or outside it, against every stock writer; a large backlog (200 and 1000 expired orders over 20 products, timed, with a checkout and a payment started 20 ms after the sweep); odd expired orders. From 084400 a run cancels at most 200 orders, the oldest: B5 then checks that what it cancelled is the oldest part, the rest still wait for payment, and later runs take them.                                                                                                                                            |
+| `race-c-sort-keys.cjs`       | C      | Cancellations (`private.cancel_order_internal`) of one product from two shops on one shelf, half picked; C3 a cancellation of a picked order against a count, a receipt and a pick on the same shelf (natural and forced); C4 a cancellation against the picker confirming the order's other line (natural and forced): never a unit picked and not put back.                                                                                                                                                                                                                                                                            |
+| `race-d-confirm-table.cjs`   | D      | Payment confirmations against each other and every stock writer, on three shelf layouts: never a pick task promised more than its shelf holds.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `race-e-product-rows.cjs`    | E      | Product rows (one level above stock rows). E1 to E4 and E2: the sweep, checkouts, packing and a cancellation of two products that stay in stock, in opposite order: they must never touch a product row. E5 to E9: offers that cross zero, and the other writers of product rows (a seller pausing an offer, a shop suspended, staff taking a product down, a seller sending an edit for review); E10 packing against a seller switching off a shared variant; E11 staff merging the brand of two products against a checkout of their last units. After every round each product's stored summary must equal one computed from scratch. |
+| `race-f-stale-summary.cjs`   | F      | The listing summary is never left stale by two writers of different offers of one product at once (two checkouts of the last units, a cancellation and a checkout).                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `race-g-recall-route.cjs`    | G      | Staff stopping a parcel (`ops_recall_shipment`) at the moment its driver starts the route (`driver_start_route`): either the stop wins (the parcel comes back, its stop is gone, the route starts without it) or the start wins (the stop is refused in plain words); never a deadlock, never a parcel coming back that its stop says to deliver. G2: staff taking a stop off the route (`ops_remove_route_stop`) at the moment the route starts.                                                                                                                                                                                        |
+| `race-h-seller-pack.cjs`     | H      | A shop packing a parcel it ships itself (`seller_mark_packed`, Tienda Sendero's own warehouse, the harness's product W) against the shopper or staff cancelling the order (H1, H1b: one wins, the other is refused in plain words), a checkout of the same offer, the shop's count, the sweep, the warehouse packing the order's other parcel and the shop pausing the offer.                                                                                                                                                                                                                                                            |
+| `lib.cjs`                    |        | The harness: fixture, sessions acting as demo users, the barrier, the checks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `run-all.sh`                 |        | Every family against one database, one after another.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 **Natural and forced.** A "natural" scenario lets both sessions go at the
 same moment (each may start a few milliseconds late, varied by round) and
@@ -95,7 +110,7 @@ family file says what it holds.
   authenticated`. The sweep runs as the database owner, as pg_cron does.
   Users: `central@yuntera.example` (staff), `bodega@yuntera.example`
   (warehouse), `repartidor@yuntera.example` (driver, family G),
-  `sendero@yuntera.example` (owner of Tienda Sendero, family E) and eight
+  `sendero@yuntera.example` (owner of Tienda Sendero, families E and H) and eight
   shoppers the harness creates, `carrera-w7-1..8@yuntera.example`, each with
   a copy of the demo shopper's address.
 - **The barrier.** A control session holds advisory lock 7707001. Every racer
@@ -111,7 +126,9 @@ family file says what it holds.
   (`FIXTURE`), so the lock order they test is the same on every database
   build: product X (variants x1 and x2), product Y (sold by both shops) and
   product Z (one variant sold by both shops), with SKU ids x1 < y < x2 and
-  product ids Y < X.
+  product ids Y < X. Family H uses product W, which Tienda Sendero ships
+  itself from its own warehouse (`sellerStock()` sets its free units there;
+  seller warehouses have no shelves).
 - **Reset per round.** Every round makes fresh orders. Before them,
   `layout()` cancels every open harness order (packed parcels stay: they hold
   no reservation), rewrites the bins of the round's products in SJO1 to a

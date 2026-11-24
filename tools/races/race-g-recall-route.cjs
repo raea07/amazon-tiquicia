@@ -123,6 +123,91 @@ const scenarios = [
   },
 ];
 
+// G2: staff taking stop A off the route (public.ops_remove_route_stop: the
+// order, then the stop and the parcel) at the moment the driver starts it.
+// Found by an independent review of wave 8 (its family X6) and brought in
+// here. Allowed: the removal wins (stop A skipped, parcel A back to ready for
+// dispatch or wherever the function sends it, the route starts with B) or the
+// start wins (the removal refused in plain words). Wrong: a started route with
+// a pending stop whose parcel is not out for delivery, a parcel out for
+// delivery whose stop is not pending, any other refusal, a deadlock.
+async function setupStop(h) {
+  const ctx = await setup(h);
+  const stop = (
+    await h.q("select id from public.route_stops where route_id = $1 and shipment_id = $2", [
+      ctx.route,
+      ctx.a.shipment,
+    ])
+  ).rows[0].id;
+  return { ...ctx, stop };
+}
+const removeActors = (_h, ctx) => [
+  { name: "start", as: DRIVER, sql: "select public.driver_start_route($1)", args: [ctx.route] },
+  {
+    name: "remove-stop",
+    as: STAFF,
+    sql: "select public.ops_remove_route_stop($1, 'Prueba de carrera ocho')",
+    args: [ctx.stop],
+  },
+];
+async function verifyRemove(h, ctx, results) {
+  const bad = [];
+  for (const r of results) {
+    if (!r.outcome || r.outcome === "DEADLOCK" || r.outcome === "SERIALIZATION") continue;
+    if (
+      r.name === "remove-stop" &&
+      /not_removable|invalid_stop_state|route_started|on_started/.test(r.outcome)
+    )
+      continue;
+    bad.push(`${r.name} refused: ${r.outcome}`);
+  }
+  const route = (await h.q("select status::text from public.routes where id = $1", [ctx.route]))
+    .rows[0].status;
+  const stops = (
+    await h.q(
+      `select rs.status::text as stop, s.status::text as parcel
+         from public.route_stops rs join public.shipments s on s.id = rs.shipment_id where rs.route_id = $1`,
+      [ctx.route],
+    )
+  ).rows;
+  if (route !== "in_progress" && !results[0].outcome) bad.push(`start accepted, route ${route}`);
+  for (const s of stops) {
+    if (route === "in_progress" && s.stop === "pending" && s.parcel !== "out_for_delivery")
+      bad.push(`a started route with a pending stop whose parcel is ${s.parcel}`);
+    if (s.parcel === "out_for_delivery" && s.stop !== "pending")
+      bad.push(`a parcel out for delivery whose stop is ${s.stop}`);
+  }
+  return bad;
+}
+scenarios.push(
+  {
+    name: "G2 ops_remove_route_stop vs driver_start_route of its route natural",
+    products: P,
+    setup: setupStop,
+    actors: (h, ctx, round) =>
+      removeActors(h, ctx).map((a, i) => ({
+        ...a,
+        delayMs: (round % 2 === 0) === (i === 1) ? Math.floor(round / 2) % 4 : 0,
+      })),
+    verify: verifyRemove,
+  },
+  ...[
+    ["forced, start first", 1],
+    ["forced, removal first", 0],
+  ].map(([tag, late]) => ({
+    name: `G2 ops_remove_route_stop vs driver_start_route of its route ${tag}`,
+    products: P,
+    setup: setupStop,
+    actors: (h, ctx) =>
+      removeActors(h, ctx).map((a, i) => ({ ...a, delayMs: i === late ? 40 : 0 })),
+    options: (_h, ctx) => ({
+      hold: { sql: "select 1 from public.routes where id = $1 for share", args: [ctx.route] },
+      holdMs: 150,
+    }),
+    verify: verifyRemove,
+  })),
+);
+
 main("G", scenarios).catch((e) => {
   console.error(e);
   process.exit(1);
