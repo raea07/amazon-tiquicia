@@ -50,16 +50,25 @@
 --     worker tapped twice), nothing changes: `count_already_listed`, with
 --     the units now on the shelf, and the screen says to count again on the
 --     product's own line. Two saves at the same moment wait for each other
---     on the shop's stock row (which must exist), and the later one reads
---     the shelf after the earlier one committed (READ COMMITTED, the level
---     every caller runs in): ONE count, never the sum. Proved with two real
---     sessions in packages/db/src/contract.count-into-location.test.ts.
+--     first on the warehouse row (the first lock every stock writer of the
+--     warehouse takes), and would wait again on the shop's stock row (which
+--     must exist); the later one reads the shelf after the earlier one
+--     committed (READ COMMITTED, the level every caller runs in): ONE count,
+--     never the sum. Proved with two real sessions in
+--     packages/db/src/contract.count-into-location.test.ts, and by review
+--     over 200 rounds each of two workers and of a double tap: one count
+--     every time, no deadlock.
 --   * LOCK ORDER. The order of a correction in 084300: the warehouse row FOR
 --     NO KEY UPDATE, the location FOR SHARE, the shop's stock row FOR UPDATE,
---     then the shelf's row. A cancellation racing this count of the same
---     product on the same shelf can still deadlock as it can with a
---     correction (STATUS.md, decision 44); the loser is told nothing was
---     saved and to try again.
+--     then the shelf's row. A cancellation that returns picked units to the
+--     same shelf at the same moment as this count of the same product can
+--     still deadlock, as it can with a correction (STATUS.md, decision 44):
+--     measured by review over 100 exact collisions, 52 ended in a deadlock
+--     (49 lost by the count, 3 by the cancellation), against 57 of 100 for
+--     wms_adjust_stock in the same race. The loser rolls back whole (nothing
+--     half-saved; on-hand stayed equal to the shelves plus the units in
+--     picking in every round) and is told nothing was saved and to try
+--     again. The fix is the cancellation's lock order, not this function.
 --   * THE LOOKUP (wms_count_candidates). The screen finds the product by its
 --     code, barcode or name, and for each match lists the shops that sell
 --     it, whether each has a stock record in THIS warehouse, and whether the

@@ -177,6 +177,20 @@ async function rpcAs(email, calls) {
     "the shelf offers to count a product that is not in the list",
   );
   await layout(field, "empty");
+  // One letter: the field asks for two, and an address with one says so too.
+  check(
+    (await section().locator('input[name="buscar"]').getAttribute("minlength")) === "2",
+    "the search field asks for at least 2 characters",
+  );
+  await field.goto(`${FIELD}/bodega/ubicacion?codigo=${SHELF}&buscar=a`, {
+    waitUntil: "networkidle",
+  });
+  const tooShort = await text(section());
+  check(
+    tooShort.includes("Escriba al menos 2 letras o números") &&
+      !tooShort.includes("No encontramos ese producto"),
+    "one letter asks for more, instead of saying no product has it",
+  );
   await search(drill[0].sku_code);
   const receipt = await text(result(drill[0].sku_code));
   log("drill:", receipt);
@@ -242,7 +256,8 @@ async function rpcAs(email, calls) {
   await staleForm.locator('input[name="quantity"]').fill("2");
   await staleForm.locator('input[name="note"]').fill(NOTE);
 
-  await form().locator("button[type=submit]").click();
+  // A real double tap on the button: one count, never two.
+  await form().locator("button[type=submit]").dblclick();
   const banner = field.locator('main [role="status"]', { hasText: "Producto contado" });
   await banner.waitFor();
   await field.waitForFunction(() => !/[?&](nuevas|producto|buscar)=/.test(window.location.search));
@@ -262,6 +277,23 @@ async function rpcAs(email, calls) {
     "the notebook's line is in the list straight away, with its shop",
   );
   await layout(field, "counted");
+  // The same units everywhere: the shop's figures rose by exactly 2, and the
+  // staff list holds one count, not two.
+  const [stockCounted] = await rpcAs("sendero@yuntera.example", [
+    ["seller_stock", { p_seller_id: shop.id }],
+  ]);
+  const counted = stockCounted.find(
+    (row) => row.sku_id === notebook.sku_id && row.warehouse_id === notebook.warehouse_id,
+  );
+  check(
+    counted.on_hand === notebook.on_hand + 2 && counted.available === notebook.available + 2,
+    `the shop's total and what shoppers can buy rose by 2 (${notebook.on_hand} → ${counted.on_hand}, ${notebook.available} → ${counted.available})`,
+  );
+  const countsOf = async () => {
+    const [list] = await rpcAs("central@yuntera.example", [["ops_stock_changes", { p_limit: 50 }]]);
+    return list.filter((c) => c.to_code === SHELF && c.note === NOTE).length;
+  };
+  check((await countsOf()) === 1, "the double tap left one count in the staff list");
 
   // The page left open saves the same count: refused, nothing changes.
   await staleForm.locator("button[type=submit]").click();
@@ -286,6 +318,7 @@ async function rpcAs(email, calls) {
     ),
     "the page behind shows the line with two, not four",
   );
+  check((await countsOf()) === 1, "and the staff list still holds one count");
   check(
     (await text(stale.locator(`li[data-count-sku="${notebook.sku_code}"]`))).includes(
       "Ya está en esta ubicación, de Tienda Sendero (2 en el estante)",

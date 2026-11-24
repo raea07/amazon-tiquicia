@@ -1,8 +1,9 @@
-import type { WmsLocationStock } from "@yuntera/db";
-import { sessionApi } from "@yuntera/next-kit/server";
-import { Alert, buttonClass } from "@yuntera/ui";
+import { ApiError, COUNT_IN_LIMITS, type WmsLocationStock } from "@yuntera/db";
+import { messageOf, sessionApi } from "@yuntera/next-kit/server";
+import { Alert, buttonClass, Skeleton } from "@yuntera/ui";
 import type { Route } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { CountInForm } from "./count-in-form";
 
 /** The kinds of location that take counted units (the database's count_not_shelf rule). */
@@ -56,7 +57,8 @@ export async function CountIn({ location, query }: { location: WmsLocationStock;
               name="buscar"
               autoComplete="off"
               defaultValue={query}
-              maxLength={80}
+              minLength={COUNT_IN_LIMITS.query[0]}
+              maxLength={COUNT_IN_LIMITS.query[1]}
               required
               className="min-h-11 w-full min-w-0 rounded-md border border-border-strong bg-surface px-3"
             />
@@ -66,9 +68,20 @@ export async function CountIn({ location, query }: { location: WmsLocationStock;
           </div>
         </form>
       )}
-      {query ? (
-        <Results location={location} here={here} query={query} closed={closed !== null} />
-      ) : null}
+      {!query ? null : query.length < COUNT_IN_LIMITS.query[0] ? (
+        // The lookup answers nothing below 2 characters: say what to type,
+        // not that no product has that code or name.
+        <div className="mt-3">
+          <Alert tone="warning" title="Escriba un poco más">
+            Escriba al menos 2 letras o números del código o del nombre del producto.
+          </Alert>
+        </div>
+      ) : (
+        // Its own wait: the location's list above is not held back by the lookup.
+        <Suspense fallback={<Skeleton className="mt-4 h-24" />}>
+          <Results location={location} here={here} query={query} closed={closed !== null} />
+        </Suspense>
+      )}
     </section>
   );
 }
@@ -85,7 +98,21 @@ async function Results({
   /** The location takes no counts now: only a form refused just now stays, with its refusal. */
   closed: boolean;
 }) {
-  const found = await (await sessionApi()).wmsCountCandidates(location.id, query);
+  const api = await sessionApi();
+  // A refused or failed lookup is said here; the location's page stays.
+  const found = await api.wmsCountCandidates(location.id, query).catch((error: unknown) => {
+    if (error instanceof ApiError) return error;
+    throw error;
+  });
+  if (found instanceof ApiError) {
+    return (
+      <div className="mt-3">
+        <Alert tone="danger" title="No se pudo buscar el producto">
+          {messageOf(found)}
+        </Alert>
+      </div>
+    );
+  }
   if (found.length === 0) {
     return (
       <div className="mt-3">
