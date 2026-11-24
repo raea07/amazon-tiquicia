@@ -13,20 +13,25 @@ unless marked otherwise.
 ## The landscape
 
 **Demand is real and already online.** Costa Rican e-commerce was about US$6.4
-billion in 2024 with double-digit growth forecast; roughly 80% of adults buy
-online and mobile is 74% of volume. Other trackers publish much lower totals on
+billion in 2024 with double-digit growth forecast (an industry estimate whose
+source page returned empty on 24 November 2026); an industry tracker says
+roughly 80% of adults buy online, and mobile is 74% of volume. Two other
+sources give 48.5% (UCR survey, September 2022) and 18% who bought and paid
+online (World Bank figure, Forbes Centroamérica, 18 September 2025), so no
+share is quoted in marketing ([market research](../research/market-and-costs-2026-11.md)
+§2.2, read 24 November 2026; owner decision D30). Other trackers publish much lower totals on
 narrower definitions, so treat the size as "large enough", not as a target.
 Domestic merchants take 55% of volume: shoppers do buy locally.
 
 **Cross-border players set the price floor and are getting closer.**
 
-| Player                              | What they offer in Costa Rica                                      | Structural weakness here                                                        |
-| ----------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| Amazon (main store)                 | Free shipping on eligible orders of US$35+                         | Days to weeks; returns cross a border; no Costa Rican electronic invoice        |
-| Amazon Bazaar (launched 7 Nov 2025) | Most items under ₡5,000, delivery in two weeks or less, cards only | Two weeks; no SINPE Móvil or cash; low-value goods only                         |
-| Temu                                | Direct shipping in about 15 days                                   | No local representation for claims; parcels held in customs                     |
-| Shein                               | Direct route since Sept 2025, about a month                        | Slowest of the group; taxes collected on delivery                               |
-| Casilleros                          | A US address and freight forwarding for anything sold in the US    | The shopper does the importing: pays per weight, waits, handles the claim alone |
+| Player                              | What they offer in Costa Rica                                                                                                                                        | Structural weakness here                                                        |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Amazon (main store)                 | Free shipping on eligible orders of US$35+                                                                                                                           | Days to weeks; returns cross a border; no Costa Rican electronic invoice        |
+| Amazon Bazaar (launched 7 Nov 2025) | Most items under ₡5,000, delivery in two weeks or less, cards only; free shipping from ₡10,000 (El Financiero, 9 Nov 2025, read 24 Nov 2026; terms may have changed) | Two weeks; no SINPE Móvil or cash; low-value goods only                         |
+| Temu                                | Direct shipping in about 15 days                                                                                                                                     | No local representation for claims; parcels held in customs                     |
+| Shein                               | Direct route since Sept 2025, about a month                                                                                                                          | Slowest of the group; taxes collected on delivery                               |
+| Casilleros                          | A US address and freight forwarding for anything sold in the US                                                                                                      | The shopper does the importing: pays per weight, waits, handles the claim alone |
 
 The "what they offer" column is from the fact sheet. The "weakness" column is
 this plan's reading of it, not a sourced finding.
@@ -40,6 +45,19 @@ or medium seller reach the whole GAM with someone else's logistics are few and
 young. (Names of specific local competitors came up during the naming search
 and are not yet in the fact sheet; a structured competitor review is listed in
 [open questions](../08-open-questions.md).)
+
+**Since then, local rivals for sellers have appeared** (all read 24 November
+2026 in the [market research](../research/market-and-costs-2026-11.md) §3; none
+publishes its seller fees):
+
+| Player                                 | What it is                                                                                                                                  | Source                                   |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Walmart Marketplace                    | Third-party sellers inside Walmart's site and app since January 2026; card payment only; **sellers deliver**                                | Delfino, 21 Jan 2026 (sponsored), medium |
+| Boxful                                 | Fulfilment warehouse in Guachipelín de Escazú since December 2025; compares Correos, Uber and Moovin rates; no prices                       | Delfino, Mar 2026; El Financiero         |
+| Pyme Store BAC                         | A bank's catalogue and store builder for small businesses that use its Compra Click payment button                                          | Ticoslandia, Dec 2025, low               |
+| Correos, BCR, INS and Mastercard pilot | "Ecosistema Digital para Pyme": inventory, e-invoicing, payments, social selling and national delivery by Correos, for 350 small businesses | La Nación, 18 Nov 2025                   |
+
+What they mean for the plan is in [go-to-market](go-to-market.md) §8 and §10.
 
 **Logistics can be bought.** Correos de Costa Rica (Pymexpress), Moovin, Boxful
 and Uber Direct all operate locally

@@ -1,6 +1,9 @@
 # Pricing and fees
 
-This is a proposal, not a price list. It sets the structure of what sellers pay
+This is a proposal, not a price list. The [pricing strategy](../00-strategy/pricing-strategy.md)
+(24 November 2026) proposes what to keep and change for the pilot and the
+launch, and its owner questions are D20 to D25 and D38 in
+[owner decisions](../00-strategy/owner-decisions.md). It sets the structure of what sellers pay
 and what shoppers pay for delivery, explains why every fee is itemised and
 published, and says how the rules that rank offers are disclosed. The structure
 is implemented and tested in `packages/core/src/fees.ts`; the amounts in it are
@@ -73,7 +76,11 @@ Gateway figures are published list prices from the
 [fact sheet, section 5](../research/costa-rica-fact-sheet.md#5-payments), at
 low-to-medium confidence. The code follows the cheaper of the two gateways
 found, and ₡180 stands for US$0.35 at an assumed exchange rate of about ₡515
-per dollar. These replace an earlier schedule (3.5% for cards, 1% for SINPE
+per dollar. At the banks' selling rate of 18 November 2026, ₡450 per dollar,
+US$0.35 is ₡157.50, so ₡180 is ₡22.50 above the list price, while the seller
+centre says the cost "se traslada sin recargo"
+([market research](../research/market-and-costs-2026-11.md) §6.4, read 24
+November 2026; owner decision D38). These replace an earlier schedule (3.5% for cards, 1% for SINPE
 Móvil) that was below cost. They are still not contracted rates: until a
 gateway is chosen ([open question](../08-open-questions.md)), quote sellers a
 range, not a figure.
@@ -85,8 +92,15 @@ proportion to what each sold, to the céntimo; see
 
 ### A statement a seller can check
 
-For a ₡20,000 household item sold by a seller who ships it themselves, paid by
-card, the tested example in `packages/core/src/fees.test.ts` — replayed
+The pilot's typical sale is a ₡20,000 household item stored in a Yuntera
+warehouse (tier _pequeño_, ₡1,400) and paid by SINPE Móvil: the seller receives
+₡15,367.00 (₡20,000 less ₡4,100 of fees and ₡533 of IVA). That is the case the
+product supports today, and the figure the seller pieces lead with.
+
+The tested case below is a later one: a seller who ships the item themselves,
+paid by card. Cards come at the open launch and driver pickups from sellers are
+"Later" in [scope by app](scope-by-app.md). For a ₡20,000 household item sold by
+a seller who ships it themselves, paid by card, the tested example in `packages/core/src/fees.test.ts` — replayed
 through a real order in `supabase/tests/040_money.sql` — gives:
 
 | Line                               |         Amount |
@@ -97,9 +111,7 @@ through a real order in `supabase/tests/040_money.sql` — gives:
 | IVA on fees, 13% of ₡3,360         |       −₡436.80 |
 | **Payout**                         | **₡16,203.20** |
 
-The same item stored in a Yuntera warehouse (tier _pequeño_, ₡1,400) and paid
-by SINPE Móvil pays the seller ₡15,367.00. More cases, and the full
-calculation, are in
+More cases, and the full calculation, are in
 [fees and settlement](../04-algorithms/fees-and-settlement.md#worked-example).
 
 The engine guarantees that payout plus fees equals the money collected, to the
@@ -126,8 +138,13 @@ separate, flat charge by zone. Zones and service levels are defined in
 
 Every amount in this table is an **assumption to validate**. Two reference
 points keep it honest: Correos charges ₡2,300 before IVA for a small parcel
-within the GAM
+within the GAM at its self-service locker
 ([fact sheet, section 7](../research/costa-rica-fact-sheet.md#7-last-mile-and-labour)),
+and its Pymexpress volume tariff, with prior authorisation, is ₡1,756.19 to
+₡2,005.53 before IVA by monthly volume plus ₡1,500 to ₡2,000 a pickup
+(correos.go.cr/tarifas, read 24 November 2026); Amazon Bazaar shipped free from
+₡10,000 at its launch (El Financiero, 9 November 2025, read 24 November 2026;
+terms may have changed);
 and the [business model](../00-strategy/business-model.md) shows that a
 free-shipping threshold set too low erases the margin on mid-sized baskets.
 
@@ -150,7 +167,17 @@ Rules that do not change with the amounts:
 - **It is cheap to do.** The fee engine already produces the breakdown.
 
 The fee schedule carries a version identifier. A change of fees is announced in
-advance (proposal: 30 days) and never applies to orders already placed.
+advance (proposal: 30 days, owner decision D24). It applies to every order paid
+after the new schedule is switched on, not only to orders placed after it: the
+fees are computed when the payment is captured, from the schedule marked
+active at that moment (`private.post_order_capture` calls
+`private.compute_seller_fees`, which reads `fee_schedules where active`;
+migrations `20261121080800_finance.sql` and `20261121082400_fixes.sql`). A
+cash-on-delivery order is captured at the door, so one placed before a change
+and delivered after it pays the new fees. Orders already paid keep their
+statement. The schedule's `effective_from` date is stored but no function
+reads it, so a new schedule takes effect when the migration that marks it
+active is applied (checked in the code on 24 November 2026).
 
 ## How ranking rules are disclosed
 
