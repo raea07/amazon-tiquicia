@@ -1,3 +1,4 @@
+import { endSentence } from "@yuntera/core";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
@@ -48,7 +49,8 @@ async function DeadLetters() {
       {dead.paused_channels.map((pause) => (
         <Alert key={pause.channel} tone="warning" title={`${CHANNEL[pause.channel]} en pausa`}>
           El proveedor rechazó las credenciales o la configuración. No se envía nada por este canal
-          hasta las {formatDateTime(pause.until)}. Revise la configuración del proveedor.
+          hasta las {endSentence(formatDateTime(pause.until))} Revise la configuración del
+          proveedor.
         </Alert>
       ))}
       {dead.items.length === 0 ? (

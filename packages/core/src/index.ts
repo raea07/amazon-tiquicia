@@ -20,4 +20,5 @@ export * from "./routing";
 export * from "./scan-codes";
 export * from "./search";
 export * from "./sellers";
+export * from "./sentence";
 export * from "./shop-logos";

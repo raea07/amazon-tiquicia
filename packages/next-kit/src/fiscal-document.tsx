@@ -1,3 +1,4 @@
+import { endSentence } from "@yuntera/core";
 import type { InvoiceDetail, InvoiceRow, InvoiceStatus } from "@yuntera/db";
 import {
   DOCUMENT_NAME,
@@ -232,7 +233,8 @@ export function FiscalDocumentView({
                 </p>
                 <p className="break-all font-mono text-xs">{groupedClave(reference.number)}</p>
                 <p className="text-ink-muted">
-                  Emitido el {formatDateTime(reference.issued_at)}. {reference.reason}
+                  {endSentence(`Emitido el ${formatDateTime(reference.issued_at)}`)}{" "}
+                  {reference.reason}
                 </p>
               </li>
             ))}

@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { endSentence } from "@yuntera/core";
 import type { Api, OrderPayment, SinpePayer } from "@yuntera/db";
 import { messageOf } from "@yuntera/expo-kit/api";
 import { useApi } from "@yuntera/expo-kit/auth";
@@ -360,7 +361,9 @@ export function RefundList({ payment }: { payment: OrderPayment }) {
             </View>
             <Text variant="small" tint="muted">
               {refund.status === "succeeded"
-                ? `Completado el ${formatDateTime(refund.completed_at ?? refund.requested_at)}.`
+                ? endSentence(
+                    `Completado el ${formatDateTime(refund.completed_at ?? refund.requested_at)}`,
+                  )
                 : refund.status === "failed"
                   ? "Nuestro equipo de finanzas lo está resolviendo y le escribirá; no tiene que hacer nada."
                   : refund.channel === "transfer"

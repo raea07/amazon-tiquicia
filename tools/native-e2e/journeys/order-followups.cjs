@@ -363,6 +363,9 @@ async function packedOrder(buyer, method) {
     "the notice does not promise back what was paid for the delivery",
   );
   check((await shop.getByTestId("fee-kept").count()) === 0, "the fee line is not repeated");
+  // A time already ends with "a. m." or "p. m.": no sentence ends with two stops.
+  const keptPage = await shop.locator("body").innerText();
+  check(!/[^.]\.\.(\s|$)/.test(keptPage), "no sentence on the order page ends with two full stops");
   await noSideways(shop, "order page, fee kept");
   await shop.screenshot({
     path: `${SHOTS}/native-order-followups-08-fee-kept.png`,

@@ -1,3 +1,4 @@
+import { endSentence } from "@yuntera/core";
 import type { InvoiceRow, InvoiceStatus, OpsInvoices, OpsInvoicingState } from "@yuntera/db";
 import { ActionForm } from "@yuntera/next-kit/client";
 import {
@@ -187,7 +188,8 @@ async function Invoices({ searchParams }: Pick<PageProps<"/comprobantes">, "sear
         {data.paused_until ? (
           <Alert tone="danger" title="Envíos a Hacienda en pausa">
             Hacienda rechazó la configuración o las credenciales del API. No se envía nada hasta las{" "}
-            {formatDateTime(data.paused_until)}. Revise la configuración del sistema de envío.
+            {endSentence(formatDateTime(data.paused_until))} Revise la configuración del sistema de
+            envío.
           </Alert>
         ) : null}
         {data.worker?.error ? (
