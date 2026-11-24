@@ -67,13 +67,18 @@
 --     merged database, 100 natural and 100 forced rounds each: 0 deadlocks
 --     and no unit lost or created against a staff cancellation putting picked
 --     units back on the shelf, a shopper's cancellation, wms_adjust_stock,
---     wms_move_stock, wms_receive_returned_shipment, a pick and a second
---     count (which ends as one count, never the sum). With the cancellation
+--     wms_move_stock, wms_receive_returned_shipment, a pick, a second
+--     count (which ends as one count, never the sum), and the shop switching
+--     off a variant two shops sell while the count takes its offer across
+--     zero (I8: 10 of 100 natural and every forced round with the seller
+--     first, until 084400's seller_set_variant_active took its offers
+--     before the product; now 0). With the cancellation
 --     of 084300 put back, the same race deadlocked in 7 of 100 natural and
 --     100 of 100 forced rounds (an earlier review measured 52 of 100 exact
 --     collisions on a database without 084400).
 --     packages/db/src/contract.count-into-location-races.test.ts keeps a
---     forced round of it in pnpm test.
+--     forced round of it in pnpm test, and test (viii) of
+--     contract.stock-product-races.test.ts one of I8.
 --   * THE LOOKUP (wms_count_candidates). The screen finds the product by its
 --     code, barcode or name, and for each match lists the shops that sell
 --     it, whether each has a stock record in THIS warehouse, and whether the

@@ -2,8 +2,8 @@
 
 Updated 24 November 2026, after wave 8 was merged on top: stock writers that
 take their rows in one order (no more deadlocks between a cancellation and a
-count, a route start and a stop, a shop's pack and a cancellation, packing and
-a seller switching a variant off) and a product summary that is never stale
+count, a route start and a stop, a shop's pack and a cancellation, packing, a
+checkout or a count and a seller switching a variant off) and a product summary that is never stale
 (migration `084400`); counting a product a location does not list (`084500`);
 the shopper app keeping what it shows when a refresh fails, the cart's date
 for another shop's offer and one refund message for one cancellation
@@ -313,7 +313,9 @@ In the order that unblocks the most.
     build keeps working against the updated preview: every call it makes
     was tried there after the migrations and answered. Of the 29 functions
     it calls, `084200` changes two (`my_orders`, `get_order`) by adding
-    fields only; a contract test parses their answers on the merged
+    fields only, and `084600` makes `get_order` give a shopper a null
+    `cancel_reason` when staff cancelled (that build does not show it); a
+    contract test parses their answers on the merged
     database with that build's own schemas. Your decision of 23 November
     2026: from your first Android release on, each new Android build goes
     straight to the internal testers without a click; until then builds
@@ -1512,10 +1514,7 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     a product while the seller changes another offer of it (E6: 24 in 100 natural, every forced round).
     (3) A shop suspended or reinstated against such a writer (E7: 2 in 100 natural, every forced round).
     (4) Staff merging two brands against a checkout crossing zero on two of
-    their products (E11: 0 and 20 in 100 natural rounds for the two checkouts tried, up to 52 in 100 forced). (5) A checkout of a variant two shops
-    sell against the shop that listed it switching it off (E10b: 6 and 14 in 100 natural rounds in two runs after the last change, every forced round;
-    found at the merge, older than this wave: 17 in 100 natural rounds
-    before; the seller's listing functions take the product row FOR UPDATE).
+    their products (E11: NUMBERS_E11).
   - Fixed in this wave, measured before and after: a cancellation against a
     count, a receipt or a pick of the same shelf (6 to 39 in 100 natural
     rounds, every forced round, to 0); a cancellation against a count into a
@@ -1527,9 +1526,13 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     listing "in stock" with nothing to sell (83 in 100, now 0); a route
     start against staff stopping one of its parcels (24 in 100, now 0); a
     shop packing its own parcel against a cancellation of the order (17 to
-    18 in 100, now 0); packing against a seller switching off a variant two
-    shops sell (14 in 100, now 0: the seller's function takes the variant FOR
-    NO KEY UPDATE).
+    18 in 100, now 0); a seller switching off a variant two shops sell
+    against packing (14 in 100), a checkout of it (6 to 17 in 100, older than
+    this wave) and a count into a location taking the shop's offer across
+    zero (10 in 100, found by an independent review of the merged tree),
+    every forced round each, all now 0: the seller's function takes its
+    offers on the variant first, then the listing, then the variant FOR NO
+    KEY UPDATE.
   - Ordinary sales no longer write the product row, so `products.updated_at`
     no longer moves with stock. Its only reader is the order of the console's
     photo-review queue.
@@ -1567,20 +1570,19 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     with the cart's at cutoffs and midnight; milliseconds of clock skew
     between the web server and the database at an hour boundary could still
     cache a date under the wrong hour. No test moves the clock.
-  - Controls under 44 px on a phone: the back links, "Presente un reclamo",
-    the shop's footer and category links and the links under the console's
-    and seller centre's home figures are 44 px now. Still under 44 px,
-    measured by `tools/e2e/touch-targets.cjs` at 390 px on the main pages of
-    the four web apps and not fixed: product card titles (36 px), the
-    product page's breadcrumb (17 px), "Agregar una dirección" in the shop's
-    account (24 px), the seller centre's price "Cambiar" links (20 px) and its
-    notification-settings link (17 px), the console home's order-status
-    links (36 px), and the summary "No se pudo entregar" on a driver's stop
-    (24 px).
+  - Controls under 44 px on a phone: TOUCH_RESULT
   - A cancelled order says why only for the reasons the system writes (no
     payment in time, parcels came back, cancelled by the shopper); when
     staff cancel, the page says "Cancelamos este pedido" and points to
-    Ayuda (staff's reason is an internal note).
+    Ayuda. Staff's reason is an internal note: since `084600` `get_order`
+    gives the shopper null for it (before, the note reached the shopper's
+    phone and anyone calling the API, though no page showed it;
+    `176_cancel_reason_to_shopper`). When the parcels came back after a
+    real attempt at the door, the notice says only the products' money
+    comes back and why the delivery fee stays, once (before, it also said
+    "we return what you paid").
+  - A stop staff removed shows, in both drivers' apps, no directions, call
+    or WhatsApp to the customer, only what to do with the parcel.
   - The closure journey leaves its one-day closure visible under "Cierres
     cancelados" for 7 days on the lane it ran on.
   - Nothing of wave 8 ran on a phone or on the hosted project; the native

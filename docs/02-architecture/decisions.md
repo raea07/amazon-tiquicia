@@ -1610,11 +1610,11 @@ had no screen and few checks.
   `contract.returned-stock-races.test.ts` (100 rounds each against a
   returned parcel's check-in).
 
-**Consequences.** A cancellation still takes a shelf's row before the shop's
-stock row (`private.cancel_order_internal`, whose only change here is the order it sorts by), so a
-cancellation racing a count of the same product on the same shelf can end
-with a deadlock for one of the two; the loser is told nothing was saved and
-to try again (fixed by decision 46). A product the location does not list is
+**Consequences.** A cancellation still took a shelf's row before the shop's
+stock row (`private.cancel_order_internal`, whose only change here was the order it sorts by), so a
+cancellation racing a count of the same product on the same shelf could end
+with a deadlock for one of the two, until decision 46 made the cancellation
+take the stock row first. A product the location does not list is
 counted onto it with its own function (decision 47).
 
 ## 45. Android builds of the shopper app go to the internal testers without a click
@@ -1673,11 +1673,14 @@ order, so a cancellation at that moment deadlocked with it.
   shop's products are refreshed in id order (a convention: no measured race
   depends on it). A count into a location (decision 47) takes the
   warehouse, the location, the stock row and the shelf, as a correction
-  does. A seller switching a variant off takes it FOR NO KEY UPDATE, not FOR
-  UPDATE: it changes no key column, and the stronger lock blocked the
-  key-share lock packing's ledger row takes on the variant while packing held
-  the offer the seller pauses (race E10: 14 in 100 natural rounds and every
-  forced round before, 0 after).
+  does. A seller switching a variant off or on takes the shop's own offers
+  on the variant first, then the product, then the variant FOR NO KEY
+  UPDATE, not FOR UPDATE (it changes no key column). It took the product and
+  the variant first and then waited on the offer, while packing (which wants
+  a key-share lock on the variant, race E10), a checkout (a key-share lock on
+  the product, E10b) or a count into a location taking the offer across zero
+  (the product, I8) held that offer: 14, 17 and 10 in 100 natural rounds and
+  every forced round before, 0 after.
   Written down in `docs/04-algorithms/sourcing-and-inventory.md`, with every
   statement that writes or locks a product row.
 - **The sweep cancels at most 200 orders a run, the oldest first**, so a run
@@ -1693,11 +1696,8 @@ order, so a cancellation at that moment deadlocked with it.
 forced rounds and documented: two writers that each take offers of two
 shared products across zero in opposite order; a cancellation or the sweep
 crossing zero on one offer of a product while the seller changes another
-offer of it; a shop suspended against such a writer; staff merging two
-brands against a checkout crossing zero on two of their products; and a
-checkout of a variant two shops sell against the shop that listed it
-switching it off (E10b: the seller's listing functions take the product row
-FOR UPDATE, which blocks the key-share lock of the checkout's order line).
+offer of it; a shop suspended against such a writer; and staff merging two
+brands against a checkout crossing zero on two of their products.
 Each loser rolls back whole and reads "nothing was saved, try again".
 A backlog of more than 200 expired orders takes more than one run to clear.
 
@@ -1820,7 +1820,11 @@ shopper) into a notice on the order page and a line of its history, with
 what the money does and what to do next (`packages/core` `cancellation.ts`;
 a test keeps the sentences equal to the SQL). A reason staff typed is an
 internal note: the shopper reads "Cancelamos este pedido" and is pointed to
-Ayuda. No database answer changed.
+Ayuda, and since 084600 `get_order` gives the shopper `cancel_reason` only
+when it is one of the three sentences the database writes (null otherwise;
+staff still read the note), so the note never reaches the shopper's phone.
+When the parcels came back after a real attempt at the door, the notice says
+only the products' money comes back and why the delivery fee stays, once.
 
 **Consequences.** A new kind of cancellation the database writes needs its
 words added there, or it reads as the generic one.
@@ -1834,7 +1838,11 @@ were 17 px tall on a phone, under the 44 px rule.
 `packages/ui`: the link is 44 px tall and a negative margin keeps its line,
 so nothing on the page moves. `tools/e2e/touch-targets.cjs` lists every other
 control under 44 px outside running text on the main pages of the four web
-apps.
+apps; what it found is 44 px too (footer, category bar, home figures, the
+product page's breadcrumb, the account's "Agregar una dirección", the seller
+centre's price and notification links, the console's order-status links,
+the driver's "No se pudo entregar"). A link stretched over its card (the
+shop's product cards) is measured as the card, which is its target.
 
 **Consequences.** A link inside a sentence is still as tall as its line, as
 the accessibility rules allow.

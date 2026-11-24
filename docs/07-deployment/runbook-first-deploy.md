@@ -2044,7 +2044,8 @@ replace`; no table changes, nothing backfilled): a product's listing
    200 orders a run (`private.expire_unpaid_orders`); a route start takes its
    parcels' orders first (`driver_start_route`); a shop's own pack takes the
    order first (`seller_mark_packed`); a seller switching a variant off takes
-   it `FOR NO KEY UPDATE` (`seller_set_variant_active`). Owner, `security
+   the shop's own offers on it first, then the listing, then the variant
+   `FOR NO KEY UPDATE` (`seller_set_variant_active`). Owner, `security
 definer`, search path and grants stay as they were (the file re-states
    them).
 2. `20261121084500_count_into_location.sql` (2 new functions): counting a
@@ -2061,7 +2062,9 @@ definer`, search path and grants stay as they were (the file re-states
    with a last column `promise`, and granted again to visitors and signed-in
    users. `private.notify_plan_event` (the messages planner) is redefined and
    `private.refund_announcement` is new: refunds booked together are
-   announced once.
+   announced once. `public.get_order` is redefined: the shopper gets
+   `cancel_reason` only when it is one of the three reasons the database
+   writes, null otherwise (staff still read it).
 
 **Why the web apps come after the migrations, and why that order is safe.**
 The preview's web apps run `717048f` until they are redeployed. Every
@@ -2069,7 +2072,9 @@ function these migrations change still answers that code: the cart sends only
 the offer ids, which reach the re-created `cart_alternatives` through its
 default and get the old columns plus a `promise` the old schema ignores; the
 seller centre's variant switch, a shop's pack and a route start take the same
-arguments and answer the same shapes; nothing else the old pages read
+arguments and answer the same shapes; `get_order` may now give a shopper
+a null `cancel_reason`, which the old schema accepts (staff, whose console
+shows the reason, still get it); nothing else the old pages read
 changed (`packages/db/src/contract.frozen-callers.test.ts` and
 `contract.shopper-followups.test.ts` prove it on the merged database). The
 store build of the shopper app (`3f251c3`) keeps working too: of the 29
@@ -2077,8 +2082,11 @@ functions it calls, `cancel_order`, `place_order` and
 `confirm_sandbox_payment` run changed code inside and still answer in that
 commit's schemas (same test file). For a few seconds while `084600` runs, a
 cart that asks for alternatives may get "function not found" until the API
-reloads its schema cache; the cart then shows the line without an
-alternative.
+reloads its schema cache. The `717048f` web cart does not catch that error:
+a cart holding a line that can no longer be bought shows the error page
+until the cache reloads, and the next load works. Point 3 below checks the
+reload straight after the push; the new web code shows the line without an
+alternative instead.
 
 Do this in order.
 
@@ -2088,7 +2096,7 @@ Do this in order.
    products' summary columns (`offer_count`, `featured_offer_id`,
    `min_price_minor`, `in_stock`), the shelves with 0 units (two from the
    wave 7 check; they stay, decision 52), and the definitions and rights of
-   the eight functions 084400 redefines.
+   the eight functions 084400 redefines and of `get_order`.
 2. **Read-only checks**:
 
    ```sql
@@ -2128,12 +2136,13 @@ Do this in order.
    functions a visitor may call unchanged (`cart_alternatives` with its new
    arguments); the sweep's first run after the push succeeded.
 
-5. **Run the suites** with `remote-db.sh test`: all 38 files, among them the
+5. **Run the suites** with `remote-db.sh test`: all 39 files, among them the
    new `171_stock_lock_order.sql` (it places 250 unpaid orders inside its own
    rolled-back transaction), `172_count_into_location.sql`,
    `173_shopper_followups.sql` (it switches the trigger `refunds_immutable`
    off and on inside its transaction, which needs the table owner),
-   `174_zero_unit_shelf_rows.sql` and `175_refunds_across_streams.sql`; the
+   `174_zero_unit_shelf_rows.sql`, `175_refunds_across_streams.sql` and
+   `176_cancel_reason_to_shopper.sql`; the
    same two `skipped` rows as before and no other. Never run the race
    harness (`tools/races`) or the contract race tests against a hosted
    database.

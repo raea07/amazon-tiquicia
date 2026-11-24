@@ -149,8 +149,11 @@ Rules:
   either until it is done.
 - A cancelled order says why on its page when the system cancelled it (no
   payment in time, parcels came back) or the shopper did. When staff cancel,
-  the reason staff type is never shown to the shopper: the page says "Cancelamos
-  este pedido" and points to Ayuda, so be ready to explain.
+  the reason staff type stays with staff (the shopper's apps never receive
+  it): the page says "Cancelamos este pedido" and points to Ayuda, so be
+  ready to explain. When the parcels came back after a real attempt at the
+  door, the page says only the products' money comes back and that the
+  delivery fee stays because someone went to the address.
 - Open refunds are reviewed daily; none may reach day 8.
 
 ## Disputes with sellers
