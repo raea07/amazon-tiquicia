@@ -290,6 +290,24 @@ async function rpcAs(email, calls) {
   );
   check((await overflow(driver)) <= 0, "the driver's route scrolls sideways on a phone");
   await driver.screenshot({ path: SHOTS + "/cf3-driver-header.png", fullPage: true });
+  // The stop's own page says the same as the route list, never "quedó como no
+  // entregada" (packages/core route-stops.ts, the rule the list uses).
+  for (const [which, says, never] of [
+    [route.stops[0], "No recoja este paquete: volvió a Despacho", "devuélvalo"],
+    [route.stops[1], "Si lleva el paquete, devuélvalo a la bodega", "No recoja"],
+  ]) {
+    await driver.goto(`${FIELD}/ruta/${which.stopId}`, { waitUntil: "networkidle" });
+    const closed = await text(driver.locator('[data-testid="stop-closed"]'));
+    log("removed stop's page:", closed.slice(0, 200));
+    check(
+      closed.includes("Central quitó esta parada") &&
+        closed.includes(says) &&
+        !closed.includes(never) &&
+        !(await text(driver.locator("body"))).includes("quedó como no entregada"),
+      `the removed stop's own page says what the route list says: ${closed.slice(0, 200)}`,
+    );
+  }
+  await driver.screenshot({ path: SHOTS + "/cf3b-driver-removed-stop.png", fullPage: true });
 
   await go("/despacho");
   const card = await text(
