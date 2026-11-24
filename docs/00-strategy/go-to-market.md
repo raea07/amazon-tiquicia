@@ -4,8 +4,8 @@
 **Conclusion 1.** Start with 5 to 10 sellers the owner can visit in person, in 3 to 5 adjacent cantons of the GAM core, and with the shoppers those sellers already have.
 **Conclusion 2.** Most early channels cost the owner's time, not money; paid advertising waits until the pilot has delivered 100 orders to standard.
 **Conclusion 3.** The product cannot yet say which channel brought a shopper, nor the 60-day repeat rate; both must be counted by hand or built before money goes into ads.
-**Conclusion 4.** Cash out is ₡441,000–₡978,000 a month in the pilot and ₡2.89M–₡4.57M at launch, before founder pay. From week 1 to 13 weeks after launch the business needs about ₡2.1M in the central case and up to about ₡11.6M in the worst case (§9, all estimates).
-**The owner must decide** the six questions in "Decisions" at the end (pilot cantons, promotions, market figures, budget level, draws, start of paid ads).
+**Conclusion 4.** Cash out is ₡441,000–₡978,000 a month in the pilot and ₡2.89M–₡4.57M at launch, before founder pay. With the launch team on salary the month breaks even at about 22 to 23 orders a day (pricing strategy §3.3). From week 1 to 13 weeks after launch the business needs about ₡2.1M in the central case and up to about ₡11.6M in the worst case (§9, all estimates).
+**The owner must decide** six questions, asked once in the [owner decisions](owner-decisions.md) list: pilot cantons (D10), budget level (D17), the shopper offer (D25), market figures (D30), draws (D41) and the start of paid ads (D42).
 
 All amounts are colones. US dollars are converted at **₡450 per US$**, the bank
 selling rate of 18 November 2026 (₡450–₡452, read 24 November 2026; the dollar
@@ -14,9 +14,10 @@ _assumption_ with a range and a way to check it. Sources are listed at the end.
 
 Related: [business model](business-model.md), [market and wedge](market-and-wedge.md),
 [roll-out plan](rollout-plan.md), [team structure](team-structure.md),
-[pricing and fees](../01-product/pricing-and-fees.md). The pricing proposal and
-the marketing copy are written separately in the same pack; this document does
-not set prices.
+[pricing and fees](../01-product/pricing-and-fees.md). Prices are proposed in the
+[pricing strategy](pricing-strategy.md) and the customer copy is in
+[marketing](../../marketing/README.md); this document does not set prices. The
+research behind it is in [market and costs](../research/market-and-costs-2026-11.md).
 
 ---
 
@@ -175,7 +176,7 @@ Why each part can be kept:
   whole pilot only if every pilot seller stocks the warehouse.
 - **SINPE Móvil and cash on delivery** are built; cards are built too but the
   [roll-out plan](rollout-plan.md) proposes adding them at the open launch
-  (decision 1 there). If cards are on in the pilot, add "o tarjeta / or card".
+  (owner decision D13). If cards are on in the pilot, add "o tarjeta / or card".
 - **"Nosotros respondemos y lo resolvemos" / "we take care of it"** rests on the policy in
   [customer service](../06-operations/customer-service.md): the shopper gets
   the remedy first and Yuntera settles with the seller afterwards.
@@ -193,7 +194,7 @@ book forbids them or the product cannot back them:
 - Any share of Costa Ricans who buy online. The three sources disagree (80%,
   48.5%, 18%), and statistics in advertising need identified, checkable
   sources (Decreto 37899-MEIC art. 55 g, read in the consolidated text of
-  7 January 2026). See decision 3.
+  7 January 2026). See owner decision D30.
 - "Garantía" or "garantizado" for anything that is only the legal minimum:
   art. 55 h allows the word only for conditions better than the legal
   warranty, and the advert must say what they are. _For the lawyer to confirm_
@@ -277,7 +278,7 @@ density.
   need prior consent (Ley 8642 art. 44) which the product records but cannot
   yet use. When built, every message starts with "Publicidad" and carries a
   free one-step opt-out ([notifications](../06-operations/notifications.md)).
-- **Contests and draws.** See decision 5.
+- **Contests and draws.** See owner decision D41.
 - **Influencer payments.** Not researched; a paid post is advertising and must
   say so (Ley 10946 from about June 2027; _for the lawyer to confirm_ today's
   rule).
@@ -296,7 +297,7 @@ roadmap's proposals.
 | 3   | First-attempt delivery success                   | ≥ 90% (roadmap)                                                      | **Resumen**: failed deliveries; **Despacho**: each route's stops delivered and failed                                                                | Partly (by hand)                |
 | 4   | Delivered stops per driver-day                   | ≥ 25 (see below)                                                     | **Despacho** per route; one route is one driver-day                                                                                                  | Partly (by hand)                |
 | 5   | Contribution per order                           | Positive on average for 4 weeks (roadmap phase 2)                    | Fees per order from the ledger in **Liquidaciones** and seller statements; costs (driver, rent, packaging) are outside the product, in a spreadsheet | No: half the inputs are outside |
-| 6   | Share of shoppers who order again within 60 days | ≥ 1/3 of pilot shoppers; ≥ 25% at launch (roadmap)                   | **No report.** The order list shows a recipient name, not the account. Needs a report function (see "Needed elsewhere")                              | **No**                          |
+| 6   | Share of shoppers who order again within 60 days | ≥ 1/3 of pilot shoppers; ≥ 25% at launch (roadmap)                   | **No report.** The order list shows a recipient name, not the account. Needs a report function (a product gap, not built)                            | **No**                          |
 | 7   | Active sellers with stock in the warehouse       | 5 in the pilot; growth each week after                               | **Vendedores** (status, listings); **Bodegas** for inbound received                                                                                  | Yes                             |
 | 8   | Refunds paid within 8 calendar days              | 100% (law; [customer service](../06-operations/customer-service.md)) | **Atención**, returns oldest first; **Cobros** for refunds the gateway did not take                                                                  | Partly (by hand)                |
 | 9   | Cash variance                                    | 0 every day of the last 2 pilot weeks (roadmap)                      | **Liquidaciones**: expected and handed in per route                                                                                                  | Yes                             |
@@ -321,11 +322,12 @@ which is the 451-or-more tier. Against it, at the assumed ₡45,000 driver-day:
 | Same, if Yuntera cannot credit the IVA                             |                       about 21.5–22.7 stops |
 | Before authorisation, at the ₡2,300 locker price                   |    19.6 stops, plus the drive to a drop-off |
 
-This plan uses **about 25 stops** as the test. It equals the business
-model's own assumed density, so at that density an own driver only breaks
-even with Correos. The business model's "about 20" needs this correction (see
-"Needed elsewhere"). Whether IVA can be credited is _for the accountant to
-confirm_.
+**About 25 stops** (24.5 at the 451-or-more tier with one ₡2,000 pickup a
+day, before IVA) is the one figure every strategy document, the marketing
+pieces and the [business model](business-model.md) use. It equals the
+business model's own assumed density, so at that density an own driver only
+breaks even with Correos. Whether IVA can be credited is _for the accountant
+to confirm_.
 
 **Until the product counts them,** numbers 2, 3, 4, 6 and 10 go in one
 spreadsheet the owner fills every Saturday: orders, late, failed, stops per
@@ -352,14 +354,14 @@ Until the trademark search is clear and the company exists, the owner may
 talk to sellers and describe the service, but prints nothing, signs nothing
 and visits no one under the name ([brand book](../brand/brand-book.md) §15).
 
-| When (weeks)     | Action                                                                                                    | Who                  | Done when                                                                                     |
-| ---------------- | --------------------------------------------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------------------------------------- |
-| 1–2              | Trademark search at the Registro Nacional; register `yuntera.cr`; reserve social handles                  | Owner, lawyer        | Search result in writing; handles held                                                        |
-| 1–6              | 10–15 seller interviews with the worked statement, without printed material or a contract                 | Owner                | 5 sellers say yes; written commitments once the search is clear and the company exists        |
-| 2–6              | Choose the warehouse and the pilot cluster (§2.3)                                                         | Owner                | Lease signed; cluster written into **Operación**                                              |
-| 4–8              | Seller flyer and pitch, shopper card, in Spanish and English (written in the marketing part of this pack) | Owner; copy editor   | Printed only after the trademark search is clear; every promotion line has dates and quantity |
-| 6–10             | Sellers list products and send stock                                                                      | Sellers; owner helps | Stock counted in the warehouse                                                                |
-| 10–22 (or later) | Closed pilot: invited shoppers only; no public posts                                                      | Owner                | Roadmap phase 1 exit criteria met                                                             |
+| When (weeks)     | Action                                                                                                | Who                  | Done when                                                                                     |
+| ---------------- | ----------------------------------------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------------------------------------- |
+| 1–2              | Trademark search at the Registro Nacional; register `yuntera.cr`; reserve social handles              | Owner, lawyer        | Search result in writing; handles held                                                        |
+| 1–6              | 10–15 seller interviews with the worked statement, without printed material or a contract             | Owner                | 5 sellers say yes; written commitments once the search is clear and the company exists        |
+| 2–6              | Choose the warehouse and the pilot cluster (§2.3)                                                     | Owner                | Lease signed; cluster written into **Operación**                                              |
+| 4–8              | Seller flyer and pitch, shopper card, in Spanish and English ([marketing](../../marketing/README.md)) | Owner; copy editor   | Printed only after the trademark search is clear; every promotion line has dates and quantity |
+| 6–10             | Sellers list products and send stock                                                                  | Sellers; owner helps | Stock counted in the warehouse                                                                |
+| 10–22 (or later) | Closed pilot: invited shoppers only; no public posts                                                  | Owner                | Roadmap phase 1 exit criteria met                                                             |
 
 ### 7.2 Launch week (first week of roll-out phase 4)
 
@@ -378,7 +380,7 @@ and visits no one under the name ([brand book](../brand/brand-book.md) §15).
 | 1–30  | Sales agent starts; target 50 active sellers                                                          | Sales agent; owner | 50 in **Vendedores**, status `active`                    |
 | 1–30  | ₡25,000 paid social test to shoppers in the served cantons only                                       | Owner              | Cost per click and per thousand views written down       |
 | 31–60 | Add a canton only by the rule in the roll-out plan; ask MEIC and Correos for a joint session (§8)     | Owner              | Rule met and written; session held or refused in writing |
-| 31–60 | Set the monthly ad cap from the test, within the budget level (decision 4)                            | Owner              | Cap written in this file                                 |
+| 31–60 | Set the monthly ad cap from the test, within the budget level (D17)                                   | Owner              | Cap written in this file                                 |
 | 61–90 | Read the launch exit test: contribution positive 4 weeks, 25% repeat in 60 days, one full route a day | Owner              | Each number read and written; go, change or stop (§10)   |
 
 ---
@@ -407,8 +409,8 @@ would.
 
 ## 9. Budget: lean, base, bold
 
-Monthly cash out, in colones. **Founder pay is not included** (decision 3 in
-the [team structure](team-structure.md)). Amounts marked _assumption_ have no
+Monthly cash out, in colones. **Founder pay is not included** (owner decision
+D18). Amounts marked _assumption_ have no
 published price; each says how to check.
 
 | Line                                        | Unit cost and source                                                                                                                                                                                                                                                     | Lean (pilot, founder runs it, 5–10 orders a day)                                        | Base (launch, 20–40 orders a day)      | Bold (launch with a team, 50–65 orders a day) |
@@ -423,7 +425,7 @@ published price; each says how to check.
 | Packaging                                   | ₡200 an order (business model assumption), 26 days a month                                                                                                                                                                                                               | ₡26,000–₡52,000 (130–260 orders)                                                        | ₡104,000–₡208,000                      | ₡260,000–₡338,000                             |
 | Courier overflow (Correos, by hand)         | ₡2,300 locker price × 1.13 IVA = about ₡2,600 a parcel until the volume tariff is authorised (Correos tariff)                                                                                                                                                            | ₡0–₡130,000 (up to 50 parcels, an assumption)                                           | Only if a driver is off                | Only if a driver is off                       |
 | Printing (flyers, parcel cards)             | _Assumption_; get 2 quotes                                                                                                                                                                                                                                               | ₡30,000–₡60,000                                                                         | ₡60,000–₡120,000                       | ₡120,000–₡240,000                             |
-| Paid social                                 | A cap the owner sets; not derived from a cost per view (none found)                                                                                                                                                                                                      | ₡0 (ads wait for the pilot exit, decision 6)                                            | ₡150,000, including the ₡25,000 test   | ₡500,000                                      |
+| Paid social                                 | A cap the owner sets; not derived from a cost per view (none found)                                                                                                                                                                                                      | ₡0 (ads wait for the pilot exit, D42)                                                   | ₡150,000, including the ₡25,000 test   | ₡500,000                                      |
 | Radio                                       | Price not found; quotes needed                                                                                                                                                                                                                                           | —                                                                                       | —                                      | Not budgeted until quoted                     |
 | Accountant                                  | _Assumption_ ₡100,000–₡300,000 a month; get 3 quotes                                                                                                                                                                                                                     | ₡100,000–₡300,000                                                                       | ₡100,000–₡300,000                      | ₡100,000–₡300,000                             |
 | **Total a month**                           |                                                                                                                                                                                                                                                                          | **₡440,900–₡978,400**                                                                   | **₡2,887,600–₡4,570,100**              | **₡7,104,600–₡7,786,100**                     |
@@ -466,7 +468,9 @@ of the level's costs:
 
 - **Base:** about 582 orders a month (**22 a day**, about all one driver can
   carry) at the low costs with one driver; about 912 (35 a day) at the high costs with two. The pricing
-  proposal finds about 24 a day for its launch month (pricing strategy §3.3).
+  proposal, with the same people and a 50 m² warehouse, finds 585 orders (22 to
+  23 a day) with ₡20,000 baskets and about 25 a day with mixed baskets
+  (pricing strategy §3.3).
 - **Bold:** about 1,430–1,560 orders a month (55–60 a day), near the top of
   its 50–65 range.
 
@@ -519,7 +523,7 @@ each one can bite.
 | Walmart Marketplace, Boxful or the Correos–BCR pilot win the same sellers                            | Sellers cite them in interviews                                                                         | Ask them for those platforms' terms; compare the total cost per order                             |
 | Founder ill or away                                                                                  | Any day with no one to drive or pack                                                                    | The backup person is trained before the pilot (roadmap phase 1)                                   |
 | An advert breaks the promotion rules (MEIC found breaches in 31% of 26 digital adverts in June 2026) | Any offer without dates, quantity or former price                                                       | Every offer goes through the checklist in §3 before it is posted                                  |
-| Support overload with no inbox or notes                                                              | More than the founder can answer within the targets                                                     | Build the console's support desk (owner chose it; task in progress) before paid ads               |
+| Support overload with no inbox or notes                                                              | More than the founder can answer within the targets                                                     | Build the console's support desk (owner decision D1, 24 November 2026) before paid ads            |
 
 **Stop or change course if any of these holds** (the roadmap's own tests,
 with numbers):
@@ -540,28 +544,11 @@ with numbers):
 
 ## Decisions for the owner
 
-1. **Which cantons does the pilot serve?**
-   A. Cluster A, East: San José Central, Montes de Oca, Curridabat, Goicoechea, Moravia.
-   B. Cluster B, West: Escazú, Santa Ana, Belén.
-   C. Cluster C, North: Heredia Central, Santo Domingo, San Pablo, Flores.
-   D. The 3 to 5 adjacent core cantons around the 5 signed sellers and the warehouse. **(recommended)** No source tells the clusters apart, and routes fill fastest where the stock and the first customers already are.
-2. **A first-order offer in the pilot?**
-   A. None. **(recommended)** Invited shoppers do not need one, and the pilot must measure real willingness to pay delivery.
-   B. First delivery free, with start date, end date and number of orders stated (art. 55 i and j).
-3. **May marketing quote how many Costa Ricans buy online?**
-   A. No; describe the problem instead. **(recommended)** The three sources disagree and the regulation needs checkable sources.
-   B. "48.5% (UCR, 2022)", with the year shown.
-   C. "About 80%", naming the industry source.
-4. **Which budget level?**
-   A. Lean until the pilot's exit test, then base. **(recommended)** It spends on people only after density is proven.
-   B. Base from the pilot.
-   C. Bold from the launch.
-5. **Draws and contests in the first 90 days?**
-   A. None. **(recommended)** Each draw needs a written reglamento, a notary or sworn declaration and the winner published nationally (art. 59), and paid entry may need the JPS.
-   B. Free-entry draws only, with all of art. 59 met.
-6. **When does paid advertising start?**
-   A. After the pilot's exit test, with a ₡25,000 test first. **(recommended)** Ads before density buy scattered orders.
-   B. In launch week.
+The questions this strategy raises are asked once, with every other owner
+question, in the [owner decisions](owner-decisions.md) list: pilot cantons
+(D10), budget level (D17), the offer for shoppers in the pilot and at the
+launch (D25), quoting how many Costa Ricans buy online (D30), draws (D41) and
+when paid advertising starts (D42).
 
 ---
 
@@ -586,13 +573,13 @@ with numbers):
 
 ## Sources
 
-Opened by the writer on 24 November 2026:
+Opened on 24 November 2026:
 
 - MTSS, Lista de salarios mínimos por ocupación 2026 (Decreto 45303-MTSS, in force 1 January 2026), copy of https://www.mtss.go.cr/temas-laborales/salarios/lista_salarios_minimos_2026.pdf — Agente de ventas ₡419,755.80; Oficinista, Telefonista, Bodeguero (encargado) ₡405,710.70; Bodeguero (peón), Mensajero ₡373,092.30; Conductor de vehículo liviano ₡13,523.69 a day.
 - Correos de Costa Rica, Tarifas, https://correos.go.cr/tarifas/ — Pymexpress volume tiers, before IVA, each needing prior authorisation from the Dirección de Pymes; pickup ₡1,500–₡2,000; locker price ₡2,300.
 - UCR, "Un estudio desmonta mitos sobre el uso de las plataformas digitales en Costa Rica" (27 May 2026), https://www.ucr.ac.cr/noticias/2026/5/27/un-estudio-desmonta-mitos-sobre-el-uso-de-las-plataformas-digitales-en-costa-rica.html — WhatsApp 96%, Facebook 80%, YouTube 77%; 792 adults, August 2025.
 
-Read in the pack's market research (`/root/yuntera-audit/strategy-pack/research/market.md`, all read 24 November 2026 by the researcher):
+Read in the [market research](../research/market-and-costs-2026-11.md) (all read 24 November 2026):
 
 - UCR Mediápolis, https://mediapolis.ucr.ac.cr/confianza-y-consumo/habitos-y-practicas-de-consumo/ — TikTok 58%, Instagram 47% (CICOM 2025; the population is not stated).
 - Decreto 37899-MEIC arts. 55 and 59 (consolidated print of 7 January 2026); Ley 8642 art. 44 (SUTEL PDF).
@@ -607,4 +594,4 @@ Read in the pack's market research (`/root/yuntera-audit/strategy-pack/research/
 - Repretel and Diario Extra, fuel prices November 2026 (search results).
 - Encuentra24 warehouse listings (search results).
 
-Repository: `STATUS.md`; `packages/core/src/promise.ts`; `apps/web/src/components/checkout-form.tsx`; `apps/web/src/app/carrito/page.tsx`; `docs/05-security-compliance/privacy.md`; `docs/00-strategy/business-model.md`, `market-and-wedge.md`; `docs/01-product/pricing-and-fees.md`, `roadmap.md`, `personas-and-journeys.md`, `scope-by-app.md`; `docs/06-operations/customer-service.md`, `logistics-playbook.md`, `notifications.md`; `docs/05-security-compliance/compliance-costa-rica.md`; `docs/07-deployment/operations.md`, `go-live-checklist.md`; `docs/08-open-questions.md`; `docs/brand/brand-book.md` §4; `supabase/migrations/20261121080300_geography_data.sql`; `supabase/migrations/20261121081600_api_operations.sql` (`ops_overview`, `ops_orders`); `apps/ops/src/lib/staff.ts`; the pack's support research (`support-and-it.md`) and English research (`english.md`).
+Repository: `STATUS.md`; `packages/core/src/promise.ts`; `apps/web/src/components/checkout-form.tsx`; `apps/web/src/app/carrito/page.tsx`; `docs/05-security-compliance/privacy.md`; `docs/00-strategy/business-model.md`, `market-and-wedge.md`; `docs/01-product/pricing-and-fees.md`, `roadmap.md`, `personas-and-journeys.md`, `scope-by-app.md`; `docs/06-operations/customer-service.md`, `logistics-playbook.md`, `notifications.md`; `docs/05-security-compliance/compliance-costa-rica.md`; `docs/07-deployment/operations.md`, `go-live-checklist.md`; `docs/08-open-questions.md`; `docs/brand/brand-book.md` §4; `supabase/migrations/20261121080300_geography_data.sql`; `supabase/migrations/20261121081600_api_operations.sql` (`ops_overview`, `ops_orders`); `apps/ops/src/lib/staff.ts`; the [support research](../research/support-and-system-health-tools.md) and the [English research](../research/english-translation-plan.md).

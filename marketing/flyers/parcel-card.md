@@ -57,5 +57,5 @@ The "come back" line carries no offer and no price. Whether a printed card invit
 ## Sources
 
 - Repository: `apps/web/src/app/ayuda/page.tsx`; `docs/06-operations/customer-service.md`; `docs/05-security-compliance/compliance-costa-rica.md` §1 and §9; `docs/brand/brand-book.md` §4, §6; `STATUS.md`.
-- Go-to-market strategy draft (24 November 2026), §5 ("A printed card in every parcel") and §7.1; roll-out plan draft §4.
-- Market research of 24 November 2026, §7.4 (Ley 8642 art. 44).
+- Go-to-market strategy (24 November 2026), §5 ("A printed card in every parcel") and §7.1; roll-out plan §4.
+- [Market research](../../docs/research/market-and-costs-2026-11.md) of 24 November 2026, §7.4 (Ley 8642 art. 44).

@@ -56,29 +56,29 @@ the count means writing the script again from the description above.
 
 ### 1.1 Counts per app and package (texts still Spanish only)
 
-| Where                                 | Files with text | Texts | Words (approx.) | Dates formatted | Hard-coded `"es-CR"` | Plural-like spots |
-| ------------------------------------- | --------------: | ----: | --------------: | --------------: | -------------------: | ----------------: |
-| `apps/web` (shop)                     |              52 |   686 |           4,705 |              24 |                    5 |                13 |
-| `apps/seller` (seller centre)         |              47 |   926 |           6,295 |              16 |                    3 |                 9 |
-| `apps/ops` (staff console)            |              86 | 1,970 |          11,729 |              66 |                   16 |                48 |
-| `apps/field` (drivers, warehouse web) |              31 |   286 |           1,410 |               3 |                    3 |                17 |
-| **Web apps, total**                   |         **216** | **3,868** |     **24,139** |                 |                      |                   |
-| `apps/shop-native`                    |              40 |   604 |           3,701 |              20 |                    4 |                16 |
-| `apps/seller-native`                  |              45 |   835 |           5,814 |              14 |                    3 |                 7 |
-| `apps/driver-native`                  |              14 |   161 |           1,171 |               1 |                    0 |                 4 |
-| `apps/warehouse-native`               |              15 |   245 |           1,272 |               4 |                    0 |                 5 |
-| **Phone apps, total**                 |         **114** | **1,845** |     **11,958** |                 |                      |                   |
-| `packages/next-kit`                   |              19 |   316 |           2,140 |               3 |                    7 |                 4 |
-| `packages/expo-kit`                   |              20 |   196 |           1,740 |               5 |                   10 |                 3 |
-| `packages/notifications` (messages)   |              16 |   465 |           3,921 |               0 |                    1 |                 3 |
-| `packages/ui`                         |               1 |    16 |              43 |               4 |                    3 |                 1 |
-| `packages/core`                       |               9 |    35 |             266 |               1 |                   14 |                 0 |
-| `packages/db` (outside the pairs)     |               — |    67 |            ~700 |               0 |                    — |                 2 |
-| `packages/brand`                      |               1 |    18 |              53 |               0 |                    3 |                 0 |
-| `packages/invoicing`                  |               8 |    84 |             184 |               0 |                    0 |                 0 |
-| `packages/payments`                   |               2 |     3 |               6 |               0 |                    0 |                 0 |
-| **All code, total**                   |                 | **6,913** |     **45,167** |                 |                      |                   |
-| **All code, distinct texts**          |                 | **4,337** |     **33,318** |                 |                      |                   |
+| Where                                 | Files with text |     Texts | Words (approx.) | Dates formatted | Hard-coded `"es-CR"` | Plural-like spots |
+| ------------------------------------- | --------------: | --------: | --------------: | --------------: | -------------------: | ----------------: |
+| `apps/web` (shop)                     |              52 |       686 |           4,705 |              24 |                    5 |                13 |
+| `apps/seller` (seller centre)         |              47 |       926 |           6,295 |              16 |                    3 |                 9 |
+| `apps/ops` (staff console)            |              86 |     1,970 |          11,729 |              66 |                   16 |                48 |
+| `apps/field` (drivers, warehouse web) |              31 |       286 |           1,410 |               3 |                    3 |                17 |
+| **Web apps, total**                   |         **216** | **3,868** |      **24,139** |                 |                      |                   |
+| `apps/shop-native`                    |              40 |       604 |           3,701 |              20 |                    4 |                16 |
+| `apps/seller-native`                  |              45 |       835 |           5,814 |              14 |                    3 |                 7 |
+| `apps/driver-native`                  |              14 |       161 |           1,171 |               1 |                    0 |                 4 |
+| `apps/warehouse-native`               |              15 |       245 |           1,272 |               4 |                    0 |                 5 |
+| **Phone apps, total**                 |         **114** | **1,845** |      **11,958** |                 |                      |                   |
+| `packages/next-kit`                   |              19 |       316 |           2,140 |               3 |                    7 |                 4 |
+| `packages/expo-kit`                   |              20 |       196 |           1,740 |               5 |                   10 |                 3 |
+| `packages/notifications` (messages)   |              16 |       465 |           3,921 |               0 |                    1 |                 3 |
+| `packages/ui`                         |               1 |        16 |              43 |               4 |                    3 |                 1 |
+| `packages/core`                       |               9 |        35 |             266 |               1 |                   14 |                 0 |
+| `packages/db` (outside the pairs)     |               — |        67 |            ~700 |               0 |                    — |                 2 |
+| `packages/brand`                      |               1 |        18 |              53 |               0 |                    3 |                 0 |
+| `packages/invoicing`                  |               8 |        84 |             184 |               0 |                    0 |                 0 |
+| `packages/payments`                   |               2 |         3 |               6 |               0 |                    0 |                 0 |
+| **All code, total**                   |                 | **6,913** |      **45,167** |                 |                      |                   |
+| **All code, distinct texts**          |                 | **4,337** |      **33,318** |                 |                      |                   |
 
 The distinct count is lower because the phone apps reuse much of the websites'
 wording. The distinct figure is the translation volume.
@@ -154,12 +154,12 @@ Not in the table:
 
 The 164 Spanish sentences fall into 4 kinds.
 
-| Kind                                         | Examples (file:line)                                                                                      | Who reads it              | Recommendation                                                                                                                                           |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Order history notes                          | `'Pedido recibido'` (`081000_checkout.sql:429`), `'Pago recibido'` (`:79`), `'Cancelado por el cliente'` (`:510`), `'Reembolso completado'` (`083400_payments.sql:522`), `'Devolución recibida'` (`082900_integrity.sql:662`) | **Shopper** (`apps/web/src/app/pedidos/[numero]/page.tsx:589`) and staff | Add a `note_code` and `note_params` beside `note` in a new migration. The apps render the code in the reader's language. Keep the Spanish `note` for old rows and old app builds. |
-| Ledger and payment-matching descriptions     | `'Pago del pedido ' \|\| number` (`080800_finance.sql:275`), `'El monto no es el del pedido.'` (`083400_payments.sql:1487`) | Finance staff             | Keep in Spanish. They are accounting records. Translate them only if staff tools get English (decision 1).                                               |
-| Account names of the chart of accounts       | `'Ingresos por envío'` (`080800_finance.sql:176`)                                                         | Finance staff, accountant | Keep in Spanish (accounting records).                                                                                                                    |
-| Reference data                               | Category names (both languages exist); zone names such as `'Resto del país'` (`080300_geography_data.sql:22`); provinces, cantons and districts | Shopper                   | Place names are proper nouns and stay as they are. Zone names a shopper sees need an English column or a code (one migration).                          |
+| Kind                                     | Examples (file:line)                                                                                                                                                                                                          | Who reads it                                                             | Recommendation                                                                                                                                                                    |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Order history notes                      | `'Pedido recibido'` (`081000_checkout.sql:429`), `'Pago recibido'` (`:79`), `'Cancelado por el cliente'` (`:510`), `'Reembolso completado'` (`083400_payments.sql:522`), `'Devolución recibida'` (`082900_integrity.sql:662`) | **Shopper** (`apps/web/src/app/pedidos/[numero]/page.tsx:589`) and staff | Add a `note_code` and `note_params` beside `note` in a new migration. The apps render the code in the reader's language. Keep the Spanish `note` for old rows and old app builds. |
+| Ledger and payment-matching descriptions | `'Pago del pedido ' \|\| number` (`080800_finance.sql:275`), `'El monto no es el del pedido.'` (`083400_payments.sql:1487`)                                                                                                   | Finance staff                                                            | Keep in Spanish. They are accounting records. Translate them only if staff tools get English (decision 1).                                                                        |
+| Account names of the chart of accounts   | `'Ingresos por envío'` (`080800_finance.sql:176`)                                                                                                                                                                             | Finance staff, accountant                                                | Keep in Spanish (accounting records).                                                                                                                                             |
+| Reference data                           | Category names (both languages exist); zone names such as `'Resto del país'` (`080300_geography_data.sql:22`); provinces, cantons and districts                                                                               | Shopper                                                                  | Place names are proper nouns and stay as they are. Zone names a shopper sees need an English column or a code (one migration).                                                    |
 
 A free-text reason a customer typed (for example a cancellation reason) stays
 as they wrote it.
@@ -476,14 +476,14 @@ These are verified in the code, not on a phone.
 
 ### 4.5 What the database must return differently
 
-| Change                                                                                  | Why                                       | Old build                 |
-| --------------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------- |
-| `update_profile`: null locale keeps the current one; new `set_locale(p_locale)`         | Section 2.2                               | Fixes it too              |
-| Order events: add `note_code`, `note_params` (jsonb); fill them in every function that writes a note | The shopper sees these lines in their language | Ignores the new fields    |
-| `category_name_en` beside `category_name` where only `name_es` is returned (`082400_fixes.sql`, lines 612 and 792) | Seller and staff screens                  | Ignores the new field     |
-| Shopper-visible zone names: an English column or a code                                 | `'Resto del país'` and the other zone names | Ignores it                |
-| Nothing for product titles, descriptions, shop names or reviews                         | Sellers' own words (decision 5)           | —                         |
-| Nothing for place names, ledger texts or the tax document                               | Proper nouns, accounting records, Hacienda schema | —                  |
+| Change                                                                                                             | Why                                               | Old build              |
+| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- | ---------------------- |
+| `update_profile`: null locale keeps the current one; new `set_locale(p_locale)`                                    | Section 2.2                                       | Fixes it too           |
+| Order events: add `note_code`, `note_params` (jsonb); fill them in every function that writes a note               | The shopper sees these lines in their language    | Ignores the new fields |
+| `category_name_en` beside `category_name` where only `name_es` is returned (`082400_fixes.sql`, lines 612 and 792) | Seller and staff screens                          | Ignores the new field  |
+| Shopper-visible zone names: an English column or a code                                                            | `'Resto del país'` and the other zone names       | Ignores it             |
+| Nothing for product titles, descriptions, shop names or reviews                                                    | Sellers' own words (decision 5)                   | —                      |
+| Nothing for place names, ledger texts or the tax document                                                          | Proper nouns, accounting records, Hacienda schema | —                      |
 
 Each function change follows CLAUDE.md: a new migration, `security definer`,
 `set search_path = ''`, caller checked, `private.fail` codes with Spanish and
@@ -496,21 +496,21 @@ English messages, a database test and a contract test.
 The order is W0 first. Then W1–W9 run in parallel. W10 and W11 come last.
 Each builder works in its own lane of `tools/dev/stack.sh` (lanes 1–12).
 
-| #       | Workstream                                    | Owns (files only it edits)                                                                                                                                                                 | Depends on | Estimate (builder-days, estimated) |
-| ------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ---------------------------------: |
-| **W0**  | Foundation                                    | `packages/i18n` (all), `messages/common.ts`; the locale proxy, switch, `alternates` helper and hidden-field helper in `packages/next-kit`; the provider and formatters in `packages/expo-kit`; `packages/ui` labels; the "no Spanish left" checker; **no app files** | —          |                                3–4 |
-| **W-DB** | Database                                     | New migration(s): `update_profile` fix, `set_locale`, order-event codes, English category and zone names; tests; `packages/db/src/areas/locale.ts`                                          | — (parallel with W0) |                       2–3 |
-| W1      | Shop website                                  | `apps/web`, `messages/shop.ts` (web keys); help page in English beside the Spanish legal text                                                                                             | W0, W-DB   |                                5–7 |
-| W2      | Seller centre                                 | `apps/seller`, `messages/seller.ts`                                                                                                                                                        | W0         |                                4–6 |
-| W3      | Staff console (if decision 1A)                | `apps/ops`, `messages/staff.ts`                                                                                                                                                            | W0         |                                6–8 |
-| W4      | Field web app                                 | `apps/field`, `messages/field.ts` (web keys)                                                                                                                                               | W0         |                                2–3 |
-| W5      | Shopper phone app                             | `apps/shop-native`, its `locales/*.json`, version 0.2.0                                                                                                                                    | W0, W1 keys | 4–5                               |
-| W6      | Seller phone app                              | `apps/seller-native`                                                                                                                                                                       | W0, W2 keys | 4–5                               |
-| W7      | Driver and warehouse phone apps               | `apps/driver-native`, `apps/warehouse-native`                                                                                                                                              | W0, W4 keys | 3–4                               |
-| W8      | Messages                                      | `packages/notifications` templates, `messages/messages.ts`, English WhatsApp JSON files, the hook's language choice, `supabase/templates` branching on `.Data`                             | W0         |                                3–4 |
-| W9      | Docs                                          | `STATUS.md`, `docs/03-data/api-reference.md`, brand book English voice section                                                                                                            | all        |                                  1 |
-| W10     | Store listings and prompts                    | Listing text (ES and EN) as files under `docs/07-deployment/`; the owner enters it in the stores                                                                                           | W5–W7      |                                  1 |
-| W11     | Language review                               | Comments only; builders apply fixes                                                                                                                                                        | W1–W8      |                   see section 6 |
+| #        | Workstream                      | Owns (files only it edits)                                                                                                                                                                                                                                           | Depends on           | Estimate (builder-days, estimated) |
+| -------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ---------------------------------: |
+| **W0**   | Foundation                      | `packages/i18n` (all), `messages/common.ts`; the locale proxy, switch, `alternates` helper and hidden-field helper in `packages/next-kit`; the provider and formatters in `packages/expo-kit`; `packages/ui` labels; the "no Spanish left" checker; **no app files** | —                    |                                3–4 |
+| **W-DB** | Database                        | New migration(s): `update_profile` fix, `set_locale`, order-event codes, English category and zone names; tests; `packages/db/src/areas/locale.ts`                                                                                                                   | — (parallel with W0) |                                2–3 |
+| W1       | Shop website                    | `apps/web`, `messages/shop.ts` (web keys); help page in English beside the Spanish legal text                                                                                                                                                                        | W0, W-DB             |                                5–7 |
+| W2       | Seller centre                   | `apps/seller`, `messages/seller.ts`                                                                                                                                                                                                                                  | W0                   |                                4–6 |
+| W3       | Staff console (if decision 1A)  | `apps/ops`, `messages/staff.ts`                                                                                                                                                                                                                                      | W0                   |                                6–8 |
+| W4       | Field web app                   | `apps/field`, `messages/field.ts` (web keys)                                                                                                                                                                                                                         | W0                   |                                2–3 |
+| W5       | Shopper phone app               | `apps/shop-native`, its `locales/*.json`, version 0.2.0                                                                                                                                                                                                              | W0, W1 keys          |                                4–5 |
+| W6       | Seller phone app                | `apps/seller-native`                                                                                                                                                                                                                                                 | W0, W2 keys          |                                4–5 |
+| W7       | Driver and warehouse phone apps | `apps/driver-native`, `apps/warehouse-native`                                                                                                                                                                                                                        | W0, W4 keys          |                                3–4 |
+| W8       | Messages                        | `packages/notifications` templates, `messages/messages.ts`, English WhatsApp JSON files, the hook's language choice, `supabase/templates` branching on `.Data`                                                                                                       | W0                   |                                3–4 |
+| W9       | Docs                            | `STATUS.md`, `docs/03-data/api-reference.md`, brand book English voice section                                                                                                                                                                                       | all                  |                                  1 |
+| W10      | Store listings and prompts      | Listing text (ES and EN) as files under `docs/07-deployment/`; the owner enters it in the stores                                                                                                                                                                     | W5–W7                |                                  1 |
+| W11      | Language review                 | Comments only; builders apply fixes                                                                                                                                                                                                                                  | W1–W8                |                      see section 6 |
 
 Rules that prevent collisions:
 
@@ -596,12 +596,12 @@ They are never shipped without the editor's review.
 
 Words customers will see, in both languages:
 
-| Spanish (usted)                                              | English                                         |
-| ------------------------------------------------------------ | ----------------------------------------------- |
-| **English** (link on Spanish pages)                          | **Español** (link on English pages)             |
-| ¿Prefiere ver Yuntera en inglés? Ver en inglés               | Prefer Yuntera in English? View in English      |
-| Idioma                                                       | Language                                        |
-| Descripción escrita por la tienda, en español.               | Description written by the shop, in Spanish.    |
+| Spanish (usted)                                                             | English                                                                       |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **English** (link on Spanish pages)                                         | **Español** (link on English pages)                                           |
+| ¿Prefiere ver Yuntera en inglés? Ver en inglés                              | Prefer Yuntera in English? View in English                                    |
+| Idioma                                                                      | Language                                                                      |
+| Descripción escrita por la tienda, en español.                              | Description written by the shop, in Spanish.                                  |
 | Este texto en inglés es una traducción. El texto en español es el que rige. | This English text is a translation. The Spanish text is the one that applies. |
 
 The last line is for the lawyer to confirm.

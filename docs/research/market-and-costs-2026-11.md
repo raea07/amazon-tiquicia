@@ -66,27 +66,27 @@ could not be found.
 
 Read before searching so time went to what is missing or older than a year.
 
-| Topic | What the repository says | Source in the repository and its own source | Age or status |
-| --- | --- | --- | --- |
-| Market size | US$6.4 billion in 2024, forecast 13% a year to US$9.3 billion in 2027 | `docs/research/costa-rica-fact-sheet.md` §8, citing Payments & Commerce Market Intelligence (PCMI) | 2024 data; the PCMI page returned empty on 24 Nov 2026 and could not be re-read |
-| Share buying online, mobile share, domestic share | About 80% of adults; mobile 74% of volume; domestic merchants 55% | Fact sheet §8, PCMI | 2024 data; see §1 below for conflicting figures |
-| Online payment mix | International credit card 68%, debit 16%, bank transfer 10%, wallets 3% (by volume, 2024) | Fact sheet §5, PCMI | 2024 data |
-| SINPE Móvil | Limits, 2025 scale ₡12.6 trillion in 745.5 million transactions | Fact sheet §5, BCCR and La Nación | Still current; 2025 figures re-confirmed below |
-| Gateway prices | ONVO cards 3.9% + US$0.35, SINPE Móvil 1.5%, US$3 per payout; Tilopay cards 4.25% + US$0.35, SINPE Móvil 2% + US$0.35 | Fact sheet §5, third-party comparison dated 20 Oct 2026 | Tilopay re-verified on its own page below; ONVO's page refused the request (403) |
-| Card fee caps | Acquiring 1.95% local, 2.50% cross-border; interchange 1.00% | Fact sheet §5, BCCR | 2024–2025; 2026 review pending |
-| Cross-border players | Amazon free shipping over US$35; Amazon Bazaar since 7 Nov 2025 (most items under ₡5,000, two weeks, cards only); Temu about 15 days; Shein direct route since Sept 2025, about a month | Fact sheet §8, Delfino and El Financiero | 2025; Bazaar's ₡10,000 free-shipping minimum added below |
-| Courier imports | 12.9 million declaration lines Jan–Jul 2025, about four times all of 2024 | Fact sheet §8, Teletica | 2025; no 2026 figure found |
-| Shopper complaints | Late or missing deliveries, slow refunds (95 complaints against one store), no local claim route for Temu and Shein, customs holds, weak rural logistics | Fact sheet §8; `docs/00-strategy/market-and-wedge.md` | 2025–2026; re-confirmed below |
-| Correos Pymexpress | Small ₡2,300 / medium ₡3,250 / large ₡4,550 / extra large ₡7,250 inside the GAM before IVA; ₡3,450–₡9,050 outside | Fact sheet §7, correos.go.cr | Re-read below: these are the self-service locker prices; the volume tariff is cheaper |
-| Moovin, Boxful, Uber Direct | Operate locally; no published prices | Fact sheet §7 | Still true; one Moovin pickup fee found below |
-| Employer charges | 26.83% employer, 10.83% worker (2026) | Fact sheet §7, La Nación and Delfino | Re-confirmed below with the breakdown |
-| Couriers' employment status | Two first-instance rulings found employment with a platform; bill 24.500 pending | Fact sheet §7; `docs/05-security-compliance/compliance-costa-rica.md` §7 | Unchanged; for the lawyer |
-| Base salary for fines | ₡462,200 in 2026 | Fact sheet §4 | Current |
-| Consumer law | Withdrawal 8 business days; refund within 8 calendar days; warranty 30 business days; total price with taxes and shipping; promised date binding; no pre-ticked options | Fact sheet §3; compliance document §1 | Current (consolidated text of 7 Jan 2026) |
-| Marketing consent | Separate, unticked consent for commercial messages; withdrawal is immediate and self-service; commercial messages start with "Publicidad" and carry a free opt-out | `docs/05-security-compliance/privacy.md`; `docs/06-operations/notifications.md` | Product rule |
-| What is built | Commercial messages are **not built** (no template, no one-step unsubscribe page). Real payments, invoices and messages are not live. Native seller, driver and warehouse apps have not run on a phone | `STATUS.md`, "Not built" | 23 Nov 2026 |
-| Fees in the product today | Commission 8%–15% by category (default 12%, floor ₡150); fulfilment ₡900 / ₡1,400 / ₡2,400 / ₡4,900; payment fee SINPE Móvil 1.5%, card 3.9% + ₡180, cash on delivery 2.0% + ₡300, bank transfer 0.5%; shipping ₡1,500 GAM core free above ₡25,000, ₡2,000 GAM extended free above ₡35,000 | `packages/core/src/fees.ts`; `docs/01-product/pricing-and-fees.md` | All marked "assumption to validate" in the repository |
-| Unit economics | Contribution about ₡2,334 on a ₡20,000 order; ₡394 on an ₡8,000 order; own driver beats Correos above about 20 stops a day, at an assumed ₡45,000 driver-day | `docs/00-strategy/business-model.md` | All cost lines are assumptions |
+| Topic                                             | What the repository says                                                                                                                                                                                                                                                                   | Source in the repository and its own source                                                        | Age or status                                                                         |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Market size                                       | US$6.4 billion in 2024, forecast 13% a year to US$9.3 billion in 2027                                                                                                                                                                                                                      | `docs/research/costa-rica-fact-sheet.md` §8, citing Payments & Commerce Market Intelligence (PCMI) | 2024 data; the PCMI page returned empty on 24 Nov 2026 and could not be re-read       |
+| Share buying online, mobile share, domestic share | About 80% of adults; mobile 74% of volume; domestic merchants 55%                                                                                                                                                                                                                          | Fact sheet §8, PCMI                                                                                | 2024 data; see §1 below for conflicting figures                                       |
+| Online payment mix                                | International credit card 68%, debit 16%, bank transfer 10%, wallets 3% (by volume, 2024)                                                                                                                                                                                                  | Fact sheet §5, PCMI                                                                                | 2024 data                                                                             |
+| SINPE Móvil                                       | Limits, 2025 scale ₡12.6 trillion in 745.5 million transactions                                                                                                                                                                                                                            | Fact sheet §5, BCCR and La Nación                                                                  | Still current; 2025 figures re-confirmed below                                        |
+| Gateway prices                                    | ONVO cards 3.9% + US$0.35, SINPE Móvil 1.5%, US$3 per payout; Tilopay cards 4.25% + US$0.35, SINPE Móvil 2% + US$0.35                                                                                                                                                                      | Fact sheet §5, third-party comparison dated 20 Oct 2026                                            | Tilopay re-verified on its own page below; ONVO's page refused the request (403)      |
+| Card fee caps                                     | Acquiring 1.95% local, 2.50% cross-border; interchange 1.00%                                                                                                                                                                                                                               | Fact sheet §5, BCCR                                                                                | 2024–2025; 2026 review pending                                                        |
+| Cross-border players                              | Amazon free shipping over US$35; Amazon Bazaar since 7 Nov 2025 (most items under ₡5,000, two weeks, cards only); Temu about 15 days; Shein direct route since Sept 2025, about a month                                                                                                    | Fact sheet §8, Delfino and El Financiero                                                           | 2025; Bazaar's ₡10,000 free-shipping minimum added below                              |
+| Courier imports                                   | 12.9 million declaration lines Jan–Jul 2025, about four times all of 2024                                                                                                                                                                                                                  | Fact sheet §8, Teletica                                                                            | 2025; no 2026 figure found                                                            |
+| Shopper complaints                                | Late or missing deliveries, slow refunds (95 complaints against one store), no local claim route for Temu and Shein, customs holds, weak rural logistics                                                                                                                                   | Fact sheet §8; `docs/00-strategy/market-and-wedge.md`                                              | 2025–2026; re-confirmed below                                                         |
+| Correos Pymexpress                                | Small ₡2,300 / medium ₡3,250 / large ₡4,550 / extra large ₡7,250 inside the GAM before IVA; ₡3,450–₡9,050 outside                                                                                                                                                                          | Fact sheet §7, correos.go.cr                                                                       | Re-read below: these are the self-service locker prices; the volume tariff is cheaper |
+| Moovin, Boxful, Uber Direct                       | Operate locally; no published prices                                                                                                                                                                                                                                                       | Fact sheet §7                                                                                      | Still true; one Moovin pickup fee found below                                         |
+| Employer charges                                  | 26.83% employer, 10.83% worker (2026)                                                                                                                                                                                                                                                      | Fact sheet §7, La Nación and Delfino                                                               | Re-confirmed below with the breakdown                                                 |
+| Couriers' employment status                       | Two first-instance rulings found employment with a platform; bill 24.500 pending                                                                                                                                                                                                           | Fact sheet §7; `docs/05-security-compliance/compliance-costa-rica.md` §7                           | Unchanged; for the lawyer                                                             |
+| Base salary for fines                             | ₡462,200 in 2026                                                                                                                                                                                                                                                                           | Fact sheet §4                                                                                      | Current                                                                               |
+| Consumer law                                      | Withdrawal 8 business days; refund within 8 calendar days; warranty 30 business days; total price with taxes and shipping; promised date binding; no pre-ticked options                                                                                                                    | Fact sheet §3; compliance document §1                                                              | Current (consolidated text of 7 Jan 2026)                                             |
+| Marketing consent                                 | Separate, unticked consent for commercial messages; withdrawal is immediate and self-service; commercial messages start with "Publicidad" and carry a free opt-out                                                                                                                         | `docs/05-security-compliance/privacy.md`; `docs/06-operations/notifications.md`                    | Product rule                                                                          |
+| What is built                                     | Commercial messages are **not built** (no template, no one-step unsubscribe page). Real payments, invoices and messages are not live. Native seller, driver and warehouse apps have not run on a phone                                                                                     | `STATUS.md`, "Not built"                                                                           | 23 Nov 2026                                                                           |
+| Fees in the product today                         | Commission 8%–15% by category (default 12%, floor ₡150); fulfilment ₡900 / ₡1,400 / ₡2,400 / ₡4,900; payment fee SINPE Móvil 1.5%, card 3.9% + ₡180, cash on delivery 2.0% + ₡300, bank transfer 0.5%; shipping ₡1,500 GAM core free above ₡25,000, ₡2,000 GAM extended free above ₡35,000 | `packages/core/src/fees.ts`; `docs/01-product/pricing-and-fees.md`                                 | All marked "assumption to validate" in the repository                                 |
+| Unit economics                                    | Contribution about ₡2,334 on a ₡20,000 order; ₡394 on an ₡8,000 order; own driver beats Correos above about 20 stops a day, at an assumed ₡45,000 driver-day                                                                                                                               | `docs/00-strategy/business-model.md`                                                               | All cost lines are assumptions                                                        |
 
 **What was missing or old, and therefore searched:** a second source on how
 many people buy online; frequency and basket; the shape of local competition
@@ -100,21 +100,21 @@ reach; and the rules on promotions, sweepstakes and marketing messages.
 
 ### 2.1 Connectivity and phones
 
-| Fact | Figure | Source | Confidence |
-| --- | --- | --- | --- |
-| Population | 5.16 million (Oct 2025) | DataReportal, Digital 2026: Costa Rica (8 Nov 2025) | Third party (compiles UN, GSMA, platform ad tools) |
-| Internet users | 4.78 million, 92.6% of the population (end 2025) | DataReportal, same report | Third party |
-| Mobile connections | 7.47 million, 145% of the population | DataReportal, citing GSMA Intelligence | Third party |
-| Households with internet | 87.32% (2025) | MICITT annual report on the national plan, citing INEC ENAHO 2025 (search result, report not opened) | Press-level; verify in INEC ENAHO 2025 |
-| Households with internet, previous year | 85.4% (2024) | UCR study citing ENAHO (search result) | Press-level |
+| Fact                                    | Figure                                           | Source                                                                                               | Confidence                                         |
+| --------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Population                              | 5.16 million (Oct 2025)                          | DataReportal, Digital 2026: Costa Rica (8 Nov 2025)                                                  | Third party (compiles UN, GSMA, platform ad tools) |
+| Internet users                          | 4.78 million, 92.6% of the population (end 2025) | DataReportal, same report                                                                            | Third party                                        |
+| Mobile connections                      | 7.47 million, 145% of the population             | DataReportal, citing GSMA Intelligence                                                               | Third party                                        |
+| Households with internet                | 87.32% (2025)                                    | MICITT annual report on the national plan, citing INEC ENAHO 2025 (search result, report not opened) | Press-level; verify in INEC ENAHO 2025             |
+| Households with internet, previous year | 85.4% (2024)                                     | UCR study citing ENAHO (search result)                                                               | Press-level                                        |
 
 ### 2.2 How many people buy online: three figures that disagree
 
-| Figure | What it measures | Source | Confidence |
-| --- | --- | --- | --- |
-| About **80%** of adults buy online | Industry estimate, method not public | PCMI (in the fact sheet); ICEX "Informe e-País" 2025 repeats it | Third party |
-| **48.5%** of consumers buy through an electronic medium | First national e-commerce survey, Centro de Investigación Observatorio del Desarrollo, UCR; article dated 12 Sep 2022 | La República (Rumbo Económico) report of the survey | Press, 2022 |
-| **18%** of the population has made a purchase **and paid** online | World Bank figure, reported by Forbes Centroamérica on 18 Sep 2025 | Search result; article not opened | Press, low |
+| Figure                                                            | What it measures                                                                                                      | Source                                                          | Confidence  |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------- |
+| About **80%** of adults buy online                                | Industry estimate, method not public                                                                                  | PCMI (in the fact sheet); ICEX "Informe e-País" 2025 repeats it | Third party |
+| **48.5%** of consumers buy through an electronic medium           | First national e-commerce survey, Centro de Investigación Observatorio del Desarrollo, UCR; article dated 12 Sep 2022 | La República (Rumbo Económico) report of the survey             | Press, 2022 |
+| **18%** of the population has made a purchase **and paid** online | World Bank figure, reported by Forbes Centroamérica on 18 Sep 2025                                                    | Search result; article not opened                               | Press, low  |
 
 **Reading.** The figures probably measure different things (any online order,
 including those paid on delivery, against an online payment), but no source
@@ -145,14 +145,14 @@ business model already names basket value as one of three deciding numbers).
 
 ### 2.4 How people pay
 
-| Fact | Figure | Source | Confidence |
-| --- | --- | --- | --- |
-| Cashless payments per person | 498.4 in 2025, up from 439.2 in 2024 | Tico Times, 17 Jun 2026, citing BCCR payment-system data | Press |
-| SINPE Móvil | 747.5 million transfers in 2025 (+15%); 4.5 million active numbers; more than 3.6 million individuals and nearly 55,000 legal entities | Same | Press (consistent with the fact sheet's 745.5 million from La Nación) |
-| Cards | 11.2 million in circulation (7.8 million debit, 3.4 million credit); nearly 150,000 businesses affiliated; more than 211,000 points of sale | Same | Press |
-| Cash in circulation | 3.1% of GDP, lowest on record | Same | Press |
-| Methods used by online shoppers (2022) | Card 78%, SINPE Móvil 73%, bank transfer 37.7%, cash 27.1%; 41.1% pay in full only on delivery | Omno (payments vendor) citing the 2022 national survey; card and SINPE figures match the La República report | Third party for cash, transfer and pay-on-delivery |
-| Cash-on-delivery share in 2026 | **Not found.** A Shopify guide gives 45% card, 25% SINPE Móvil, 12% cash on delivery with no source | easyappsecom.com | Unverified; do not use |
+| Fact                                   | Figure                                                                                                                                      | Source                                                                                                       | Confidence                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| Cashless payments per person           | 498.4 in 2025, up from 439.2 in 2024                                                                                                        | Tico Times, 17 Jun 2026, citing BCCR payment-system data                                                     | Press                                                                 |
+| SINPE Móvil                            | 747.5 million transfers in 2025 (+15%); 4.5 million active numbers; more than 3.6 million individuals and nearly 55,000 legal entities      | Same                                                                                                         | Press (consistent with the fact sheet's 745.5 million from La Nación) |
+| Cards                                  | 11.2 million in circulation (7.8 million debit, 3.4 million credit); nearly 150,000 businesses affiliated; more than 211,000 points of sale | Same                                                                                                         | Press                                                                 |
+| Cash in circulation                    | 3.1% of GDP, lowest on record                                                                                                               | Same                                                                                                         | Press                                                                 |
+| Methods used by online shoppers (2022) | Card 78%, SINPE Móvil 73%, bank transfer 37.7%, cash 27.1%; 41.1% pay in full only on delivery                                              | Omno (payments vendor) citing the 2022 national survey; card and SINPE figures match the La República report | Third party for cash, transfer and pay-on-delivery                    |
+| Cash-on-delivery share in 2026         | **Not found.** A Shopify guide gives 45% card, 25% SINPE Móvil, 12% cash on delivery with no source                                         | easyappsecom.com                                                                                             | Unverified; do not use                                                |
 
 **Reading.** SINPE Móvil is a habit for almost every adult and for tens of
 thousands of companies. Card-only checkouts (Amazon, Amazon Bazaar, Walmart's
@@ -183,26 +183,26 @@ it delivers, **only where the company's own page or reputable press says so.**
 
 ### 3.1 Local and regional marketplaces and classifieds
 
-| Player | What it is | Charges sellers | Charges shoppers | Speed | Source (read 24 Nov 2026) | Confidence |
-| --- | --- | --- | --- | --- | --- | --- |
-| **Walmart Marketplace (Costa Rica)** | "Lanzamiento oficial" of third-party sellers inside Walmart's site and app; items labelled "Exclusivo en línea"; TV, appliances, computing, mattresses; 24 more categories planned for 2026–2027 | Not published | Not published; pay by credit or debit card | Not published; **sellers deliver**, Walmart handles follow-up and after-sales | Delfino, 21 Jan 2026 (sponsored content) | Press, medium (sponsored) |
-| **Pyme Store BAC** | A bank's online catalogue and store builder for small businesses that already use its Compra Click payment button | Not published | Not published | Not published | Ticoslandia, Dec 2025; search result | Press, low |
-| **Pymexpress "Ecosistema Digital para Pyme"** | BCR, Correos, INS and Mastercard: inventory sync, e-invoice v4.4 connection, payments, WhatsApp/Facebook/Instagram integration, national delivery by Correos. Pilot with 350 small businesses | Not published | Not applicable | Not stated | La Nación, 18 Nov 2025 | Press |
-| **TicoMarket** | Online craft fair: jewellery, personal care, décor, clothing, toys, baked goods | 0% commission, membership from ₡2,500 a month or ₡25,000 a year (search result showing the site's own text; the page read did not show the fee) | Not stated | "Envíos a todo el país"; pay by SINPE Móvil | ticomarket.com | Low on the fee |
-| **Encuentra24** | Classifieds (vehicles, property, goods, services) | Posting free in vehicles, classifieds, technology, jobs (sponsored article); featured-ad prices not found | None (buyer contacts seller) | Not applicable | La Nación sponsored article; encuentra24.com | Press, low |
-| **Mercado Libre Costa Rica** | Classifieds-style site; the home page says publishing is free. Whether checkout, Mercado Pago or Mercado Envíos work in Costa Rica: **not verified** (help pages refused the request) | Not verified | Not verified | Not verified | mercadolibre.co.cr (403 on help pages) | Unverified |
-| **CostaRicaYA.com** | A Guatemalan marketplace that announced entry about three years ago | Not published | Not published | Not published | Revista Summa (old) | Low; may be inactive |
-| **HolaCompras** | Online store with 95 MEIC complaints for late, missing or duplicated orders, waits of up to six months | n/a | n/a | n/a | CRHoy | Press (already in the fact sheet) |
+| Player                                        | What it is                                                                                                                                                                                       | Charges sellers                                                                                                                                 | Charges shoppers                           | Speed                                                                         | Source (read 24 Nov 2026)                    | Confidence                        |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------- | -------------------------------------------- | --------------------------------- |
+| **Walmart Marketplace (Costa Rica)**          | "Lanzamiento oficial" of third-party sellers inside Walmart's site and app; items labelled "Exclusivo en línea"; TV, appliances, computing, mattresses; 24 more categories planned for 2026–2027 | Not published                                                                                                                                   | Not published; pay by credit or debit card | Not published; **sellers deliver**, Walmart handles follow-up and after-sales | Delfino, 21 Jan 2026 (sponsored content)     | Press, medium (sponsored)         |
+| **Pyme Store BAC**                            | A bank's online catalogue and store builder for small businesses that already use its Compra Click payment button                                                                                | Not published                                                                                                                                   | Not published                              | Not published                                                                 | Ticoslandia, Dec 2025; search result         | Press, low                        |
+| **Pymexpress "Ecosistema Digital para Pyme"** | BCR, Correos, INS and Mastercard: inventory sync, e-invoice v4.4 connection, payments, WhatsApp/Facebook/Instagram integration, national delivery by Correos. Pilot with 350 small businesses    | Not published                                                                                                                                   | Not applicable                             | Not stated                                                                    | La Nación, 18 Nov 2025                       | Press                             |
+| **TicoMarket**                                | Online craft fair: jewellery, personal care, décor, clothing, toys, baked goods                                                                                                                  | 0% commission, membership from ₡2,500 a month or ₡25,000 a year (search result showing the site's own text; the page read did not show the fee) | Not stated                                 | "Envíos a todo el país"; pay by SINPE Móvil                                   | ticomarket.com                               | Low on the fee                    |
+| **Encuentra24**                               | Classifieds (vehicles, property, goods, services)                                                                                                                                                | Posting free in vehicles, classifieds, technology, jobs (sponsored article); featured-ad prices not found                                       | None (buyer contacts seller)               | Not applicable                                                                | La Nación sponsored article; encuentra24.com | Press, low                        |
+| **Mercado Libre Costa Rica**                  | Classifieds-style site; the home page says publishing is free. Whether checkout, Mercado Pago or Mercado Envíos work in Costa Rica: **not verified** (help pages refused the request)            | Not verified                                                                                                                                    | Not verified                               | Not verified                                                                  | mercadolibre.co.cr (403 on help pages)       | Unverified                        |
+| **CostaRicaYA.com**                           | A Guatemalan marketplace that announced entry about three years ago                                                                                                                              | Not published                                                                                                                                   | Not published                              | Not published                                                                 | Revista Summa (old)                          | Low; may be inactive              |
+| **HolaCompras**                               | Online store with 95 MEIC complaints for late, missing or duplicated orders, waits of up to six months                                                                                           | n/a                                                                                                                                             | n/a                                        | n/a                                                                           | CRHoy                                        | Press (already in the fact sheet) |
 
 ### 3.2 Cross-border buying and couriers
 
-| Player | Charges shoppers | Speed | Source | Confidence |
-| --- | --- | --- | --- | --- |
-| **Amazon Bazaar** | Free shipping on orders of **₡10,000 or more**; a standard fee below (amount not stated); free returns within 15 days; international Visa, Mastercard, American Express only; "muchos de los productos cuestan menos de $10" | Two weeks or less | El Financiero (launch article, Nov 2025) | Press, high |
-| **Amazon (main store)** | Free shipping on eligible orders of US$35+ | Days to weeks | Repository fact sheet §8 | Medium |
-| **Temu, Shein** | Not re-checked; MEIC says neither has representation in Costa Rica, so claims fall on the consumer | About 15 days / about a month | Repository fact sheet; Teletica interview with MEIC | Medium |
-| **Aeropost (casillero)** | Freight US$5.99 per kg on the FLEX plan, US$3.99 per kg on Smart Weight, plus international and customs handling per parcel (search result showing the official page; the page itself returned an error) | Not stated | aeropost.com/SJO/es/casillero | Low–medium |
-| **Other casilleros** (JetBox, Aerocasillas, Tivi) | Same model: per-kilo freight plus a commission on value; Tivi lists US$10.50 for 1 kg | Not stated | jplcostarica.com comparison; tivicr.com | Third party |
+| Player                                            | Charges shoppers                                                                                                                                                                                                             | Speed                         | Source                                              | Confidence  |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------- | ----------- |
+| **Amazon Bazaar**                                 | Free shipping on orders of **₡10,000 or more**; a standard fee below (amount not stated); free returns within 15 days; international Visa, Mastercard, American Express only; "muchos de los productos cuestan menos de $10" | Two weeks or less             | El Financiero (launch article, Nov 2025)            | Press, high |
+| **Amazon (main store)**                           | Free shipping on eligible orders of US$35+                                                                                                                                                                                   | Days to weeks                 | Repository fact sheet §8                            | Medium      |
+| **Temu, Shein**                                   | Not re-checked; MEIC says neither has representation in Costa Rica, so claims fall on the consumer                                                                                                                           | About 15 days / about a month | Repository fact sheet; Teletica interview with MEIC | Medium      |
+| **Aeropost (casillero)**                          | Freight US$5.99 per kg on the FLEX plan, US$3.99 per kg on Smart Weight, plus international and customs handling per parcel (search result showing the official page; the page itself returned an error)                     | Not stated                    | aeropost.com/SJO/es/casillero                       | Low–medium  |
+| **Other casilleros** (JetBox, Aerocasillas, Tivi) | Same model: per-kilo freight plus a commission on value; Tivi lists US$10.50 for 1 kg                                                                                                                                        | Not stated                    | jplcostarica.com comparison; tivicr.com             | Third party |
 
 **Import tax: a conflict to resolve.** The fact sheet says the US$500
 exemption for online purchases ended on 1 May 2021. A La Nación explainer says
@@ -212,12 +212,12 @@ customer copy.
 
 ### 3.3 Supermarket and delivery apps that sell general goods
 
-| Player | Charges merchants | Speed | Source | Confidence |
-| --- | --- | --- | --- | --- |
-| **Uber Eats** | 25%–29% per order depending on plan (Uber Eats for Merchants data); more than 5,000 merchants | Minutes to hours; "Uber Speed" convenience orders in about 15 minutes | El Financiero, 15 Jul 2026; Uber newsroom | Press |
-| **PedidosYa** (incl. PedidosYa Market dark stores) | 25% base commission, negotiable by volume | Fast delivery; dark stores are its own stock | El Financiero, 15 Jul 2026 | Press |
-| **DiDi Food** | Did not disclose rates | Not stated | El Financiero, 15 Jul 2026 | Press |
-| **Walmart / Masxmenos / Maxi Palí online** | n/a (own stock) | Maxi Palí orders in about three hours (pick-up or delivery) | Delfino, Jun 2024 | Press, dated |
+| Player                                             | Charges merchants                                                                             | Speed                                                                 | Source                                    | Confidence   |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------- | ------------ |
+| **Uber Eats**                                      | 25%–29% per order depending on plan (Uber Eats for Merchants data); more than 5,000 merchants | Minutes to hours; "Uber Speed" convenience orders in about 15 minutes | El Financiero, 15 Jul 2026; Uber newsroom | Press        |
+| **PedidosYa** (incl. PedidosYa Market dark stores) | 25% base commission, negotiable by volume                                                     | Fast delivery; dark stores are its own stock                          | El Financiero, 15 Jul 2026                | Press        |
+| **DiDi Food**                                      | Did not disclose rates                                                                        | Not stated                                                            | El Financiero, 15 Jul 2026                | Press        |
+| **Walmart / Masxmenos / Maxi Palí online**         | n/a (own stock)                                                                               | Maxi Palí orders in about three hours (pick-up or delivery)           | Delfino, Jun 2024                         | Press, dated |
 
 Merchant complaints about these apps (El Financiero, 15 Jul 2026): the
 commission; no control over the courier; damaged orders with no one to claim
@@ -230,12 +230,12 @@ flow; customer prices rising (a ₡6,000 meal reaching ₡7,500).
 read 24 Nov 2026; prices **before 13% IVA**; requires prior authorisation by
 the Dirección de Pymes):
 
-| Monthly volume | GAM → GAM, first kg | GAM → rest of country, first kg | Rest → rest, first kg | Each extra kg (GAM routes) |
-| --- | ---: | ---: | ---: | ---: |
-| Emprendedor, 5–24 parcels | ₡2,005.53 | ₡2,741.70 | ₡3,478.93 | ₡1,061.95 |
-| Mi Pyme, 25–200 | ₡1,962.17 | ₡2,682.42 | ₡3,403.71 | ₡1,038.99 |
-| Premium, 201–450 | ₡1,853.76 | ₡2,534.22 | ₡3,215.66 | ₡981.59 |
-| Gold, 451+ | ₡1,756.19 | ₡2,400.84 | ₡3,046.38 | ₡929.92 |
+| Monthly volume            | GAM → GAM, first kg | GAM → rest of country, first kg | Rest → rest, first kg | Each extra kg (GAM routes) |
+| ------------------------- | ------------------: | ------------------------------: | --------------------: | -------------------------: |
+| Emprendedor, 5–24 parcels |           ₡2,005.53 |                       ₡2,741.70 |             ₡3,478.93 |                  ₡1,061.95 |
+| Mi Pyme, 25–200           |           ₡1,962.17 |                       ₡2,682.42 |             ₡3,403.71 |                  ₡1,038.99 |
+| Premium, 201–450          |           ₡1,853.76 |                       ₡2,534.22 |             ₡3,215.66 |                    ₡981.59 |
+| Gold, 451+                |           ₡1,756.19 |                       ₡2,400.84 |             ₡3,046.38 |                    ₡929.92 |
 
 Other Correos lines on the same page: light cargo 3–10 kg ₡3,982.30 flat on all
 routes; heavy express 10–20 kg ₡9,800 plus ₡1,000 per extra kg; home pickup
@@ -259,11 +259,11 @@ against ₡1,756–₡2,006 before IVA.
 
 **Private couriers:**
 
-| Courier | Published price | Source | Confidence |
-| --- | --- | --- | --- |
-| Moovin | Pickup ₡1,200 plus IVA for 3 parcels or fewer, free for 4 or more; delivery price shown only after entering the shipment | moovin.me terms page (about 642 days old) | Verified, dated |
-| Boxful | Free sign-up; compares Correos, Uber and Moovin rates; fulfilment warehouse at Parque Empresarial Blum, Guachipelín de Escazú, since December 2025; more than 5,000 small businesses across the region, 74% led by women. No prices published | Delfino, Mar 2026; El Financiero | Press |
-| Uber Direct / Uber Envíos | Available in Costa Rica; merchant price not published (intake form). Uber's driver-side tariff for Envíos: base ₡400, ₡240 per km, ₡40 per minute, minimum ₡855 | uber.com/es-CR blog; merchants.ubereats.com | Verified for driver tariff only; not a merchant price |
+| Courier                   | Published price                                                                                                                                                                                                                               | Source                                      | Confidence                                            |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------- |
+| Moovin                    | Pickup ₡1,200 plus IVA for 3 parcels or fewer, free for 4 or more; delivery price shown only after entering the shipment                                                                                                                      | moovin.me terms page (about 642 days old)   | Verified, dated                                       |
+| Boxful                    | Free sign-up; compares Correos, Uber and Moovin rates; fulfilment warehouse at Parque Empresarial Blum, Guachipelín de Escazú, since December 2025; more than 5,000 small businesses across the region, 74% led by women. No prices published | Delfino, Mar 2026; El Financiero            | Press                                                 |
+| Uber Direct / Uber Envíos | Available in Costa Rica; merchant price not published (intake form). Uber's driver-side tariff for Envíos: base ₡400, ₡240 per km, ₡40 per minute, minimum ₡855                                                                               | uber.com/es-CR blog; merchants.ubereats.com | Verified for driver tariff only; not a merchant price |
 
 ### 3.5 Social-media selling
 
@@ -287,32 +287,32 @@ and no one to answer for the delivery. Those match the repository's wedge.
 
 ### 4.1 How many small businesses
 
-| Figure | What it counts | Source | Confidence |
-| --- | --- | --- | --- |
-| 36,098 | Micro, small and medium firms **registered with MEIC** (May 2026), up 97% from 18,301 in May 2022; MEIC says mipymes are about 98% of all firms | El Observador, 28 Jun 2026, citing MEIC | Press |
-| 12,050 | People in MEIC's entrepreneur register (May 2026) | Same | Press |
-| 31,641 | "Active PYMES" at end of December 2025, +23% in a year (Expo PymeCR analysis; source data not named) | La República, 2 Jan 2026 | Press, method unknown |
-| About 140,000 | Small and medium firms, "INEC and MEIC data" | Microsoft press release, May 2025 | Low |
-| About 150,000 | Businesses affiliated to the card system | Tico Times, 17 Jun 2026, BCCR | Press |
-| Nearly 55,000 | Legal entities using SINPE Móvil | Same | Press |
-| 20,400 | Small businesses affiliated to Correos Pymexpress (2024) | La República, 6 May 2024 | Press, dated |
+| Figure        | What it counts                                                                                                                                  | Source                                  | Confidence            |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | --------------------- |
+| 36,098        | Micro, small and medium firms **registered with MEIC** (May 2026), up 97% from 18,301 in May 2022; MEIC says mipymes are about 98% of all firms | El Observador, 28 Jun 2026, citing MEIC | Press                 |
+| 12,050        | People in MEIC's entrepreneur register (May 2026)                                                                                               | Same                                    | Press                 |
+| 31,641        | "Active PYMES" at end of December 2025, +23% in a year (Expo PymeCR analysis; source data not named)                                            | La República, 2 Jan 2026                | Press, method unknown |
+| About 140,000 | Small and medium firms, "INEC and MEIC data"                                                                                                    | Microsoft press release, May 2025       | Low                   |
+| About 150,000 | Businesses affiliated to the card system                                                                                                        | Tico Times, 17 Jun 2026, BCCR           | Press                 |
+| Nearly 55,000 | Legal entities using SINPE Móvil                                                                                                                | Same                                    | Press                 |
+| 20,400        | Small businesses affiliated to Correos Pymexpress (2024)                                                                                        | La República, 6 May 2024                | Press, dated          |
 
 **How many sell online: not found.** The closest proxies are the 20,400
 Pymexpress clients (2024) and the 55,000 companies on SINPE Móvil.
 
 ### 4.2 What selling online costs them today
 
-| Cost line | Published figure | Source | Confidence |
-| --- | --- | --- | --- |
-| Card payments via Tilopay | 4.25% + US$0.35; no monthly fee | tilopay.com/tarifas | Verified |
-| SINPE Móvil via Tilopay | 2% + US$0.35 | Same | Verified |
-| Card instalments via Tilopay | BAC Tasa Cero 7.5% (3 months) to 14% (12 months); Credix 6% to 14%; each + US$0.35 | Same | Verified |
-| ONVO | Cards 3.9% + US$0.35, SINPE Móvil 1.5%, US$3 per payout | Repository fact sheet (third-party comparison, 20 Oct 2026); ONVO's own page refused the request | Low–medium |
-| SINPE Móvil person to person | Free up to ₡100,000 a day out and ₡2,000,000 a month in | Repository fact sheet, BCCR | Verified there |
-| Courier inside the GAM | ₡1,756–₡2,006 per first kilo before IVA (Correos volume tariff) | §3.4 | Verified |
-| Courier GAM to rest of country | ₡2,401–₡2,742 per first kilo before IVA | §3.4 | Verified |
-| Delivery-app commission | 25%–29% | §3.3 | Press |
-| Marketplace commission (local) | Not published by Walmart, BAC, Falabella-type players; TicoMarket 0% plus membership | §3.1 | Low |
+| Cost line                      | Published figure                                                                     | Source                                                                                           | Confidence     |
+| ------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | -------------- |
+| Card payments via Tilopay      | 4.25% + US$0.35; no monthly fee                                                      | tilopay.com/tarifas                                                                              | Verified       |
+| SINPE Móvil via Tilopay        | 2% + US$0.35                                                                         | Same                                                                                             | Verified       |
+| Card instalments via Tilopay   | BAC Tasa Cero 7.5% (3 months) to 14% (12 months); Credix 6% to 14%; each + US$0.35   | Same                                                                                             | Verified       |
+| ONVO                           | Cards 3.9% + US$0.35, SINPE Móvil 1.5%, US$3 per payout                              | Repository fact sheet (third-party comparison, 20 Oct 2026); ONVO's own page refused the request | Low–medium     |
+| SINPE Móvil person to person   | Free up to ₡100,000 a day out and ₡2,000,000 a month in                              | Repository fact sheet, BCCR                                                                      | Verified there |
+| Courier inside the GAM         | ₡1,756–₡2,006 per first kilo before IVA (Correos volume tariff)                      | §3.4                                                                                             | Verified       |
+| Courier GAM to rest of country | ₡2,401–₡2,742 per first kilo before IVA                                              | §3.4                                                                                             | Verified       |
+| Delivery-app commission        | 25%–29%                                                                              | §3.3                                                                                             | Press          |
+| Marketplace commission (local) | Not published by Walmart, BAC, Falabella-type players; TicoMarket 0% plus membership | §3.1                                                                                             | Low            |
 
 ### 4.3 What sellers complain about
 
@@ -334,15 +334,15 @@ about. The repository's plan to interview 10–15 target sellers
 
 ### 5.1 Commission tables
 
-| Marketplace | Commission | Minimum or fixed fee | Source | Confidence |
-| --- | --- | --- | --- | --- |
-| Amazon US | Most categories 15%; computers, consumer electronics, full-size appliances 8%; beauty and baby 8% up to US$10 then 15%; clothing 5%–17% by price; furniture 15% then 10% above US$200; grocery 8% up to US$15 then 15%; jewellery 20% then 5% | US$0.30 minimum; Professional plan US$39.99 a month or US$0.99 per item sold | sell.amazon.com/pricing | Verified |
-| Amazon Mexico | Most categories 15%; electronics and computers 10%; toys 8% up to MXN 300 then 15%; beauty and health 12% up to MXN 200 then 15%; food 12% up to MXN 500 then 15%; video consoles 8% | MXN 8 minimum; plan free for 12 months, then MXN 75 or MXN 600 a month by sales | vender.amazon.com.mx/precios | Verified |
-| Mercado Libre Mexico | "Clásica" about 8%–17%, "Premium" about 11%–21.5% by category (sources disagree) | Fixed fee per unit under MXN 299: about MXN 25–37 | Tiendanube, Profitos and other seller blogs | Third party |
-| Shopee Brazil | From March 2026: 20% + R$4.50 up to R$79.99; 14% + R$16–R$20 above; individual sellers pay more | Included | Priceva, Ecommerce na Prática and others; sources disagree | Third party |
-| Falabella (Chile) | A commission per category, in a table shown only after registering | Logistics fee per unit, by size and by whether the price is below or above CLP 19,990 | falabella.com "cuánto cuesta vender" | Verified that the table is not public |
-| Uber Eats / PedidosYa in Costa Rica | 25%–29% / 25% base | — | El Financiero, 15 Jul 2026 | Press |
-| **Repository today** | 8% (electronics, groceries) to 15% (fashion), default 12% | ₡150 floor per unit; no monthly fee in the pilot | `packages/core/src/fees.ts` | Repository |
+| Marketplace                         | Commission                                                                                                                                                                                                                                    | Minimum or fixed fee                                                                  | Source                                                     | Confidence                            |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------- |
+| Amazon US                           | Most categories 15%; computers, consumer electronics, full-size appliances 8%; beauty and baby 8% up to US$10 then 15%; clothing 5%–17% by price; furniture 15% then 10% above US$200; grocery 8% up to US$15 then 15%; jewellery 20% then 5% | US$0.30 minimum; Professional plan US$39.99 a month or US$0.99 per item sold          | sell.amazon.com/pricing                                    | Verified                              |
+| Amazon Mexico                       | Most categories 15%; electronics and computers 10%; toys 8% up to MXN 300 then 15%; beauty and health 12% up to MXN 200 then 15%; food 12% up to MXN 500 then 15%; video consoles 8%                                                          | MXN 8 minimum; plan free for 12 months, then MXN 75 or MXN 600 a month by sales       | vender.amazon.com.mx/precios                               | Verified                              |
+| Mercado Libre Mexico                | "Clásica" about 8%–17%, "Premium" about 11%–21.5% by category (sources disagree)                                                                                                                                                              | Fixed fee per unit under MXN 299: about MXN 25–37                                     | Tiendanube, Profitos and other seller blogs                | Third party                           |
+| Shopee Brazil                       | From March 2026: 20% + R$4.50 up to R$79.99; 14% + R$16–R$20 above; individual sellers pay more                                                                                                                                               | Included                                                                              | Priceva, Ecommerce na Prática and others; sources disagree | Third party                           |
+| Falabella (Chile)                   | A commission per category, in a table shown only after registering                                                                                                                                                                            | Logistics fee per unit, by size and by whether the price is below or above CLP 19,990 | falabella.com "cuánto cuesta vender"                       | Verified that the table is not public |
+| Uber Eats / PedidosYa in Costa Rica | 25%–29% / 25% base                                                                                                                                                                                                                            | —                                                                                     | El Financiero, 15 Jul 2026                                 | Press                                 |
+| **Repository today**                | 8% (electronics, groceries) to 15% (fashion), default 12%                                                                                                                                                                                     | ₡150 floor per unit; no monthly fee in the pilot                                      | `packages/core/src/fees.ts`                                | Repository                            |
 
 **Reading.** For general goods, 8%–15% is the published norm at the two
 largest marketplaces where the tables could be read. Delivery apps charge
@@ -353,27 +353,27 @@ fulfilment fee sees the total as cheaper than the 25%–29% apps or the
 
 ### 5.2 Fulfilment and storage fees
 
-| Marketplace | Fulfilment per unit | Storage | Source | Confidence |
-| --- | --- | --- | --- | --- |
-| Amazon Mexico (FBA) | Most categories, price under MXN 150: envelope 0–0.10 kg MXN 27.00; standard 0–0.10 kg MXN 28.00; standard 0.50–0.60 kg MXN 28.25; standard 0–0.10 kg at price MXN 499+: MXN 61.80. Health, food, drinks under MXN 150: MXN 4.50–5.00 | MXN 0.36 per dm³ a month (Jan–Sep), 0.53 (Oct–Dec); large 0.19 / 0.43 | vender.amazon.com.mx/precios | Verified |
-| Amazon US (FBA) | Small standard about US$3.06–3.31; large standard 1–1.5 lb about US$4.90–5.52 (2026) | About US$0.78–0.87 per cubic foot a month (Jan–Sep), US$2.40 (Oct–Dec); aged-stock surcharges | Webgility, RepricerExpress, Red Stag | Third party |
-| Falabella (Chile) | Per unit, by size and price band; part subsidised; returns paid in full by the seller | Not stated | falabella.com | Verified (structure only) |
-| Boxful (Costa Rica) | Not published | Not published | Delfino, Mar 2026 | Press |
-| **Repository today** | ₡900 / ₡1,400 / ₡2,400 / ₡4,900 by size tier | No storage fee in the pilot; proposed for launch | `fees.ts`; pricing document | Repository |
+| Marketplace          | Fulfilment per unit                                                                                                                                                                                                                   | Storage                                                                                       | Source                               | Confidence                |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------- |
+| Amazon Mexico (FBA)  | Most categories, price under MXN 150: envelope 0–0.10 kg MXN 27.00; standard 0–0.10 kg MXN 28.00; standard 0.50–0.60 kg MXN 28.25; standard 0–0.10 kg at price MXN 499+: MXN 61.80. Health, food, drinks under MXN 150: MXN 4.50–5.00 | MXN 0.36 per dm³ a month (Jan–Sep), 0.53 (Oct–Dec); large 0.19 / 0.43                         | vender.amazon.com.mx/precios         | Verified                  |
+| Amazon US (FBA)      | Small standard about US$3.06–3.31; large standard 1–1.5 lb about US$4.90–5.52 (2026)                                                                                                                                                  | About US$0.78–0.87 per cubic foot a month (Jan–Sep), US$2.40 (Oct–Dec); aged-stock surcharges | Webgility, RepricerExpress, Red Stag | Third party               |
+| Falabella (Chile)    | Per unit, by size and price band; part subsidised; returns paid in full by the seller                                                                                                                                                 | Not stated                                                                                    | falabella.com                        | Verified (structure only) |
+| Boxful (Costa Rica)  | Not published                                                                                                                                                                                                                         | Not published                                                                                 | Delfino, Mar 2026                    | Press                     |
+| **Repository today** | ₡900 / ₡1,400 / ₡2,400 / ₡4,900 by size tier                                                                                                                                                                                          | No storage fee in the pilot; proposed for launch                                              | `fees.ts`; pricing document          | Repository                |
 
 No conversion of pesos to colones is made here: no exchange-rate source for the
 peso was read.
 
 ### 5.3 Free-delivery thresholds and delivery fees
 
-| Marketplace | Threshold | Source | Confidence |
-| --- | --- | --- | --- |
-| **Amazon Bazaar, Costa Rica** | **₡10,000** | El Financiero | Press, high |
-| Amazon, Costa Rica | US$35 on eligible orders | Repository fact sheet | Medium |
-| Mercado Libre Mexico | MXN 299 (mandatory free shipping on new items above it) | Telediario; UpSeller | Third party |
-| Mercado Libre Chile / Colombia | CLP 19,990 / COP 60,000 (Nov 2025) | UpSeller | Third party |
-| Mercado Libre Argentina | Lowered from ARS 33,000 to ARS 15,000 (2026) | El Cronista; Forbes Argentina | Press |
-| **Repository today** | ₡25,000 GAM core (₡1,500 below); ₡35,000 GAM extended (₡2,000 below) | `docs/01-product/pricing-and-fees.md` | Repository |
+| Marketplace                    | Threshold                                                            | Source                                | Confidence  |
+| ------------------------------ | -------------------------------------------------------------------- | ------------------------------------- | ----------- |
+| **Amazon Bazaar, Costa Rica**  | **₡10,000**                                                          | El Financiero                         | Press, high |
+| Amazon, Costa Rica             | US$35 on eligible orders                                             | Repository fact sheet                 | Medium      |
+| Mercado Libre Mexico           | MXN 299 (mandatory free shipping on new items above it)              | Telediario; UpSeller                  | Third party |
+| Mercado Libre Chile / Colombia | CLP 19,990 / COP 60,000 (Nov 2025)                                   | UpSeller                              | Third party |
+| Mercado Libre Argentina        | Lowered from ARS 33,000 to ARS 15,000 (2026)                         | El Cronista; Forbes Argentina         | Press       |
+| **Repository today**           | ₡25,000 GAM core (₡1,500 below); ₡35,000 GAM extended (₡2,000 below) | `docs/01-product/pricing-and-fees.md` | Repository  |
 
 **Reading.** The free-delivery threshold is the most visible number a
 shopper compares. Amazon Bazaar's ₡10,000 is two and a half times lower than
@@ -395,21 +395,21 @@ for an ordinary day; monthly figures are the "genérico" monthly amounts.
 The MTSS calls the list "una guía ilustrativa": the right category depends on
 the actual tasks.
 
-| Role in this business | Closest MTSS occupation | Category | 2026 minimum |
-| --- | --- | --- | ---: |
-| Delivery driver (car or van) | Conductor de vehículo liviano | TOSC | ₡13,523.69 a day (= ₡405,710.70 at 30 days) |
-| Delivery driver (truck) | Conductor de vehículo pesado | TOC | ₡13,991.86 a day |
-| Motorbike courier | Mensajero (no motorbike-specific occupation in the list) | TONCG | ₡373,092.30 a month |
-| Warehouse worker | Bodeguero (peón) | TONCG | ₡373,092.30 a month |
-| Warehouse lead | Bodeguero (encargado) | TOSCG | ₡405,710.70 a month |
-| Packer | Empacador, etiquetador (manual) | TONC | ₡12,436.41 a day |
-| Inventory scanner | Escaneador de inventarios (hand held) | TOSCG | ₡405,710.70 a month |
-| Forklift driver | Montacarguista | TOSC | ₡13,523.69 a day |
-| Customer-service agent | Telefonista or Oficinista (general); no call-centre occupation in the list | TOSCG | ₡405,710.70 a month |
-| Cash handler / collector | Cajero / Cobrador | TOCG / TOSCG | ₡419,755.80 / ₡405,710.70 a month |
-| Sales agent (seller recruitment) | Agente de ventas | TOCG | ₡419,755.80 a month |
-| Social-media manager | Gestor de redes sociales: monitors and replies TOSCG ₡405,710.70; reads and interprets data TOCG ₡419,755.80; designs final artwork TOE ₡16,244.50 a day | — | as stated |
-| University graduate | Bachiller ₡664,078.07; Licenciado ₡796,921.00 a month | — | as stated |
+| Role in this business            | Closest MTSS occupation                                                                                                                                  | Category     |                                2026 minimum |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------: |
+| Delivery driver (car or van)     | Conductor de vehículo liviano                                                                                                                            | TOSC         | ₡13,523.69 a day (= ₡405,710.70 at 30 days) |
+| Delivery driver (truck)          | Conductor de vehículo pesado                                                                                                                             | TOC          |                            ₡13,991.86 a day |
+| Motorbike courier                | Mensajero (no motorbike-specific occupation in the list)                                                                                                 | TONCG        |                         ₡373,092.30 a month |
+| Warehouse worker                 | Bodeguero (peón)                                                                                                                                         | TONCG        |                         ₡373,092.30 a month |
+| Warehouse lead                   | Bodeguero (encargado)                                                                                                                                    | TOSCG        |                         ₡405,710.70 a month |
+| Packer                           | Empacador, etiquetador (manual)                                                                                                                          | TONC         |                            ₡12,436.41 a day |
+| Inventory scanner                | Escaneador de inventarios (hand held)                                                                                                                    | TOSCG        |                         ₡405,710.70 a month |
+| Forklift driver                  | Montacarguista                                                                                                                                           | TOSC         |                            ₡13,523.69 a day |
+| Customer-service agent           | Telefonista or Oficinista (general); no call-centre occupation in the list                                                                               | TOSCG        |                         ₡405,710.70 a month |
+| Cash handler / collector         | Cajero / Cobrador                                                                                                                                        | TOCG / TOSCG |           ₡419,755.80 / ₡405,710.70 a month |
+| Sales agent (seller recruitment) | Agente de ventas                                                                                                                                         | TOCG         |                         ₡419,755.80 a month |
+| Social-media manager             | Gestor de redes sociales: monitors and replies TOSCG ₡405,710.70; reads and interprets data TOCG ₡419,755.80; designs final artwork TOE ₡16,244.50 a day | —            |                                   as stated |
+| University graduate              | Bachiller ₡664,078.07; Licenciado ₡796,921.00 a month                                                                                                    | —            |                                   as stated |
 
 **Increase for 2027:** 1.70% for all private-sector categories from
 1 Jan 2027 (Técnico Medio 2.58768%; domestic work pending). MTSS communiqué
@@ -424,25 +424,25 @@ the choice between employee and contractor (repository compliance document
 
 ### 6.2 Employer social charges and mandatory extras
 
-| Item | Figure | Source | Confidence |
-| --- | --- | --- | --- |
-| CCSS and related employer charges | 26.83% in total: SEM 9.25, IVM 5.58, FODESAF 5.00, INA 1.50, IMAS 0.50, Banco Popular 0.25 + 0.25, FCL 1.50, OPC 2.00, INS work-risk 1.00 (reference) | Alegra, updated 7 Oct 2026 | Third party, matches the repository's 26.83% |
-| Small-employer exception | Non-agricultural employers with fewer than 5 permanent workers do not pay INA (1.50%) | Same | Third party; **for the accountant to confirm** |
-| INS work-risk premium | Varies by activity; the 1% is a reference, can reach about 6% in construction and security | Same | Third party; get an INS quote (repository open question 19) |
-| Worker's share | 10.83% (repository) / 10.5% (FiniquitoJusto) | Repository fact sheet; finiquitojusto.com | Conflict; **for the accountant to confirm** |
-| Aguinaldo (13th month) | One twelfth of the year's pay (1 Dec–30 Nov) | Aglegal; El Financiero calculator | Third party; **for the accountant to confirm** |
-| Vacation | Two weeks per 50 weeks worked | FiniquitoJusto | Third party; **for the lawyer to confirm** |
-| Severance and notice | Severance only on dismissal without cause, capped at 8 years; scale in Código de Trabajo art. 29 | Alegra; FiniquitoJusto | Third party; **for the lawyer to confirm** |
+| Item                              | Figure                                                                                                                                                | Source                                    | Confidence                                                  |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------- |
+| CCSS and related employer charges | 26.83% in total: SEM 9.25, IVM 5.58, FODESAF 5.00, INA 1.50, IMAS 0.50, Banco Popular 0.25 + 0.25, FCL 1.50, OPC 2.00, INS work-risk 1.00 (reference) | Alegra, updated 7 Oct 2026                | Third party, matches the repository's 26.83%                |
+| Small-employer exception          | Non-agricultural employers with fewer than 5 permanent workers do not pay INA (1.50%)                                                                 | Same                                      | Third party; **for the accountant to confirm**              |
+| INS work-risk premium             | Varies by activity; the 1% is a reference, can reach about 6% in construction and security                                                            | Same                                      | Third party; get an INS quote (repository open question 19) |
+| Worker's share                    | 10.83% (repository) / 10.5% (FiniquitoJusto)                                                                                                          | Repository fact sheet; finiquitojusto.com | Conflict; **for the accountant to confirm**                 |
+| Aguinaldo (13th month)            | One twelfth of the year's pay (1 Dec–30 Nov)                                                                                                          | Aglegal; El Financiero calculator         | Third party; **for the accountant to confirm**              |
+| Vacation                          | Two weeks per 50 weeks worked                                                                                                                         | FiniquitoJusto                            | Third party; **for the lawyer to confirm**                  |
+| Severance and notice              | Severance only on dismissal without cause, capped at 8 years; scale in Código de Trabajo art. 29                                                      | Alegra; FiniquitoJusto                    | Third party; **for the lawyer to confirm**                  |
 
 **Estimate, fully loaded monthly cost of one employee** (salary × (1 + 26.83%
 charges + 8.33% aguinaldo + about 4% vacation), before severance provision,
 uniforms and insurance above the reference rate):
 
-| Role | 2026 minimum | Estimated monthly cost | Range |
-| --- | ---: | ---: | --- |
-| Warehouse worker or motorbike courier (TONCG) | ₡373,092 | about ₡519,000 | ₡500,000–₡560,000 |
-| Driver, customer service, warehouse lead (TOSC/TOSCG) | ₡405,711 | about ₡565,000 | ₡545,000–₡610,000 |
-| Sales agent or cashier (TOCG) | ₡419,756 | about ₡584,000 | ₡565,000–₡630,000 |
+| Role                                                  | 2026 minimum | Estimated monthly cost | Range             |
+| ----------------------------------------------------- | -----------: | ---------------------: | ----------------- |
+| Warehouse worker or motorbike courier (TONCG)         |     ₡373,092 |         about ₡519,000 | ₡500,000–₡560,000 |
+| Driver, customer service, warehouse lead (TOSC/TOSCG) |     ₡405,711 |         about ₡565,000 | ₡545,000–₡610,000 |
+| Sales agent or cashier (TOCG)                         |     ₡419,756 |         about ₡584,000 | ₡565,000–₡630,000 |
 
 These are **estimates** at the legal minimum; the market usually pays more. To
 verify: ask the accountant for a payroll quote for each role.
@@ -454,14 +454,14 @@ plausible but unverified.
 
 ### 6.3 Market pay above the minimum (low confidence)
 
-| Role | Figure | Source | Confidence |
-| --- | --- | --- | --- |
-| Average formal salaried worker | ₡822,699.50 a month (May 2026) | BCCR figure in a search result | Press-level |
-| Customer service | 80% earn ₡354,551–₡1,020,750 gross a month; average ₡657,336 | Paylab (search result; page refused the request) | Third party, low |
-| Logistics customer service (one job advert) | ₡405,710 a month, Santa Ana, 1 year's experience | Magneto job listing, 21 Sep 2026 | One advert |
-| Logistics controller (closest to operations lead) | ₡431,294–₡1,020,249 gross a month; about ₡765,690 at 5 years | Paylab (fewer than 20 respondents) | Third party, low |
-| Logistics director | ₡573,449–₡2,780,767 gross a month | Paylab | Third party, low |
-| Seller-success person, marketing person | **Not found** | — | — |
+| Role                                              | Figure                                                       | Source                                           | Confidence       |
+| ------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------ | ---------------- |
+| Average formal salaried worker                    | ₡822,699.50 a month (May 2026)                               | BCCR figure in a search result                   | Press-level      |
+| Customer service                                  | 80% earn ₡354,551–₡1,020,750 gross a month; average ₡657,336 | Paylab (search result; page refused the request) | Third party, low |
+| Logistics customer service (one job advert)       | ₡405,710 a month, Santa Ana, 1 year's experience             | Magneto job listing, 21 Sep 2026                 | One advert       |
+| Logistics controller (closest to operations lead) | ₡431,294–₡1,020,249 gross a month; about ₡765,690 at 5 years | Paylab (fewer than 20 respondents)               | Third party, low |
+| Logistics director                                | ₡573,449–₡2,780,767 gross a month                            | Paylab                                           | Third party, low |
+| Seller-success person, marketing person           | **Not found**                                                | —                                                | —                |
 
 PwC's SEIS study found 86% of companies adjusted salaries between
 November 2025 and April 2026 and early staff turnover of 26% (Revista Summa,
@@ -469,17 +469,17 @@ headline only).
 
 ### 6.4 Fuel, vehicles, rent, exchange rate
 
-| Item | Figure | Source | Confidence |
-| --- | --- | --- | --- |
-| Fuel, November 2026 | Regular about ₡807–808 a litre, super ₡805–806, diesel ₡807–808 (sources differ by ₡1–2) | Repretel; Diario Extra (ARESEP approval) | Press |
-| Fuel, December 2026 | Government proposed a cut of up to ₡103 a litre; not yet in force | Infobae, 20 Nov 2026 | Press |
-| Small motorbike | One used 2025 Honda Navi advertised at ₡790,000 (May 2026); **no dealer list price found** | Encuentra24 listing | One advert |
-| Small car or van | **Not found** | — | — |
-| Industrial warehouse rent, GAM | Listings: Coyol US$8.00–8.50 per m² a month plus about US$0.85–0.89 maintenance; Heredia US$7.25–9.00; Alajuela about US$8 including security and maintenance (units of 400–5,200 m²) | Encuentra24 listings, 2026 | Listings, not transactions |
-| Industrial market | Vacancy below 1%; net absorption about 288,000 m² in a year; availability rising in Coyol | Delfino, May 2026, citing CBRE | Press |
-| Older benchmark | Alajuela asking rent US$7.30 per m² (Q1 2024), vacancy under 6% | Statista summary of Cushman & Wakefield | Third party |
-| Small spaces (50–200 m²) | **Not found**; small units usually cost more per m² | — | Estimate: US$8–14 per m²; verify with three listings near the first sellers |
-| Exchange rate | Monex low ₡444.45 on 19 Nov 2026; bank selling rates ₡450–₡452 on 18 Nov 2026; down 10.6% in 2026 | El Observador; Diario Extra; Nación | Press |
+| Item                           | Figure                                                                                                                                                                                | Source                                   | Confidence                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------- |
+| Fuel, November 2026            | Regular about ₡807–808 a litre, super ₡805–806, diesel ₡807–808 (sources differ by ₡1–2)                                                                                              | Repretel; Diario Extra (ARESEP approval) | Press                                                                       |
+| Fuel, December 2026            | Government proposed a cut of up to ₡103 a litre; not yet in force                                                                                                                     | Infobae, 20 Nov 2026                     | Press                                                                       |
+| Small motorbike                | One used 2025 Honda Navi advertised at ₡790,000 (May 2026); **no dealer list price found**                                                                                            | Encuentra24 listing                      | One advert                                                                  |
+| Small car or van               | **Not found**                                                                                                                                                                         | —                                        | —                                                                           |
+| Industrial warehouse rent, GAM | Listings: Coyol US$8.00–8.50 per m² a month plus about US$0.85–0.89 maintenance; Heredia US$7.25–9.00; Alajuela about US$8 including security and maintenance (units of 400–5,200 m²) | Encuentra24 listings, 2026               | Listings, not transactions                                                  |
+| Industrial market              | Vacancy below 1%; net absorption about 288,000 m² in a year; availability rising in Coyol                                                                                             | Delfino, May 2026, citing CBRE           | Press                                                                       |
+| Older benchmark                | Alajuela asking rent US$7.30 per m² (Q1 2024), vacancy under 6%                                                                                                                       | Statista summary of Cushman & Wakefield  | Third party                                                                 |
+| Small spaces (50–200 m²)       | **Not found**; small units usually cost more per m²                                                                                                                                   | —                                        | Estimate: US$8–14 per m²; verify with three listings near the first sellers |
+| Exchange rate                  | Monex low ₡444.45 on 19 Nov 2026; bank selling rates ₡450–₡452 on 18 Nov 2026; down 10.6% in 2026                                                                                     | El Observador; Diario Extra; Nación      | Press                                                                       |
 
 **Consequence for the fee schedule (repository).** `fees.ts` charges ₡180 as
 the card fixed fee, "₡180 ≈ US$0.35" at an assumed ₡515 per dollar. At ₡449,
@@ -501,18 +501,18 @@ open question 24).
 
 ### 7.1 Reach by channel
 
-| Channel | Reach | Source | Confidence |
-| --- | --- | --- | --- |
-| WhatsApp | 96% of adults with a mobile phone | CICOM-UCR, "Nuestras apps de cada día 2025", phone survey of 792 adults, August 2025 (UCR, 27 May 2026) | Verified (university survey) |
-| Facebook | 80% | Same | Verified |
-| YouTube | 77% | Same | Verified |
-| TikTok | 58%, fastest growing; 35–54 year-olds use it about as much as 18–34 | CICOM-UCR (Mediápolis page) | Verified |
-| Instagram | 47% | Same | Verified |
-| X / LinkedIn | 15% / 11% | Same | Verified |
-| At least one social network | 90% | Same | Verified |
-| Facebook / Instagram / Messenger ad reach | 3.50 million (67.8%) / 2.65 million (51.4%) / 1.95 million (37.8%) | DataReportal, 8 Nov 2025 | Third party (platform ad tools) |
-| Radio | 61% listened in the last 30 days on traditional sets; 79.8% including online; 31% of listeners spend 1–3 hours a day | Kantar IBOPE Media TGI Costa Rica 2025 R3 (Delfino, 14 Feb 2026) | Press |
-| Advertisers on radio | More than 1,700 used radio with other media; 1,056 used only radio (2025) | Same | Press |
+| Channel                                   | Reach                                                                                                                | Source                                                                                                  | Confidence                      |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| WhatsApp                                  | 96% of adults with a mobile phone                                                                                    | CICOM-UCR, "Nuestras apps de cada día 2025", phone survey of 792 adults, August 2025 (UCR, 27 May 2026) | Verified (university survey)    |
+| Facebook                                  | 80%                                                                                                                  | Same                                                                                                    | Verified                        |
+| YouTube                                   | 77%                                                                                                                  | Same                                                                                                    | Verified                        |
+| TikTok                                    | 58%, fastest growing; 35–54 year-olds use it about as much as 18–34                                                  | CICOM-UCR (Mediápolis page)                                                                             | Verified                        |
+| Instagram                                 | 47%                                                                                                                  | Same                                                                                                    | Verified                        |
+| X / LinkedIn                              | 15% / 11%                                                                                                            | Same                                                                                                    | Verified                        |
+| At least one social network               | 90%                                                                                                                  | Same                                                                                                    | Verified                        |
+| Facebook / Instagram / Messenger ad reach | 3.50 million (67.8%) / 2.65 million (51.4%) / 1.95 million (37.8%)                                                   | DataReportal, 8 Nov 2025                                                                                | Third party (platform ad tools) |
+| Radio                                     | 61% listened in the last 30 days on traditional sets; 79.8% including online; 31% of listeners spend 1–3 hours a day | Kantar IBOPE Media TGI Costa Rica 2025 R3 (Delfino, 14 Feb 2026)                                        | Press                           |
+| Advertisers on radio                      | More than 1,700 used radio with other media; 1,056 used only radio (2025)                                            | Same                                                                                                    | Press                           |
 
 ### 7.2 Advertising costs
 
@@ -530,16 +530,16 @@ open question 24).
 
 ### 7.3 Fairs, chambers and networks
 
-| Network | What it is | Figures | Source | Confidence |
-| --- | --- | --- | --- | --- |
-| EXPOPYME Oficial (MEIC) | Government fair for small businesses | 235 businesses at Antigua Aduana, 2026; more than 15,000 visitors; regional editions of 40 businesses each (e.g. Quepos, 24–25 Oct); applicants need packaged, labelled products and health registrations | Delfino Apr 2026; La República; newsinamerica | Press |
-| Expo Pyme CR | Private fair, 4th edition | 3–4 Oct 2026, Parque La Libertad, Desamparados, free entry | Delfino, May 2026 | Press |
-| Feria Nacional de Economía Social y Solidaria | National fair | 4–6 Dec 2026, Parque Nacional, San José | Search result | Press, low |
-| Impulso (women-led businesses) | Free fair | 11–12 Jul 2026, Parque Viva | CRHoy (sponsored) | Low |
-| esencial COSTA RICA (country brand) | Licence for companies and products | More than 700–750 licensed companies (2024–2025); licensing digitised Sept 2025 | La República; Delfino | Press |
-| MEIC registers | Mipyme and entrepreneur registers; training | 36,098 firms and 12,050 entrepreneurs; 5,890 people trained in a year | El Observador, 28 Jun 2026 | Press |
-| Sistema de Banca para el Desarrollo | Development credit | ₡1.94 trillion in 492,177 loans since May 2022; average ₡3.94 million | Same | Press |
-| Chambers of commerce, craft associations, farmers' markets | **Membership costs and member counts not found** | — | — | — |
+| Network                                                    | What it is                                       | Figures                                                                                                                                                                                                   | Source                                        | Confidence |
+| ---------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ---------- |
+| EXPOPYME Oficial (MEIC)                                    | Government fair for small businesses             | 235 businesses at Antigua Aduana, 2026; more than 15,000 visitors; regional editions of 40 businesses each (e.g. Quepos, 24–25 Oct); applicants need packaged, labelled products and health registrations | Delfino Apr 2026; La República; newsinamerica | Press      |
+| Expo Pyme CR                                               | Private fair, 4th edition                        | 3–4 Oct 2026, Parque La Libertad, Desamparados, free entry                                                                                                                                                | Delfino, May 2026                             | Press      |
+| Feria Nacional de Economía Social y Solidaria              | National fair                                    | 4–6 Dec 2026, Parque Nacional, San José                                                                                                                                                                   | Search result                                 | Press, low |
+| Impulso (women-led businesses)                             | Free fair                                        | 11–12 Jul 2026, Parque Viva                                                                                                                                                                               | CRHoy (sponsored)                             | Low        |
+| esencial COSTA RICA (country brand)                        | Licence for companies and products               | More than 700–750 licensed companies (2024–2025); licensing digitised Sept 2025                                                                                                                           | La República; Delfino                         | Press      |
+| MEIC registers                                             | Mipyme and entrepreneur registers; training      | 36,098 firms and 12,050 entrepreneurs; 5,890 people trained in a year                                                                                                                                     | El Observador, 28 Jun 2026                    | Press      |
+| Sistema de Banca para el Desarrollo                        | Development credit                               | ₡1.94 trillion in 492,177 loans since May 2022; average ₡3.94 million                                                                                                                                     | Same                                          | Press      |
+| Chambers of commerce, craft associations, farmers' markets | **Membership costs and member counts not found** | —                                                                                                                                                                                                         | —                                             | —          |
 
 ### 7.4 The rules on promotions, sweepstakes and marketing messages
 

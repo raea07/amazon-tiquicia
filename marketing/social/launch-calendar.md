@@ -4,7 +4,7 @@
 **Conclusion 1.** The posts teach how Yuntera works (cutoff, paying, the delivery code, returns) instead of announcing a price; nothing in them is a promotion unless the owner chooses one.
 **Conclusion 2.** Week 3 and 4 add sellers: half the posts recruit shops, because a marketplace with few shops cannot keep the shopper.
 **Conclusion 3.** Each post's code counts replies by hand until the product records where a shopper came from.
-**The owner must decide** the question at the end (the start day). Who posts and answers is README decision 2; a launch offer is the pricing proposal's decision 5.
+**The owner must decide** the start day (D43). Who posts and answers is D29, and a launch offer is D25; all three are in the [owner decisions](../../docs/00-strategy/owner-decisions.md) list.
 
 **Gates:** G1, G1b, G2 to G4, G6, G7, G9, G12 before day 1. The closed pilot has no public posts (go-to-market §7.1); this calendar starts on the open-launch day, called **L**. Paid boosting waits for the pilot's exit test and then a ₡25,000 test (market research §7.2).
 
@@ -26,7 +26,7 @@ Sources: WhatsApp, Facebook and YouTube from the CICOM-UCR phone survey of 792 a
 
 1. One fact per post, and it must be true on the day it is posted. Re-read the zone in the console the morning of each post.
 2. Name the cantons whenever delivery is mentioned. Never "toda la GAM".
-3. No offer, discount, draw or contest unless the owner chooses one (shopper offer: pricing proposal, decision 5; draws: go-to-market, decision 5). If one is added, the post states start and end dates, quantity if limited, every restriction and the former price (Decreto 37899-MEIC art. 55 i, j).
+3. No offer, discount, draw or contest unless the owner chooses one (shopper offer: D25; draws: D41). If one is added, the post states start and end dates, quantity if limited, every restriction and the former price (Decreto 37899-MEIC art. 55 i, j).
 4. No customer, seller or driver shown or quoted without written permission, kept on file.
 5. Replies to comments: within the customer-service targets, in usted; anything about an order moves to WhatsApp or the order page. Never ask for, or write, a delivery code, an address or a phone number in a comment.
 6. A paid partnership or a post a seller paid for says so; Ley 10946 (from about June 2027) adds advertising transparency, and today's rule is for the lawyer to confirm.
@@ -43,7 +43,7 @@ FB = Facebook, IG = Instagram, TT = TikTok, WA = WhatsApp Status. Days count fro
 | RED-S1-01 | L+0 | FB, IG, WA | Announce, with the cantons | Desde hoy entregamos en [cantones]. Tiendas de Costa Rica, con repartidores propios. Pida de lunes a sábado antes de las 2 de la tarde y, por lo general, le llega el siguiente día de entrega. La fecha exacta la ve antes de pagar. | From today we deliver in [cantons]. Costa Rican shops, with our own drivers. Order Monday to Saturday before 2 p.m. and it usually arrives the next delivery day. You see the exact date before you pay. | Outline map of the cantons with their names, the logo; no photograph                                   |
 | RED-S1-02 | L+1 | TT         | Show the order path        | (Voz) Así funciona: usted busca, ve la fecha y el total antes de pagar, paga con SINPE Móvil o al recibir, y el repartidor le pide su código.                                                                                         | (Voice) Here's how it works: you search, see the date and total before you pay, pay by SINPE Móvil or on delivery, and the driver asks for your code.                                                    | 20–30 s screen recording of the shop on a phone with demo products only; captions on screen in Spanish |
 | RED-S1-03 | L+2 | FB, IG     | The cutoff                 | ¿Lo ocupa para el jueves? Pídalo el miércoles antes de las 2 de la tarde. La fecha exacta aparece en cada producto antes de pagar.                                                                                                    | Need it by Thursday? Order on Wednesday before 2 p.m. The exact date shows on every product before you pay.                                                                                              | A wall clock at 1:45 p.m. beside a phone; plain background                                             |
-| RED-S1-04 | L+4 | FB, IG, WA | Delivery charge, plainly   | Envío en [cantones]: ₡1 500. Gratis en pedidos desde ₡25 000. Lo ve en el producto, no al final.                                                                                                                                      | Delivery in [cantons]: ₡1,500. Free on orders from ₡25,000. You see it on the product, not at the end.                                                                                                   | The two amounts large, the cantons below                                                               |
+| RED-S1-04 | L+4 | FB, IG, WA | Delivery charge, plainly   | Envío en [cantones]: ₡1 500. Gratis en pedidos desde ₡25 000. Lo ve en el producto, no al final.                                                                                                                                      | Delivery in [cantons]: ₡1 500. Free on orders from ₡25 000. You see it on the product, not at the end.                                                                                                   | The two amounts large, the cantons below                                                               |
 
 ### Week 2: paying and the delivery code
 
@@ -61,7 +61,7 @@ FB = Facebook, IG = Instagram, TT = TikTok, WA = WhatsApp Status. Days count fro
 | RED-S3-01 | L+14 | FB, IG     | Withdrawal                      | Tiene 8 días hábiles desde que recibe para devolver, sin dar explicaciones. La ley los cuenta desde la compra; nosotros, desde la entrega. No aplica a perecederos, artículos de uso personal abiertos ni hechos a la medida. Lo pide en la página de su pedido. | You have 8 business days from delivery to return it, no reason needed. The law counts from the purchase; we count from delivery. It does not apply to perishables, opened personal items or made-to-measure goods. Ask for it on your order page. | A calendar with 8 working days marked from a delivery day                                         |
 | RED-S3-02 | L+15 | TT         | Sellers: how it works           | (Voz) ¿Tiene una tienda? Traiga su producto una vez. Lo guardamos, lo empacamos, lo entregamos y le cobramos al cliente por usted. Usted ve cada cargo antes de publicar.                                                                                        | (Voice) Do you have a shop? Bring your product once. We store it, pack it, deliver it and collect from the customer for you. You see every fee before you list.                                                                                   | A box going onto a labelled shelf; a phone showing the seller centre's fee preview with demo data |
 | RED-S3-03 | L+16 | FB, IG, WA | Refund time and the missed date | Si devuelve, el reembolso llega en un máximo de 8 días naturales, por el mismo medio con que pagó. Y si no cumplimos la fecha prometida, puede cancelar y le devolvemos todo.                                                                                    | If you return it, the refund arrives within 8 calendar days, by the same means you paid. And if we miss the promised date, you can cancel and we refund everything.                                                                               | Plain text card, two lines                                                                        |
-| RED-S3-04 | L+18 | FB         | Sellers: the fees               | Para tiendas: sin mensualidad ni costo por publicar. Comisión del 8% al 15% según la categoría, solo cuando vende, más bodega desde ₡900 por unidad. En una venta de ₡20 000 en Hogar pagada por SINPE Móvil, usted recibe ₡15 367.                              | For shops: no monthly fee and no listing fee. A commission of 8% to 15% by category, only when you sell, plus a warehouse fee from ₡900 a unit. On a ₡20,000 home sale paid by SINPE Móvil, you receive ₡15,367.                                  | The worked statement as a receipt                                                                 |
+| RED-S3-04 | L+18 | FB         | Sellers: the fees               | Para tiendas: sin mensualidad ni costo por publicar. Comisión del 8% al 15% según la categoría, solo cuando vende, más bodega desde ₡900 por unidad. En una venta de ₡20 000 en Hogar pagada por SINPE Móvil, usted recibe ₡15 367.                              | For shops: no monthly fee and no listing fee. A commission of 8% to 15% by category, only when you sell, plus a warehouse fee from ₡900 a unit. On a ₡20 000 home sale paid by SINPE Móvil, you receive ₡15 367.                                  | The worked statement as a receipt                                                                 |
 
 ### Week 4: behind the work, and shops
 
@@ -88,9 +88,8 @@ One shoot day before L, by the owner or a contractor: the gate handover, the she
 
 ## Decision for the owner
 
-1. **Which day is L?**
-   - A. A Monday, so week 1 runs Monday to Saturday with deliveries every day. **(recommended)** The first post promises the next delivery day; a Saturday launch would push the first deliveries past Sunday.
-   - B. Whatever day payments go live.
+Which day is L, the launch day, is owner decision D43. Its recommended option
+is a Monday, so week 1 runs Monday to Saturday with deliveries every day.
 
 ## Assumptions to verify
 
@@ -102,6 +101,6 @@ One shoot day before L, by the owner or a contractor: the gate handover, the she
 
 ## Sources
 
-- Market research of 24 November 2026: CICOM-UCR 2025 via https://www.ucr.ac.cr/noticias/2026/5/27/un-estudio-desmonta-mitos-sobre-el-uso-de-las-plataformas-digitales-en-costa-rica.html and https://mediapolis.ucr.ac.cr/confianza-y-consumo/habitos-y-practicas-de-consumo/ (§7.1); advertising costs not found and the ₡25,000 test (§7.2); Decreto 37899-MEIC art. 55, Ley 10946 (§7.4).
+- [Market research](../../docs/research/market-and-costs-2026-11.md) of 24 November 2026: CICOM-UCR 2025 via https://www.ucr.ac.cr/noticias/2026/5/27/un-estudio-desmonta-mitos-sobre-el-uso-de-las-plataformas-digitales-en-costa-rica.html and https://mediapolis.ucr.ac.cr/confianza-y-consumo/habitos-y-practicas-de-consumo/ (§7.1); advertising costs not found and the ₡25,000 test (§7.2); Decreto 37899-MEIC art. 55, Ley 10946 (§7.4).
 - Repository: `supabase/migrations/20261121080300_geography_data.sql`, `20261121080000_foundation.sql`; `apps/web/src/app/ayuda/page.tsx`; `docs/brand/brand-book.md` §4; `docs/01-product/pricing-and-fees.md`; `docs/06-operations/customer-service.md`; `STATUS.md`.
-- Go-to-market strategy draft (24 November 2026), §5, §7 and decision 5; pricing proposal draft, decision 5; roll-out plan draft, decision 2 (cash limit). Help page (return exceptions); compliance §1 and `STATUS.md`, Internal console (review moderation).
+- Go-to-market strategy (24 November 2026), §5 and §7; owner decisions D41 (draws), D25 (shopper offer) and D14 (cash limit). Help page (return exceptions); compliance §1 and `STATUS.md`, Internal console (review moderation).
