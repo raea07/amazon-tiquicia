@@ -179,12 +179,17 @@
 --     natural, 100 / 100 forced with the seller first). It now takes the
 --     shop's own offers on the variant first (FOR NO KEY UPDATE, id order,
 --     only for a shop the caller belongs to), then the product, then the
---     variant FOR NO KEY UPDATE: the function changes only `active` of the
---     variant, no key column, and deletes nothing, so the weaker lock is
---     enough, and two changes of one variant still run one after the other
---     (E10c: 0 / 0, one switches it off, the other finds it off). After it:
---     E10, E10b and I8 0 / 0; a shop switching off the variant of a parcel
---     it packs itself, H8, 0 / 0 before and after. The other seller
+--     variant. Taking the offers first is what removes all three: E10, E10b
+--     and I8 are 0 / 0 after it, and stay 0 / 0 when the variant is taken
+--     FOR UPDATE again (an independent check of the merged tree). The
+--     variant is now taken FOR NO KEY UPDATE as well, a precaution no race
+--     depends on: the function changes only `active` of the variant, no key
+--     column, and deletes nothing, so the weaker lock is enough; a
+--     transaction that only references the variant no longer holds the
+--     switch up (contract test (ix)), and two changes of one variant still
+--     run one after the other (E10c: 0 / 0, one switches it off, the other
+--     finds it off). A shop switching off the variant of a parcel it packs
+--     itself, H8, 0 / 0 before and after. The other seller
 --     functions that call private.own_listing still take the product first;
 --     none of them writes an offer after it.
 -- Every statement that writes or locks public.products, and the order each
@@ -612,7 +617,8 @@ begin
   -- lock order of this migration's header), and this function may pause or
   -- resume these offers after taking the product. Taking the product first
   -- deadlocked with a count, a checkout or any stock write that held the
-  -- offer and took it across zero (races I8 and E10b). Only offers of a shop
+  -- offer and took it across zero (races I8 and E10b), and with a pack
+  -- holding the offer (E10). Only offers of a shop
   -- the caller belongs to are locked; own_listing still decides who may go on.
   perform 1 from public.offers o
   where o.sku_id = p_sku_id
@@ -623,10 +629,11 @@ begin
   for no key update of o;
   p := private.own_listing(v_product_id);
   -- NO KEY UPDATE, not UPDATE: it still makes two changes of one variant
-  -- wait for each other, but not the key-share lock that a pack takes on
-  -- the variant through its ledger row while it holds the offer this
-  -- function pauses (race E10). This function changes no key column of the
-  -- variant (only `active`) and deletes nothing.
+  -- wait for each other, but not a transaction that only references the
+  -- variant (a key-share lock: a pack's ledger row, an order line). Since
+  -- the offers come first no race depends on it (E10 is 0 either way);
+  -- contract test (ix) guards it. This function changes no key column of
+  -- the variant (only `active`) and deletes nothing.
   select * into k from public.skus where id = p_sku_id for no key update;
   if p_active is null then
     perform private.fail('invalid_variant_state');

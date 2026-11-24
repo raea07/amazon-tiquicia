@@ -24,20 +24,24 @@
  *         the order);
  *   (vii) the warehouse packing a parcel of a variant two shops sell while
  *         the shop that listed it switches the variant off
- *         (seller_set_variant_active took the variant FOR UPDATE, which
- *         blocks the key-share lock the pack's ledger row takes on it, while
- *         the pack held the offer the seller wanted to pause);
+ *         (seller_set_variant_active took the variant FOR UPDATE before the
+ *         offer it pauses, while the pack held that offer and wanted a
+ *         key-share lock on the variant for its ledger row; since 084400 the
+ *         seller takes its offers first, which alone removes the deadlock);
  *   (viii) a count into a location (wms_count_into_location, 084500) that
  *         takes the shop's offer of a shared variant across zero while the
  *         shop switches that variant off (seller_set_variant_active took the
  *         product before the offer, the count takes the offer before the
- *         product; since 084400 the seller takes its offers first).
+ *         product; since 084400 the seller takes its offers first);
+ *   (ix)  the shop switching a variant off while another transaction holds
+ *         only a key-share lock on the variant (with FOR UPDATE on the
+ *         variant the switch waited for it to end; no deadlock depends on it).
  *
  * Fixtures are this file's own: three products with chosen ids (X with two
  * variants, Z sold by two shops, W which Tienda Sendero ships itself from its
  * own warehouse), a shelf in SJO1, a shopper, a driver of its
  * own (so the demo driver's day is untouched) and, for (v), two packed cash
- * orders planned on one route. Races (i), (iii), (v), (vi), (vii) and (viii) are rolled back;
+ * orders planned on one route. Races (i), (iii), (v), (vi), (vii), (viii) and (ix) are rolled back;
  * (ii) and (iv) commit and are undone after each round. At the end the
  * route's parcels are stopped and checked back in and the route is closed;
  * the file's cancelled orders are deleted. The suite passes on a used
@@ -801,6 +805,36 @@ describe.skipIf(!db.enabled)(
       }
       await cleanUp();
       await db.query("delete from public.bin_stock where location_id = $1", [shelf2]);
+    });
+
+    it("(ix) switching a variant off does not wait for a key-share lock on the variant", async () => {
+      // No race of tools/races depends on this: the offers-first lock alone
+      // removes E10, E10b and I8. It guards the other half of the 084400
+      // redefinition, the variant taken FOR NO KEY UPDATE instead of FOR
+      // UPDATE: a transaction that only references the variant (a ledger row,
+      // an order line, a cart line: each takes a key-share lock on it) no
+      // longer holds the seller up until it ends.
+      await layout({ z1: 2 });
+      for (let round = 0; round < ROUNDS; round++) {
+        const holder = await session(null);
+        const seller = await session(SELLER);
+        try {
+          await holder.client.query("select 1 from public.skus where id = $1 for key share", [
+            SKU.z,
+          ]);
+          const switching = outcome(
+            seller.client.query("select public.seller_set_variant_active($1, false)", [SKU.z]),
+          );
+          const settled = await Promise.race([
+            switching,
+            new Promise<string>((resolve) => setTimeout(() => resolve("still waiting"), 3000)),
+          ]);
+          expect(settled, `round ${round}: variant off`).toBe("");
+        } finally {
+          await finish(holder, seller);
+        }
+      }
+      await cleanUp();
     });
   },
 );
