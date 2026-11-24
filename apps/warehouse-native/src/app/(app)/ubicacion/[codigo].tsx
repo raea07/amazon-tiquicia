@@ -20,8 +20,14 @@ import {
   TextField,
 } from "@yuntera/expo-kit/ui";
 import { Stack as Nav, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
-import { AccessibilityInfo, Platform, StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  AccessibilityInfo,
+  Platform,
+  type ScrollViewInstance,
+  StyleSheet,
+  View,
+} from "react-native";
 import { CountIn } from "@/components/count-in";
 import { plural } from "@/lib/floor";
 import {
@@ -335,6 +341,14 @@ export default function LocationScreen() {
     { personal: true },
   );
   const [done, setDone] = useState<string | null>(null);
+  const screen = useRef<ScrollViewInstance>(null);
+  // Counted in: the form below closes, so the answer at the top (with the
+  // list) is brought into view, once the screen has been drawn without the
+  // form, instead of leaving an empty search box on screen.
+  const [lift, setLift] = useState(0);
+  useEffect(() => {
+    if (lift > 0) screen.current?.scrollTo({ y: 0, animated: false });
+  }, [lift]);
   // The last refusal, kept so that it is still shown when its product has
   // left the location meanwhile and its card (with the form) is gone.
   const [refusal, setRefusal] = useState<Refusal | null>(null);
@@ -350,6 +364,9 @@ export default function LocationScreen() {
   useEffect(() => {
     if (gone && Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(gone);
   }, [gone]);
+  useEffect(() => {
+    if (done && Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(done);
+  }, [done]);
 
   if (location.isPending || all.isPending) return <LoadingState label="Cargando la ubicación…" />;
   if (location.isError || all.isError) {
@@ -380,6 +397,7 @@ export default function LocationScreen() {
 
   return (
     <Screen
+      scrollRef={screen}
       refreshing={location.isRefetching}
       onRefresh={() => {
         setRefusal(null);
@@ -457,6 +475,7 @@ export default function LocationScreen() {
         onDone={(message) => {
           setRefusal(null);
           setDone(message);
+          setLift((n) => n + 1);
         }}
         onRefused={() => {
           setDone(null);

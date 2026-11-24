@@ -22,6 +22,7 @@
 // Fails on any console error, uncaught exception or 5xx (the database's
 // refusals are 400s the browser logs, expected there).
 
+const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
@@ -32,6 +33,10 @@ const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const SHELF = "Y-74-01-A";
 const SWITCHED_OFF = "Y-74-02-A";
 const NOTE = "Dos libretas detrás de una caja sin etiqueta";
+// The earphones carry a 13-digit barcode (a UPC-A with a leading 0, as some
+// sellers store it); the worker's scanner reads the 12-digit UPC-A.
+const STORED_GTIN = "0012345678905";
+const SCANNED_UPC_A = "012345678905";
 const log = (...args) => console.log(...args);
 const squash = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -89,6 +94,38 @@ async function rpcAs(email, calls) {
   const drill = drillList[0];
   const keeper = earphones.shops.find((s) => s.stock_record);
   const away = earphones.shops.find((s) => !s.stock_record);
+  const [keeperRoles] = await rpcAs("vendedor@yuntera.example", [["my_roles", {}]]);
+  check(
+    keeperRoles.sellers.some((s) => s.id === keeper.seller_id),
+    `the earphones' shop here is ${keeper.seller_name}`,
+  );
+  const keeperTotals = async () => {
+    const [rows] = await rpcAs("vendedor@yuntera.example", [
+      ["seller_stock", { p_seller_id: keeper.seller_id }],
+    ]);
+    return rows.find(
+      (row) => row.sku_id === earphones.sku_id && row.warehouse_id === notebook.warehouse_id,
+    );
+  };
+  const earphonesBefore = await keeperTotals();
+  // No function sets a barcode on an existing product (sellers set one only
+  // on new products), so this one goes straight into the lane's database, as
+  // in warehouse.cjs, and is taken off again at the end.
+  const database = process.env.DATABASE_URL;
+  if (!database) throw new Error("DATABASE_URL is not set (run through tools/dev/stack.sh)");
+  const sql = (statement) => {
+    const run = spawnSync(
+      "psql",
+      [database, "-X", "-q", "-t", "-v", "ON_ERROR_STOP=1", "-c", statement],
+      { encoding: "utf8" },
+    );
+    if (run.status !== 0) throw new Error(`psql: ${run.stderr}`);
+    return run.stdout.trim();
+  };
+  const earphonesGtin = sql(
+    `select coalesce(gtin, '') from public.skus where id = '${earphones.sku_id}'`,
+  );
+  sql(`update public.skus set gtin = '${STORED_GTIN}' where id = '${earphones.sku_id}'`);
   const [keeperStock] = await rpcAs("central@yuntera.example", [
     ["wms_location_stock", { p_warehouse_id: notebook.warehouse_id, p_code: SHELF }],
   ]);
@@ -195,6 +232,10 @@ async function rpcAs(email, calls) {
     squash(await result(notebook.sku_code).innerText()).includes("Unidades de Tienda Sendero."),
     "found by its name, with its shop",
   );
+  check(
+    (await page.getByTestId("count-in-scan-feedback").count()) === 0,
+    "the scanner's answer about the earlier code is gone after a search by name",
+  );
   await inResult(notebook.sku_code, "count-in-quantity").fill("2");
   check(
     squash(await inResult(notebook.sku_code, "count-in-submit").innerText()) ===
@@ -219,6 +260,23 @@ async function rpcAs(email, calls) {
   await inResult(notebook.sku_code, "count-in-note").fill(NOTE);
   await inResult(notebook.sku_code, "count-in-submit").click();
   await byId("stock-result").waitFor();
+  const inView = async (locator) => {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      const box = await locator.boundingBox();
+      if (box && box.y >= 0 && box.y + box.height <= 844) return true;
+      await page.waitForTimeout(200);
+    }
+    return false;
+  };
+  check(
+    await inView(byId("stock-result")),
+    "the confirmation is brought into view, not left above the screen",
+  );
+  check(
+    (await page.getByTestId("count-in-scan-feedback").count()) === 0,
+    "no scanner answer from an earlier code is left in the count section",
+  );
   check(
     (await textOf("stock-result")).includes(
       `Se sumaron 2 unidades de ${notebook.sku_code} a esta ubicación: ya aparece en la lista.`,
@@ -237,7 +295,9 @@ async function rpcAs(email, calls) {
   await shot("04-counted");
 
   // ── A colleague counts the same product here meanwhile ──
-  await scan(earphones.sku_code);
+  // Found by its barcode in another of its forms; after the refusal it must
+  // stay on screen with what was typed, not vanish as "not found".
+  await scan(SCANNED_UPC_A);
   await result(earphones.sku_code).waitFor();
   await inResult(earphones.sku_code, "count-in-quantity").fill("2");
   await inResult(earphones.sku_code, "count-in-note").fill("Dos audífonos detrás de la caja");
@@ -277,6 +337,11 @@ async function rpcAs(email, calls) {
   check(
     await says(result(earphones.sku_code), "Ya está en esta ubicación"),
     "the result says it is in the list now",
+  );
+  check(
+    (await inResult(earphones.sku_code, "count-in-note").inputValue()) ===
+      "Dos audífonos detrás de la caja" && (await page.getByTestId("count-in-none").count()) === 0,
+    "found by a barcode read in another form, the refused form and its reason stay, never 'not found'",
   );
   expectRefusal = false;
   await noSideways("refused, counted meanwhile");
@@ -361,6 +426,15 @@ async function rpcAs(email, calls) {
   check(
     after.on_hand === notebook.on_hand && after.available === notebook.available,
     "the shop's total and what shoppers can buy are what they were",
+  );
+  const earphonesAfter = await keeperTotals();
+  check(
+    earphonesAfter.on_hand === earphonesBefore.on_hand &&
+      earphonesAfter.available === earphonesBefore.available,
+    `${keeper.seller_name}'s earphones total and what shoppers can buy are what they were`,
+  );
+  sql(
+    `update public.skus set gtin = ${earphonesGtin ? `'${earphonesGtin}'` : "null"} where id = '${earphones.sku_id}'`,
   );
   await rpcAs("central@yuntera.example", [
     ["ops_set_location_active", { p_location_id: shelf.id, p_active: false }],

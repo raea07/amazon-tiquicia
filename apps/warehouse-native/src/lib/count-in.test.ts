@@ -7,6 +7,7 @@ import {
   countedInText,
   countInButton,
   elsewhereText,
+  keepResults,
   listedText,
   noCountHere,
   notFoundText,
@@ -105,5 +106,24 @@ describe("a count of a new product", () => {
     ]) {
       assert.ok(page.includes(part), `the web page says: ${part}`);
     }
+  });
+});
+
+describe("the results read again after a refusal", () => {
+  const notebook = { sku_id: "a", listed: false };
+  const earphones = { sku_id: "b", listed: false };
+  it("take what the new read says about each product shown", () => {
+    assert.deepEqual(
+      keepResults([notebook, earphones], [{ sku_id: "b", listed: true }, notebook]),
+      [notebook, { sku_id: "b", listed: true }],
+    );
+  });
+  it("never drop a product the new read misses (a barcode found in another of its forms)", () => {
+    assert.deepEqual(keepResults([earphones], []), [earphones]);
+    assert.deepEqual(keepResults([notebook, earphones], [notebook]), [notebook, earphones]);
+  });
+  it("are the new read when nothing was shown", () => {
+    assert.deepEqual(keepResults(null, [notebook]), [notebook]);
+    assert.deepEqual(keepResults([], [notebook]), [notebook]);
   });
 });

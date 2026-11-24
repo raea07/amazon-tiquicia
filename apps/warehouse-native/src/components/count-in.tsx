@@ -20,6 +20,7 @@ import {
   countedInText,
   countInButton,
   elsewhereText,
+  keepResults,
   listedText,
   noCountHere,
   notFoundText,
@@ -164,17 +165,25 @@ export function CountIn({
   const [nameError, setNameError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // A new scanner (with no answer left from an earlier code) after a name
+  // search or a count: its last words are never read next to another result.
+  const [scanner, setScanner] = useState(0);
   const closed = noCountHere(location);
   const here = { id: location.id, code: location.code };
 
   const lookup = (query: string) => api.wmsCountCandidates(location.id, query);
   const onScan = async (code: string): Promise<ScanFeedback> => {
+    // The form that found it (a UPC-A read as 13 digits, say) is the one
+    // asked again after a refusal: the code as read may match nothing.
+    let matched = code;
     const list = await findByForms(code, async (form) => {
       const answer = await lookup(form);
-      return answer.length > 0 ? answer : null;
+      if (answer.length === 0) return null;
+      matched = form;
+      return answer;
     });
     // Not found: the scanner says so where the worker is looking.
-    setAsked(list ? code : "");
+    setAsked(list ? matched : "");
     setFound(list);
     return list
       ? { tone: "success", message: `Encontrado: ${list[0]?.title ?? code}.` }
@@ -186,6 +195,7 @@ export function CountIn({
       return;
     }
     setNameError(null);
+    setScanner((n) => n + 1);
     setSearching(true);
     try {
       setAsked(name.trim());
@@ -197,10 +207,11 @@ export function CountIn({
     }
   };
   // After a refusal: the lookup again, so a product now listed here says so.
+  // What was shown keeps its place (and its form, with the refusal).
   const again = () => {
     if (asked) {
       lookup(asked)
-        .then(setFound)
+        .then((fresh) => setFound((shown) => keepResults(shown, fresh)))
         .catch(() => undefined);
     }
     onRefused();
@@ -236,6 +247,7 @@ export function CountIn({
       {closed || !searchOpen ? null : (
         <>
           <BarcodeScanner
+            key={scanner}
             camera={camera}
             label="Código de barras o código YT"
             hint="El de la etiqueta del producto."
@@ -316,6 +328,7 @@ export function CountIn({
                     setFound(null);
                     setAsked("");
                     setName("");
+                    setScanner((n) => n + 1);
                     onDone(message);
                   }}
                   onRefused={again}

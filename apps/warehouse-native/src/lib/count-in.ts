@@ -83,3 +83,15 @@ export const searchable = (query: string) => {
   const text = query.trim();
   return text.length >= COUNT_IN_LIMITS.query[0] && text.length <= COUNT_IN_LIMITS.query[1];
 };
+
+/**
+ * The results after a refusal, read again: each product shown before keeps
+ * its place, with what the new read says about it (now listed here, say).
+ * A product the new read does not return stays as it was shown, so a refused
+ * form never disappears with what was typed and its refusal; the worker is
+ * never told that a product they just saw does not exist.
+ */
+export function keepResults<T extends { sku_id: string }>(previous: T[] | null, next: T[]): T[] {
+  if (!previous || previous.length === 0) return next;
+  return previous.map((shown) => next.find((fresh) => fresh.sku_id === shown.sku_id) ?? shown);
+}
