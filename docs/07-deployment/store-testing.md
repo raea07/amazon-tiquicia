@@ -14,37 +14,41 @@ Expo **team** account (the team account that already holds the company's
 Apple credentials), not in the personal account. The project in the personal
 account is an earlier one and is no longer used for store builds.
 
-**Where things stand (22 November 2026).**
+**Where things stand (24 November 2026).**
 
-- **Android: sent, waiting for the owner.** The build
+- **Android: released to the internal testers.** The build
   `a20ef1d8-a926-40d4-947d-823cd87be32a` (version 0.1.0, version code 4,
-  made from commit `3f251c3`, the code the hosted preview runs) was sent to
-  Google Play's internal testing track on 22 November 2026 (Expo submission
-  `8d09854a-da67-4919-afe6-114fc50f633f`). The Google service account key
-  is uploaded on Expo (Part 1, step 5, done). Because the app has never been
-  published, the build arrived in Play Console as a **draft** release: it
-  reaches no tester until the owner releases it (Part 1, steps 6 to 8). Its
-  page is in the team account's project **yuntera**, under **Builds**.
-- **iPhone: no build yet.** Expo's tool refused to start one without
-  questions: _"Credentials are not set up. Run this command again in
-  interactive mode."_ The company's distribution certificate and App Store
-  Connect key are in the team account, but neither is yet attached to
-  `com.yuntera.shop`, and attaching them, registering the identifier with
-  Apple and making its provisioning profile can only be done in an
-  interactive run. The owner does that once (Part 2), from commit `3f251c3`,
-  so that both stores carry the same code as the hosted preview until the
-  preview is updated. Nothing was created at Apple.
+  made from commit `3f251c3`) was sent to Google Play's internal testing
+  track on 22 November 2026 (Expo submission
+  `8d09854a-da67-4919-afe6-114fc50f633f`) as a draft release. The owner
+  started its rollout: Play Console shows release 0.1.0 as "Available to
+  internal testers", released on 23 November 2026, "Not reviewed" (seen in
+  the owner's screenshot of 24 November; the developer side cannot open Play
+  Console). Until Google reviews the app, testers see it in Google Play
+  under the temporary name "com.yuntera.shop (unreviewed)". Not yet
+  confirmed: the app installed on a tester's phone.
+- **iPhone: in App Store Connect.** The owner ran the one interactive build
+  (Part 2) on 24 November 2026 from commit `3f251c3`: build
+  `68a59cea-0f69-4745-9bd1-72eb6e90b399` (version 0.1.0, build number 4)
+  finished on Expo and its submission
+  `487ff981-58b0-4621-a39d-48603f91c9b9` to App Store Connect finished the
+  same day (read on Expo). The app record **Yuntera** exists with Apple ID
+  number `6838560774`. Expo holds, for `com.yuntera.shop`, the company's one
+  distribution certificate (serial ends `91BA`, reused, not duplicated), a
+  provisioning profile valid until 31 October 2027 and the App Store Connect
+  key `8A673478NB` for submissions. Not yet confirmed: Apple finished
+  processing the build, and the app installed from TestFlight.
 - **Builds used** in the team account's cycle from 1 November to
-  1 December 2026, after the Android build above: Android 4 of 15, iOS 2 of
-  15. Nothing was billed.
-- **Newer code is not in the stores.** The account screens inside the app
-  (deleting the account, the password reset and change, the second step,
-  reporting a listing, message channels) came after `3f251c3`. A build of
-  them must wait until the hosted preview has migration `083900`
-  ([runbook](runbook-first-deploy.md#migrations-083510-to-083900)), because
-  the app now sends an argument the preview's functions do not accept yet.
-  Apple's review asks for account deletion inside the app before the App
-  Store; internal TestFlight testing has no review.
+  1 December 2026: Android 4 of 15, iOS 3 of 15 (2 before this build plus
+  this one; counted, not read again from Expo's billing page). Nothing was
+  billed.
+- **Newer code is not in the stores.** Both store builds are made from
+  `3f251c3`. The hosted preview has since received every migration up to
+  `084300`, so a build of the newer screens (the account screens inside the
+  app, the order follow-ups and the rest) is possible; the next builds for
+  both stores are made once the work in progress is merged and on the
+  preview. Apple's review asks for account deletion inside the app before
+  the App Store; internal TestFlight testing has no review.
 
 ## Part 1: Android (Google Play internal testing)
 
@@ -129,9 +133,20 @@ is ticked, and **Save** again.
 
 ### 7. Start the rollout of the draft release
 
-The developer side uploads each build as a **draft** release, because a
-Google Play app that has never been published accepts only draft releases.
-For each new upload:
+The first build was uploaded as a **draft** release, because a Google Play
+app that has never been published accepts only draft releases, and the owner
+started its rollout on 23 November 2026.
+
+By the owner's decision of 23 November 2026 (decision 45), every later build
+is sent with the release status "completed" (`apps/shop-native/eas.json`,
+since 24 November 2026): it reaches the internal testers without a click.
+One thing is not verified: Google's help pages do not say whether Google
+accepts such a release from an app it has not reviewed yet, and one report
+from 2026 says it does not. If Google refuses the next build for that
+reason, the developer side sends the same build again as a draft (no new
+build is used) and the owner starts its rollout as below.
+
+For a draft release:
 
 1. Play Console > the app > **Test and release** > **Testing** > **Internal
    testing** > **Releases**.
@@ -276,7 +291,8 @@ They receive an e-mail and install the app from TestFlight.
 App Store Connect > **Apps** > **Yuntera** > **App Information** > under
 **General Information**, **Apple ID** (a number such as `6740000000`). Send
 it to the developer side. It goes into `apps/shop-native/eas.json`, as
-`"ascAppId"` in `submit.production.ios`, and is not secret.
+`"ascAppId"` in `submit.production.ios`, and is not secret. Done on
+24 November 2026: the number is `6838560774`.
 
 ### What the developer side then does alone
 
@@ -322,9 +338,9 @@ shopper app, once each has been built for a phone (none has yet):
 
 ## Afterwards
 
-- **Owner:** for Android, start the rollout of each new draft release (Part
-  1, step 7) and add or remove testers. For iPhone, add or remove testers in
-  the TestFlight group.
+- **Owner:** add or remove testers in Play Console and in the TestFlight
+  group. For Android, start the rollout of a release only when the developer
+  side says a build arrived as a draft (Part 1, step 7).
 - **Developer side:** builds new versions and sends them to both stores
   without the owner. Version numbers go up on their own.
 

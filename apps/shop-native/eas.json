@@ -53,10 +53,11 @@
     "production": {
       "android": {
         "track": "internal",
-        "releaseStatus": "draft"
+        "releaseStatus": "completed"
       },
       "ios": {
         "appleTeamId": "6MQVM5UNDL",
+        "ascAppId": "6838560774",
         "language": "es-MX"
       }
     }
