@@ -8,13 +8,19 @@
 //      what the order says; asked again (the same function a pull runs), the
 //      amount comes. Then the order and its payment cannot be refreshed: what
 //      is on screen stays, with a notice above it, until asked again.
+//      Asked again while the order cannot be read either: one notice that
+//      names both, never "the rest is up to date" under "may not be".
 //   2. A brand's results on screen whose background refresh fails: they stay,
 //      with their count and a notice above them. Another brand chosen while
 //      the search fails: the error state, never the first brand's products.
+//      A category page whose categories cannot be read: the error state with
+//      "Intentar de nuevo", never "this category does not exist".
 //   3. The cart with a line another shop still sells: the other shop's date
 //      comes with the alternative (no product page is asked for) and is the
 //      date that offer's product page shows. While the alternatives cannot be
 //      read, the line never says that nobody else sells it.
+//   4. Reads that never answer (the app's limit is 15 s): the order page, its
+//      payment and the cart's alternatives each end with a way to ask again.
 //
 // Pull-to-refresh is not driven: the web export has no pull gesture. The
 // order page's pull and its "Intentar de nuevo" run the same function.
@@ -40,6 +46,8 @@ const colones = (minor) =>
   }`;
 /** Longer than the app's cache keeps an answer fresh (30 s), so a return to the app asks again. */
 const STALE_MS = 31_000;
+/** How long the shopper app waits for a read (apps/shop-native/src/app/_layout.tsx). */
+const READ_LIMIT_MS = 15_000;
 
 function check(condition, message) {
   if (!condition) throw new Error(message);
@@ -124,8 +132,12 @@ async function stoppedOrder(buyer) {
   const errors = [];
   // The functions this journey makes fail on purpose, and how many times.
   const failing = new Set();
+  // The functions that get no answer at all until heal(), and their held requests.
+  const hanging = new Set();
+  const held = [];
   const failedOnPurpose = new Map();
-  const onPurpose = (url) => [...failing].some((fn) => url.includes(`/rest/v1/rpc/${fn}`));
+  const onPurpose = (url) =>
+    [...failing, ...hanging].some((fn) => url.includes(`/rest/v1/rpc/${fn}`));
   page.on("console", (message) => {
     const url = message.location()?.url ?? "";
     if (message.type() !== "error") return;
@@ -139,6 +151,10 @@ async function stoppedOrder(buyer) {
   });
   await page.route("**/rest/v1/rpc/*", async (route) => {
     const fn = new URL(route.request().url()).pathname.split("/").pop();
+    if (hanging.has(fn)) {
+      held.push(route);
+      return;
+    }
     if (failing.has(fn)) {
       failedOnPurpose.set(fn, (failedOnPurpose.get(fn) ?? 0) + 1);
       await route.fulfill({
@@ -153,7 +169,17 @@ async function stoppedOrder(buyer) {
   const fail = (...fns) => {
     for (const fn of fns) failing.add(fn);
   };
-  const heal = () => failing.clear();
+  const hang = (...fns) => {
+    for (const fn of fns) hanging.add(fn);
+  };
+  const heal = () => {
+    failing.clear();
+    hanging.clear();
+    // Held requests now answer; the app gave up on them already.
+    for (const route of held.splice(0)) route.continue().catch(() => undefined);
+  };
+  const retryButtons = () =>
+    page.locator('[data-testid$="-retry"]').filter({ visible: true }).count();
 
   const visible = (testId) => page.getByTestId(testId).filter({ visible: true }).first();
   const flat = async (locator) => squash(await locator.innerText());
@@ -225,8 +251,34 @@ async function stoppedOrder(buyer) {
   await noSideways("order page, payment unread");
   await shot("01-payment-unread");
 
-  heal();
+  // Asked again while the network is still down: the order cannot be
+  // refreshed either. One notice names both; nothing says the order is up to date.
+  fail("get_order");
   await visible("payment-unread-retry").click();
+  const both = await settledText(
+    visible("order-kept"),
+    (text) => text.startsWith("No pudimos actualizar su pedido ni consultar su pago"),
+    { what: "the notice for the order and its payment" },
+  );
+  log("   ", both);
+  check(
+    !both.includes("sí está al día") && both.includes("puede no estar al día"),
+    "it never says the order is up to date while its refresh failed",
+  );
+  check(
+    (await page.getByTestId("payment-unread").filter({ visible: true }).count()) === 0 &&
+      (await retryButtons()) === 1,
+    "one notice and one 'Intentar de nuevo'",
+  );
+  check(
+    !(await flat(visible("order-stopping"))).includes("₡"),
+    "still no amount while the payment is unread",
+  );
+  await noSideways("order page, order and payment unread");
+  await shot("01b-order-and-payment-unread");
+
+  heal();
+  await visible("order-kept-retry").click();
   const told = await settledText(
     visible("order-stopping"),
     (text) => text.includes(`le devolvemos ${amount}, el envío incluido,`),
@@ -234,7 +286,8 @@ async function stoppedOrder(buyer) {
   );
   log("   ", told);
   check(
-    (await page.getByTestId("payment-unread").filter({ visible: true }).count()) === 0,
+    (await page.getByTestId("payment-unread").filter({ visible: true }).count()) === 0 &&
+      (await page.getByTestId("order-kept").filter({ visible: true }).count()) === 0,
     "asked again, the payment answers: the amount comes and the notice goes",
   );
   await shot("02-payment-read");
@@ -245,7 +298,7 @@ async function stoppedOrder(buyer) {
   await backToTheApp();
   const kept = await settledText(
     visible("order-kept"),
-    (text) => text.startsWith("No pudimos actualizar su pedido"),
+    (text) => text.startsWith("No pudimos actualizar su pedido ni su pago"),
     { what: "the order's notice" },
   );
   log("   ", kept);
@@ -254,8 +307,10 @@ async function stoppedOrder(buyer) {
     "a failed refresh keeps the order and its amount on screen",
   );
   check(
-    (await page.getByTestId("payment-kept").filter({ visible: true }).count()) === 1,
-    "and says the payment's amounts may not be up to date",
+    kept.includes("Los montos de su pago y de sus reembolsos que ve pueden no estar al día.") &&
+      (await page.getByTestId("payment-kept").filter({ visible: true }).count()) === 0 &&
+      (await retryButtons()) === 1,
+    "one notice says the payment's amounts may not be up to date too, with one button",
   );
   await noSideways("order page, refresh failed");
   await shot("03-order-kept");
@@ -359,6 +414,38 @@ async function stoppedOrder(buyer) {
     "asked again, Volcán's own products",
   );
 
+  // A category page whose categories cannot be read: not "it does not exist".
+  fail("list_categories");
+  await page.goto(`${SHOP}/c/electronica`, { waitUntil: "networkidle" });
+  const categoryError = await settledText(
+    page.getByText("No pudimos cargar esta información").filter({ visible: true }).first(),
+    (text) => text.length > 0,
+    { what: "the category page's error state" },
+  );
+  log("   ", categoryError);
+  const categoryBody = await flat(page.locator("body"));
+  check(
+    !categoryBody.includes("No encontramos esa categoría") &&
+      (await page
+        .getByRole("button", { name: "Intentar de nuevo" })
+        .filter({ visible: true })
+        .count()) === 1,
+    "a category whose read failed is not called missing, and can be asked again",
+  );
+  await noSideways("category page, categories unread");
+  await shot("05b-category-unread");
+  heal();
+  await page
+    .getByRole("button", { name: "Intentar de nuevo" })
+    .filter({ visible: true })
+    .first()
+    .click();
+  await page.locator('[data-testid^="product-"]').filter({ visible: true }).first().waitFor();
+  check(
+    !(await flat(page.locator("body"))).includes("No pudimos cargar esta información"),
+    "asked again, the category and its products come",
+  );
+
   // ── 3. The cart: another shop's offer and its date ─────────────────────────
   const product = await visitor("get_product", { p_slug: EARPHONES });
   const offers = product.skus[0].offers;
@@ -439,6 +526,29 @@ async function stoppedOrder(buyer) {
       `the product page shows the same date for TecnoCasa's offer ("${arrival}")`,
     );
     await shot("08-product-same-date");
+
+    // ── 4a. The cart's alternatives never answer ────────────────────────────
+    hang("cart_alternatives");
+    await page.goto(`${SHOP}/carrito`, { waitUntil: "domcontentloaded" });
+    await settledText(
+      visible("cart-unavailable"),
+      (text) => text.includes("Estamos revisando si otra tienda lo vende"),
+      { what: "the line while the other shops are being checked" },
+    );
+    const givenUp = await settledText(
+      visible("cart-unavailable"),
+      (text) => text.includes("No pudimos revisar si otra tienda lo vende"),
+      { what: "the line once the check gave up", timeout: READ_LIMIT_MS + 15_000 },
+    );
+    log("   ", givenUp);
+    check(
+      (await page.getByTestId("cart-alternatives-retry").filter({ visible: true }).count()) === 1,
+      "a check that never answers ends with a way to ask again",
+    );
+    heal();
+    await visible("cart-alternatives-retry").click();
+    await visible("cart-alternative").waitFor();
+    check(true, "asked again, the alternative comes");
   } finally {
     await shop("seller_update_offer", {
       p_offer_id: sendero.offer_id,
@@ -447,6 +557,61 @@ async function stoppedOrder(buyer) {
     });
     await shop.dispose();
   }
+
+  // ── 4b. The order never answers on its first read ───────────────────────────
+  hang("get_order");
+  await page.goto(`${SHOP}/pedidos/${order.order_number}`, { waitUntil: "domcontentloaded" });
+  await page
+    .getByText("No pudimos cargar esta información")
+    .filter({ visible: true })
+    .first()
+    .waitFor({ timeout: READ_LIMIT_MS + 15_000 });
+  check(
+    (await page
+      .getByRole("button", { name: "Intentar de nuevo" })
+      .filter({ visible: true })
+      .count()) === 1,
+    "an order that never answers ends with the error state and 'Intentar de nuevo'",
+  );
+  await shot("09-order-hung");
+  heal();
+  await page
+    .getByRole("button", { name: "Intentar de nuevo" })
+    .filter({ visible: true })
+    .first()
+    .click();
+  await visible("order-title").waitFor();
+  check(true, "asked again, the order comes");
+
+  // ── 4c. The payment never answers ───────────────────────────────────────────
+  hang("order_payment");
+  await page.goto(`${SHOP}/pedidos/${order.order_number}`, { waitUntil: "domcontentloaded" });
+  await visible("order-title").waitFor();
+  await visible("payment-loading").waitFor();
+  check(
+    !(await flat(page.locator("body"))).includes("le devolvemos ₡"),
+    "while the payment is being read the page says so and states no amount",
+  );
+  const hungPayment = await settledText(
+    visible("payment-unread"),
+    (text) => text.startsWith("No pudimos consultar su pago"),
+    { what: "the payment's notice once the read gave up", timeout: READ_LIMIT_MS + 15_000 },
+  );
+  log("   ", hungPayment);
+  check(
+    (await retryButtons()) === 1 &&
+      (await page.getByTestId("payment-loading").filter({ visible: true }).count()) === 0,
+    "a payment that never answers ends with the notice and one 'Intentar de nuevo'",
+  );
+  await shot("10-payment-hung");
+  heal();
+  await visible("payment-unread-retry").click();
+  await settledText(
+    visible("order-stopping"),
+    (text) => text.includes(`le devolvemos ${amount}, el envío incluido,`),
+    { what: "the amount once the payment answered" },
+  );
+  check(true, "asked again, the payment answers and the amount comes");
 
   await visitor.dispose();
   await buyer.dispose();

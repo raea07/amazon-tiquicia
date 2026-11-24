@@ -61,8 +61,7 @@ import { needsSignIn } from "@/lib/guard";
 import {
   AMOUNT_UNREAD,
   firstReadFailed,
-  KEPT,
-  PAYMENT_UNREAD,
+  orderNotice,
   RETURN_UNREAD,
   refreshFailed,
 } from "@/lib/kept-reads";
@@ -227,6 +226,18 @@ export default function OrderScreen() {
   // made are unknown, and no amount is said (see refund-outlook.ts).
   const refundedSoFar = refundedSoFarOf(payment.data?.refunds) ?? 0;
   const feeBack = deliveryFeeComesBack(o.shipments);
+  // One notice for whatever could not be read, with one "Intentar de nuevo".
+  const notice = orderNotice({
+    orderStale: refreshFailed(order),
+    payment: paymentUnread ? "unread" : refreshFailed(payment) ? "stale" : "ok",
+    returnsUnread: firstReadFailed(returns) && o.items.some((item) => item.returned_quantity > 0),
+  });
+  const noticeError =
+    notice?.cause === "order"
+      ? order.error
+      : notice?.cause === "payment"
+        ? payment.error
+        : returns.error;
   // What comes back when the warehouse receives them: what is left of the
   // payment, less the delivery fee when someone went to the door.
   const comesBack = amountComingBack({
@@ -250,14 +261,14 @@ export default function OrderScreen() {
   return (
     <Screen refreshing={pulling} onRefresh={readAgain}>
       <Nav.Screen options={{ title: o.order_number }} />
-      {refreshFailed(order) ? (
+      {notice ? (
         <KeptNotice
-          title={KEPT.order.title}
-          body={KEPT.order.body}
-          error={order.error}
+          title={notice.title}
+          body={notice.body}
+          error={noticeError}
           onRetry={readAgain}
-          retrying={pulling}
-          testID="order-kept"
+          retrying={pulling || order.isFetching || payment.isFetching || returns.isFetching}
+          testID={notice.testID}
         />
       ) : null}
       {oneParam(params.nuevo) === "1" ? (
@@ -292,24 +303,11 @@ export default function OrderScreen() {
       ) : awaitingPayment && payment.data ? (
         <PaymentInstructions order={o} payment={payment.data} />
       ) : null}
-      {paymentUnread ? (
-        <KeptNotice
-          title={PAYMENT_UNREAD.title}
-          body={PAYMENT_UNREAD.body}
-          error={payment.error}
-          onRetry={readAgain}
-          retrying={pulling || payment.isFetching}
-          testID="payment-unread"
-        />
-      ) : refreshFailed(payment) ? (
-        <KeptNotice
-          title={KEPT.payment.title}
-          body={KEPT.payment.body}
-          error={payment.error}
-          onRetry={readAgain}
-          retrying={pulling || payment.isFetching}
-          testID="payment-kept"
-        />
+      {payment.isPending && payment.isFetching ? (
+        // Until the payment answers (or its read times out) no amount is said.
+        <Text variant="small" tint="muted" testID="payment-loading">
+          Consultando su pago…
+        </Text>
       ) : null}
       {payment.data?.money_in_review && !(awaitingPayment && payment.data.stage === "review") ? (
         <MoneyInReview payment={payment.data} />
@@ -526,7 +524,7 @@ export default function OrderScreen() {
                 </Text>
               ) : item.returned_quantity > 0 && firstReadFailed(returns) ? (
                 <Text variant="small" tint="warning" testID="return-unread">
-                  {`Devolución en trámite. ${RETURN_UNREAD} Deslice hacia abajo para intentarlo de nuevo.`}
+                  {`Devolución en trámite. ${RETURN_UNREAD}`}
                 </Text>
               ) : null}
             </Card>

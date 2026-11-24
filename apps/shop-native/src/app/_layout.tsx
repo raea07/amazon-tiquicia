@@ -51,11 +51,17 @@ const webBack =
  * product pages need no account, as on the website; checkout and orders ask
  * for one.
  */
+/** How long the shop waits for a read before saying it could not be read. */
+const READ_TIMEOUT_MS = 15_000;
+
 export default function RootLayout() {
   return (
     // An account with an authenticator app gives its code on the sign-in
-    // screen of this app, as in the other three (kit: SecondStepForm).
-    <AppProviders env={env} secondStep="in-app">
+    // screen of this app, as in the other three (kit: SecondStepForm). A read
+    // that has not answered in 15 seconds counts as failed, so every screen
+    // shows its error state or notice with "Intentar de nuevo" instead of
+    // loading, or turning its pull spinner, for ever.
+    <AppProviders env={env} secondStep="in-app" readTimeoutMs={READ_TIMEOUT_MS}>
       <CartProvider>
         <Stack
           screenOptions={{

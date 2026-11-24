@@ -1,11 +1,13 @@
 import { oneParam } from "@yuntera/expo-kit/paths";
 import { colors, radius, space, touchTarget } from "@yuntera/expo-kit/theme";
-import { EmptyState, LinkButton, LoadingState, Text } from "@yuntera/expo-kit/ui";
+import { EmptyState, ErrorState, LinkButton, LoadingState, Text } from "@yuntera/expo-kit/ui";
 import { Link, router, Stack, useLocalSearchParams } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { KeptNotice } from "@/components/kept-notice";
 import { Listing, type ListingChange, parseSort } from "@/components/listing";
 import { parseBrand } from "@/lib/brand-filter";
 import { useCategories } from "@/lib/catalog";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 
 /** A category, at /c/<slug> like the website: its sub-categories, then its products. */
 export default function CategoryScreen() {
@@ -22,6 +24,9 @@ export default function CategoryScreen() {
   const categories = useCategories();
 
   if (categories.isPending) return <LoadingState label="Cargando categoría…" />;
+  // The categories could not be read: that is not "this category does not exist".
+  if (firstReadFailed(categories) || !categories.data)
+    return <ErrorState error={categories.error} onRetry={() => void categories.refetch()} />;
   const category = categories.data?.find((c) => c.slug === slug);
   if (!category) {
     return (
@@ -56,6 +61,16 @@ export default function CategoryScreen() {
         }
         header={
           <View style={styles.header}>
+            {refreshFailed(categories) ? (
+              <KeptNotice
+                title={KEPT.categories.title}
+                body={KEPT.categories.body}
+                error={categories.error}
+                onRetry={() => void categories.refetch()}
+                retrying={categories.isFetching}
+                testID="category-kept"
+              />
+            ) : null}
             {parent ? (
               <Link
                 href={{ pathname: "/c/[slug]", params: { slug: parent.slug } }}

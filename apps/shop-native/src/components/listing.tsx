@@ -1,7 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { CatalogSearchInput } from "@yuntera/db";
 import { useApi } from "@yuntera/expo-kit/auth";
-import { useApiQuery } from "@yuntera/expo-kit/data";
+import { readTimeoutOf, useApiQuery, withReadTimeout } from "@yuntera/expo-kit/data";
 import { colors, gutter, radius, space, touchTarget } from "@yuntera/expo-kit/theme";
 import { Button, EmptyState, ErrorState, LoadingState, Text } from "@yuntera/expo-kit/ui";
 import type { ReactElement } from "react";
@@ -115,7 +115,7 @@ export function Listing({
   const results = useInfiniteQuery({
     queryKey: ["search", "listing", query ?? "", categorySlug ?? "", brand ?? "", sort, inStock],
     initialPageParam: 0,
-    queryFn: ({ pageParam }) => {
+    queryFn: ({ pageParam, meta }) => {
       const input: CatalogSearchInput = {
         query: query || null,
         categorySlug: categorySlug ?? null,
@@ -125,7 +125,8 @@ export function Listing({
         limit: PAGE_SIZE,
         offset: pageParam * PAGE_SIZE,
       };
-      return api.searchProducts(input);
+      // Within the app's time limit for a read (app/_layout.tsx), as every useApiQuery.
+      return withReadTimeout(api.searchProducts(input), readTimeoutOf(meta));
     },
     getNextPageParam: (last, pages) => {
       const total = last[0]?.total_count ?? 0;

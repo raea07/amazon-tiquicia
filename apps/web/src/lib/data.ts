@@ -74,7 +74,19 @@ export async function searchCatalog(input: CatalogSearchInput) {
   return publicApi().searchProducts(input);
 }
 
-export async function getProductPage(slug: string, postalCode: string | null) {
+/**
+ * A product page for a district. Its offers carry their delivery promise,
+ * which also depends on the clock: pass `hour` (promiseHour from
+ * @yuntera/core, the Costa Rica date and hour) so an answer is never served
+ * after the hour it was computed for, at a zone's cutoff or at midnight. The
+ * page then gives the same date as the cart, which reads it live
+ * (cart_alternatives). The argument only keys the cache.
+ */
+export async function getProductPage(
+  slug: string,
+  postalCode: string | null,
+  _hour: string | null = null,
+) {
   "use cache";
   cacheLife("minutes");
   const product = await publicApi().getProduct(slug, postalCode);

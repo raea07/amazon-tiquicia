@@ -7,7 +7,9 @@ import {
   AMOUNT_UNREAD,
   firstReadFailed,
   KEPT,
+  orderNotice,
   PAYMENT_UNREAD,
+  type PaymentRead,
   RETURN_UNREAD,
   refreshFailed,
   TRY_AGAIN,
@@ -90,6 +92,86 @@ describe("the words", () => {
   });
 });
 
+describe("the order page's notice", () => {
+  const payments: PaymentRead[] = ["ok", "unread", "stale"];
+  const every = payments.flatMap((payment) =>
+    [false, true].flatMap((orderStale) =>
+      [false, true].map((returnsUnread) => ({ orderStale, payment, returnsUnread })),
+    ),
+  );
+
+  it("is one notice, or none when every read answered", () => {
+    expect(orderNotice({ orderStale: false, payment: "ok", returnsUnread: false })).toBeNull();
+    for (const reads of every.slice(1)) {
+      const notice = orderNotice(reads);
+      if (reads.orderStale || reads.payment !== "ok" || reads.returnsUnread) {
+        expect(notice, JSON.stringify(reads)).not.toBeNull();
+        expect(notice?.title).toMatch(/^No pudimos /);
+      }
+    }
+  });
+
+  it("never says the order is up to date when its refresh failed", () => {
+    for (const reads of every.filter((r) => r.orderStale)) {
+      const notice = orderNotice(reads);
+      expect(`${notice?.title} ${notice?.body}`, JSON.stringify(reads)).not.toContain(
+        "sí está al día",
+      );
+      expect(notice?.title).toContain("actualizar su pedido");
+      expect(notice?.testID).toBe("order-kept");
+    }
+  });
+
+  it("names every read that failed, in one title", () => {
+    expect(orderNotice({ orderStale: true, payment: "unread", returnsUnread: false })?.title).toBe(
+      "No pudimos actualizar su pedido ni consultar su pago",
+    );
+    expect(orderNotice({ orderStale: true, payment: "stale", returnsUnread: false })?.title).toBe(
+      "No pudimos actualizar su pedido ni su pago",
+    );
+    expect(orderNotice({ orderStale: true, payment: "stale", returnsUnread: true })?.title).toBe(
+      "No pudimos actualizar su pedido, su pago ni consultar sus devoluciones",
+    );
+    expect(orderNotice({ orderStale: false, payment: "unread", returnsUnread: true })?.title).toBe(
+      "No pudimos consultar su pago ni sus devoluciones",
+    );
+    expect(orderNotice({ orderStale: false, payment: "ok", returnsUnread: true })).toMatchObject({
+      title: "No pudimos consultar sus devoluciones",
+      body: "Lo demás de su pedido sí está al día. Cómo va su devolución aparece aquí cuando la podamos consultar.",
+      cause: "returns",
+      testID: "returns-unread",
+    });
+  });
+
+  it("keeps the words of a single failure", () => {
+    expect(
+      orderNotice({ orderStale: false, payment: "unread", returnsUnread: false }),
+    ).toMatchObject({ ...PAYMENT_UNREAD, testID: "payment-unread", cause: "payment" });
+    expect(
+      orderNotice({ orderStale: false, payment: "stale", returnsUnread: false }),
+    ).toMatchObject({
+      ...KEPT.payment,
+      testID: "payment-kept",
+    });
+    expect(orderNotice({ orderStale: true, payment: "ok", returnsUnread: false })).toMatchObject({
+      ...KEPT.order,
+      testID: "order-kept",
+      cause: "order",
+    });
+  });
+
+  it("states no amount while the payment is unread, in the usted register", () => {
+    for (const reads of every) {
+      const notice = orderNotice(reads);
+      if (!notice) continue;
+      const text = `${notice.title} ${notice.body}`;
+      expect(text).not.toMatch(/₡|\d/);
+      expect(text).not.toMatch(/\b[a-z]+_[a-z_]+\b/);
+      expect(text).not.toMatch(/\b(tú|tu|puedes|intenta|deslice)\b/i);
+    }
+  });
+});
+
 describe("a cart line while the other shops are checked", () => {
   const line = { title: "Hamaca", seller_name: "Tienda Sendero", available: 0 };
 
@@ -133,6 +215,28 @@ describe("the screens", () => {
       /if \(\w+\.isError\)|\w+\.isError \?/.test(readFileSync(join(app, file), "utf8")),
     );
     expect(offenders).toEqual([]);
+  });
+
+  it("never say a category does not exist because the categories could not be read", () => {
+    const category = readFileSync(join(app, "app/c/[slug].tsx"), "utf8");
+    const failed = category.indexOf("firstReadFailed(categories)");
+    expect(failed).toBeGreaterThan(-1);
+    expect(failed).toBeLessThan(category.indexOf("No encontramos esa categoría"));
+  });
+
+  it("never leave a failed read with only a pull to ask again", () => {
+    const offenders = [...files("app"), ...files("components")].filter((file) =>
+      /Deslice hacia abajo/i.test(readFileSync(join(app, file), "utf8")),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("give up on a read that never answers", () => {
+    const layout = readFileSync(join(app, "app/_layout.tsx"), "utf8");
+    expect(layout).toMatch(/readTimeoutMs=\{READ_TIMEOUT_MS\}/);
+    // The listing reads outside useApiQuery, so it applies the limit itself.
+    const listing = readFileSync(join(app, "components/listing.tsx"), "utf8");
+    expect(listing).toMatch(/withReadTimeout\(api\.searchProducts/);
   });
 
   it("do not ask for a product page per cart alternative", () => {

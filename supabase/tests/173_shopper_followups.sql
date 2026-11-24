@@ -136,7 +136,10 @@ select pg_temp.remember('tecno_offer', (
   select o.id::text from public.offers o join public.sellers s on s.id = o.seller_id
   join public.skus k on k.id = o.sku_id join public.products p on p.id = k.product_id
   where p.slug = current_setting('t.earphones') and s.slug = 'tecnocasa'));
-update public.offers set status = 'active', available_quantity = greatest(available_quantity, 5)
+-- TecnoCasa's offer takes 3 handling days here (it is seeded with none), so a
+-- date computed without the alternative's own handling days is caught.
+update public.offers set status = 'active', available_quantity = greatest(available_quantity, 5),
+       handling_days = 3
 where id = current_setting('t.tecno_offer')::uuid;
 update public.offers set status = 'paused' where id = current_setting('t.sendero_offer')::uuid;
 
@@ -146,6 +149,8 @@ do $$ begin
   assert (select handling_days from public.offers where id = current_setting('t.sendero_offer')::uuid)
          <> (select handling_days from public.offers where id = current_setting('t.tecno_offer')::uuid),
     'fixture: the two offers take different handling days';
+  assert (select handling_days from public.offers where id = current_setting('t.tecno_offer')::uuid) = 3,
+    'fixture: the alternative takes handling days of its own';
 end $$;
 
 -- ═══ 1. Who may call what ══════════════════════════════════════════════════
@@ -259,7 +264,12 @@ begin
          is distinct from pg_temp.page_promise(current_setting('t.earphones'),
                                                current_setting('t.sendero_offer')::uuid, '10101')
          or pg_temp.page_promise(current_setting('t.earphones'), current_setting('t.sendero_offer')::uuid, '10101') is null,
-    'promise: the date is TecnoCasa''s (no handling days), not the paused offer''s';
+    'promise: the date is TecnoCasa''s, not the paused offer''s';
+  -- With TecnoCasa's own 3 handling days: later than a date without them.
+  assert (select (a.promise ->> 'earliest')::date
+          from public.cart_alternatives(array[current_setting('t.sendero_offer')::uuid], '10101') a)
+         > (select e.earliest from public.delivery_estimate('10101', 0) e),
+    'promise: the alternative''s own handling days count';
   -- A caller that sends only the offer ids: the same answer, no date.
   select * into strict v from public.cart_alternatives(array[current_setting('t.sendero_offer')::uuid]);
   assert v.alternative_offer_id = current_setting('t.tecno_offer')::uuid and v.seller_name = 'TecnoCasa'
@@ -525,6 +535,127 @@ begin
   assert (select count(*) from pg_temp.messages(o.id, 'refund_completed')) = 1
          and (select (context ->> 'amount_minor')::bigint from pg_temp.messages(o.id, 'refund_completed')) = o.shipping_minor,
     'K: one "refund arrived" with the fee';
+end $$;
+
+-- L: booked together, the goods' refund confirmed first and the fee's still
+-- open (a gateway refund not answered yet, or failed and waiting for finance's
+-- transfer). "Refund arrived" waits for the last of the two: nothing is said
+-- while the fee is open, and once it is confirmed one message names the total
+-- (docs/06-operations/notifications.md says so).
+select pg_temp.remember('order_l', pg_temp.packed_order('reembolso173a@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'ref-173-l')::text);
+select pg_temp.stop_and_receive(current_setting('t.order_l')::uuid);
+select private.confirm_refund((pg_temp.refund_of(current_setting('t.order_l')::uuid, 'parcel_returned')).id, 'ref-goods');
+select pg_temp.plan_refunds(current_setting('t.order_l')::uuid);
+do $$
+declare
+  o public.orders%rowtype;
+begin
+  select * into o from public.orders where id = current_setting('t.order_l')::uuid;
+  assert (select count(*) from private.refund_confirmations c
+          where c.refund_id = (pg_temp.refund_of(o.id, 'parcel_returned')).id) = 1
+         and (select count(*) from private.refund_confirmations c
+              where c.refund_id = (pg_temp.refund_of(o.id, 'delivery_fee')).id) = 0,
+    'L: the goods are confirmed, the fee is not';
+  assert (select count(*) from private.outbox_events e where e.id > current_setting('t.events_from')::bigint
+          and e.topic = 'refund.completed' and e.payload ->> 'order_id' = o.id::text) = 1,
+    'L: the goods'' confirmation has its event';
+  assert (select count(*) from pg_temp.messages(o.id, 'refund_completed')) = 0,
+    'L: "refund arrived" waits while the fee is open';
+  assert (select count(*) from pg_temp.messages(o.id, 'refund_initiated')) = 1,
+    'L: the start was announced once';
+end $$;
+set constraints all immediate;
+set constraints all deferred;
+select pg_temp.plan_refunds(current_setting('t.order_l')::uuid);
+do $$
+declare
+  o public.orders%rowtype;
+  m private.notification_deliveries;
+begin
+  select * into o from public.orders where id = current_setting('t.order_l')::uuid;
+  assert (select count(*) from pg_temp.messages(o.id, 'refund_completed')) = 1,
+    format('L: one "refund arrived" once the fee is confirmed, not %s',
+           (select count(*) from pg_temp.messages(o.id, 'refund_completed')));
+  select * into m from pg_temp.messages(o.id, 'refund_completed');
+  assert (m.context ->> 'amount_minor')::bigint = o.total_minor
+         and (select e.payload ->> 'reason' from private.outbox_events e where e.id = m.event_id) = 'delivery_fee',
+    format('L: with the total, on the fee''s confirmation %s', m.context);
+end $$;
+
+-- M: a refund settled at the door is left out of a group. The goods' refund
+-- of a group is made to read as settled at the door (an entry on the
+-- drivers' cash in its ledger transaction); the fee is then announced on its
+-- own, with its own amount. Done in a block that is rolled back, so the
+-- register and the ledger stay as they were.
+select pg_temp.remember('order_m', pg_temp.packed_order('reembolso173b@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'ref-173-m')::text);
+select pg_temp.stop_and_receive(current_setting('t.order_m')::uuid);
+set constraints all immediate;
+set constraints all deferred;
+do $$
+declare
+  o public.orders%rowtype;
+  g private.refunds;
+  f private.refunds;
+  v_before_fee jsonb;
+  v_fee_started jsonb;
+  v_fee_arrived jsonb;
+  v_goods jsonb;
+begin
+  select * into o from public.orders where id = current_setting('t.order_m')::uuid;
+  g := pg_temp.refund_of(o.id, 'parcel_returned');
+  f := pg_temp.refund_of(o.id, 'delivery_fee');
+  v_before_fee := private.refund_announcement(f.id, false);
+  begin
+    insert into public.ledger_entries (transaction_id, account_id, amount_minor)
+    values (g.ledger_transaction_id, private.ledger_account('driver_cash'), 1),
+           (g.ledger_transaction_id, private.ledger_account('driver_cash'), -1);
+    v_fee_started := private.refund_announcement(f.id, false);
+    v_fee_arrived := private.refund_announcement(f.id, true);
+    v_goods := private.refund_announcement(g.id, false);
+    raise exception using errcode = 'P0173', message = 'roll back case M';
+  exception when sqlstate 'P0173' then
+    null;
+  end;
+  assert (v_before_fee ->> 'refund_count')::integer = 2,
+    format('M: without the door entry the two are a group %s', v_before_fee);
+  assert v_fee_started is null and v_fee_arrived is null,
+    format('M: with the goods settled at the door, the fee is announced on its own %s %s',
+           v_fee_started, v_fee_arrived);
+  assert v_goods is null, 'M: and the goods too (no group)';
+  assert not exists (select 1 from public.ledger_entries e
+                     where e.transaction_id = g.ledger_transaction_id
+                       and e.account_id = private.ledger_account('driver_cash')),
+    'M: the door entry was rolled back';
+end $$;
+-- And planned that way, the fee's own message names the fee alone.
+do $$
+declare
+  o public.orders%rowtype;
+  g private.refunds;
+  e private.outbox_events;
+  v_amounts bigint[];
+begin
+  select * into o from public.orders where id = current_setting('t.order_m')::uuid;
+  g := pg_temp.refund_of(o.id, 'parcel_returned');
+  begin
+    insert into public.ledger_entries (transaction_id, account_id, amount_minor)
+    values (g.ledger_transaction_id, private.ledger_account('driver_cash'), 1),
+           (g.ledger_transaction_id, private.ledger_account('driver_cash'), -1);
+    for e in select * from private.outbox_events x
+             where x.id > current_setting('t.events_from')::bigint and x.topic = 'refund.requested'
+               and x.payload ->> 'order_id' = o.id::text and x.payload ->> 'reason' = 'delivery_fee' loop
+      perform private.notify_plan_event(e);
+    end loop;
+    select array_agg((d.context ->> 'amount_minor')::bigint) into v_amounts
+    from pg_temp.messages(o.id, 'refund_initiated') d;
+    raise exception using errcode = 'P0173', message = 'roll back case M';
+  exception when sqlstate 'P0173' then
+    null;
+  end;
+  assert v_amounts = array[o.shipping_minor],
+    format('M: the fee''s "refund started" names the fee alone, not %s', v_amounts);
 end $$;
 
 -- Everything planned again, once more: still exactly what was said above.

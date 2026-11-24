@@ -98,5 +98,78 @@ export const PAYMENT_UNREAD = {
 /** The refund notice of an order coming back, while the payment cannot be read. */
 export const AMOUNT_UNREAD = "Todavía no le podemos decir el monto: no pudimos consultar su pago.";
 
-/** A returned item whose return could not be read. */
+/** A returned item whose return could not be read (the notice above has the button). */
 export const RETURN_UNREAD = "No pudimos consultar cómo va su devolución.";
+
+/** What the order page knows of one of its three reads. */
+export type PaymentRead = "ok" | "unread" | "stale";
+
+export interface OrderNotice {
+  title: string;
+  body: string;
+  /** Which read failed first: its error gives the notice's last sentence. */
+  cause: "order" | "payment" | "returns";
+  testID: "order-kept" | "payment-unread" | "payment-kept" | "returns-unread";
+}
+
+/**
+ * The order page's one notice when something could not be read: the order
+ * kept after its refresh failed, the payment never read or not refreshed,
+ * the returns of a returned item never read. One notice and one "Intentar de
+ * nuevo" (which reads all three again), so the page never says in one place
+ * that the order is up to date and in another that it may not be. Null when
+ * every read the page needs answered.
+ */
+export function orderNotice(reads: {
+  orderStale: boolean;
+  payment: PaymentRead;
+  /** The order has returned items and their returns could not be read. */
+  returnsUnread: boolean;
+}): OrderNotice | null {
+  const { orderStale, payment, returnsUnread } = reads;
+  const failed: Array<[verb: string, what: string]> = [];
+  if (orderStale) failed.push(["actualizar", "su pedido"]);
+  if (payment === "stale") failed.push(["actualizar", "su pago"]);
+  if (payment === "unread") failed.push(["consultar", "su pago"]);
+  if (returnsUnread) failed.push(["consultar", "sus devoluciones"]);
+  if (failed.length === 0) return null;
+  // The words used so far when only one read failed.
+  if (failed.length === 1) {
+    if (orderStale) return { ...KEPT.order, cause: "order", testID: "order-kept" };
+    if (payment === "unread")
+      return { ...PAYMENT_UNREAD, cause: "payment", testID: "payment-unread" };
+    if (payment === "stale") return { ...KEPT.payment, cause: "payment", testID: "payment-kept" };
+  }
+  // "actualizar su pedido ni su pago": a verb is said once for what follows it.
+  const said = failed.map(([verb, what], i) =>
+    i > 0 && failed[i - 1]?.[0] === verb ? what : `${verb} ${what}`,
+  );
+  const title = `No pudimos ${
+    said.length === 1 ? said[0] : `${said.slice(0, -1).join(", ")} ni ${said[said.length - 1]}`
+  }`;
+  const body = [
+    orderStale
+      ? "Le mostramos lo último que cargamos de su pedido; puede no estar al día."
+      : "Lo demás de su pedido sí está al día.",
+    payment === "unread"
+      ? "Los montos de su pago y de sus reembolsos aparecen aquí cuando lo podamos consultar."
+      : payment === "stale"
+        ? "Los montos de su pago y de sus reembolsos que ve pueden no estar al día."
+        : null,
+    returnsUnread ? "Cómo va su devolución aparece aquí cuando la podamos consultar." : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return {
+    title,
+    body,
+    cause: orderStale ? "order" : payment !== "ok" ? "payment" : "returns",
+    testID: orderStale
+      ? "order-kept"
+      : payment === "unread"
+        ? "payment-unread"
+        : payment === "stale"
+          ? "payment-kept"
+          : "returns-unread",
+  };
+}

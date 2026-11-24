@@ -54,11 +54,13 @@ async function Cart() {
   // Another shop may still sell what the shopper chose: say so, instead of
   // "gone", with when it would arrive in the district the cart is priced for
   // (the date that offer's product page gives for it).
-  const alternativeOf = new Map(
-    (hasUnavailable ? await api.cartAlternatives(unavailable, location.postalCode) : []).map(
-      (alt) => [alt.offer_id, alt],
-    ),
-  );
+  // If the other shops cannot be checked, the cart still shows (it never
+  // says that nobody else sells the line while that is unknown).
+  const alternatives = hasUnavailable
+    ? await api.cartAlternatives(unavailable, location.postalCode).catch(() => null)
+    : [];
+  const alternativesUnread = alternatives === null;
+  const alternativeOf = new Map((alternatives ?? []).map((alt) => [alt.offer_id, alt]));
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
@@ -98,6 +100,7 @@ async function Cart() {
                   <UnavailableLine
                     line={line}
                     alternative={alternativeOf.get(line.offer_id)}
+                    alternativesUnread={alternativesUnread}
                     quantity={quantity}
                   />
                 )}
@@ -211,7 +214,7 @@ async function Cart() {
         <div className="mt-5">
           {hasUnavailable ? (
             <Alert tone="warning">
-              {alternativeOf.size > 0
+              {alternativeOf.size > 0 || alternativesUnread
                 ? "Cambie o quite los productos que ya no están disponibles para continuar. El total cambia cuando lo haga."
                 : "Quite los productos no disponibles para continuar. El total cambia cuando lo haga."}
             </Alert>
@@ -235,19 +238,24 @@ async function Cart() {
 function UnavailableLine({
   line,
   alternative,
+  alternativesUnread,
   quantity,
 }: {
   line: CartLine;
   alternative: DatedCartAlternative | undefined;
+  /** The other shops could not be checked. */
+  alternativesUnread: boolean;
   quantity: number;
 }) {
   if (!alternative) {
+    const gone = line.seller_name
+      ? `La oferta de ${line.seller_name} ya no está disponible`
+      : "Ya no está disponible";
     return (
       <Alert tone="warning" title={line.title ?? "Producto no disponible"}>
-        {line.seller_name
-          ? `La oferta de ${line.seller_name} ya no está disponible`
-          : "Ya no está disponible"}{" "}
-        y ninguna otra tienda lo vende ahora. Quítelo para continuar con su compra.
+        {alternativesUnread
+          ? `${gone}. No pudimos revisar si otra tienda lo vende: recargue la página para intentarlo de nuevo, o quítelo para continuar con su compra.`
+          : `${gone} y ninguna otra tienda lo vende ahora. Quítelo para continuar con su compra.`}
       </Alert>
     );
   }
