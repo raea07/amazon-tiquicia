@@ -2078,9 +2078,9 @@ shows the reason, still get it); nothing else the old pages read
 changed (`packages/db/src/contract.frozen-callers.test.ts` and
 `contract.shopper-followups.test.ts` prove it on the merged database). The
 store build of the shopper app (`3f251c3`) keeps working too: of the 29
-functions it calls, `cancel_order`, `place_order` and
-`confirm_sandbox_payment` run changed code inside and still answer in that
-commit's schemas (same test file). For a few seconds while `084600` runs, a
+functions it calls, four run changed code: `cancel_order`, `place_order` and
+`confirm_sandbox_payment` inside, and `get_order`, which `084600` redefines
+directly; all four still answer in that commit's schemas (same test file). For a few seconds while `084600` runs, a
 cart that asks for alternatives may get "function not found" until the API
 reloads its schema cache. The `717048f` web cart does not catch that error:
 a cart holding a line that can no longer be bought shows the error page

@@ -3,10 +3,11 @@
  * 084600), against the merged database.
  *
  *   - The store build of the shopper app (commit 3f251c3, on testers'
- *     phones). Of the 29 database functions it calls, three run code that
+ *     phones). Of the 29 database functions it calls, four run code that
  *     wave 8 changed: cancel_order (private.cancel_order_internal, 084400),
  *     place_order and confirm_sandbox_payment (the stock triggers that refresh
- *     a product's summary, 084400). Their answers, and get_order and my_orders
+ *     a product's summary, 084400), and get_order (redefined directly in
+ *     084600). Their answers, and get_order and my_orders
  *     of an order cancelled for no payment (whose reason the new screens now
  *     show) and of one staff cancelled with their own note (whose reason
  *     get_order, since 084600, gives the shopper as null), parse with that

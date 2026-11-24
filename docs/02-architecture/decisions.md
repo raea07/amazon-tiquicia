@@ -1674,13 +1674,17 @@ order, so a cancellation at that moment deadlocked with it.
   depends on it). A count into a location (decision 47) takes the
   warehouse, the location, the stock row and the shelf, as a correction
   does. A seller switching a variant off or on takes the shop's own offers
-  on the variant first, then the product, then the variant FOR NO KEY
-  UPDATE, not FOR UPDATE (it changes no key column). It took the product and
-  the variant first and then waited on the offer, while packing (which wants
-  a key-share lock on the variant, race E10), a checkout (a key-share lock on
-  the product, E10b) or a count into a location taking the offer across zero
-  (the product, I8) held that offer: 14, 17 and 10 in 100 natural rounds and
-  every forced round before, 0 after.
+  on the variant first, then the product, then the variant. It took the
+  product and the variant first and then waited on the offer, while packing
+  (which wants a key-share lock on the variant, race E10), a checkout (a
+  key-share lock on the product, E10b) or a count into a location taking
+  the offer across zero (the product, I8) held that offer: 14, 17 and 10 in
+  100 natural rounds and every forced round before, 0 after. Taking the
+  offers first is the fix: with the variant taken FOR UPDATE again all
+  three stay 0. The variant is now taken FOR NO KEY UPDATE as well (it
+  changes no key column), a precaution no race depends on, so that a
+  transaction that only references the variant does not hold the switch up
+  (contract test (ix) of `contract.stock-product-races`).
   Written down in `docs/04-algorithms/sourcing-and-inventory.md`, with every
   statement that writes or locks a product row.
 - **The sweep cancels at most 200 orders a run, the oldest first**, so a run

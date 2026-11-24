@@ -281,9 +281,9 @@ shopper, packer or staff member reads "Alguien más cambiaba lo mismo en ese
 momento, así que no se guardó nada. Inténtelo de nuevo." (`try_again`); the sweep runs again five minutes later:
 
 - two transactions that each take offers of two shared products across zero
-  in opposite order: two checkouts of last units (E5: 29 to 33 / 43 to 63
-  in two runs); a staff cancellation giving back last units against such a
-  checkout (E5b: 1 / 65); by the same mechanism, not raced separately, the
+  in opposite order: two checkouts of last units (E5: 24 to 33 / 43 to 63
+  over the runs); a staff cancellation giving back last units against such a
+  checkout (E5b: 1 to 5 / 61 to 74); by the same mechanism, not raced separately, the
   sweep against such a checkout (packing never takes an offer across zero);
 - a cancellation or the sweep that gives back the last unit of one offer of
   a product and then writes another offer of the same product, against the
@@ -293,12 +293,12 @@ momento, así que no se guardó nada. Inténtelo de nuevo." (`try_again`); the s
   the seller waits for it (E6: 22 to 26 / 100; E6b: 0 / 0);
 - a shop suspended or reinstated (its products in id order) against a
   writer that takes two of its products across zero in the other order
-  (E7: 1 to 3 / 100);
+  (E7: 0 to 4 / 100);
 - staff merging two brands (`ops_merge_brands`: one `UPDATE` of every
   product of the brand, in scan order) against a checkout that holds one of
   those products after taking its offer across zero and wants another (E11,
-  found by an independent review: natural 0 to 20 in 100 rounds over three runs and the two checkouts tried;
-  forced up to 56 in 100,
+  found by an independent review: natural 0 to 20 in 100 rounds over the runs and the two checkouts tried;
+  forced up to 74 in 100,
   depending on which session waits first; the same before 084400). Rare (a
   staff action). No summary was wrong in any round.
 
@@ -313,10 +313,15 @@ product. On the merged database before the change: E10 14 / 100 natural and
 every forced round, E10b 17 / 100 natural and every forced round, I8 10 / 100
 natural and every forced round with the seller first. Since 084400 it takes
 the shop's own offers on the variant first (`FOR NO KEY UPDATE`, id order),
-then the product, then the variant `FOR NO KEY UPDATE` (it changes only
-`active`, no key column, and deletes nothing): E10, E10b and I8 0 / 0, two
-switches of one variant still run one after the other (E10c: 0 / 0), and a
-shop switching off the variant of a parcel it packs itself stays 0 / 0 (H8).
+then the product, then the variant: E10, E10b and I8 0 / 0, two switches of
+one variant still run one after the other (E10c: 0 / 0), and a shop
+switching off the variant of a parcel it packs itself stays 0 / 0 (H8).
+Taking the offers first is what fixes all three: with the variant taken
+`FOR UPDATE` again they stay 0 / 0. The variant is taken `FOR NO KEY UPDATE`
+as well (it changes only `active`, no key column, and deletes nothing), a
+precaution no race depends on: a transaction that only references the
+variant (a ledger row, an order line) no longer holds the switch up
+(contract test (ix) of `contract.stock-product-races`).
 
 **Every statement that writes or locks `public.products`** (the definitions
 in force), the order its path takes, and what it means for stock writers.
