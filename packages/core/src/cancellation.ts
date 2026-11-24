@@ -21,9 +21,7 @@ export const CANCEL_REASON = {
 
 export type CancelReasonKind = keyof typeof CANCEL_REASON | "other";
 
-export function cancelReasonKind(
-  reason: string | null | undefined,
-): CancelReasonKind {
+export function cancelReasonKind(reason: string | null | undefined): CancelReasonKind {
   const stored = (reason ?? "").trim();
   for (const [kind, sentence] of Object.entries(CANCEL_REASON)) {
     if (stored === sentence) return kind as CancelReasonKind;
@@ -71,8 +69,7 @@ export function cancellationWords(
       };
     case "returned":
       return {
-        title:
-          "Cancelamos su pedido porque los paquetes regresaron sin entregarse",
+        title: "Cancelamos su pedido porque los paquetes regresaron sin entregarse",
         body: `Los paquetes volvieron a nuestra bodega sin llegar a usted. ${money} Si todavía quiere los productos, haga el pedido de nuevo.`,
         history: "Cancelado: los paquetes regresaron sin entregarse",
       };

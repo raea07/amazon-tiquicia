@@ -64,19 +64,12 @@ const SHELF = "C8-01";
 const SHELF2 = "C8-02";
 const ROUNDS = 3;
 
-const id = (n: number) =>
-  `c8000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
+const id = (n: number) => `c8000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
 const PRODUCT_X = id(0x0a);
 const PRODUCT_Z = id(0x0b);
 const PRODUCT_W = id(0x0c);
 const SKU = { x1: id(0x101), x2: id(0x102), z: id(0x103), w: id(0x104) };
-const OFFER = {
-  x1: id(0x201),
-  x2: id(0x202),
-  z1: id(0x203),
-  z2: id(0x204),
-  ws: id(0x205),
-};
+const OFFER = { x1: id(0x201), x2: id(0x202), z1: id(0x203), z2: id(0x204), ws: id(0x205) };
 
 type Session = { client: pg.PoolClient; pid: number };
 
@@ -92,10 +85,7 @@ describe.skipIf(!db.enabled)(
     let senderoWarehouse = "";
 
     beforeAll(async () => {
-      pool = new pg.Pool({
-        connectionString: process.env.DATABASE_URL,
-        max: 8,
-      });
+      pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 8 });
       await db.connect();
       for (const [email, name] of [
         [SHOPPER, "Prueba Carrera Producto"],
@@ -132,24 +122,16 @@ describe.skipIf(!db.enabled)(
       );
       for (const row of rows) users.set(row.email, row.id);
 
-      const one = async <T extends pg.QueryResultRow>(
-        sql: string,
-        args: unknown[] = [],
-      ) => (await db.query<T>(sql, args)).rows[0] as T;
+      const one = async <T extends pg.QueryResultRow>(sql: string, args: unknown[] = []) =>
+        (await db.query<T>(sql, args)).rows[0] as T;
       warehouseId = (
-        await one<{ id: string }>(
-          "select id from public.warehouses where code = 'SJO1'",
-        )
+        await one<{ id: string }>("select id from public.warehouses where code = 'SJO1'")
       ).id;
       sendero = (
-        await one<{ id: string }>(
-          "select id from public.sellers where slug = 'tienda-sendero'",
-        )
+        await one<{ id: string }>("select id from public.sellers where slug = 'tienda-sendero'")
       ).id;
       cafetal = (
-        await one<{ id: string }>(
-          "select id from public.sellers where slug = 'cafetal-los-santos'",
-        )
+        await one<{ id: string }>("select id from public.sellers where slug = 'cafetal-los-santos'")
       ).id;
       senderoWarehouse = (
         await one<{ id: string }>(
@@ -168,21 +150,9 @@ describe.skipIf(!db.enabled)(
         "select category_id, brand_id from public.products where slug = 'balon-futbol-sendero-5'",
       );
       for (const [pid, slug, title] of [
-        [
-          PRODUCT_X,
-          "carrera-contrato-producto-x",
-          "Producto X de la prueba de contrato",
-        ],
-        [
-          PRODUCT_Z,
-          "carrera-contrato-producto-z",
-          "Producto Z de la prueba de contrato",
-        ],
-        [
-          PRODUCT_W,
-          "carrera-contrato-producto-w",
-          "Producto W de la prueba de contrato",
-        ],
+        [PRODUCT_X, "carrera-contrato-producto-x", "Producto X de la prueba de contrato"],
+        [PRODUCT_Z, "carrera-contrato-producto-z", "Producto Z de la prueba de contrato"],
+        [PRODUCT_W, "carrera-contrato-producto-w", "Producto W de la prueba de contrato"],
       ]) {
         await db.query(
           `insert into public.products (id, slug, title, description, category_id, brand_id, status, created_by_seller_id)
@@ -261,9 +231,7 @@ describe.skipIf(!db.enabled)(
         "delete from public.routes r using public.drivers d where d.id = r.driver_id and d.user_id = $1",
         [users.get(DRIVER)],
       );
-      await db.query("delete from public.orders where user_id = any($1)", [
-        mine,
-      ]);
+      await db.query("delete from public.orders where user_id = any($1)", [mine]);
       const skus = Object.values(SKU);
       const client = await pool.connect();
       try {
@@ -277,34 +245,25 @@ describe.skipIf(!db.enabled)(
       } finally {
         client.release();
       }
-      await db.query(
-        "update public.pick_tasks set location_id = null where location_id = $1",
-        [shelfId],
-      );
-      await db.query(
-        "delete from public.bin_stock where sku_id = any($1) or location_id = $2",
-        [skus, shelfId],
-      );
-      await db.query("delete from public.warehouse_locations where id = $1", [
+      await db.query("update public.pick_tasks set location_id = null where location_id = $1", [
         shelfId,
       ]);
+      await db.query("delete from public.bin_stock where sku_id = any($1) or location_id = $2", [
+        skus,
+        shelfId,
+      ]);
+      await db.query("delete from public.warehouse_locations where id = $1", [shelfId]);
       await db.query(
         "delete from public.warehouse_locations where warehouse_id = $1 and code = $2",
         [warehouseId, SHELF2],
       );
-      await db.query("delete from public.stock_levels where sku_id = any($1)", [
-        skus,
-      ]);
-      await db.query("delete from public.offers where id = any($1)", [
-        Object.values(OFFER),
-      ]);
+      await db.query("delete from public.stock_levels where sku_id = any($1)", [skus]);
+      await db.query("delete from public.offers where id = any($1)", [Object.values(OFFER)]);
       await db.query("delete from public.skus where id = any($1)", [skus]);
       await db.query("delete from public.products where id = any($1)", [
         [PRODUCT_X, PRODUCT_Z, PRODUCT_W],
       ]);
-      await db.query("delete from public.drivers where user_id = $1", [
-        users.get(DRIVER),
-      ]);
+      await db.query("delete from public.drivers where user_id = $1", [users.get(DRIVER)]);
     }
 
     /** Open orders of this file cancelled, then deleted; its route closed. */
@@ -317,10 +276,7 @@ describe.skipIf(!db.enabled)(
         [[SHOPPER, SHOPPER2]],
       );
       for (const row of rows) {
-        await db.query(
-          "select private.cancel_order_internal($1, 'Prueba de contrato')",
-          [row.id],
-        );
+        await db.query("select private.cancel_order_internal($1, 'Prueba de contrato')", [row.id]);
       }
       await db.query(
         `delete from public.orders o using auth.users u
@@ -364,21 +320,12 @@ describe.skipIf(!db.enabled)(
       const client = await pool.connect();
       await client.query("begin");
       if (email) {
-        await client.query(
-          "select set_config('request.jwt.claims', $1, true)",
-          [
-            JSON.stringify({
-              sub: users.get(email),
-              role: "authenticated",
-              aal: "aal2",
-            }),
-          ],
-        );
+        await client.query("select set_config('request.jwt.claims', $1, true)", [
+          JSON.stringify({ sub: users.get(email), role: "authenticated", aal: "aal2" }),
+        ]);
         await client.query("set local role authenticated");
       }
-      const { rows } = await client.query<{ pid: number }>(
-        "select pg_backend_pid() as pid",
-      );
+      const { rows } = await client.query<{ pid: number }>("select pg_backend_pid() as pid");
       return { client, pid: rows[0]?.pid ?? 0 };
     }
 
@@ -399,9 +346,7 @@ describe.skipIf(!db.enabled)(
       query.then(
         () => "",
         (error: Error & { code?: string }) =>
-          error.code === "40P01" || error.code === "40001"
-            ? `LOCK ${error.code}`
-            : error.message,
+          error.code === "40P01" || error.code === "40001" ? `LOCK ${error.code}` : error.message,
       );
 
     async function finish(...sessions: Session[]) {
@@ -419,16 +364,13 @@ describe.skipIf(!db.enabled)(
         )
       ).rows[0]?.id ?? "";
     let keys = 0;
-    const placeSql =
-      "select public.place_order($1::jsonb, $2, $3::public.payment_method, $4)";
+    const placeSql = "select public.place_order($1::jsonb, $2, $3::public.payment_method, $4)";
     const placeArgs = async (
       lines: [string, number][],
       method: "card" | "cash_on_delivery",
       email = SHOPPER,
     ) => [
-      JSON.stringify(
-        lines.map(([offer, quantity]) => ({ offer_id: offer, quantity })),
-      ),
+      JSON.stringify(lines.map(([offer, quantity]) => ({ offer_id: offer, quantity }))),
       await address(email),
       method,
       `carrera-producto-${Date.now()}-${keys++}`,
@@ -444,10 +386,9 @@ describe.skipIf(!db.enabled)(
       const order = (placed as { r: { order_id: string } }).r.order_id;
       const shipment =
         (
-          await db.query<{ id: string }>(
-            "select id from public.shipments where order_id = $1",
-            [order],
-          )
+          await db.query<{ id: string }>("select id from public.shipments where order_id = $1", [
+            order,
+          ])
         ).rows[0]?.id ?? "";
       await run(WORKER, "select public.wms_start_picking($1)", [shipment]);
       const { rows: tasks } = await db.query<{
@@ -515,16 +456,11 @@ describe.skipIf(!db.enabled)(
             [PRODUCT_X],
           );
           const buying = outcome(
-            shopper.client.query(
-              placeSql,
-              await placeArgs([[OFFER.x1, 1]], "card"),
-            ),
+            shopper.client.query(placeSql, await placeArgs([[OFFER.x1, 1]], "card")),
           );
           const settled = await Promise.race([
             buying,
-            new Promise<string>((resolve) =>
-              setTimeout(() => resolve("still waiting"), 3000),
-            ),
+            new Promise<string>((resolve) => setTimeout(() => resolve("still waiting"), 3000)),
           ]);
           expect(settled, `round ${round}`).toBe("");
         } finally {
@@ -551,27 +487,15 @@ describe.skipIf(!db.enabled)(
               .query(placeSql, await placeArgs([[OFFER.z1, 1]], "card"))
               .then(() => one.client.query("commit")),
           );
-          expect(
-            await waitsForLock(one.pid),
-            `round ${round}: first waited`,
-          ).toBe(true);
+          expect(await waitsForLock(one.pid), `round ${round}: first waited`).toBe(true);
           const second = outcome(
             two.client
-              .query(
-                placeSql,
-                await placeArgs([[OFFER.z2, 1]], "card", SHOPPER2),
-              )
+              .query(placeSql, await placeArgs([[OFFER.z2, 1]], "card", SHOPPER2))
               .then(() => two.client.query("commit")),
           );
-          expect(
-            await waitsForLock(two.pid),
-            `round ${round}: second waited`,
-          ).toBe(true);
+          expect(await waitsForLock(two.pid), `round ${round}: second waited`).toBe(true);
           await holder.client.query("rollback");
-          expect([await first, await second], `round ${round}`).toEqual([
-            "",
-            "",
-          ]);
+          expect([await first, await second], `round ${round}`).toEqual(["", ""]);
           const s = await summary(PRODUCT_Z);
           expect(s?.stored, `round ${round}: the summary`).toEqual(s?.computed);
           expect(
@@ -602,25 +526,18 @@ describe.skipIf(!db.enabled)(
             [held.order],
           );
           const cancelling = outcome(
-            cancel.client.query(
-              "select public.cancel_order($1, 'Prueba de contrato')",
-              [held.order],
-            ),
+            cancel.client.query("select public.cancel_order($1, 'Prueba de contrato')", [
+              held.order,
+            ]),
           );
-          expect(
-            await waitsForLock(cancel.pid),
-            `round ${round}: cancellation waited`,
-          ).toBe(true);
+          expect(await waitsForLock(cancel.pid), `round ${round}: cancellation waited`).toBe(true);
           const counting = outcome(
             count.client.query(
               "select public.wms_adjust_stock($1, $2, $3, 1, 'Conteo de la prueba de contrato', null)",
               [shelfId, SKU.x2, sendero],
             ),
           );
-          expect(
-            await waitsForLock(count.pid),
-            `round ${round}: count waited`,
-          ).toBe(true);
+          expect(await waitsForLock(count.pid), `round ${round}: count waited`).toBe(true);
           await holder.client.query("rollback");
           expect(await cancelling, `round ${round}: cancellation`).toBe("");
           await cancel.client.query("rollback");
@@ -661,26 +578,15 @@ describe.skipIf(!db.enabled)(
               ])
               .then(() => pick.client.query("commit")),
           );
-          expect(
-            await waitsForLock(pick.pid),
-            `round ${round}: pick waited`,
-          ).toBe(true);
+          expect(await waitsForLock(pick.pid), `round ${round}: pick waited`).toBe(true);
           const cancelling = outcome(
             cancel.client
-              .query("select public.cancel_order($1, 'Prueba de contrato')", [
-                x.order,
-              ])
+              .query("select public.cancel_order($1, 'Prueba de contrato')", [x.order])
               .then(() => cancel.client.query("commit")),
           );
-          expect(
-            await waitsForLock(cancel.pid),
-            `round ${round}: cancellation waited`,
-          ).toBe(true);
+          expect(await waitsForLock(cancel.pid), `round ${round}: cancellation waited`).toBe(true);
           await holder.client.query("rollback");
-          expect([await picking, await cancelling], `round ${round}`).toEqual([
-            "",
-            "",
-          ]);
+          expect([await picking, await cancelling], `round ${round}`).toEqual(["", ""]);
           // Both units are back on their shelves: on hand is the shelves again.
           const { rows } = await db.query<{ on_hand: number; shelves: number }>(
             `select l.on_hand, (select coalesce(sum(b.quantity), 0)::int from public.bin_stock b
@@ -690,10 +596,7 @@ describe.skipIf(!db.enabled)(
             [warehouseId, sendero, [SKU.x1, SKU.x2]],
           );
           for (const row of rows)
-            expect(
-              row.on_hand,
-              `round ${round}: a unit picked and not put back`,
-            ).toBe(row.shelves);
+            expect(row.on_hand, `round ${round}: a unit picked and not put back`).toBe(row.shelves);
         } finally {
           await finish(holder, pick, cancel);
         }
@@ -705,34 +608,24 @@ describe.skipIf(!db.enabled)(
       const parcels: string[] = [];
       for (const offer of [OFFER.x1, OFFER.z1]) {
         const x = await cashInPicking([[offer, 1]], 1);
-        await run(
-          WORKER,
-          "select public.wms_pack_shipment($1, 900, 1::smallint)",
-          [x.shipment],
-        );
+        await run(WORKER, "select public.wms_pack_shipment($1, 900, 1::smallint)", [x.shipment]);
         parcels.push(x.shipment);
       }
       const driverId =
         (
-          await db.query<{ id: string }>(
-            "select d.id from public.drivers d where d.user_id = $1",
-            [users.get(DRIVER)],
-          )
+          await db.query<{ id: string }>("select d.id from public.drivers d where d.user_id = $1", [
+            users.get(DRIVER),
+          ])
         ).rows[0]?.id ?? "";
       const today =
-        (await db.query<{ d: string }>("select private.cr_today()::text as d"))
-          .rows[0]?.d ?? "";
+        (await db.query<{ d: string }>("select private.cr_today()::text as d")).rows[0]?.d ?? "";
       const route = (
-        await run(
-          STAFF,
-          "select public.ops_create_route($1::date, $2, $3::jsonb, $4) as id",
-          [
-            today,
-            warehouseId,
-            JSON.stringify(parcels.map((shipment_id) => ({ shipment_id }))),
-            driverId,
-          ],
-        )
+        await run(STAFF, "select public.ops_create_route($1::date, $2, $3::jsonb, $4) as id", [
+          today,
+          warehouseId,
+          JSON.stringify(parcels.map((shipment_id) => ({ shipment_id }))),
+          driverId,
+        ])
       ).id as string;
       try {
         for (let round = 0; round < ROUNDS; round++) {
@@ -740,29 +633,19 @@ describe.skipIf(!db.enabled)(
           const start = await session(DRIVER);
           const recall = await session(STAFF);
           try {
-            await holder.client.query(
-              "select 1 from public.routes where id = $1 for share",
-              [route],
-            );
+            await holder.client.query("select 1 from public.routes where id = $1 for share", [
+              route,
+            ]);
             const starting = outcome(
-              start.client.query("select public.driver_start_route($1)", [
-                route,
+              start.client.query("select public.driver_start_route($1)", [route]),
+            );
+            expect(await waitsForLock(start.pid), `round ${round}: start waited`).toBe(true);
+            const recalling = outcome(
+              recall.client.query("select public.ops_recall_shipment($1, 'Prueba de contrato')", [
+                parcels[0],
               ]),
             );
-            expect(
-              await waitsForLock(start.pid),
-              `round ${round}: start waited`,
-            ).toBe(true);
-            const recalling = outcome(
-              recall.client.query(
-                "select public.ops_recall_shipment($1, 'Prueba de contrato')",
-                [parcels[0]],
-              ),
-            );
-            expect(
-              await waitsForLock(recall.pid),
-              `round ${round}: stop waited`,
-            ).toBe(true);
+            expect(await waitsForLock(recall.pid), `round ${round}: stop waited`).toBe(true);
             await holder.client.query("rollback");
             expect(await starting, `round ${round}: start`).toBe("");
             await start.client.query("rollback");
@@ -779,17 +662,13 @@ describe.skipIf(!db.enabled)(
             "select public.ops_recall_shipment($1, 'Fin de la prueba de contrato')",
             [shipment],
           );
-          await run(
-            WORKER,
-            "select public.wms_receive_returned_shipment($1, true, null)",
-            [shipment],
-          );
+          await run(WORKER, "select public.wms_receive_returned_shipment($1, true, null)", [
+            shipment,
+          ]);
         }
-        await run(
-          STAFF,
-          "select public.ops_close_route($1, 'Fin de la prueba de contrato')",
-          [route],
-        );
+        await run(STAFF, "select public.ops_close_route($1, 'Fin de la prueba de contrato')", [
+          route,
+        ]);
       }
     });
 
@@ -822,30 +701,17 @@ describe.skipIf(!db.enabled)(
           // while it waits (before 084400 the pack took the parcel and the
           // stock row, then waited for the order behind the cancellation,
           // which then wanted the parcel).
-          await holder.client.query(
-            "select 1 from public.orders where id = $1 for update",
-            [order],
-          );
+          await holder.client.query("select 1 from public.orders where id = $1 for update", [
+            order,
+          ]);
           const cancelling = outcome(
-            cancel.client.query(
-              "select public.cancel_order($1, 'Prueba de contrato')",
-              [order],
-            ),
+            cancel.client.query("select public.cancel_order($1, 'Prueba de contrato')", [order]),
           );
-          expect(
-            await waitsForLock(cancel.pid),
-            `round ${round}: cancellation waited`,
-          ).toBe(true);
+          expect(await waitsForLock(cancel.pid), `round ${round}: cancellation waited`).toBe(true);
           const packing = outcome(
-            pack.client.query(
-              "select public.seller_mark_packed($1, 900, 1::smallint)",
-              [parcel],
-            ),
+            pack.client.query("select public.seller_mark_packed($1, 900, 1::smallint)", [parcel]),
           );
-          expect(
-            await waitsForLock(pack.pid),
-            `round ${round}: pack waited`,
-          ).toBe(true);
+          expect(await waitsForLock(pack.pid), `round ${round}: pack waited`).toBe(true);
           await holder.client.query("rollback");
           expect(await cancelling, `round ${round}: cancellation`).toBe("");
           await cancel.client.query("rollback");
@@ -867,30 +733,19 @@ describe.skipIf(!db.enabled)(
           // The pack queues on the offer (its stock write updates it) holding
           // the stock row; the seller starts while it waits and queues on the
           // same offer (since 084400 before the product and the variant).
-          await holder.client.query(
-            "select 1 from public.offers where id = $1 for share",
-            [OFFER.z1],
-          );
+          await holder.client.query("select 1 from public.offers where id = $1 for share", [
+            OFFER.z1,
+          ]);
           const packing = outcome(
-            pack.client.query(
-              "select public.wms_pack_shipment($1, 900, 1::smallint)",
-              [held.shipment],
-            ),
+            pack.client.query("select public.wms_pack_shipment($1, 900, 1::smallint)", [
+              held.shipment,
+            ]),
           );
-          expect(
-            await waitsForLock(pack.pid),
-            `round ${round}: pack waited`,
-          ).toBe(true);
+          expect(await waitsForLock(pack.pid), `round ${round}: pack waited`).toBe(true);
           const switching = outcome(
-            seller.client.query(
-              "select public.seller_set_variant_active($1, false)",
-              [SKU.z],
-            ),
+            seller.client.query("select public.seller_set_variant_active($1, false)", [SKU.z]),
           );
-          expect(
-            await waitsForLock(seller.pid),
-            `round ${round}: seller waited`,
-          ).toBe(true);
+          expect(await waitsForLock(seller.pid), `round ${round}: seller waited`).toBe(true);
           await holder.client.query("rollback");
           expect(await packing, `round ${round}: pack`).toBe("");
           await pack.client.query("rollback");
@@ -922,30 +777,20 @@ describe.skipIf(!db.enabled)(
           // nothing else; since, it holds its offer first). The count starts
           // while it waits: it takes the stock row and the offer across zero
           // and wants the product. Without one order: a deadlock every round.
-          await holder.client.query(
-            "select 1 from public.products where id = $1 for share",
-            [PRODUCT_Z],
-          );
+          await holder.client.query("select 1 from public.products where id = $1 for share", [
+            PRODUCT_Z,
+          ]);
           const switching = outcome(
-            seller.client.query(
-              "select public.seller_set_variant_active($1, false)",
-              [SKU.z],
-            ),
+            seller.client.query("select public.seller_set_variant_active($1, false)", [SKU.z]),
           );
-          expect(
-            await waitsForLock(seller.pid),
-            `round ${round}: seller waited`,
-          ).toBe(true);
+          expect(await waitsForLock(seller.pid), `round ${round}: seller waited`).toBe(true);
           const counting = outcome(
             counter.client.query(
               "select public.wms_count_into_location($1, $2, $3, 3, 'Conteo de la prueba de contrato')",
               [shelf2, SKU.z, sendero],
             ),
           );
-          expect(
-            await waitsForLock(counter.pid),
-            `round ${round}: count waited`,
-          ).toBe(true);
+          expect(await waitsForLock(counter.pid), `round ${round}: count waited`).toBe(true);
           await holder.client.query("rollback");
           expect(await switching, `round ${round}: variant off`).toBe("");
           await seller.client.query("rollback");
@@ -955,9 +800,7 @@ describe.skipIf(!db.enabled)(
         }
       }
       await cleanUp();
-      await db.query("delete from public.bin_stock where location_id = $1", [
-        shelf2,
-      ]);
+      await db.query("delete from public.bin_stock where location_id = $1", [shelf2]);
     });
   },
 );

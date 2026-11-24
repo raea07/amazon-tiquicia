@@ -45,19 +45,12 @@ import {
   SimulatePaymentForm,
 } from "@/components/order-actions";
 import { OrderInvoices } from "@/components/order-invoices";
-import {
-  MoneyInReview,
-  PaymentPanel,
-  RefundList,
-} from "@/components/payment-panel";
+import { MoneyInReview, PaymentPanel, RefundList } from "@/components/payment-panel";
 import { ReturnStatusList } from "@/components/return-status";
 import { requireViewer } from "@/lib/session";
 import { sessionApi } from "@/lib/supabase";
 
-export const metadata: Metadata = {
-  title: "Su pedido",
-  robots: { index: false },
-};
+export const metadata: Metadata = { title: "Su pedido", robots: { index: false } };
 
 export default function OrderPage(props: PageProps<"/pedidos/[numero]">) {
   return (
@@ -72,8 +65,7 @@ export default function OrderPage(props: PageProps<"/pedidos/[numero]">) {
 /** Why staff hid a shopper's review, as the shopper reads it. */
 const HIDDEN_REVIEW_REASON: Record<ReviewHideReason, string> = {
   offensive: "El motivo: tenía insultos o lenguaje ofensivo.",
-  personal_data:
-    "El motivo: incluía datos personales, suyos o de otra persona.",
+  personal_data: "El motivo: incluía datos personales, suyos o de otra persona.",
   off_topic: "El motivo: no hablaba del producto ni de su compra.",
   spam: "El motivo: tenía publicidad o enlaces.",
   not_genuine: "El motivo: no describía una experiencia real con el producto.",
@@ -98,8 +90,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
     order = await api.getOrder(numero);
   } catch (error) {
     // Someone else's order and a non-existent one look the same: not found.
-    if (error instanceof ApiError && error.code === "order_not_found")
-      notFound();
+    if (error instanceof ApiError && error.code === "order_not_found") notFound();
     throw error;
   }
   // Where each return stands, so the page can say what happens next.
@@ -121,11 +112,9 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
 
   await connection();
   const today = toCostaRicaTime(new Date()).date;
-  const delivered =
-    order.status === "delivered" || order.status === "completed";
+  const delivered = order.status === "delivered" || order.status === "completed";
   const withdrawalOpen = delivered && today <= order.withdrawal_deadline;
-  const warrantyOpen =
-    delivered && order.warranty_until !== null && today <= order.warranty_until;
+  const warrantyOpen = delivered && order.warranty_until !== null && today <= order.warranty_until;
   const awaitingPayment = order.status === "pending_payment";
   // Every parcel still to deliver is on its way back to the warehouse
   // (stopped by staff, or sent back after a route): nothing reaches the
@@ -133,25 +122,16 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
   const back = orderComingBack(order.status, order.shipments);
   // Or every parcel left waits in the warehouse to go out again: no "En
   // camino" and no old date either.
-  const waiting = back
-    ? null
-    : orderAwaitingNewAttempt(order.status, order.shipments);
+  const waiting = back ? null : orderAwaitingNewAttempt(order.status, order.shipments);
   // Money held for the shopper, so a cancellation gives some back.
-  const paid = ["captured", "partially_refunded"].includes(
-    order.payment?.status ?? "",
-  );
-  const refundedSoFar = payment.refunds.reduce(
-    (sum, refund) => sum + refund.amount_minor,
-    0,
-  );
+  const paid = ["captured", "partially_refunded"].includes(order.payment?.status ?? "");
+  const refundedSoFar = payment.refunds.reduce((sum, refund) => sum + refund.amount_minor, 0);
   const feeBack = deliveryFeeComesBack(order.shipments);
   // What comes back when the warehouse receives them: what is left of the
   // payment, less the delivery fee when someone went to the door.
   const comesBack = Math.max(
     0,
-    (order.payment?.amount_minor ?? 0) -
-      refundedSoFar -
-      (feeBack ? 0 : order.shipping_minor),
+    (order.payment?.amount_minor ?? 0) - refundedSoFar - (feeBack ? 0 : order.shipping_minor),
   );
   // Why the delivery fee stays charged, when the order is (being) cancelled
   // after a real attempt at the door.
@@ -167,9 +147,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
 
   // Why it was cancelled, and what to do next (the reason stored on the order).
   const why =
-    order.cancelled_at !== null &&
-    ["cancelled", "refunded"].includes(order.status) &&
-    !back
+    order.cancelled_at !== null && ["cancelled", "refunded"].includes(order.status) && !back
       ? cancellationWords(
           order.cancel_reason,
           paid || refundedSoFar > 0 || order.payment?.status === "refunded",
@@ -186,8 +164,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
       ) : null}
       {query.pago === "cancelado" && payment.stage !== "paid" ? (
         <Alert tone="info" className="mb-6" title="No se hizo ningún cobro">
-          Volvió sin pagar. Puede pagar cuando quiera mientras guardamos sus
-          productos.
+          Volvió sin pagar. Puede pagar cuando quiera mientras guardamos sus productos.
         </Alert>
       ) : null}
       {query.nuevo === "1" ? (
@@ -203,9 +180,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
         {/* Not "En camino" when no parcel is on its way to the shopper any more. */}
         {back ? (
           <Badge tone="warning">
-            {back.cancels
-              ? "Se está cancelando"
-              : "Un paquete regresa a la bodega"}
+            {back.cancels ? "Se está cancelando" : "Un paquete regresa a la bodega"}
           </Badge>
         ) : waiting ? (
           <Badge tone="info">Entrega reprogramada</Badge>
@@ -215,11 +190,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
       </div>
       <p className="mt-1 text-ink-muted">
         Realizado el{" "}
-        {formatDate(order.placed_at, {
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        })}
+        {formatDate(order.placed_at, { day: "numeric", month: "long", year: "numeric" })}
       </p>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
@@ -231,15 +202,12 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
               </Alert>
             </div>
           ) : null}
-          {awaitingPayment && throughGateway ? (
-            <PaymentPanel payment={payment} />
-          ) : null}
+          {awaitingPayment && throughGateway ? <PaymentPanel payment={payment} /> : null}
           {awaitingPayment && !throughGateway ? (
             <PaymentInstructions order={order} payment={payment} />
           ) : null}
           {/* Money that arrived and waits for finance, or goes back: said whatever the order's status. */}
-          {payment.money_in_review &&
-          !(awaitingPayment && payment.stage === "review") ? (
+          {payment.money_in_review && !(awaitingPayment && payment.stage === "review") ? (
             <MoneyInReview payment={payment} />
           ) : null}
           {back ? (
@@ -262,9 +230,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                   : ""
                 : back.cancels
                   ? `Cuando la bodega confirme que lo recibió, le devolvemos ${formatPrice(comesBack)}${
-                      feeBack && order.shipping_minor > 0
-                        ? ", el envío incluido,"
-                        : ""
+                      feeBack && order.shipping_minor > 0 ? ", el envío incluido," : ""
                     } por el mismo medio con que pagó.${feeKept ? ` ${feeKept}` : ""}`
                   : "Cuando la bodega lo reciba, le devolvemos lo que pagó por ese paquete."}
             </Alert>
@@ -278,8 +244,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
           ) : null}
           {payment.refunds.length > 1 ? (
             <p className="-mt-3 text-sm" data-testid="refund-total">
-              En total le devolvemos{" "}
-              <strong>{formatPrice(refundedSoFar)}</strong>
+              En total le devolvemos <strong>{formatPrice(refundedSoFar)}</strong>
               {refundedSoFar === order.total_minor && order.shipping_minor > 0
                 ? ": todo lo que pagó, el envío incluido."
                 : "."}
@@ -293,9 +258,8 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                 {order.delivery_pin}
               </p>
               <p className="mt-2 text-sm text-ink-muted">
-                Dígaselo al repartidor solo cuando tenga el paquete en sus
-                manos. Es la prueba de que usted lo recibió; nadie de Yuntera se
-                lo va a pedir por teléfono ni por mensaje.
+                Dígaselo al repartidor solo cuando tenga el paquete en sus manos. Es la prueba de
+                que usted lo recibió; nadie de Yuntera se lo va a pedir por teléfono ni por mensaje.
               </p>
             </section>
           ) : null}
@@ -311,10 +275,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
             ) : order.status === "cancelled" ||
               order.status === "refunded" ||
               back ? null : waiting ? (
-              <p
-                className="mt-2 font-semibold"
-                data-testid="awaiting-new-attempt"
-              >
+              <p className="mt-2 font-semibold" data-testid="awaiting-new-attempt">
                 {awaitingNewAttemptLine(waiting.failedAttempt)}
               </p>
             ) : (
@@ -325,16 +286,13 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
               </p>
             )}
             <p className="mt-2 text-sm text-ink-muted">
-              {order.address.recipient_name} · {order.address.senas}.{" "}
-              {order.address.district}, {order.address.canton}.
+              {order.address.recipient_name} · {order.address.senas}. {order.address.district},{" "}
+              {order.address.canton}.
             </p>
 
             <ul className="mt-4 flex flex-col gap-3">
               {order.shipments.map((shipment, index) => (
-                <li
-                  key={shipment.id}
-                  className="rounded-lg border border-border bg-surface p-4"
-                >
+                <li key={shipment.id} className="rounded-lg border border-border bg-surface p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-semibold">
                       {order.shipments.length > 1
@@ -346,14 +304,8 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                     </p>
                     {isStoppedShipment(shipment.status, shipment.recalled) ? (
                       <Badge tone="warning">Detenido en la bodega</Badge>
-                    ) : isRescheduledShipment(
-                        shipment.status,
-                        shipment.attempt_count,
-                      ) ||
-                      waitsForNewAttempt(
-                        shipment.status,
-                        shipment.attempt_count,
-                      ) ? (
+                    ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ||
+                      waitsForNewAttempt(shipment.status, shipment.attempt_count) ? (
                       <Badge tone="info">Entrega reprogramada</Badge>
                     ) : (
                       <ShipmentStatusBadge status={shipment.status} />
@@ -361,8 +313,8 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                   </div>
                   {shipment.driver_first_name ? (
                     <p className="mt-2 text-sm">
-                      {shipment.driver_first_name} va en camino con su paquete.
-                      Tenga a mano su código de entrega.
+                      {shipment.driver_first_name} va en camino con su paquete. Tenga a mano su
+                      código de entrega.
                     </p>
                   ) : null}
                   {isStoppedShipment(shipment.status, shipment.recalled) ? (
@@ -375,27 +327,18 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                   ) : shipment.status === "returning" ? (
                     <p className="mt-2 text-sm">
                       Este paquete regresa a nuestra bodega sin entregarse.
-                      {paid
-                        ? " Le devolvemos lo que pagó por él cuando la bodega lo reciba."
-                        : ""}
+                      {paid ? " Le devolvemos lo que pagó por él cuando la bodega lo reciba." : ""}
                     </p>
-                  ) : isRescheduledShipment(
-                      shipment.status,
-                      shipment.attempt_count,
-                    ) ||
-                    waitsForNewAttempt(
-                      shipment.status,
-                      shipment.attempt_count,
-                    ) ? (
+                  ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ||
+                    waitsForNewAttempt(shipment.status, shipment.attempt_count) ? (
                     <p className="mt-2 text-sm">
-                      Reprogramamos la entrega de este paquete. Le avisaremos
-                      cuando vuelva a salir hacia usted; si necesita cambiar
-                      algo, escríbanos.
+                      Reprogramamos la entrega de este paquete. Le avisaremos cuando vuelva a salir
+                      hacia usted; si necesita cambiar algo, escríbanos.
                     </p>
                   ) : shipment.status === "delivery_failed" ? (
                     <p className="mt-2 text-sm text-warning">
-                      No pudimos entregarlo. Lo intentaremos de nuevo el próximo
-                      día hábil; si necesita cambiar algo, escríbanos.
+                      No pudimos entregarlo. Lo intentaremos de nuevo el próximo día hábil; si
+                      necesita cambiar algo, escríbanos.
                     </p>
                   ) : null}
                 </li>
@@ -410,17 +353,10 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
             <ul className="mt-3 flex flex-col gap-3">
               {order.items.map((item) => {
                 const returnable = item.quantity - item.returned_quantity;
-                const moderation = reviewStates.find(
-                  (state) => state.order_item_id === item.id,
-                );
-                const itemReturns = returns.filter(
-                  (entry) => entry.order_item_id === item.id,
-                );
+                const moderation = reviewStates.find((state) => state.order_item_id === item.id);
+                const itemReturns = returns.filter((entry) => entry.order_item_id === item.id);
                 return (
-                  <li
-                    key={item.id}
-                    className="rounded-lg border border-border bg-surface p-4"
-                  >
+                  <li key={item.id} className="rounded-lg border border-border bg-surface p-4">
                     <div className="flex gap-4">
                       <div className="size-16 shrink-0 overflow-hidden rounded-md bg-arena-100">
                         {item.image_path ? (
@@ -445,8 +381,8 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                         )}
                         <p className="text-sm text-ink-muted">
                           {item.variant_name ? `${item.variant_name} · ` : ""}
-                          {item.quantity} × {formatPrice(item.unit_price_minor)}{" "}
-                          · Vendido por {item.seller_name}
+                          {item.quantity} × {formatPrice(item.unit_price_minor)} · Vendido por{" "}
+                          {item.seller_name}
                         </p>
                       </div>
                       <p className="shrink-0 font-semibold tabular-nums">
@@ -455,23 +391,13 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                     </div>
 
                     {moderation?.hidden ? (
-                      <Alert
-                        tone="warning"
-                        className="mt-4"
-                        title="Retiramos su reseña"
-                      >
+                      <Alert tone="warning" className="mt-4" title="Retiramos su reseña">
                         {moderation.hidden_at
                           ? `El ${formatDate(moderation.hidden_at, { day: "numeric", month: "long", year: "numeric" })} la quitamos`
                           : "La quitamos"}{" "}
-                        de la página del producto y ya no cuenta en su
-                        calificación.{" "}
-                        {
-                          HIDDEN_REVIEW_REASON[
-                            moderation.hidden_reason ?? "rules"
-                          ]
-                        }{" "}
-                        Si cree que es un error, escríbanos a{" "}
-                        {brand.support.email} y la revisamos de nuevo.
+                        de la página del producto y ya no cuenta en su calificación.{" "}
+                        {HIDDEN_REVIEW_REASON[moderation.hidden_reason ?? "rules"]} Si cree que es
+                        un error, escríbanos a {brand.support.email} y la revisamos de nuevo.
                       </Alert>
                     ) : null}
 
@@ -484,10 +410,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                               : "Escribir una reseña"}
                           </summary>
                           <div className="mt-3">
-                            <ReviewForm
-                              orderItemId={item.id}
-                              orderNumber={order.order_number}
-                            />
+                            <ReviewForm orderItemId={item.id} orderNumber={order.order_number} />
                           </div>
                         </details>
                         {returnable > 0 && (withdrawalOpen || warrantyOpen) ? (
@@ -509,10 +432,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                     ) : null}
                     {itemReturns.length > 0 ? (
                       <div className="mt-4 border-t border-border pt-4">
-                        <ReturnStatusList
-                          returns={itemReturns}
-                          orderNumber={order.order_number}
-                        />
+                        <ReturnStatusList returns={itemReturns} orderNumber={order.order_number} />
                       </div>
                     ) : null}
                   </li>
@@ -542,12 +462,8 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
             <ol className="mt-3 space-y-2 border-l-2 border-border pl-4 text-sm">
               {order.timeline.map((event) => (
                 <li key={`${event.at}-${event.kind}-${event.to_status ?? ""}`}>
-                  <span className="font-medium">
-                    {describeEvent(event, order)}
-                  </span>
-                  <span className="ml-2 text-ink-muted">
-                    {formatDateTime(event.at)}
-                  </span>
+                  <span className="font-medium">{describeEvent(event, order)}</span>
+                  <span className="ml-2 text-ink-muted">{formatDateTime(event.at)}</span>
                 </li>
               ))}
             </ol>
@@ -560,23 +476,17 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
             <dl className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between">
                 <dt>Productos</dt>
-                <dd className="tabular-nums">
-                  {formatPrice(order.items_total_minor)}
-                </dd>
+                <dd className="tabular-nums">{formatPrice(order.items_total_minor)}</dd>
               </div>
               <div className="flex justify-between">
                 <dt>Envío</dt>
                 <dd className="tabular-nums">
-                  {order.shipping_minor === 0
-                    ? "Gratis"
-                    : formatPrice(order.shipping_minor)}
+                  {order.shipping_minor === 0 ? "Gratis" : formatPrice(order.shipping_minor)}
                 </dd>
               </div>
               <div className="flex justify-between border-t border-border pt-2 text-base font-bold">
                 <dt>Total</dt>
-                <dd className="tabular-nums">
-                  {formatPrice(order.total_minor)}
-                </dd>
+                <dd className="tabular-nums">{formatPrice(order.total_minor)}</dd>
               </div>
             </dl>
             <p className="mt-2 text-xs text-ink-muted">
@@ -587,9 +497,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
               {PAYMENT_LABEL[order.payment_method]}
               {order.payment?.status === "captured" ? " · recibido" : ""}
               {order.payment?.status === "refunded" ? " · reembolsado" : ""}
-              {order.payment?.status === "partially_refunded"
-                ? " · reembolsado en parte"
-                : ""}
+              {order.payment?.status === "partially_refunded" ? " · reembolsado en parte" : ""}
               {order.payment?.status === "captured" &&
               payment.refunds.some((refund) => refund.status !== "succeeded")
                 ? " · reembolso en camino"
@@ -599,16 +507,11 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
 
           {delivered ? (
             <div className="rounded-lg border border-border bg-surface p-5 text-sm">
-              <h2 className="text-base font-bold">
-                Sus derechos sobre esta compra
-              </h2>
+              <h2 className="text-base font-bold">Sus derechos sobre esta compra</h2>
               <ul className="mt-2 space-y-1.5 text-ink-muted">
                 <li>
                   Devolución sin dar motivo hasta el{" "}
-                  <strong className="text-ink">
-                    {formatDate(order.withdrawal_deadline)}
-                  </strong>
-                  .
+                  <strong className="text-ink">{formatDate(order.withdrawal_deadline)}</strong>.
                 </li>
                 {order.warranty_until ? (
                   <li>
@@ -633,10 +536,7 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
               <p className="mt-1 mb-3 text-sm text-ink-muted">
                 Puede cancelar mientras no hayamos empezado a prepararlo.
               </p>
-              <CancelOrderForm
-                orderId={order.id}
-                orderNumber={order.order_number}
-              />
+              <CancelOrderForm orderId={order.id} orderNumber={order.order_number} />
             </div>
           ) : null}
 
@@ -653,93 +553,66 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
   );
 }
 
-function PaymentInstructions({
-  order,
-  payment,
-}: {
-  order: OrderDetail;
-  payment: OrderPayment;
-}) {
+function PaymentInstructions({ order, payment }: { order: OrderDetail; payment: OrderPayment }) {
   // The simulation only while the site is in sandbox mode, whatever mode the order was placed in.
   const sandbox = payment.stage === "simulated";
   if (order.payment_method === "card" && !sandbox) {
     // A card order no gateway can take any more (placed before the payments set-up changed).
     return (
       <section className="rounded-lg border border-maiz-300 bg-maiz-50 p-5">
-        <h2 className="text-lg font-bold">
-          Este pedido ya no se puede pagar en línea
-        </h2>
+        <h2 className="text-lg font-bold">Este pedido ya no se puede pagar en línea</h2>
         <p className="mt-2 text-sm">
-          No se le ha cobrado nada. Haga el pedido de nuevo para pagarlo con
-          tarjeta; este se cancela solo cuando se acabe el tiempo de reserva.
+          No se le ha cobrado nada. Haga el pedido de nuevo para pagarlo con tarjeta; este se
+          cancela solo cuando se acabe el tiempo de reserva.
         </p>
       </section>
     );
   }
   return (
     <section className="rounded-lg border border-maiz-300 bg-maiz-50 p-5">
-      <h2 className="text-lg font-bold">
-        Falta el pago de {formatPrice(order.total_minor)}
-      </h2>
+      <h2 className="text-lg font-bold">Falta el pago de {formatPrice(order.total_minor)}</h2>
       {order.payment_method === "sinpe_movil" ? (
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
           <li>Abra la aplicación de su banco y elija SINPE Móvil.</li>
           <li>
-            Envíe exactamente <strong>{formatPrice(order.total_minor)}</strong>{" "}
-            al número que le indicamos.
+            Envíe exactamente <strong>{formatPrice(order.total_minor)}</strong> al número que le
+            indicamos.
           </li>
           <li>
             En el detalle escriba el código{" "}
-            <strong className="tabular-nums">
-              {order.payment?.sinpe_reference}
-            </strong>
-            .
+            <strong className="tabular-nums">{order.payment?.sinpe_reference}</strong>.
           </li>
         </ol>
       ) : (
         <p className="mt-2 text-sm">
-          Complete el pago con su tarjeta en la página segura del procesador de
-          pagos.
+          Complete el pago con su tarjeta en la página segura del procesador de pagos.
         </p>
       )}
       <p className="mt-2 text-sm text-ink-muted">
-        Guardamos sus productos por 30 minutos. Si no recibimos el pago, el
-        pedido se cancela solo y no se le cobra nada.
+        Guardamos sus productos por 30 minutos. Si no recibimos el pago, el pedido se cancela solo y
+        no se le cobra nada.
       </p>
       {sandbox ? (
         <div className="mt-4 border-t border-maiz-300 pt-4">
           <p className="mb-3 text-sm">
-            <strong>Modo de prueba:</strong> este sitio todavía no está
-            conectado a un procesador de pagos. Use este botón para simular que
-            el pago llegó.
+            <strong>Modo de prueba:</strong> este sitio todavía no está conectado a un procesador de
+            pagos. Use este botón para simular que el pago llegó.
           </p>
-          <SimulatePaymentForm
-            orderId={order.id}
-            orderNumber={order.order_number}
-          />
+          <SimulatePaymentForm orderId={order.id} orderNumber={order.order_number} />
         </div>
       ) : null}
     </section>
   );
 }
 
-function describeEvent(
-  event: OrderDetail["timeline"][number],
-  order: OrderDetail,
-): string {
+function describeEvent(event: OrderDetail["timeline"][number], order: OrderDetail): string {
   if (event.kind === "note") return event.note ?? "Nota";
   if (event.kind === "payment") return event.note ?? "Pago";
   if (event.kind === "order_status" && event.to_status === "cancelled") {
     return cancellationWords(order.cancel_reason, false).history;
   }
-  if (
-    event.kind === "order_status" &&
-    event.to_status &&
-    event.to_status in ORDER_STATUS_LABEL
-  ) {
-    return ORDER_STATUS_LABEL[
-      event.to_status as keyof typeof ORDER_STATUS_LABEL
-    ]["es-CR"];
+  if (event.kind === "order_status" && event.to_status && event.to_status in ORDER_STATUS_LABEL) {
+    return ORDER_STATUS_LABEL[event.to_status as keyof typeof ORDER_STATUS_LABEL]["es-CR"];
   }
   if (
     event.kind === "shipment_status" &&

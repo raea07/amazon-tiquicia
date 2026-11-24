@@ -53,37 +53,41 @@ async function Stop({ params }: Pick<PageProps<"/ruta/[parada]">, "params">) {
         ) : null}
       </header>
 
-      <section className="rounded-lg border border-border bg-surface p-5">
-        <h2 className="text-sm font-semibold text-ink-muted">Señas</h2>
-        <p className="mt-1 text-lg">{stop.senas}</p>
-        {stop.plus_code ? (
-          <p className="mt-1 text-sm text-ink-muted">Código Plus {stop.plus_code}</p>
-        ) : null}
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          <a
-            href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={buttonClass({ block: true })}
-          >
-            Cómo llegar
-          </a>
-          <a
-            href={`tel:${stop.phone}`}
-            className={buttonClass({ variant: "secondary", block: true })}
-          >
-            Llamar
-          </a>
-          <a
-            href={`https://wa.me/${digits}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={buttonClass({ variant: "secondary", block: true })}
-          >
-            WhatsApp
-          </a>
-        </div>
-      </section>
+      {/* A removed stop is not visited: no directions, no call to the customer
+          (as in the drivers' app). */}
+      {stop.status === "skipped" ? null : (
+        <section className="rounded-lg border border-border bg-surface p-5">
+          <h2 className="text-sm font-semibold text-ink-muted">Señas</h2>
+          <p className="mt-1 text-lg">{stop.senas}</p>
+          {stop.plus_code ? (
+            <p className="mt-1 text-sm text-ink-muted">Código Plus {stop.plus_code}</p>
+          ) : null}
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClass({ block: true })}
+            >
+              Cómo llegar
+            </a>
+            <a
+              href={`tel:${stop.phone}`}
+              className={buttonClass({ variant: "secondary", block: true })}
+            >
+              Llamar
+            </a>
+            <a
+              href={`https://wa.me/${digits}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClass({ variant: "secondary", block: true })}
+            >
+              WhatsApp
+            </a>
+          </div>
+        </section>
+      )}
 
       {stop.cod_amount_minor > 0 && open ? (
         <Alert tone="warning" title={`Cobrar ${formatPrice(stop.cod_amount_minor)} en efectivo`}>
@@ -96,7 +100,7 @@ async function Stop({ params }: Pick<PageProps<"/ruta/[parada]">, "params">) {
         // do with the parcel depends on whether the route had started (the
         // route list's rule, packages/core route-stops.ts).
         <div className="flex flex-col gap-3" data-testid="stop-closed">
-          <Alert tone="warning" title="Central quitó esta parada">
+          <Alert tone="warning" title="No entregue esta parada">
             {skippedStopNote(route, stop)}
           </Alert>
           <Link href="/ruta" className={buttonClass({ variant: "secondary", block: true })}>

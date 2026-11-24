@@ -474,7 +474,7 @@ export default function StopScreen() {
         // Staff took it off the route: nothing to do at the door, and what to
         // do with the parcel depends on whether the route had started.
         <Stack gap={3}>
-          <Alert tone="warning" title="Central quitó esta parada" testID="stop-closed">
+          <Alert tone="warning" title="No entregue esta parada" testID="stop-closed">
             {skippedStopNote(route, stop)}
           </Alert>
           <LinkButton href="/" variant="secondary" block>

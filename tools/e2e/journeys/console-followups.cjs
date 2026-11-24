@@ -306,6 +306,12 @@ async function rpcAs(email, calls) {
         !(await text(driver.locator("body"))).includes("quedó como no entregada"),
       `the removed stop's own page says what the route list says: ${closed.slice(0, 200)}`,
     );
+    // Not visited: no directions and no call to the customer, as in the drivers' app.
+    check(
+      (await driver.getByRole("link", { name: "Cómo llegar" }).count()) === 0 &&
+        (await driver.locator('a[href^="tel:"], a[href^="https://wa.me/"]').count()) === 0,
+      "the removed stop's page still offers directions or a call to the customer",
+    );
   }
   await driver.screenshot({ path: SHOTS + "/cf3b-driver-removed-stop.png", fullPage: true });
 
