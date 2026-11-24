@@ -21,7 +21,9 @@ export const CANCEL_REASON = {
 
 export type CancelReasonKind = keyof typeof CANCEL_REASON | "other";
 
-export function cancelReasonKind(reason: string | null | undefined): CancelReasonKind {
+export function cancelReasonKind(
+  reason: string | null | undefined,
+): CancelReasonKind {
   const stored = (reason ?? "").trim();
   for (const [kind, sentence] of Object.entries(CANCEL_REASON)) {
     if (stored === sentence) return kind as CancelReasonKind;
@@ -41,27 +43,36 @@ export interface CancellationWords {
 /**
  * The words for a cancelled order. `paid` says whether any money was taken
  * for it (a captured payment, or refunds made): then the money goes back the
- * way it came; otherwise nothing was charged.
+ * way it came; otherwise nothing was charged. `feeKept` is the sentence that
+ * says why the delivery fee stays charged (deliveryFeeKeptLine), when it
+ * does: then only the products' money goes back, the notice says so and
+ * carries that sentence, and the page shows it nowhere else.
  */
 export function cancellationWords(
   reason: string | null | undefined,
   paid: boolean,
+  feeKept: string | null = null,
 ): CancellationWords {
-  const money = paid
-    ? "Le devolvemos lo que pagó por el mismo medio con que pagó."
-    : "No se le cobró nada.";
+  const money = !paid
+    ? "No se le cobró nada."
+    : feeKept
+      ? `Le devolvemos lo que pagó por los productos por el mismo medio con que pagó. ${feeKept}`
+      : "Le devolvemos lo que pagó por el mismo medio con que pagó.";
   switch (cancelReasonKind(reason)) {
     case "unpaid":
       return {
         title: "Cancelamos su pedido porque no recibimos el pago a tiempo",
         body: `Guardamos sus productos solo por un tiempo y el pago no llegó. ${
-          paid ? "Si su pago llegó después, se lo devolvemos por el mismo medio." : money
+          paid
+            ? `Si su pago llegó después, se lo devolvemos por el mismo medio.${feeKept ? ` ${feeKept}` : ""}`
+            : money
         } Si todavía los quiere, haga el pedido de nuevo.`,
         history: "Cancelado: no recibimos el pago a tiempo",
       };
     case "returned":
       return {
-        title: "Cancelamos su pedido porque los paquetes regresaron sin entregarse",
+        title:
+          "Cancelamos su pedido porque los paquetes regresaron sin entregarse",
         body: `Los paquetes volvieron a nuestra bodega sin llegar a usted. ${money} Si todavía quiere los productos, haga el pedido de nuevo.`,
         history: "Cancelado: los paquetes regresaron sin entregarse",
       };

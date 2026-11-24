@@ -55,7 +55,9 @@ async function as(email) {
     });
     const body = await r.json().catch(() => null);
     if (r.status() >= 400)
-      throw new Error(`${fn} as ${email}: ${r.status()} ${JSON.stringify(body)}`);
+      throw new Error(
+        `${fn} as ${email}: ${r.status()} ${JSON.stringify(body)}`,
+      );
     return body;
   };
   rpc.dispose = () => ctx.dispose();
@@ -64,9 +66,15 @@ async function as(email) {
 
 /** An order of the shopper, a notebook from the warehouse, picked and packed. */
 async function packedOrder(buyer, method) {
-  const address = (await buyer("my_addresses")).find((a) => a.is_default && a.zone_active);
-  const product = await buyer("get_product", { p_slug: "libreta-tapa-dura-a5" });
-  const offer = product.skus.flatMap((k) => k.offers).find((o) => o.fulfillment === "platform");
+  const address = (await buyer("my_addresses")).find(
+    (a) => a.is_default && a.zone_active,
+  );
+  const product = await buyer("get_product", {
+    p_slug: "libreta-tapa-dura-a5",
+  });
+  const offer = product.skus
+    .flatMap((k) => k.offers)
+    .find((o) => o.fulfillment === "platform");
   const placed = await buyer("place_order", {
     p_items: [{ offer_id: offer.offer_id, quantity: 1 }],
     p_address_id: address.id,
@@ -79,9 +87,13 @@ async function packedOrder(buyer, method) {
   const bodega = await as("bodega@yuntera.example");
   const warehouse = (await bodega("my_roles")).warehouses[0].id;
   const board = await bodega("wms_board", { p_warehouse_id: warehouse });
-  const shipment = board.shipments.find((s) => s.order_number === placed.order_number);
+  const shipment = board.shipments.find(
+    (s) => s.order_number === placed.order_number,
+  );
   await bodega("wms_start_picking", { p_shipment_id: shipment.shipment_id });
-  const detail = await bodega("wms_shipment", { p_shipment_id: shipment.shipment_id });
+  const detail = await bodega("wms_shipment", {
+    p_shipment_id: shipment.shipment_id,
+  });
   for (const task of detail.tasks) {
     await bodega("wms_confirm_pick", {
       p_task_id: task.task_id,
@@ -108,8 +120,13 @@ async function packedOrder(buyer, method) {
     p_shipment_id: shipment.shipment_id,
     p_reason: "El cliente pidió cancelar",
   });
-  const order = await buyer("get_order", { p_order_number: placed.order_number });
-  check(order.shipping_minor > 0, `the order ${order.order_number} pays a delivery fee`);
+  const order = await buyer("get_order", {
+    p_order_number: placed.order_number,
+  });
+  check(
+    order.shipping_minor > 0,
+    `the order ${order.order_number} pays a delivery fee`,
+  );
 
   const browser = await chromium.launch();
   const errors = [];
@@ -122,9 +139,12 @@ async function packedOrder(buyer, method) {
     });
     const page = await context.newPage();
     page.on("console", (m) => {
-      if (m.type() === "error") errors.push(`console: ${m.text().slice(0, 300)}`);
+      if (m.type() === "error")
+        errors.push(`console: ${m.text().slice(0, 300)}`);
     });
-    page.on("pageerror", (e) => errors.push(`pageerror: ${String(e).slice(0, 300)}`));
+    page.on("pageerror", (e) =>
+      errors.push(`pageerror: ${String(e).slice(0, 300)}`),
+    );
     page.on("response", (r) => {
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
@@ -132,14 +152,18 @@ async function packedOrder(buyer, method) {
   };
   const noSideways = async (page, where) =>
     check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
+      (await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      )) <= 0,
       `no sideways scrolling at 390 px: ${where}`,
     );
 
   // ── 2. The shopper app while the parcel waits ──
   const shop = await phone();
   const shopId = (id) => shop.getByTestId(id).filter({ visible: true }).first();
-  await shop.goto(`${SHOP}/ingresar?siguiente=%2Fpedidos`, { waitUntil: "networkidle" });
+  await shop.goto(`${SHOP}/ingresar?siguiente=%2Fpedidos`, {
+    waitUntil: "networkidle",
+  });
   await shopId("sign-in-email").fill(SHOPPER);
   await shopId("sign-in-password").fill(PASSWORD);
   await shopId("sign-in-submit").click();
@@ -151,28 +175,44 @@ async function packedOrder(buyer, method) {
     "the list says it is being cancelled",
   );
   await noSideways(shop, "order list");
-  await shop.screenshot({ path: `${SHOTS}/native-order-followups-01-list.png`, fullPage: true });
+  await shop.screenshot({
+    path: `${SHOTS}/native-order-followups-01-list.png`,
+    fullPage: true,
+  });
   await shopId(`order-${order.order_number}`).click();
   await shopId("order-stopping").waitFor();
   // The amount is said once the payment (with its refunds) has answered.
   const stopping = await settledText(
     shopId("order-stopping"),
-    (text) => text.includes(`le devolvemos ${colones(order.total_minor)}, el envío incluido,`),
+    (text) =>
+      text.includes(
+        `le devolvemos ${colones(order.total_minor)}, el envío incluido,`,
+      ),
     { what: "the cancelled order's notice" },
   );
   log("   ", stopping);
-  check(true, "the order page says how much comes back, the delivery fee included");
+  check(
+    true,
+    "the order page says how much comes back, the delivery fee included",
+  );
   check(
     (await shop.getByTestId("delivery-pin").count()) === 0,
     "no delivery code for an order being cancelled",
   );
-  check(!squash(await shop.locator("body").innerText()).includes("En camino"), "never En camino");
+  check(
+    !squash(await shop.locator("body").innerText()).includes("En camino"),
+    "never En camino",
+  );
   await noSideways(shop, "order page");
-  await shop.screenshot({ path: `${SHOTS}/native-order-followups-02-order.png`, fullPage: true });
+  await shop.screenshot({
+    path: `${SHOTS}/native-order-followups-02-order.png`,
+    fullPage: true,
+  });
 
   // ── 3. The warehouse app checks it in ──
   const floor = await phone();
-  const floorId = (id) => floor.getByTestId(id).filter({ visible: true }).first();
+  const floorId = (id) =>
+    floor.getByTestId(id).filter({ visible: true }).first();
   await floor.goto(`${WAREHOUSE}/`, { waitUntil: "networkidle" });
   await floorId("sign-in-email").fill("bodega@yuntera.example");
   await floorId("sign-in-password").fill(PASSWORD);
@@ -195,11 +235,16 @@ async function packedOrder(buyer, method) {
     "the board says the parcel never left the building",
   );
   await noSideways(floor, "warehouse board");
-  await floor.screenshot({ path: `${SHOTS}/native-order-followups-03-board.png`, fullPage: true });
+  await floor.screenshot({
+    path: `${SHOTS}/native-order-followups-03-board.png`,
+    fullPage: true,
+  });
   await parcelRow.click();
   await floorId("returned-submit").waitFor();
   check(
-    squash(await floorId("returned-origin").innerText()).includes("Central lo detuvo"),
+    squash(await floorId("returned-origin").innerText()).includes(
+      "Central lo detuvo",
+    ),
     "and so does its page",
   );
   await floorId("returned-condition-resellable").click();
@@ -208,7 +253,9 @@ async function packedOrder(buyer, method) {
   const result = squash(await floorId("returned-result").innerText());
   log("   ", result);
   check(
-    result.includes(`Al cliente se le devuelven ${colones(order.total_minor)}, el envío incluido.`),
+    result.includes(
+      `Al cliente se le devuelven ${colones(order.total_minor)}, el envío incluido.`,
+    ),
     "checked in: the shopper gets the goods and the delivery fee back",
   );
   await floor.screenshot({
@@ -244,14 +291,23 @@ async function packedOrder(buyer, method) {
   // ── 6. A paid order taken off a route being driven, then sent back ──
   const route = await ownRoute(1);
   const sent = route.stops[0];
-  await central("ops_remove_route_stop", { p_stop_id: sent.stopId, p_reason: "El camión se varó" });
-  const sentOrder = await buyer("get_order", { p_order_number: sent.orderNumber });
-  await central("ops_return_shipment", { p_shipment_id: sentOrder.shipments[0].id });
+  await central("ops_remove_route_stop", {
+    p_stop_id: sent.stopId,
+    p_reason: "El camión se varó",
+  });
+  const sentOrder = await buyer("get_order", {
+    p_order_number: sent.orderNumber,
+  });
+  await central("ops_return_shipment", {
+    p_shipment_id: sentOrder.shipments[0].id,
+  });
   await central.dispose();
 
   await shop.goto(`${SHOP}/pedidos`, { waitUntil: "networkidle" });
   await shopId(`order-${cash.placed.order_number}`).waitFor();
-  const cashRow = squash(await shopId(`order-${cash.placed.order_number}`).innerText());
+  const cashRow = squash(
+    await shopId(`order-${cash.placed.order_number}`).innerText(),
+  );
   log("   ", cashRow);
   check(
     cashRow.includes("Se está cancelando") &&
@@ -269,15 +325,19 @@ async function packedOrder(buyer, method) {
     "the list says a parcel sent back is being cancelled",
   );
   await noSideways(shop, "order list, cash and sent back");
-  await shop.screenshot({ path: `${SHOTS}/native-order-followups-06-list.png`, fullPage: true });
+  await shop.screenshot({
+    path: `${SHOTS}/native-order-followups-06-list.png`,
+    fullPage: true,
+  });
 
   await shopId(`order-${cash.placed.order_number}`).click();
   await shopId("order-stopping").waitFor();
   const cashPage = squash(await shopId("order-stopping").innerText());
   log("   ", cashPage);
   check(
-    cashPage.includes("No se le cobró nada, así que no hay nada que devolver.") &&
-      !/le devolvemos/i.test(squash(await shop.locator("body").innerText())),
+    cashPage.includes(
+      "No se le cobró nada, así que no hay nada que devolver.",
+    ) && !/le devolvemos/i.test(squash(await shop.locator("body").innerText())),
     "the page promises no money back for a cash order",
   );
   await shop.goto(`${SHOP}/pedidos`, { waitUntil: "networkidle" });
@@ -288,11 +348,16 @@ async function packedOrder(buyer, method) {
     shopId("order-stopping"),
     (text) =>
       text.includes("Su pedido regresa a nuestra bodega sin entregarse.") &&
-      text.includes(`le devolvemos ${colones(sentOrder.total_minor)}, el envío incluido,`),
+      text.includes(
+        `le devolvemos ${colones(sentOrder.total_minor)}, el envío incluido,`,
+      ),
     { what: "the sent-back order's notice" },
   );
   log("   ", sentPage);
-  check(true, "the page says a parcel sent back comes back and what is refunded");
+  check(
+    true,
+    "the page says a parcel sent back comes back and what is refunded",
+  );
   // The history below may say "En camino": it was, before it came back.
   const sentAll = squash(await shop.locator("body").innerText());
   const sentBody = sentAll.slice(0, sentAll.indexOf("Historial"));
@@ -316,12 +381,22 @@ async function packedOrder(buyer, method) {
   // (someone went to the door), and the page says why.
   const tried = (await ownRoute(1)).stops[0];
   const driver = await as("repartidor@yuntera.example");
-  await driver("driver_fail_stop", { p_stop_id: tried.stopId, p_reason: "nobody_home" });
+  await driver("driver_fail_stop", {
+    p_stop_id: tried.stopId,
+    p_reason: "nobody_home",
+  });
   await driver.dispose();
-  const triedOrder = await buyer("get_order", { p_order_number: tried.orderNumber });
-  check(triedOrder.shipping_minor > 0, "fixture: the order tried at the door has a delivery fee");
+  const triedOrder = await buyer("get_order", {
+    p_order_number: tried.orderNumber,
+  });
+  check(
+    triedOrder.shipping_minor > 0,
+    "fixture: the order tried at the door has a delivery fee",
+  );
   const central2 = await as("central@yuntera.example");
-  await central2("ops_return_shipment", { p_shipment_id: triedOrder.shipments[0].id });
+  await central2("ops_return_shipment", {
+    p_shipment_id: triedOrder.shipments[0].id,
+  });
   await central2.dispose();
   const feeLine = `El envío (${colones(triedOrder.shipping_minor)}) no se devuelve porque fuimos a entregarlo a su dirección.`;
   await shop.goto(`${SHOP}/pedidos`, { waitUntil: "networkidle" });
@@ -347,14 +422,29 @@ async function packedOrder(buyer, method) {
   });
   await triedBodega.dispose();
   check(
-    (triedIn.delivery_fee_refund_minor ?? 0) === 0 && triedIn.order_status === "cancelled",
+    (triedIn.delivery_fee_refund_minor ?? 0) === 0 &&
+      triedIn.order_status === "cancelled",
     "fixture: cancelled, no delivery-fee refund after a real attempt",
   );
   await shop.reload({ waitUntil: "load" });
-  await shopId("fee-kept").waitFor();
-  const kept = squash(await shopId("fee-kept").innerText());
+  // Once cancelled, the cancellation notice says it: only the products' money
+  // comes back, and why the fee stays, once on the screen.
+  await shopId("order-cancel-reason").waitFor();
+  const kept = squash(await shopId("order-cancel-reason").innerText());
   log("   ", kept);
-  check(kept === feeLine, "after the check-in the page still says why the fee stays");
+  check(
+    kept.includes(feeLine),
+    "after the check-in the notice says why the fee stays",
+  );
+  check(
+    kept.includes("Le devolvemos lo que pagó por los productos") &&
+      !kept.includes("Le devolvemos lo que pagó por el mismo medio"),
+    "the notice does not promise back what was paid for the delivery",
+  );
+  check(
+    (await shop.getByTestId("fee-kept").count()) === 0,
+    "the fee line is not repeated",
+  );
   await noSideways(shop, "order page, fee kept");
   await shop.screenshot({
     path: `${SHOTS}/native-order-followups-08-fee-kept.png`,
