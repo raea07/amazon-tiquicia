@@ -298,6 +298,7 @@ this in order.
    No entry may name `anon`, `authenticated` or PUBLIC. Then
    `remote-db.sh test` with `020_access.sql` and `110_lockdown.sql` must pass;
    110 fails on any table privilege, unlisted function or write policy.
+
 4. **No write policy and no readable table:**
 
    ```sql
@@ -372,7 +373,7 @@ this in order.
      `auth` to `supabase_auth_admin`). Low risk while no migration or
      dashboard query creates objects in `storage`; `postgres` could revoke
      it with `alter default privileges for role postgres in schema storage
-     revoke all on tables from anon, authenticated` (and sequences,
+revoke all on tables from anon, authenticated` (and sequences,
      functions), which is the owner's decision.
    - `supabase_admin` in `public`, `graphql` and `graphql_public`: everything
      to `anon` and `authenticated`. `postgres` cannot change these. They apply
@@ -394,6 +395,7 @@ this in order.
    than for `select` (57 read policies remain); row-level security on all 80
    tables (62 public, 18 private). From outside, every table path answered
    `401` to a visitor and `403` to the shopper (`42501`), reads and writes.
+
 5. **Storage.** `105_product_photos.sql` passed on its own. Through the
    storage API, as a visitor and as `vendedor` (TecnoCasa), only reads and
    refused writes: the waiting bucket by its public address gives _Bucket not
@@ -560,6 +562,7 @@ Do this in order.
 
    One value for all four apps. It must be 32 characters or more and not one
    of the repository's example values, or the apps treat it as missing.
+
 2. **Set it on all four Vercel projects BEFORE redeploying**, as a sensitive
    variable for Production (`yuntera-web`, `yuntera-vende`,
    `yuntera-central`, `yuntera-campo`), from the file so it never appears on
@@ -579,6 +582,7 @@ Do this in order.
    `AUTH_CLIENT_IP_HOPS` are only for another host. **Never set
    `YUNTERA_LOCAL_RUN`** on Vercel or any deployment: it relaxes the key
    checks for the local stack and CI.
+
 3. **Apply both migrations** with `remote-db.sh push`. Before that, read-only,
    to know what the one-off changes of `083200` will touch:
 
@@ -604,6 +608,7 @@ Do this in order.
    `driver_fail_stop` and `driver_report_position`, and stops a payment
    marked refunded from announcing "refund completed" (that now waits for
    `private.confirm_refund`).
+
 4. **Check the network extension's grants**, right after `083200` and again
    after any upgrade, disable or re-enable of `pg_net`:
 
@@ -628,6 +633,7 @@ Do this in order.
    `notify-sweep` job still succeeds (`cron.job_run_details`) and that
    `select private.notify_kick();` runs without error. Details are in
    [access control](../03-data/access-control.md).
+
 5. **Run the suites** with `remote-db.sh test`: all 20 files, including
    `125_followups.sql` (its `net_grants` block runs the same checks as point 4
    and fails while either role can still use `net`), `130_web_followups.sql`
@@ -656,7 +662,7 @@ Do this in order.
    ```
 
    (The same value is `printf %s "$(printf %s auth-limit-caller | openssl dgst
-   -sha256 -hmac "$KEY" -r | cut -d' ' -f1)" | sha256sum`, but that puts the
+-sha256 -hmac "$KEY" -r | cut -d' ' -f1)" | sha256sum`, but that puts the
    key on a command line.) Then sign in to each app once with a demo account:
    it must work. If sign-in now fails everywhere with the generic message, the
    digest does not match the key the apps hold: fix the digest with
@@ -665,6 +671,7 @@ Do this in order.
    digest together; the console's activity cookies and the "known browser"
    marks are signed with it, so console sessions end and every browser counts
    as new once.
+
 8. **Optional, together or not at all: the human check.** Create a Cloudflare
    Turnstile widget for the apps' domains; set its public site key as
    `NEXT_PUBLIC_AUTH_CAPTCHA_SITE_KEY` on all four projects and redeploy
@@ -753,6 +760,7 @@ Do this in order.
 
    If the count is not 0, stop and look at those refunds first: each will
    become a transfer for finance to make and record.
+
 2. **Check that the platform lets the migration owner create a trigger on
    `auth.users`** (the existing `on_auth_user_created` says it does):
 
@@ -791,6 +799,7 @@ Do this in order.
    Then watch `cron.job_run_details` for a few minutes: both sweeps must
    succeed (without the Vault secrets `payments_worker_token` and
    `invoice_worker_token` they wake nobody; that is expected).
+
 5. **Run the suites** with `remote-db.sh test`: all 25 files, including
    `135_payments.sql`, `140_invoicing.sql`, `145_refunds_end_to_end.sql` and
    `150_payments_invoicing_guard.sql`. The invoicing suite's concurrency test
@@ -853,7 +862,7 @@ in headless Chromium, the Management API through the network proxy.
 3. **Read-only checks, then `push`.** No order in `shipped` or
    `partially_shipped` had a parcel delivered and the rest returned; 2
    refunds; `payments_mode` `sandbox`; `has_table_privilege(current_user,
-   'auth.users', 'TRIGGER')` true. `push` applied all four at the first try
+'auth.users', 'TRIGGER')` true. `push` applied all four at the first try
    in 2.6 s (06:05:59 to 06:06:02); `status` lists 33 files. No platform
    difference this time.
 4. **What they left.**
@@ -935,8 +944,9 @@ in headless Chromium, the Management API through the network proxy.
    checks left are counted with the seed's. That is a fault in the test, not
    in what the database allows; the suites are being changed to assert on
    their own fixtures.
+
 7. **Redeploy.** One at a time from the repository root with `vercel deploy
-   --prod --yes --token dummy`, 30 to 40 s each: web
+--prod --yes --token dummy`, 30 to 40 s each: web
    `dpl_12nCw68ahpdAfkvuEMhwrTrVxc8h` (ready 06:19:20), vende
    `dpl_6paYVhBG7mqzCDo86Ky5hLtgcMbx`, central
    `dpl_5usvPFn9DaDvSn7vo7L8xCs9eACo`, campo
@@ -1226,7 +1236,7 @@ Chromium, the Management API through the network proxy; worktree at
    a browser check running at the same time and the scheduler's history. No
    test or file had to change.
 6. **Redeploy**, one at a time from the repository root with `vercel deploy
-   --prod --yes --token dummy`, 25 to 35 s each: web
+--prod --yes --token dummy`, 25 to 35 s each: web
    `dpl_JBesEfvhktdf3RDwDZSNrUTbqSRy` (ready 22:16:50), vende
    `dpl_4B2XAJxRUCfL2y8zK8pqW2GUowz5`, central
    `dpl_9smbCZahkLWxYx5Z8sxhzJ8GU8vD`, campo
@@ -1248,7 +1258,7 @@ Chromium, the Management API through the network proxy; worktree at
    (the visitor's personal calls are refused `not_authenticated`, as
    before). The build never calls the notification-settings functions; its
    settings write is `update_profile` and `set_my_commercial_consent(p_opt_in,
-   p_text_version, p_source)`: both sent with the stored values and
+p_text_version, p_source)`: both sent with the stored values and
    answered. `set_my_notification_settings` with the old eight names and the
    stored values (as the old websites send it) answered too; it raised
    `comprador`'s settings version from 0 to 1.
@@ -1504,7 +1514,7 @@ dates was recorded and compared before then.
    `100_notifications`. Row counts before and after the run identical except
    the scheduler's history. No test or file had to change.
 6. **Redeploy**, one at a time from the repository root with `vercel deploy
-   --prod --yes --token dummy`, 25 to 30 s each: web
+--prod --yes --token dummy`, 25 to 30 s each: web
    `dpl_E5nMK89qecpVTarobq25j3bdnej1` (ready 05:12:58), vende
    `dpl_3htsGubW83wZxQ64RTVvbNCCpTuE`, central
    `dpl_6QfA8BiFAHqo9rvRwQgf96ELuePU`, campo
@@ -1640,7 +1650,7 @@ dates was recorded and compared before then.
      district itself (before, it had none and followed its canton); no
      console action clears it. It was put back with one guarded statement
      through `remote-db.sh sql` (`update … set zone_id = null where
-     postal_code = '10111' and zone_id = 'gam-core'`, with an audit entry), so
+postal_code = '10111' and zone_id = 'gam-core'`, with an audit entry), so
      no district has its own zone again, as before.
    - **Brands**: "Prueba Dos" deleted with "Eliminar «Prueba Dos»" ("con la
      marca que se había unido a ella. Sus direcciones quedan libres"); neither
@@ -1799,6 +1809,7 @@ Do this in order.
    owner, `security definer`, an empty search path and no app role allowed to
    run them; the list of functions a visitor may call unchanged; the sweep's
    first run after the push succeeded.
+
 5. **Run the suites** with `remote-db.sh test`: all 33 files, among them the
    new `167_order_followups.sql`, `168_warehouse_stock.sql` and
    `169_returned_stock.sql`; the same two `skipped` rows as before and no
@@ -1848,7 +1859,7 @@ was written first, at `04db98b`, before anything was applied).
    columns; owner `postgres`, definer, `search_path=""`, execute for
    `postgres` only and the definition's md5 of the four private functions;
    the sweep's job `expire-unpaid-orders` (`*/5 * * * *`, `select
-   private.expire_unpaid_orders()`, last five runs succeeded, "1 row");
+private.expire_unpaid_orders()`, last five runs succeeded, "1 row");
    `reservation_minutes` 30 and no order in `pending_payment`; 0 table
    privileges of the app roles; 18 accounts (11 demo, 7 deleted and
    anonymised), 0 second factors; `vault.secrets` holds
@@ -1895,7 +1906,7 @@ was written first, at `04db98b`, before anything was applied).
    `100_notifications`. Row counts before and after identical except the
    scheduler's history. No test had to change.
 6. **Redeploy**, one at a time from the repository root with `vercel deploy
-   --prod --yes --token dummy`, 26 to 37 s each: web
+--prod --yes --token dummy`, 26 to 37 s each: web
    `dpl_EDTU6BQSdu3TGyZQG6NHfGwdF7kK` (ready 19:57:32), vende
    `dpl_4p2CRFjWoUjBe6yV5BKmoaKrx2Wo`, central
    `dpl_8KH7CwAqqqFtNRAhidpMCJggArAP`, campo
@@ -2016,6 +2027,138 @@ sign-in, and must try one account before the rest.
 
 **For production**: the same order. The read-only checks of point 2 matter
 only on a database with data; check the isolation level before the push.
+
+### Migrations 084400 to 084600
+
+Three migrations of wave 8, merged on 24 November 2026 and **applied nowhere
+yet**: written before anyone applies them. Apply them in filename order, in one
+sitting, then redeploy the four web apps together:
+
+1. `20261121084400_stock_lock_order.sql` (8 functions, all `create or
+replace`; no table changes, nothing backfilled): a product's listing
+   summary is written only when it changes and is computed under a lock on
+   the product row (`private.refresh_product_summary`,
+   `private.offers_summary_trigger`, `private.sellers_summary_trigger`); a
+   cancellation takes its pick tasks and stock rows before any shelf
+   (`private.cancel_order_internal`); the unpaid-order sweep cancels at most
+   200 orders a run (`private.expire_unpaid_orders`); a route start takes its
+   parcels' orders first (`driver_start_route`); a shop's own pack takes the
+   order first (`seller_mark_packed`); a seller switching a variant off takes
+   it `FOR NO KEY UPDATE` (`seller_set_variant_active`). Owner, `security
+definer`, search path and grants stay as they were (the file re-states
+   them).
+2. `20261121084500_count_into_location.sql` (2 new functions): counting a
+   product a location does not list (`wms_count_into_location`) and its
+   lookup (`wms_count_candidates`), for a worker of the warehouse or
+   operations staff. No table and no existing function changes.
+3. `20261121084600_shopper_followups.sql`: **changes two private tables** and
+   **drops and re-creates `cart_alternatives`**. `private.refunds` gets
+   `booked_xact` (xid8, the booking transaction; existing rows stay null and
+   are announced alone, as they were); `private.refund_confirmations` gets
+   `seq` (an identity column, which rewrites that table; both tables are
+   small on the preview). `public.cart_alternatives(offer ids)` is dropped and
+   created again as `cart_alternatives(offer ids, postal code default null)`
+   with a last column `promise`, and granted again to visitors and signed-in
+   users. `private.notify_plan_event` (the messages planner) is redefined and
+   `private.refund_announcement` is new: refunds booked together are
+   announced once.
+
+**Why the web apps come after the migrations, and why that order is safe.**
+The preview's web apps run `717048f` until they are redeployed. Every
+function these migrations change still answers that code: the cart sends only
+the offer ids, which reach the re-created `cart_alternatives` through its
+default and get the old columns plus a `promise` the old schema ignores; the
+seller centre's variant switch, a shop's pack and a route start take the same
+arguments and answer the same shapes; nothing else the old pages read
+changed (`packages/db/src/contract.frozen-callers.test.ts` and
+`contract.shopper-followups.test.ts` prove it on the merged database). The
+store build of the shopper app (`3f251c3`) keeps working too: of the 29
+functions it calls, `cancel_order`, `place_order` and
+`confirm_sandbox_payment` run changed code inside and still answer in that
+commit's schemas (same test file). For a few seconds while `084600` runs, a
+cart that asks for alternatives may get "function not found" until the API
+reloads its schema cache; the cart then shows the line without an
+alternative.
+
+Do this in order.
+
+1. **Check the starting point**: `remote-db.sh status` lists 41 applied files
+   and these three pending, and nothing else pending. Record what point 4
+   compares against: the refund rows and their confirmations (counts), the
+   products' summary columns (`offer_count`, `featured_offer_id`,
+   `min_price_minor`, `in_stock`), the shelves with 0 units (two from the
+   wave 7 check; they stay, decision 52), and the definitions and rights of
+   the eight functions 084400 redefines.
+2. **Read-only checks**:
+
+   ```sql
+   -- the isolation level of the database and of the API's roles (read committed)
+   show default_transaction_isolation;
+   -- what depends on the function that is dropped (nothing expected besides its own grants)
+   select classid::regclass, objid, deptype from pg_depend
+   where refobjid = 'public.cart_alternatives(uuid[])'::regprocedure;
+   -- the size of the two tables that change (small)
+   select (select count(*) from private.refunds) as refunds,
+          (select count(*) from private.refund_confirmations) as confirmations;
+   ```
+
+3. **Apply the three** with `remote-db.sh push`; `status` then lists 44 files.
+   Straight after, call `cart_alternatives` through the public API as a
+   visitor with only `p_offer_ids` (an empty list answers `[]`): a "function
+   not found" answer means the API has not reloaded its schema cache yet.
+4. **Check what they left**:
+
+   ```sql
+   select pg_get_function_identity_arguments('public.cart_alternatives'::regproc); -- p_offer_ids uuid[], p_postal_code text
+   select has_function_privilege('anon', 'public.cart_alternatives(uuid[], text)', 'execute'); -- true
+   select has_function_privilege('authenticated', 'public.wms_count_into_location(uuid, uuid, uuid, integer, text)', 'execute'); -- true
+   select has_function_privilege('anon', 'public.wms_count_into_location(uuid, uuid, uuid, integer, text)', 'execute');          -- false
+   select count(*) from private.refunds where booked_xact is not null;               -- 0 (old rows stay null)
+   select count(*), count(seq) from private.refund_confirmations;                    -- both the same
+   select count(*) from public.products p where p.in_stock is distinct from exists (
+     select 1 from public.offers o join public.skus k on k.id = o.sku_id
+     join public.sellers s on s.id = o.seller_id
+     where k.product_id = p.id and k.active and o.status = 'active' and s.status = 'active'
+       and o.condition = 'new' and o.available_quantity > 0);                      -- 0
+   ```
+
+   And: the refund rows, confirmations and product summaries as in point 1;
+   the eight functions of 084400 with a new definition, the same owner,
+   `security definer`, an empty search path and the same rights; the list of
+   functions a visitor may call unchanged (`cart_alternatives` with its new
+   arguments); the sweep's first run after the push succeeded.
+
+5. **Run the suites** with `remote-db.sh test`: all 38 files, among them the
+   new `171_stock_lock_order.sql` (it places 250 unpaid orders inside its own
+   rolled-back transaction), `172_count_into_location.sql`,
+   `173_shopper_followups.sql` (it switches the trigger `refunds_immutable`
+   off and on inside its transaction, which needs the table owner),
+   `174_zero_unit_shelf_rows.sql` and `175_refunds_across_streams.sql`; the
+   same two `skipped` rows as before and no other. Never run the race
+   harness (`tools/races`) or the contract race tests against a hosted
+   database.
+6. **Redeploy the four web apps together** (step 7): the shop (the cart's
+   date, the reason a cancelled order was cancelled, a cart with nothing to
+   buy, the product page's cache keyed by the hour), the console (a single
+   closed day refreshes the shop, 44 px back links), the field app (the count
+   into a location, a removed stop's page) and the seller centre (44 px back
+   links). Expect one cache miss per product page, district and hour.
+7. **The native apps need new builds** to show their parts: the warehouse app
+   for the count into a location, the shopper app for the kept data, the
+   15-second read limit, the cart's date, the cancellation reasons and the
+   cart with nothing to buy. Until then the store build keeps working as
+   described above.
+8. **A smoke test**: a product counted into a location that does not list it
+   (and counted out again with a correction), a cart line whose offer was
+   paused shows another shop's offer with its date, an order stopped and
+   checked in gets one "refund started" planned with the total (the messages
+   are planned only; no worker is deployed), and an unpaid order cancelled
+   by the sweep says why on its page.
+
+**Not verified on a hosted database:** the races (they run only locally, on
+a lane), that the API runs every caller in READ COMMITTED (from the
+documentation), the 200-per-run cap through the scheduled job (tested by
+calling the function), and the refund messages through a real gateway.
 
 ## 4. Confirm the database is what the migrations say
 
