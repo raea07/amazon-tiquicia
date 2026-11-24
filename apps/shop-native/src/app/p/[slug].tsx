@@ -23,9 +23,11 @@ import {
 import { Link, Stack as Nav, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { KeptNotice } from "@/components/kept-notice";
 import { ProductGrid, ProductImage, Stars } from "@/components/product";
 import { QuantityStepper } from "@/components/quantity";
 import { useCart } from "@/lib/cart-context";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 import { chooseSku, rankOffers } from "@/lib/offers";
 import { NOT_FOUND } from "@/lib/wording";
 
@@ -283,7 +285,7 @@ export default function ProductScreen() {
   );
 
   if (product.isPending) return <LoadingState label="Cargando producto…" />;
-  if (product.isError)
+  if (firstReadFailed(product))
     return <ErrorState error={product.error} onRetry={() => void product.refetch()} />;
   // Taken down, archived or never there: the website's not-found page, in its words.
   if (!product.data) {
@@ -308,6 +310,16 @@ export default function ProductScreen() {
   return (
     <Screen refreshing={product.isRefetching} onRefresh={() => void product.refetch()}>
       <Nav.Screen options={{ title: page.category.name_es }} />
+      {refreshFailed(product) ? (
+        <KeptNotice
+          title={KEPT.product.title}
+          body={KEPT.product.body}
+          error={product.error}
+          onRetry={() => void product.refetch()}
+          retrying={product.isFetching}
+          testID="product-kept"
+        />
+      ) : null}
       <View style={styles.imageFrame}>
         <ProductImage
           path={page.images[0]?.path ?? null}

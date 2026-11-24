@@ -3,7 +3,7 @@ import { SplashScreen } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { type ReactNode, useEffect, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { createQueryClient, wireAppLifecycle } from "../data/query-client";
+import { createQueryClient, type QueryClientOptions, wireAppLifecycle } from "../data/query-client";
 import { getSupabase, type PublicEnv } from "../supabase/client";
 import { useBrandFonts } from "../ui/fonts";
 import { type SecondStepMode, SessionProvider, useSession } from "./session";
@@ -31,17 +31,23 @@ function HideSplashWhenReady({ children }: { children: ReactNode }) {
  * `secondStep` says where an account with an authenticator app gives its
  * code (session.tsx): "in-app" on this app's sign-in screen (the seller,
  * driver and warehouse apps), "website" by default.
+ *
+ * `readTimeoutMs` makes a read that never answers fail after that long, so
+ * the screen's error state or notice, with "Intentar de nuevo", takes over
+ * (data/query-client.ts). Apps that do not pass it keep waiting as before.
  */
 export function AppProviders({
   env,
   secondStep,
+  readTimeoutMs,
   children,
 }: {
   env: PublicEnv;
   secondStep?: SecondStepMode;
+  readTimeoutMs?: QueryClientOptions["readTimeoutMs"];
   children: ReactNode;
 }) {
-  const [queryClient] = useState(createQueryClient);
+  const [queryClient] = useState(() => createQueryClient({ readTimeoutMs }));
   const supabase = getSupabase(env);
   useEffect(wireAppLifecycle, []);
   return (

@@ -14,11 +14,13 @@ import {
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { DistrictPicker } from "@/components/district-picker";
+import { KeptNotice } from "@/components/kept-notice";
 import { type Pin, PinPicker } from "@/components/pin-picker";
 import { validateAddress } from "@/lib/address";
 import { useCart } from "@/lib/cart-context";
 import { useDistricts } from "@/lib/catalog";
 import { needsSignIn } from "@/lib/guard";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 
 /**
  * A delivery address the Costa Rican way: the district, the "señas" a
@@ -106,14 +108,26 @@ export default function NewAddressScreen() {
       />
       {districts.isPending ? (
         <LoadingState label="Cargando distritos…" />
-      ) : districts.isError ? (
+      ) : firstReadFailed(districts) || !districts.data ? (
         <ErrorState error={districts.error} onRetry={() => void districts.refetch()} />
       ) : (
-        <DistrictPicker
-          districts={districts.data}
-          postalCode={postalCode}
-          onChange={setPostalCode}
-        />
+        <>
+          {refreshFailed(districts) ? (
+            <KeptNotice
+              title={KEPT.districts.title}
+              body={KEPT.districts.body}
+              error={districts.error}
+              onRetry={() => void districts.refetch()}
+              retrying={districts.isFetching}
+              testID="districts-kept"
+            />
+          ) : null}
+          <DistrictPicker
+            districts={districts.data}
+            postalCode={postalCode}
+            onChange={setPostalCode}
+          />
+        </>
       )}
       <TextField
         label="Señas"

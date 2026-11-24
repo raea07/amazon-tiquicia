@@ -12,12 +12,63 @@ import { AppState, Platform } from "react-native";
  * own that the person can see, as the drivers' app does (lib/driver.tsx).
  */
 
-/** Only a request that never arrived is worth repeating; a refusal is an answer. */
+/** The `detail` of the network error a read gets when it never answered in time. */
+export const READ_TIMED_OUT = "read_timed_out";
+
+/**
+ * Only a request that never arrived is worth repeating; a refusal is an
+ * answer. A read that timed out is not repeated by itself: the person was
+ * already kept waiting, and the screen offers "Intentar de nuevo".
+ */
 export function shouldRetry(failureCount: number, error: unknown): boolean {
-  return failureCount < 2 && error instanceof ApiError && error.code === "network";
+  return (
+    failureCount < 2 &&
+    error instanceof ApiError &&
+    error.code === "network" &&
+    error.detail !== READ_TIMED_OUT
+  );
 }
 
-export function createQueryClient(): QueryClient {
+/** What an app may set on its cache (see `AppProviders`). */
+export interface QueryClientOptions {
+  /**
+   * How long a read may go unanswered before it counts as failed, in
+   * milliseconds. Without it a read that never answers leaves a screen
+   * loading, or its pull spinner turning, with no way to ask again. Reads
+   * only: a change is never cut short, since the database may still apply it.
+   */
+  readTimeoutMs?: number;
+}
+
+/** The cache's per-query settings that `useApiQuery` reads (TanStack's `meta`). */
+export interface ReadMeta {
+  readTimeoutMs?: number;
+}
+
+/**
+ * The read, or a network error (detail READ_TIMED_OUT) once `ms` passed
+ * without an answer. The request itself is left to finish; its answer is
+ * not used. Without `ms`, the read as it is.
+ */
+export function withReadTimeout<T>(read: Promise<T>, ms: number | undefined): Promise<T> {
+  if (!ms || ms <= 0) return read;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ApiError("network", { detail: READ_TIMED_OUT })), ms);
+  });
+  return Promise.race([read, late]).finally(() => clearTimeout(timer));
+}
+
+/** The time limit a query's `meta` carries, if any. */
+export const readTimeoutOf = (meta: unknown): number | undefined => {
+  const value = (meta as ReadMeta | undefined)?.readTimeoutMs;
+  return typeof value === "number" ? value : undefined;
+};
+
+export function createQueryClient(options: QueryClientOptions = {}): QueryClient {
+  const meta: ReadMeta | undefined = options.readTimeoutMs
+    ? { readTimeoutMs: options.readTimeoutMs }
+    : undefined;
   return new QueryClient({
     defaultOptions: {
       queries: {
@@ -25,6 +76,8 @@ export function createQueryClient(): QueryClient {
         gcTime: 5 * 60_000,
         retry: shouldRetry,
         refetchOnWindowFocus: true,
+        // Every read of this cache: useApiQuery and the listing apply it.
+        meta: meta as Record<string, unknown> | undefined,
       },
       mutations: {
         retry: false,

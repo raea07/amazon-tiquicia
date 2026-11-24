@@ -25,8 +25,10 @@ import * as Crypto from "expo-crypto";
 import { Link, Redirect, router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { KeptNotice } from "@/components/kept-notice";
 import { useCart } from "@/lib/cart-context";
 import { needsSignIn } from "@/lib/guard";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 
 type Method = "sinpe_movil" | "card" | "cash_on_delivery";
 
@@ -89,8 +91,9 @@ export default function CheckoutScreen() {
   if (cart.ready && cart.items.length === 0 && !place.isSuccess)
     return <Redirect href="/carrito" />;
   if (addresses.isPending || !cart.ready) return <LoadingState />;
-  if (addresses.isError)
+  if (firstReadFailed(addresses))
     return <ErrorState error={addresses.error} onRetry={() => void addresses.refetch()} />;
+  if (!addresses.data) return <LoadingState />;
 
   // First purchase: there is no address yet, so that comes first.
   if (addresses.data.length === 0) {
@@ -118,10 +121,16 @@ export default function CheckoutScreen() {
     );
   }
   if (quote.isPending || lines.isPending) return <LoadingState label="Calculando su total…" />;
-  if (quote.isError) return <ErrorState error={quote.error} onRetry={() => void quote.refetch()} />;
-  if (lines.isError) return <ErrorState error={lines.error} onRetry={() => void lines.refetch()} />;
+  if (firstReadFailed(quote))
+    return <ErrorState error={quote.error} onRetry={() => void quote.refetch()} />;
+  if (firstReadFailed(lines))
+    return <ErrorState error={lines.error} onRetry={() => void lines.refetch()} />;
+  if (!quote.data || !lines.data) return <LoadingState label="Calculando su total…" />;
 
   const q = quote.data;
+  // Shown and asking again failed: kept, and said; placing the order checks
+  // prices and stock again whatever the screen shows.
+  const keptError = [addresses, quote, lines].find((read) => refreshFailed(read))?.error ?? null;
   if ((q.issue && q.issue !== "zone_not_served") || q.total_minor == null) {
     return (
       <Screen>
@@ -186,6 +195,19 @@ export default function CheckoutScreen() {
         </>
       }
     >
+      {keptError ? (
+        <KeptNotice
+          title={KEPT.checkout.title}
+          body={KEPT.checkout.body}
+          error={keptError}
+          onRetry={() => {
+            void addresses.refetch();
+            void Promise.all([quote.refetch(), lines.refetch()]);
+          }}
+          retrying={addresses.isFetching || quote.isFetching || lines.isFetching}
+          testID="checkout-kept"
+        />
+      ) : null}
       {q.payments_mode === "sandbox" ? (
         <Alert tone="info" title="Sitio en modo de prueba">
           Los pagos son simulados: no se cobra dinero real ni se entrega ningún producto.

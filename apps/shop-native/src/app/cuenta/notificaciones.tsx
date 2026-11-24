@@ -6,7 +6,9 @@ import { signInPath } from "@yuntera/expo-kit/paths";
 import { Card, ErrorState, LoadingState, Screen, Text } from "@yuntera/expo-kit/ui";
 import { Redirect } from "expo-router";
 import { useState } from "react";
+import { KeptNotice } from "@/components/kept-notice";
 import { needsSignIn } from "@/lib/guard";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 
 /**
  * Notificaciones (the website's /cuenta/notificaciones): which channels the
@@ -32,7 +34,7 @@ export default function NotificationsScreen() {
 
   if (needsSignIn(status)) return <Redirect href={signInPath("/cuenta/notificaciones")} />;
   if (settings.isPending) return <LoadingState />;
-  if (settings.isError)
+  if (firstReadFailed(settings) || !settings.data)
     return <ErrorState error={settings.error} onRetry={() => void settings.refetch()} />;
 
   const data = settings.data;
@@ -43,6 +45,16 @@ export default function NotificationsScreen() {
         void settings.refetch().then(() => setLoaded((n) => n + 1));
       }}
     >
+      {refreshFailed(settings) ? (
+        <KeptNotice
+          title={KEPT.notifications.title}
+          body={KEPT.notifications.body}
+          error={settings.error}
+          onRetry={() => void settings.refetch().then(() => setLoaded((n) => n + 1))}
+          retrying={settings.isFetching}
+          testID="notifications-kept"
+        />
+      ) : null}
       <Text tint="muted">
         Elija por dónde quiere que le avisemos de sus pedidos. Nunca le enviaremos su código de
         entrega, su dirección ni datos de pago: para eso, abra la página del pedido.

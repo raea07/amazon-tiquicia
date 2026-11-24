@@ -6,6 +6,7 @@ import {
   daysBetween,
   describePromise,
   easterSunday,
+  promiseHour,
   SERVICE_PRESETS,
   toCostaRicaTime,
   weekdayOf,
@@ -188,5 +189,33 @@ describe("promise wording", () => {
     expect(describePromise(p, now)).toBe(
       "Llega entre el miércoles, 25 de noviembre y el lunes, 30 de noviembre",
     );
+  });
+});
+
+describe("the hour a promise holds for", () => {
+  it("is the Costa Rica date and hour", () => {
+    expect(promiseHour(crTime("2026-11-24", 13, 59))).toBe("2026-11-24T13");
+    expect(promiseHour(crTime("2026-11-24", 14, 0))).toBe("2026-11-24T14");
+    expect(promiseHour(crTime("2026-11-24", 0, 0))).toBe("2026-11-24T00");
+    expect(promiseHour(crTime("2026-11-23", 23, 59))).toBe("2026-11-23T23");
+  });
+
+  it("changes whenever the promise can change with the clock alone", () => {
+    // Every hour of two weeks, every zone, with and without handling days:
+    // two instants with the same key always get the same promise, so a
+    // cache keyed by it never serves a promise past its hour.
+    const start = crTime("2026-11-23", 0, 0).getTime();
+    for (const zone of Object.values(SERVICE_PRESETS)) {
+      for (const handlingDays of [0, 2]) {
+        for (let hour = 0; hour < 14 * 24; hour++) {
+          const first = new Date(start + hour * 3_600_000);
+          const last = new Date(first.getTime() + 3_599_999);
+          expect(promiseHour(last)).toBe(promiseHour(first));
+          expect(computeDeliveryPromise({ now: last, zone, handlingDays })).toEqual(
+            computeDeliveryPromise({ now: first, zone, handlingDays }),
+          );
+        }
+      }
+    }
   });
 });

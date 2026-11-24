@@ -1,13 +1,15 @@
 import { colors, space } from "@yuntera/expo-kit/theme";
 import { Divider, ErrorState, ListRow, LoadingState, Screen, Text } from "@yuntera/expo-kit/ui";
 import { View } from "react-native";
+import { KeptNotice } from "@/components/kept-notice";
 import { useCategories } from "@/lib/catalog";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 
 /** Every department with products, and its sub-categories, as the website's category bar. */
 export default function CategoriesScreen() {
   const categories = useCategories();
   if (categories.isPending) return <LoadingState label="Cargando categorías…" />;
-  if (categories.isError)
+  if (firstReadFailed(categories) || !categories.data)
     return <ErrorState error={categories.error} onRetry={() => void categories.refetch()} />;
 
   const all = categories.data;
@@ -19,6 +21,18 @@ export default function CategoriesScreen() {
       refreshing={categories.isRefetching}
       onRefresh={() => void categories.refetch()}
     >
+      {refreshFailed(categories) ? (
+        <View style={{ paddingHorizontal: space[4], paddingTop: space[3] }}>
+          <KeptNotice
+            title={KEPT.categories.title}
+            body={KEPT.categories.body}
+            error={categories.error}
+            onRetry={() => void categories.refetch()}
+            retrying={categories.isFetching}
+            testID="categories-kept"
+          />
+        </View>
+      ) : null}
       <View style={{ paddingVertical: space[2] }}>
         {departments.map((department) => {
           const children = all.filter(

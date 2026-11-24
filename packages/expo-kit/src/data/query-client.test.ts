@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ AppState: {}, Platform: { OS: "ios" } }));
 vi.mock("expo-network", () => ({}));
 
-const { createQueryClient, shouldRetry } = await import("./query-client");
+const { createQueryClient, READ_TIMED_OUT, readTimeoutOf, shouldRetry, withReadTimeout } =
+  await import("./query-client");
 const { onlineManager } = await import("@tanstack/react-query");
 
 describe("shouldRetry", () => {
@@ -51,5 +52,40 @@ describe("a change made while offline", () => {
       onlineManager.setOnline(true);
       client.clear();
     }
+  });
+});
+
+describe("a read that never answers", () => {
+  const never = () => new Promise<never>(() => undefined);
+
+  it("fails as a network error once its time is up, and is not repeated by itself", async () => {
+    const error = await withReadTimeout(never(), 20).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "network", detail: READ_TIMED_OUT });
+    expect(shouldRetry(0, error)).toBe(false);
+  });
+
+  it("answers as usual when it answers in time, or when the app set no limit", async () => {
+    await expect(withReadTimeout(Promise.resolve(7), 1_000)).resolves.toBe(7);
+    await expect(withReadTimeout(Promise.resolve(7), undefined)).resolves.toBe(7);
+    await expect(
+      withReadTimeout(Promise.reject(new ApiError("forbidden")), 1_000),
+    ).rejects.toMatchObject({
+      code: "forbidden",
+    });
+  });
+
+  it("reaches every query of a cache created with a limit, and none without", async () => {
+    const limited = createQueryClient({ readTimeoutMs: 20 });
+    const outcome = await limited
+      .fetchQuery({
+        queryKey: ["hung"],
+        queryFn: ({ meta }) => withReadTimeout(never(), readTimeoutOf(meta)),
+      })
+      .catch((caught: unknown) => caught);
+    expect(outcome).toMatchObject({ code: "network", detail: READ_TIMED_OUT });
+    // Failed after one try: the limit is not multiplied by retries.
+    expect(limited.getQueryState(["hung"])?.fetchFailureCount).toBe(1);
+    expect(readTimeoutOf(createQueryClient().getDefaultOptions().queries?.meta)).toBeUndefined();
   });
 });

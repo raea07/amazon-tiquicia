@@ -34,6 +34,19 @@ export function toCostaRicaTime(instant: Date): LocalDateTime {
   };
 }
 
+/**
+ * The Costa Rica date and hour of an instant, as "YYYY-MM-DDTHH": the only
+ * part of the clock a delivery promise depends on (a zone's cutoff is a whole
+ * hour, `cutoff_hour`, and a day ends at midnight). Two instants with the same
+ * key get the same promise from the same data, so a cached answer that
+ * carries a promise and is keyed by this is never served after the hour it
+ * was computed for (apps/web/src/lib/data.ts, the product page).
+ */
+export function promiseHour(instant: Date): string {
+  const local = toCostaRicaTime(instant);
+  return `${local.date}T${String(local.hour).padStart(2, "0")}`;
+}
+
 const parse = (d: LocalDate) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
   if (!m) throw new RangeError(`Not a YYYY-MM-DD date: ${d}`);

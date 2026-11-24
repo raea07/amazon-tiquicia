@@ -31,11 +31,12 @@ import { paymentsApi, paymentsErrors } from "./payments";
 import * as peoplePayouts from "./people-payouts";
 import { photosApi, photosErrors } from "./photos";
 import { sellerListingsApi, sellerListingsErrors } from "./seller-listings";
+import { shopperFollowupsApi, shopperFollowupsErrors } from "./shopper-followups";
 import type { Caller, Messages } from "./types";
 import { warehouseStockApi, warehouseStockErrors } from "./warehouse-stock";
 import { webFollowupsApi, webFollowupsErrors } from "./web-followups";
 
-// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts, operations, order-followups, warehouse-stock, count-into-location and lock-conflicts areas name their exports uniquely, so
+// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts, operations, order-followups, warehouse-stock, count-into-location, lock-conflicts and shopper-followups areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
 // would clash with each other, so their schemas and types are re-exported by
 // name.
@@ -104,6 +105,7 @@ export type {
 } from "./people-payouts";
 export * from "./photos";
 export * from "./seller-listings";
+export * from "./shopper-followups";
 export type { Caller, Messages } from "./types";
 export * from "./warehouse-stock";
 export * from "./web-followups";
@@ -130,6 +132,7 @@ export const areaErrors = {
   ...warehouseStockErrors,
   ...countIntoLocationErrors,
   ...lockConflictErrors,
+  ...shopperFollowupsErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -160,4 +163,6 @@ export const areaApi = (caller: Caller) => ({
   // After the core, integrity and operations methods it replaces with wider
   // answers (see order-followups.ts).
   ...orderFollowupsApi(caller),
+  // After seller-listings: its cart alternatives carry the delivery date.
+  ...shopperFollowupsApi(caller),
 });

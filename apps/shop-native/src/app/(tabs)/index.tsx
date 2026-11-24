@@ -16,9 +16,11 @@ import {
 } from "@yuntera/expo-kit/ui";
 import { Link } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
+import { KeptNotice } from "@/components/kept-notice";
 import { ProductGrid } from "@/components/product";
 import { SearchBox } from "@/components/search-box";
 import { useDistrictName } from "@/lib/catalog";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 
 const PROMISES: Array<[string, string]> = [
   [
@@ -52,6 +54,9 @@ export default function HomeScreen() {
     void popular.refetch();
     void madeHere.refetch();
   };
+  // A shelf on screen whose refresh failed stays; one line above says so.
+  const keptError =
+    [categories, popular, madeHere].find((read) => refreshFailed(read))?.error ?? null;
   const departments = (categories.data ?? []).filter((c) => !c.parent_slug && c.product_count > 0);
 
   return (
@@ -71,6 +76,17 @@ export default function HomeScreen() {
           </Pressable>
         </Link>
       </View>
+
+      {keptError ? (
+        <KeptNotice
+          title={KEPT.home.title}
+          body={KEPT.home.body}
+          error={keptError}
+          onRetry={refresh}
+          retrying={categories.isFetching || popular.isFetching || madeHere.isFetching}
+          testID="home-kept"
+        />
+      ) : null}
 
       {/* Once, right after an account deletion brought the shopper back here. */}
       <AccountDeletedNotice />
@@ -106,7 +122,7 @@ export default function HomeScreen() {
         <SectionHeader title="Categorías" />
         {categories.isPending ? (
           <LoadingState />
-        ) : categories.isError ? (
+        ) : firstReadFailed(categories) ? (
           <ErrorState error={categories.error} onRetry={() => void categories.refetch()} />
         ) : (
           <View style={styles.categories}>
@@ -151,7 +167,7 @@ export default function HomeScreen() {
         <SectionHeader title="Lo que más se está llevando" />
         {popular.isPending ? (
           <LoadingState label="Cargando productos…" />
-        ) : popular.isError ? (
+        ) : firstReadFailed(popular) || !popular.data ? (
           <ErrorState error={popular.error} onRetry={() => void popular.refetch()} />
         ) : (
           <ProductGrid products={popular.data} testIDPrefix="home-product" />

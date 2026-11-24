@@ -1,4 +1,9 @@
-import { isPhotoTemplate, type OfferCandidate, selectFeaturedOffer } from "@yuntera/core";
+import {
+  isPhotoTemplate,
+  type OfferCandidate,
+  promiseHour,
+  selectFeaturedOffer,
+} from "@yuntera/core";
 import type { ShopOffer as ProductOffer, ShopProductPage as ProductPage } from "@yuntera/db";
 import { pictureAddress } from "@yuntera/next-kit/product-image";
 import { ShopLogo } from "@yuntera/next-kit/shop-logo";
@@ -67,7 +72,10 @@ function toCandidate(offer: ProductOffer): OfferCandidate {
 
 async function Product({ params, searchParams }: PageProps<"/p/[slug]">) {
   const [{ slug }, query, location] = await Promise.all([params, searchParams, readLocation()]);
-  const product = await getProductPage(slug, location.postalCode);
+  // The promise dates depend on today: a request-time fact, never baked into a
+  // prerender, and the cached page is keyed by the hour they hold for.
+  await connection();
+  const product = await getProductPage(slug, location.postalCode, promiseHour(new Date()));
   if (!product) notFound();
 
   const requested = Array.isArray(query.v) ? query.v[0] : query.v;
@@ -76,8 +84,6 @@ async function Product({ params, searchParams }: PageProps<"/p/[slug]">) {
     product.skus.find((k) => k.offers.some((o) => o.available > 0)) ??
     product.skus[0];
 
-  // The promise dates depend on today: a request-time fact, never baked into a prerender.
-  await connection();
   const offers = sku?.offers ?? [];
   const selection = selectFeaturedOffer(offers.map(toCandidate));
   const byId = new Map(offers.map((offer) => [offer.offer_id, offer]));

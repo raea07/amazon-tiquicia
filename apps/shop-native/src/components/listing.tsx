@@ -1,7 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { CatalogSearchInput } from "@yuntera/db";
 import { useApi } from "@yuntera/expo-kit/auth";
-import { useApiQuery } from "@yuntera/expo-kit/data";
+import { readTimeoutOf, useApiQuery, withReadTimeout } from "@yuntera/expo-kit/data";
 import { colors, gutter, radius, space, touchTarget } from "@yuntera/expo-kit/theme";
 import { Button, EmptyState, ErrorState, LoadingState, Text } from "@yuntera/expo-kit/ui";
 import type { ReactElement } from "react";
@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { KeptNotice } from "@/components/kept-notice";
 import {
   BRAND_EMPTY,
   brandOptions,
@@ -23,6 +24,7 @@ import {
   settledTotal,
   showBrandFilter,
 } from "@/lib/brand-filter";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 import { ProductCard } from "./product";
 import { SelectSheet } from "./select-sheet";
 
@@ -113,7 +115,7 @@ export function Listing({
   const results = useInfiniteQuery({
     queryKey: ["search", "listing", query ?? "", categorySlug ?? "", brand ?? "", sort, inStock],
     initialPageParam: 0,
-    queryFn: ({ pageParam }) => {
+    queryFn: ({ pageParam, meta }) => {
       const input: CatalogSearchInput = {
         query: query || null,
         categorySlug: categorySlug ?? null,
@@ -123,14 +125,23 @@ export function Listing({
         limit: PAGE_SIZE,
         offset: pageParam * PAGE_SIZE,
       };
-      return api.searchProducts(input);
+      // Within the app's time limit for a read (app/_layout.tsx), as every useApiQuery.
+      return withReadTimeout(api.searchProducts(input), readTimeoutOf(meta));
     },
     getNextPageParam: (last, pages) => {
       const total = last[0]?.total_count ?? 0;
       return pages.length * PAGE_SIZE < total ? pages.length : undefined;
     },
   });
+  // Only the answer for these options: a new search, brand or category has
+  // its own key and starts empty (no placeholder data), so another one's
+  // results are never shown under it.
   const products = results.data?.pages.flat() ?? [];
+  // Results on screen and asking again failed (a background refresh, a pull
+  // or the next page): they stay, and the screen says so above them.
+  const kept = refreshFailed(results);
+  const askAgain = () =>
+    void (results.isFetchNextPageError ? results.fetchNextPage() : results.refetch());
   // Null until the search for these options has answered: while it loads
   // (a new filter, or brand A changed for brand B) no count is said.
   const total = settledTotal(results);
@@ -149,7 +160,7 @@ export function Listing({
       />
       {brand ? (
         <View style={styles.brandSummary}>
-          {results.isError ? null : (
+          {firstReadFailed(results) ? null : (
             <Text
               variant="small"
               aria-live="polite"
@@ -170,6 +181,16 @@ export function Listing({
   const controls = (
     <View style={styles.controls}>
       {header}
+      {kept ? (
+        <KeptNotice
+          title={KEPT.listing.title}
+          body={KEPT.listing.body}
+          error={results.error}
+          onRetry={askAgain}
+          retrying={results.isFetching}
+          testID="listing-kept"
+        />
+      ) : null}
       {brandFilter}
       {total !== null && products.length > 0 && !brand ? (
         <Text variant="small" tint="muted" aria-live="polite">
@@ -205,7 +226,7 @@ export function Listing({
   return (
     <SafeAreaView edges={["left", "right"]} style={styles.page}>
       <FlatList
-        data={results.isSuccess ? products : []}
+        data={products}
         keyExtractor={(item) => item.slug}
         numColumns={2}
         columnWrapperStyle={styles.columns}
@@ -232,7 +253,7 @@ export function Listing({
         ListEmptyComponent={
           results.isPending ? (
             <LoadingState label="Cargando productos…" />
-          ) : results.isError ? (
+          ) : firstReadFailed(results) ? (
             <ErrorState error={results.error} onRetry={() => void results.refetch()} />
           ) : brand ? (
             <EmptyState

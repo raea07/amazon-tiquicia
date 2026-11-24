@@ -9,6 +9,7 @@ import {
 import type { Api } from "@yuntera/db";
 import { useCallback } from "react";
 import { useApi, useSession } from "../auth/session";
+import { readTimeoutOf, withReadTimeout } from "./query-client";
 
 /**
  * Reads from the API through the cache. Keys that depend on who is signed in
@@ -28,7 +29,8 @@ export function useApiQuery<T>(
   const { personal = false, enabled = true, ...rest } = options;
   return useQuery({
     queryKey: personal ? ["user", viewer?.id ?? "anonymous", ...key] : key,
-    queryFn: () => read(api),
+    // Within the cache's time limit, when the app set one (createQueryClient).
+    queryFn: ({ meta }) => withReadTimeout(read(api), readTimeoutOf(meta)),
     // Only once fully signed in: halfway through the second step the
     // database refuses everything but the second step's own calls.
     enabled: personal ? enabled !== false && Boolean(viewer) && status === "signedIn" : enabled,

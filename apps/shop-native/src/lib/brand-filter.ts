@@ -46,6 +46,8 @@ export function brandOptions(brands: ShopBrand[]) {
 /** What a listing's search query looks like to the screen (react-query's names). */
 export interface ListingResults {
   isSuccess: boolean;
+  /** True with `data` when asking again failed and the last answer is kept (kept-reads.ts). */
+  isError?: boolean;
   isPlaceholderData?: boolean;
   data?: { pages: { total_count: number }[][] };
 }
@@ -55,9 +57,12 @@ export interface ListingResults {
  * while it has not answered for them yet (the first page of a new filter,
  * or another filter's results standing in). A count is only said once it is
  * the count of what is asked: "0 productos" while loading would be false.
+ * When a refresh failed, the answer kept for these same options still
+ * counts (the screen says above it that it could not be updated).
  */
 export function settledTotal(results: ListingResults): number | null {
-  if (!results.isSuccess || results.isPlaceholderData || !results.data) return null;
+  if (results.isPlaceholderData || !results.data) return null;
+  if (!results.isSuccess && !results.isError) return null;
   return results.data.pages[0]?.[0]?.total_count ?? 0;
 }
 

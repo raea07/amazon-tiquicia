@@ -1,4 +1,4 @@
-import type { CartAlternative, CartLine } from "@yuntera/db";
+import type { CartLine, DatedCartAlternative } from "@yuntera/db";
 import { useApiQuery } from "@yuntera/expo-kit/data";
 import { colors, space } from "@yuntera/expo-kit/theme";
 import {
@@ -18,22 +18,29 @@ import {
   TextLink,
 } from "@yuntera/expo-kit/ui";
 import { Link, router } from "expo-router";
+import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { UnavailableLine } from "@/components/cart-alternative";
+import { KeptNotice } from "@/components/kept-notice";
 import { ProductImage } from "@/components/product";
 import { QuantityStepper } from "@/components/quantity";
 import { useCart } from "@/lib/cart-context";
-import { unavailableFooter } from "@/lib/cart-wording";
+import { type AlternativesLookup, unavailableFooter } from "@/lib/cart-wording";
+import { firstReadFailed, KEPT, refreshFailed } from "@/lib/kept-reads";
 
 function Line({
   line,
   quantity,
   alternative,
+  lookup,
+  onRetryAlternatives,
 }: {
   line: CartLine;
   quantity: number;
   /** Another shop's offer of the same variant, for a line that cannot be bought. */
-  alternative: CartAlternative | undefined;
+  alternative: DatedCartAlternative | undefined;
+  lookup: AlternativesLookup;
+  onRetryAlternatives: () => void;
 }) {
   const cart = useCart();
   const max = Math.max(Math.min(line.available, 10), 1);
@@ -53,7 +60,13 @@ function Line({
             </Text>
           </>
         ) : (
-          <UnavailableLine line={line} alternative={alternative} quantity={quantity} />
+          <UnavailableLine
+            line={line}
+            alternative={alternative}
+            quantity={quantity}
+            lookup={lookup}
+            onRetry={onRetryAlternatives}
+          />
         )}
         <View style={styles.lineActions}>
           {line.buyable ? (
@@ -101,13 +114,25 @@ export default function CartScreen() {
     { enabled: cart.items.length > 0 },
   );
 
-  // Another shop may still sell what the shopper chose: say so, instead of "gone".
+  // Another shop may still sell what the shopper chose: say so, instead of
+  // "gone", with when it would arrive in the district the cart is priced for
+  // (the date its product page gives; no request per product).
   const unavailable = (lines.data ?? []).filter((line) => !line.buyable).map((l) => l.offer_id);
   const alternatives = useApiQuery(
-    ["cart-alternatives", unavailable],
-    (api) => api.cartAlternatives(unavailable),
+    ["cart-alternatives", unavailable, cart.postalCode],
+    (api) => api.cartAlternatives(unavailable, cart.postalCode),
     { enabled: unavailable.length > 0 },
   );
+  // A pull, and every "Intentar de nuevo" above a kept cart: everything again.
+  const [pulling, setPulling] = useState(false);
+  const readAgain = () => {
+    setPulling(true);
+    void Promise.allSettled([
+      lines.refetch(),
+      quote.refetch(),
+      ...(unavailable.length > 0 ? [alternatives.refetch()] : []),
+    ]).finally(() => setPulling(false));
+  };
 
   if (!cart.ready) return <LoadingState />;
   if (cart.items.length === 0) {
@@ -122,30 +147,35 @@ export default function CartScreen() {
   }
   if (lines.isPending || quote.isPending)
     return <LoadingState label="Revisando precios y existencias…" />;
-  if (lines.isError) return <ErrorState error={lines.error} onRetry={() => void lines.refetch()} />;
-  if (quote.isError) return <ErrorState error={quote.error} onRetry={() => void quote.refetch()} />;
+  if (firstReadFailed(lines))
+    return <ErrorState error={lines.error} onRetry={() => void lines.refetch()} />;
+  if (firstReadFailed(quote))
+    return <ErrorState error={quote.error} onRetry={() => void quote.refetch()} />;
+  if (!lines.data || !quote.data) return <LoadingState label="Revisando precios y existencias…" />;
 
   const quantityOf = new Map(cart.items.map((item) => [item.offerId, item.quantity]));
   const hasUnavailable = unavailable.length > 0;
-  // While they load (or if they fail) the line says only that it is gone; the
-  // swap appears as soon as the answer does.
+  // While they load the line says that the other shops are being checked; if
+  // they could not be read, it says so and offers to ask again. "Nobody else
+  // sells it" only once they answered.
   const alternativeOf = new Map(
     (hasUnavailable ? (alternatives.data ?? []) : []).map((alt) => [alt.offer_id, alt]),
   );
+  const lookup: AlternativesLookup =
+    alternatives.data !== undefined ? "done" : firstReadFailed(alternatives) ? "failed" : "loading";
   const q = quote.data;
+  // Lines or the total on screen, and asking again failed: they stay, and the
+  // cart says so (checkout checks prices and stock again anyway).
+  const keptError = refreshFailed(lines) ? lines.error : refreshFailed(quote) ? quote.error : null;
 
   return (
     <Screen
-      refreshing={lines.isRefetching || quote.isRefetching}
-      onRefresh={() => {
-        void lines.refetch();
-        void quote.refetch();
-        if (hasUnavailable) void alternatives.refetch();
-      }}
+      refreshing={pulling}
+      onRefresh={readAgain}
       footer={
         hasUnavailable ? (
           <Alert tone="warning" testID="cart-blocked">
-            {unavailableFooter(alternativeOf.size > 0)}
+            {unavailableFooter(alternativeOf.size > 0 || lookup !== "done")}
           </Alert>
         ) : (
           <Button block size="lg" onPress={() => router.push("/pagar")} testID="cart-continue">
@@ -154,6 +184,16 @@ export default function CartScreen() {
         )
       }
     >
+      {keptError ? (
+        <KeptNotice
+          title={KEPT.cart.title}
+          body={KEPT.cart.body}
+          error={keptError}
+          onRetry={readAgain}
+          retrying={pulling}
+          testID="cart-kept"
+        />
+      ) : null}
       <Stack gap={3}>
         {lines.data.map((line) => (
           <Line
@@ -161,6 +201,8 @@ export default function CartScreen() {
             line={line}
             quantity={quantityOf.get(line.offer_id) ?? 1}
             alternative={alternativeOf.get(line.offer_id)}
+            lookup={lookup}
+            onRetryAlternatives={() => void alternatives.refetch()}
           />
         ))}
       </Stack>
