@@ -37,6 +37,7 @@ tools/
   dev-api/     local stand-in for the Supabase API, for development and tests
   e2e/         browser journeys for the four web apps
   native-e2e/  browser journeys through the web export of the native apps
+  races/       two-session races against a lane's database (not part of pnpm test)
 docs/          strategy, product, architecture, data, algorithms, security,
                operations, deployment, brand
 ```
@@ -189,7 +190,7 @@ tools/dev/stack.sh native 1
 tools/dev/stack.sh native-e2e 1
 ```
 
-That runs the fourteen native journeys, each on a freshly seeded database:
+That runs the seventeen native journeys, each on a freshly seeded database:
 `shop` (including a return), `shop-parity` (the cart's other shop's offer,
 the brand filter, the category menu kept fresh, a product taken down),
 `seller` (including a price below the fees and a seller's second step),
@@ -200,8 +201,12 @@ stretch without signal, a suspension that hands the route back to Central
 and a delivery code locked and released), `driver-removed-stop` (stops
 Central took off the route before and after the start), `warehouse` (picking
 by scan, refused receipts and a returned parcel), `warehouse-stock` (a
-location, a move, a count correction), `order-followups` (a stopped parcel
-in the shopper and warehouse apps) and `staff` (the right and wrong kinds of
+location, a move, a count correction), `count-into-location` (counting a
+product a location does not list), `order-followups` (a stopped parcel
+in the shopper and warehouse apps), `shop-followups` (what the shopper app
+says when a read fails or never answers, and the cart's other shop's date),
+`shop-cancel-reasons` (why an order was cancelled, a cart with nothing to
+buy) and `staff` (the right and wrong kinds of
 account for the three staff apps), and the account screens of each app:
 `accounts-shop` (deletion, the password reset and change, the second step
 inside the app, reporting a listing, message channels), `accounts-seller`

@@ -100,13 +100,13 @@ scanned with the phone's camera where the browser supports it and typed by
 hand where it does not; dedicated scanners and a native app are Later
 decisions.
 
-| Pilot                                                                       | Launch                                       | Later                                                                                           |
-| --------------------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Receive an inbound shipment against its notice; record shortages and damage | Label printing for units without barcodes    | Cycle counting (a count correction per location exists since 084300)                            |
-| Put away to a location by scanning or typing its code                       | Batch picking across orders                  | Slotting suggestions                                                                            |
-| Pick list per order, in bin order, confirmed line by line                   | Packing station flow with weight check       | Wave planning                                                                                   |
-| Pack and mark ready for dispatch                                            | Returns receiving and grading                | Multiple warehouses and transfers (moves between locations of one warehouse exist since 084300) |
-| Hand over to a driver against a route                                       | Stock adjustments with a reason and approval | Handheld scanners; native app with fast scan                                                    |
+| Pilot                                                                       | Launch                                       | Later                                                                                                                              |
+| --------------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Receive an inbound shipment against its notice; record shortages and damage | Label printing for units without barcodes    | Cycle counting (a count correction per location exists since 084300, and counting a product a location does not list since 084500) |
+| Put away to a location by scanning or typing its code                       | Batch picking across orders                  | Slotting suggestions                                                                                                               |
+| Pick list per order, in bin order, confirmed line by line                   | Packing station flow with weight check       | Wave planning                                                                                                                      |
+| Pack and mark ready for dispatch                                            | Returns receiving and grading                | Multiple warehouses and transfers (moves between locations of one warehouse exist since 084300)                                    |
+| Hand over to a driver against a route                                       | Stock adjustments with a reason and approval | Handheld scanners; native app with fast scan                                                                                       |
 
 **Connectivity.** Warehouses have Wi-Fi, so the web app's need for a connection
 is a small cost here. Every action is confirmed by the server before the
