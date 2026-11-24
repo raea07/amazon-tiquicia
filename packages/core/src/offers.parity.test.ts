@@ -15,9 +15,14 @@ import { OFFER_ORDER_SQL } from "./offers";
 /**
  * The migrations that write the rule. 083600 has the listing summary, the
  * first product page body and the cart's alternatives; 083700 replaces the
- * product page body (it must keep the rule, and its markers).
+ * product page body and 084400 the listing summary (each must keep the rule,
+ * and its markers).
  */
-const FILES = ["20261121083600_seller_listings.sql", "20261121083700_console_catalogue.sql"];
+const FILES = [
+  "20261121083600_seller_listings.sql",
+  "20261121083700_console_catalogue.sql",
+  "20261121084400_stock_lock_order.sql",
+];
 
 function read(file: string): string {
   return readFileSync(

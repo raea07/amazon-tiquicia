@@ -52,6 +52,7 @@ its own entry, not something that happens by drift.
 | 43  | [Order follow-ups: the delivery fee, stopping a packed parcel, an order that never moves back](#43-order-follow-ups-the-delivery-fee-when-nobody-went-to-the-door-stopping-a-packed-parcel-an-order-that-never-moves-back) | Built; not on the preview yet            |
 | 44  | [Warehouse stock: free units, moves the shop never sees, counts only onto shelves](#44-warehouse-stock-what-is-free-moves-that-the-shop-never-sees-counts-only-onto-shelves)                                               | Built; not on the preview yet            |
 | 45  | [Android builds of the shopper app go to the internal testers without a click](#45-android-builds-of-the-shopper-app-go-to-the-internal-testers-without-a-click)                                                           | Decided; settings not changed yet        |
+| 46  | [Product rows written only when the summary changes; one lock order for stock, orders and shelves](#46-product-rows-written-only-when-the-summary-changes-one-lock-order-for-stock-orders-and-shelves)                     | Built; not on the preview yet            |
 
 ---
 
@@ -1623,3 +1624,63 @@ builds stay drafts.
 settings (`apps/shop-native/eas.json`, the app configuration, identifiers,
 permissions and native modules) are not changed by this record. They change
 when the first release has been made.
+
+## 46. Product rows written only when the summary changes; one lock order for stock, orders and shelves
+
+**Context.** Every stock write refreshed the product's listing summary, so
+two transactions writing two products shared by several variants or shops
+in opposite order deadlocked on the product rows (an independent race
+harness: 1 to 42 in 100 natural rounds, every forced round). The refresh
+read the offers before it locked the product row, so two checkouts of the
+last units of two offers of one product could leave it "in stock" with
+nothing to sell. A cancellation took a shelf before the stock row, the
+opposite of a count, a receipt and a pick. The unpaid-order sweep held the
+stock rows of every expired order for its whole run. A driver starting a
+route took the route and its parcels before their orders, and a shop
+packing a parcel it ships itself took the parcel and its stock before the
+order, so a cancellation at that moment deadlocked with it.
+
+**Decision.** (migration 084400)
+
+- **The summary is written only when it changes.** It depends on whether an
+  offer has units, never on how many, so an offer's update refreshes it only
+  when price, list price, status, fulfilment, handling days or condition
+  changed, or the units crossed zero; the refresh writes only a value that
+  differs. Chosen over the other fix the review offered (taking every
+  order's product rows in id order in each stock writer): wave 7 showed that
+  every lock added to a core writer creates new inversions, while this one
+  removes the product row from ordinary sales altogether and changes no
+  stock writer.
+- **The refresh locks the product row before it reads.** Two refreshes of
+  one product run one after the other, and the later one computes from what
+  the earlier committed. This relies on READ COMMITTED and on the refresh
+  being a VOLATILE function (a new snapshot per statement, also inside a
+  trigger).
+- **One lock order** for every stock writer: warehouse (moves and counts),
+  location, order, parcel, pick tasks, stock rows by product, shop and
+  warehouse (each with its offer and, when the offer crosses zero, its
+  product), shelf rows. The cancellation follows it now; a route start takes
+  its parcels' orders first; a shop packing a parcel it ships itself
+  (`seller_mark_packed`) takes the order first, as warehouse packing does; a
+  shop's products are refreshed in id order (a convention: no measured race
+  depends on it).
+  Written down in `docs/04-algorithms/sourcing-and-inventory.md`, with every
+  statement that writes or locks a product row.
+- **The sweep cancels at most 200 orders a run, the oldest first**, so a run
+  holds stock rows for about 0.4 s (measured for 200 orders on a local
+  database of a shared machine, not on the hosted project); the five-minute
+  schedule takes the rest.
+- **The races stay in the repository** (`tools/races`, two real sessions and
+  forced interleavings, 100 rounds a scenario), outside `pnpm test`; a few
+  forced rounds of each fix are contract tests.
+
+**Consequences.** Ordinary sales no longer write the product row (its
+`updated_at` no longer moves with stock). Still possible, measured with
+forced rounds and documented: two writers that each take offers of two
+shared products across zero in opposite order; a cancellation or the sweep
+crossing zero on one offer of a product while the seller changes another
+offer of it; a shop suspended against such a writer; staff merging two
+brands against a checkout crossing zero on two of their products; and, outside
+product rows, packing against a seller switching off a variant two shops
+sell. Each loser rolls back whole and reads "nothing was saved, try again".
+A backlog of more than 200 expired orders takes more than one run to clear.
