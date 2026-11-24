@@ -1636,7 +1636,9 @@ last units of two offers of one product could leave it "in stock" with
 nothing to sell. A cancellation took a shelf before the stock row, the
 opposite of a count, a receipt and a pick. The unpaid-order sweep held the
 stock rows of every expired order for its whole run. A driver starting a
-route took the route and its parcels before their orders.
+route took the route and its parcels before their orders, and a shop
+packing a parcel it ships itself took the parcel and its stock before the
+order, so a cancellation at that moment deadlocked with it.
 
 **Decision.** (migration 084400)
 
@@ -1658,12 +1660,16 @@ route took the route and its parcels before their orders.
   location, order, parcel, pick tasks, stock rows by product, shop and
   warehouse (each with its offer and, when the offer crosses zero, its
   product), shelf rows. The cancellation follows it now; a route start takes
-  its parcels' orders first; a shop's products are refreshed in id order.
+  its parcels' orders first; a shop packing a parcel it ships itself
+  (`seller_mark_packed`) takes the order first, as warehouse packing does; a
+  shop's products are refreshed in id order (a convention: no measured race
+  depends on it).
   Written down in `docs/04-algorithms/sourcing-and-inventory.md`, with every
   statement that writes or locks a product row.
-- **The sweep cancels at most 200 orders a run, the oldest first**, so no run
-  holds stock rows for more than about 0.4 s; the five-minute schedule takes
-  the rest.
+- **The sweep cancels at most 200 orders a run, the oldest first**, so a run
+  holds stock rows for about 0.4 s (measured for 200 orders on a local
+  database of a shared machine, not on the hosted project); the five-minute
+  schedule takes the rest.
 - **The races stay in the repository** (`tools/races`, two real sessions and
   forced interleavings, 100 rounds a scenario), outside `pnpm test`; a few
   forced rounds of each fix are contract tests.
@@ -1671,9 +1677,10 @@ route took the route and its parcels before their orders.
 **Consequences.** Ordinary sales no longer write the product row (its
 `updated_at` no longer moves with stock). Still possible, measured with
 forced rounds and documented: two writers that each take offers of two
-shared products across zero in opposite order; a cancellation, packing or
-the sweep crossing zero on one offer of a product while the seller changes
-another offer of it; a shop suspended against such a writer; and, outside
+shared products across zero in opposite order; a cancellation or the sweep
+crossing zero on one offer of a product while the seller changes another
+offer of it; a shop suspended against such a writer; staff merging two
+brands against a checkout crossing zero on two of their products; and, outside
 product rows, packing against a seller switching off a variant two shops
 sell. Each loser rolls back whole and reads "nothing was saved, try again".
 A backlog of more than 200 expired orders takes more than one run to clear.

@@ -1,6 +1,7 @@
 -- Stock writers that do not deadlock on product rows or shelves, a product
 -- summary that is never stale, a capped unpaid-order sweep, and a route that
--- starts in the lock order of the parcels it carries.
+-- starts, and a shop that packs its own parcel, in the lock order of the
+-- parcels' orders.
 --
 -- Measured before and after with two real sessions (tools/races, README
 -- there; the tables are in the wave 8 report). Every session of the API runs
@@ -81,7 +82,8 @@
 --     the order (packing takes them before the stock rows, a cancellation
 --     after; both hold the order row first, so they never meet: race H1, a
 --     cancellation against a shop packing its own parcel of the same order,
---     0 with this migration).
+--     and H7, against the warehouse packing it, 0 in 100 natural and every
+--     forced round with this migration).
 --
 --     Two functions did not follow it:
 --       - private.cancel_order_internal put picked units back on their
@@ -102,7 +104,14 @@
 --         this branch before the fix: staff 18 and the shopper 17 in 100
 --         natural rounds, every forced round). It now takes the order first,
 --         as wms_pack_shipment does since 084200. Nothing else changes in it.
---         With this migration 0.
+--         With this migration 0. This moves a lock a core stock writer
+--         always took (the order, last) to the front, so every writer it can
+--         meet on the same order, parcel, stock row, offer or variant was
+--         raced, 100 natural and 100 forced rounds each, before and after
+--         (family H: a checkout of the same offer, the shop's count, the
+--         sweep, the warehouse packing the order's other parcel, the shop
+--         pausing the offer or switching off its variant): 0 in every one,
+--         before and after.
 --   * THE SWEEP IS CAPPED. private.expire_unpaid_orders took every expired
 --     order and held their stock rows for its whole run (about 2 ms an order:
 --     0.4 s for 200, 2 s for 1000; the hosted API's statement timeout is 8 s
@@ -130,30 +139,37 @@
 -- the loser rolls back whole and the person reads "nothing was saved, try
 -- again", try_again; the sweep runs again five minutes later):
 --   - two transactions that EACH take an offer of two shared products across
---     zero (out of stock, or back in stock), in opposite order. Measured for
---     two checkouts of last units (E5: 33 / 63; before this migration 26 /
---     74, and then the summary was also wrong in 42 / 26 rounds); by the same
---     mechanism, not raced separately: a cancellation or the sweep against
---     such a checkout (packing never takes an offer across zero);
+--     zero (out of stock, or back in stock), in opposite order. Two checkouts
+--     of last units (E5: 29 to 33 / 43 to 63 in two runs; before this
+--     migration 26 / 74, and then the summary was also wrong in 42 / 26
+--     rounds); a staff cancellation giving back last units against such a
+--     checkout (E5b: 1 / 65, the same before); by the same mechanism, not
+--     raced separately: the sweep against such a checkout (packing never
+--     takes an offer across zero);
 --   - a staff cancellation or the sweep giving back the last unit of one
 --     offer of a product and then writing another offer of
 --     the same product, against the seller changing or pausing that second
 --     offer at that moment (offer row, then product row) (E6). A checkout
 --     does not deadlock with it: place_order takes its offers FOR SHARE before it writes a stock row,
---     so the seller waits (E6: 22 / 100, before 20 / 100; E6b: 0 / 0);
+--     so the seller waits (E6: 22 to 26 / 100, before 20 / 100; E6b: 0 / 0);
 --   - a shop suspended or reinstated (its products in product-id order)
 --     against a writer that takes two of its products across zero in the
---     other order (E7: 3 / 100; before this migration, when its walk had
---     no order, 1 / 100);
+--     other order (E7: 1 to 3 / 100; before this migration, when its walk
+--     had no order, 1 / 100);
 --   - staff merging two brands (public.ops_merge_brands: one UPDATE of every
 --     product of the brand, in scan order) against a checkout that holds one
 --     of those products after taking its offer across zero and wants another
---     (E11, measured by an independent review and here: natural 0 for a checkout of [x1, low] and 8 for [second, x2] in 100 rounds; forced up to 21 and 55 in 100, depending on which session waits first). Not changed
---     here; the function is outside this migration.
+--     (E11, found by an independent review: natural 0 for a checkout of
+--     [x1, low] and 4 to 8 for [second, x2] in 100 rounds; forced up to 38
+--     and 56 in 100, depending on which session waits first; the same
+--     before this migration). Not changed here; the function is outside
+--     this migration.
 -- And, not on product rows: packing against a seller switching off a variant
 -- two shops sell (seller_set_variant_active takes the variant FOR UPDATE,
 -- which waits for the key share packing's ledger row takes on it) (E10:
--- 13 / 100; before this migration 20 / 100). Not changed here.
+-- 10 to 13 / 100; before this migration 20 / 100). A shop switching off the
+-- variant of a parcel it packs itself did not deadlock (H8: 0 / 0). Not
+-- changed here.
 -- Every statement that writes or locks public.products, and the order each
 -- path takes, is listed in docs/04-algorithms/sourcing-and-inventory.md.
 

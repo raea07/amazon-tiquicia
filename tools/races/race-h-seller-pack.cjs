@@ -20,7 +20,11 @@
  *       (wms_pack_shipment, order first) vs the shop packing its parcel;
  *   H6  the shop pausing its offer of ws (seller_update_offer) vs the pack;
  *   H7  for comparison, the warehouse packing a picked parcel of x1 from SJO1
- *       (wms_pack_shipment, order first since 084200) vs staff cancelling its order.
+ *       (wms_pack_shipment, order first since 084200) vs staff cancelling its order;
+ *   H8  the shop switching off the variant of ws (seller_set_variant_active: the
+ *       variant FOR UPDATE, then its offers) vs the pack (offer row, then a key
+ *       share on the variant for its ledger row): the E10 mechanism, which the
+ *       order lock does not touch.
  *
  * H7's check is the same as H1's on its own parcel, plus x1's stock row
  * (reserved = active reservations, available = on_hand - reserved).
@@ -43,6 +47,7 @@
  *   H5 forced-order:        the order FOR UPDATE; the warehouse pack first.
  *   H6 forced-offer:        the offer row of ws FOR SHARE; the pack first.
  *   H7 forced-order / forced-parcel: as H1.
+ *   H8 forced-offer:        as H6.
  */
 "use strict";
 const { main, STAFF, WORKER, SHOPPER } = require("./lib.cjs");
@@ -387,6 +392,40 @@ const scenarios = [
       ["forced-order", holdOrder, 0],
       ["forced-parcel", holdParcel, 1],
     ],
+  ),
+  ...family(
+    "H8 the shop switching off variant W (seller_set_variant_active) vs seller_mark_packed",
+    {
+      // A product's last variant cannot be switched off (last_variant), so W
+      // gets a second variant (no offer) for this scenario.
+      setup: async (h) => {
+        const ctx = await codOrder(h);
+        await h.q(
+          `insert into public.skus (id, product_id, code, variant_name, weight_grams, length_cm, width_cm, height_cm)
+           values ('e8000000-0000-4000-8000-000000000302', $1, 'CARRERA-W2', 'Dos', 500, 20, 15, 10)
+           on conflict (id) do update set active = true`,
+          [h.offer("ws").product_id],
+        );
+        return ctx;
+      },
+      actors: (h, ctx) => [
+        pack(ctx),
+        {
+          name: "variant-off",
+          as: SELLER,
+          sql: "select public.seller_set_variant_active($1, false)",
+          args: [h.offer("ws").sku_id],
+        },
+      ],
+      verify: async (h, ctx, results) => {
+        const bad = allowed(results, {});
+        bad.push(...(await stockAndSummary(h, ctx)));
+        await h.q("update public.skus set active = true where id = $1", [h.offer("ws").sku_id]);
+        await h.q("update public.offers set status = 'active' where id = $1", [h.offer("ws").id]);
+        return bad;
+      },
+    },
+    [["forced-offer", holdOffer, 0]],
   ),
 ];
 
