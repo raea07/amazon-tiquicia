@@ -73,7 +73,12 @@ const count = (h, code, units = COUNT_UNITS, as = WORKER, name = "count") => ({
   name,
   as,
   sql: "select public.wms_count_into_location($1, $2, $3, $4, 'Conteo de la carrera ocho')",
-  args: [h.loc.get(code), h.offer("low").sku_id, h.offer("low").seller_id, units],
+  args: [
+    h.loc.get(code),
+    h.offer("low").sku_id,
+    h.offer("low").seller_id,
+    units,
+  ],
 });
 
 /**
@@ -83,7 +88,14 @@ const count = (h, code, units = COUNT_UNITS, as = WORKER, name = "count") => ({
  * the target shelf when it succeeds; `mayRefuse` the other writer's allowed
  * refusal.
  */
-function scenario({ name, prepare, other, adds, mayRefuse = null, target = "W7-02" }) {
+function scenario({
+  name,
+  prepare,
+  other,
+  adds,
+  mayRefuse = null,
+  target = "W7-02",
+}) {
   return {
     name,
     products: ["low"],
@@ -102,12 +114,16 @@ function scenario({ name, prepare, other, adds, mayRefuse = null, target = "W7-0
       const o = results.find((r) => r.name !== "count");
       if (c.outcome && c.outcome !== "count_already_listed")
         bad.push(`count refused with ${c.outcome}`);
-      if (o.outcome && o.outcome !== mayRefuse) bad.push(`${o.name} refused with ${o.outcome}`);
+      if (o.outcome && o.outcome !== mayRefuse)
+        bad.push(`${o.name} refused with ${o.outcome}`);
       if (c.outcome && o.outcome) bad.push("both refused");
       const expected =
-        ctx.before + (c.outcome ? 0 : COUNT_UNITS) + (o.outcome ? 0 : adds(ctx, results));
+        ctx.before +
+        (c.outcome ? 0 : COUNT_UNITS) +
+        (o.outcome ? 0 : adds(ctx, results));
       const now = await shelf(h, ctx.target);
-      if (now !== expected) bad.push(`${ctx.target} holds ${now}, expected ${expected}`);
+      if (now !== expected)
+        bad.push(`${ctx.target} holds ${now}, expected ${expected}`);
       return bad;
     },
   };
@@ -154,7 +170,11 @@ const scenarios = [
       name: "adjust",
       as: WORKER,
       sql: "select public.wms_adjust_stock($1, $2, $3, 2, 'Conteo de la carrera ocho', null)",
-      args: [h.loc.get("W7-02"), h.offer("low").sku_id, h.offer("low").seller_id],
+      args: [
+        h.loc.get("W7-02"),
+        h.offer("low").sku_id,
+        h.offer("low").seller_id,
+      ],
     }),
     adds: () => 2,
   }),
@@ -188,7 +208,11 @@ const scenarios = [
       name: "pick",
       as: WORKER,
       sql: "select public.wms_confirm_pick($1, $2, null, $3)",
-      args: [ctx.x.tasks[0].id, ctx.x.tasks[0].quantity, ctx.x.tasks[0].sku_code],
+      args: [
+        ctx.x.tasks[0].id,
+        ctx.x.tasks[0].quantity,
+        ctx.x.tasks[0].sku_code,
+      ],
     }),
     adds: () => 0,
   }),
@@ -207,7 +231,11 @@ const scenarios = [
         name: "pick",
         as: WORKER,
         sql: "select public.wms_confirm_pick($1, $2, null, $3)",
-        args: [ctx.x.tasks[0].id, ctx.x.tasks[0].quantity, ctx.x.tasks[0].sku_code],
+        args: [
+          ctx.x.tasks[0].id,
+          ctx.x.tasks[0].quantity,
+          ctx.x.tasks[0].sku_code,
+        ],
         delayMs: (round >> 1) % 3,
       },
     ],
@@ -220,7 +248,8 @@ const scenarios = [
       if (p.outcome) bad.push(`pick refused with ${p.outcome}`);
       const expected = c.outcome ? 0 : COUNT_UNITS;
       const now = await shelf(h, "W7-02");
-      if (now !== expected) bad.push(`W7-02 holds ${now}, expected ${expected}`);
+      if (now !== expected)
+        bad.push(`W7-02 holds ${now}, expected ${expected}`);
       return bad;
     },
   },
@@ -240,10 +269,16 @@ const scenarios = [
     prepare: async (h) => {
       await h.layout(["low"], { "W7-01": 10 });
       const x = await h.cashInPicking(4, [["low", 2]], "all");
-      await h.call(WORKER, "select public.wms_pack_shipment($1, 900, 1::smallint)", [x.shipment]);
-      await h.call(STAFF, "select public.ops_recall_shipment($1, 'Prueba de carrera ocho')", [
-        x.shipment,
-      ]);
+      await h.call(
+        WORKER,
+        "select public.wms_pack_shipment($1, 900, 1::smallint)",
+        [x.shipment],
+      );
+      await h.call(
+        STAFF,
+        "select public.ops_recall_shipment($1, 'Prueba de carrera ocho')",
+        [x.shipment],
+      );
       return { x, orders: [x.order] };
     },
     other: (_h, ctx) => ({
@@ -286,7 +321,102 @@ function forced(sc, countFirst) {
     },
   };
 }
-for (const sc of [...scenarios]) scenarios.push(forced(sc, true), forced(sc, false));
+for (const sc of [...scenarios])
+  scenarios.push(forced(sc, true), forced(sc, false));
+
+/*
+ * I8 (found by an independent review of the merged tree, its J2): the
+ * harness's own product Y, whose one variant Tienda Sendero ("low") and
+ * Cafetal Los Santos ("second") both sell. "low" sits at 0 available (1 unit
+ * on W7-01, a paid order of 1), so a count into W7-02 takes its offer across
+ * zero and then its product row. At the same moment Tienda Sendero switches
+ * the shared variant off, which pauses its offer. Before the seller's
+ * function took the shop's offers on the variant first, it took the product
+ * row first and then waited on the offer the count held: 10 / 100 natural,
+ * every "seller first" forced round. Last in the file: ownFixture() replaces
+ * the seed's "low" with the harness's own for the scenarios after it.
+ * Forced: a third session holds product Y FOR SHARE for 150 ms; one actor
+ * starts at once, the other 40 ms late.
+ */
+const i8 = {
+  name: "I8 count into W7-02 of 'low' (at zero) vs Tienda Sendero switching off shared variant Y",
+  products: ["low", "second"],
+  setup: async (h) => {
+    await h.ownFixture();
+    await h.layout(["low", "second"], { "W7-01": 1 });
+    const order = await h.place(5, [["low", 1]]);
+    await h.call(SHOPPER(5), "select public.confirm_sandbox_payment($1)", [
+      order,
+    ]);
+    return { orders: [order] };
+  },
+  actors: (h, _ctx, round) => [
+    {
+      name: "count",
+      as: WORKER,
+      sql: "select public.wms_count_into_location($1, $2, $3, $4, 'Conteo de la carrera ocho')",
+      args: [
+        h.loc.get("W7-02"),
+        h.offer("low").sku_id,
+        h.offer("low").seller_id,
+        COUNT_UNITS,
+      ],
+    },
+    {
+      name: "variant-off",
+      as: "sendero@yuntera.example",
+      sql: "select public.seller_set_variant_active($1, false)",
+      args: [h.offer("low").sku_id],
+      delayMs: round % 5,
+    },
+  ],
+  verify: async (h, _ctx, results) => {
+    const bad = await h.summaryCheck(h.fixtureProducts);
+    for (const r of results)
+      if (r.outcome) bad.push(`${r.name} refused with ${r.outcome}`);
+    const o = h.offer("low");
+    const { rows } = await h.q(
+      "select quantity from public.bin_stock where location_id = $1 and sku_id = $2 and seller_id = $3",
+      [h.loc.get("W7-02"), o.sku_id, o.seller_id],
+    );
+    if ((rows[0]?.quantity ?? 0) !== COUNT_UNITS)
+      bad.push(
+        `W7-02 holds ${rows[0]?.quantity ?? 0}, expected ${COUNT_UNITS}`,
+      );
+    await h.q("update public.offers set status = 'active' where id = $1", [
+      o.id,
+    ]);
+    await h.q("update public.skus set active = true where id = $1", [o.sku_id]);
+    return bad;
+  },
+};
+const holdY = (h) => ({
+  hold: {
+    sql: "select 1 from public.products where id = $1 for share",
+    args: [h.offer("low").product_id],
+  },
+  holdMs: 150,
+});
+scenarios.push(
+  i8,
+  {
+    ...i8,
+    name: `${i8.name} forced (count first)`,
+    actors: (h, ctx) =>
+      i8.actors(h, ctx, 0).map((a, i) => ({ ...a, delayMs: i === 1 ? 40 : 0 })),
+    options: holdY,
+  },
+  {
+    ...i8,
+    name: `${i8.name} forced (seller first)`,
+    actors: (h, ctx) =>
+      i8
+        .actors(h, ctx, 0)
+        .reverse()
+        .map((a, i) => ({ ...a, delayMs: i === 1 ? 40 : 0 })),
+    options: holdY,
+  },
+);
 
 main("I", scenarios).catch((e) => {
   console.error(e);
