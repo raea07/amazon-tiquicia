@@ -272,61 +272,54 @@ In the order that unblocks the most.
    nothing here uses, so the listing itself was not opened.
 10. **Know what the preview costs.** The Vercel projects are on your Pro plan,
     which bills by use. The Supabase project is in the free organisation.
-11. **Before the native apps go to a store:**
-    1. The four store identifiers are settled (you chose them on 21 November
-       2026, and they can never change after the first upload):
-       `com.yuntera.shop`, `com.yuntera.vende`, `com.yuntera.ruta` and
-       `com.yuntera.bodega`, with `.dev` and `.preview` for test builds. The
-       shopper app is registered under its identifier in Google Play Console.
-    2. Apple's export-compliance question is answered in the apps. They ship
-       no encryption of their own: the saved session is kept only in the
-       phone's Keychain or Keystore-backed secure store, and all four apps
-       declare that they use no non-exempt encryption
-       (`usesNonExemptEncryption: false`). A guard test on dependencies and
-       source, and a scan of every exported bundle (`stack.sh native` and CI),
-       keep that true. People signed in to an earlier test build sign in once
-       more. Unverified until a build is on a phone: the real size limits per
-       stored value, behaviour after a restore to a new device, reading the
-       session while the phone is locked, and App Store Connect actually
-       skipping the question.
-    3. The first Android build asked for the fingerprint and biometric
-       permissions (`USE_BIOMETRIC`, `USE_FINGERPRINT`), which the secure-storage
-       library brings in and no app uses. They are now removed in all four
-       apps' configuration; check the permissions list of the next Android
-       build to confirm.
-    4. Publish a privacy policy at a public address. The account-deletion page
-       exists (the shop's `/ayuda/eliminar-cuenta`) and every web app can
-       delete an account. All four native apps now can too, but the store
-       builds made so far come from `3f251c3`, before that work; both stores
-       require it in the app at the first public submission. The preview has
-       had migration `083900` since 22 November 2026 (evening), so a build
-       with it can be made now; none has been made or tried against the
-       preview yet.
-    5. Decide whether the four apps keep one shared icon, as the brand book
-       says today, or get icons that tell them apart in the store.
-    6. An Apple Developer Program membership (US$99 a year) for any iOS build on
-       a phone, TestFlight or the App Store, and a Google Play Console account
-       (US$25). Demo accounts on the hosted project for the stores' reviewers.
-    7. **Release the Android draft in Play Console.** The build
-       `a20ef1d8-a926-40d4-947d-823cd87be32a` (version 0.1.0, version code 4,
-       commit `3f251c3`) was sent to the internal testing track on
-       22 November 2026 (submission `8d09854a-da67-4919-afe6-114fc50f633f`);
-       your Google key is uploaded on Expo. Because the app was never
-       published, it arrived as a draft: add testers and start its rollout
-       ([store-testing.md](docs/07-deployment/store-testing.md), Part 1,
-       steps 6 to 8). No iPhone build exists yet: run the iPhone command in
-       Part 2 once, interactively, from commit `3f251c3` (`git checkout
+11. **Before the native apps go to a store:** 1. The four store identifiers are settled (you chose them on 21 November
+    2026, and they can never change after the first upload):
+    `com.yuntera.shop`, `com.yuntera.vende`, `com.yuntera.ruta` and
+    `com.yuntera.bodega`, with `.dev` and `.preview` for test builds. The
+    shopper app is registered under its identifier in Google Play Console. 2. Apple's export-compliance question is answered in the apps. They ship
+    no encryption of their own: the saved session is kept only in the
+    phone's Keychain or Keystore-backed secure store, and all four apps
+    declare that they use no non-exempt encryption
+    (`usesNonExemptEncryption: false`). A guard test on dependencies and
+    source, and a scan of every exported bundle (`stack.sh native` and CI),
+    keep that true. People signed in to an earlier test build sign in once
+    more. Unverified until a build is on a phone: the real size limits per
+    stored value, behaviour after a restore to a new device, reading the
+    session while the phone is locked, and App Store Connect actually
+    skipping the question. 3. The first Android build asked for the fingerprint and biometric
+    permissions (`USE_BIOMETRIC`, `USE_FINGERPRINT`), which the secure-storage
+    library brings in and no app uses. They are now removed in all four
+    apps' configuration; check the permissions list of the next Android
+    build to confirm. 4. Publish a privacy policy at a public address. The account-deletion page
+    exists (the shop's `/ayuda/eliminar-cuenta`) and every web app can
+    delete an account. All four native apps now can too, but the store
+    builds made so far come from `3f251c3`, before that work; both stores
+    require it in the app at the first public submission. The preview has
+    had migration `083900` since 22 November 2026 (evening), so a build
+    with it can be made now; none has been made or tried against the
+    preview yet. 5. Decide whether the four apps keep one shared icon, as the brand book
+    says today, or get icons that tell them apart in the store. 6. An Apple Developer Program membership (US$99 a year) for any iOS build on
+    a phone, TestFlight or the App Store, and a Google Play Console account
+    (US$25). Demo accounts on the hosted project for the stores' reviewers. 7. **Release the Android draft in Play Console.** The build
+    `a20ef1d8-a926-40d4-947d-823cd87be32a` (version 0.1.0, version code 4,
+    commit `3f251c3`) was sent to the internal testing track on
+    22 November 2026 (submission `8d09854a-da67-4919-afe6-114fc50f633f`);
+    your Google key is uploaded on Expo. Because the app was never
+    published, it arrived as a draft: add testers and start its rollout
+    ([store-testing.md](docs/07-deployment/store-testing.md), Part 1,
+    steps 6 to 8). No iPhone build exists yet: run the iPhone command in
+    Part 2 once, interactively, from commit `3f251c3` (`git checkout
 3f251c3` after cloning), so both stores carry the same code. That
-       build keeps working against the updated preview: every call it makes
-       was tried there after the migrations and answered. Of the 29 functions
-       it calls, `084200` changes two (`my_orders`, `get_order`) by adding
-       fields only; a contract test parses their answers on the merged
-       database with that build's own schemas. Your decision of 23 November
-       2026: from your first Android release on, each new Android build goes
-       straight to the internal testers without a click; until then builds
-       stay drafts. The build settings are not changed yet. The team account has used 4 of
-       its 15 Android builds and 2 of its 15 iOS builds in the cycle from
-       1 November to 1 December 2026; nothing was billed.
+    build keeps working against the updated preview: every call it makes
+    was tried there after the migrations and answered. Of the 29 functions
+    it calls, `084200` changes two (`my_orders`, `get_order`) by adding
+    fields only; a contract test parses their answers on the merged
+    database with that build's own schemas. Your decision of 23 November
+    2026: from your first Android release on, each new Android build goes
+    straight to the internal testers without a click; until then builds
+    stay drafts. The build settings are not changed yet. The team account has used 4 of
+    its 15 Android builds and 2 of its 15 iOS builds in the cycle from
+    1 November to 1 December 2026; nothing was billed.
 
 ## What is built
 
@@ -456,6 +449,22 @@ How the new parts work, in short:
   down any photo.
 
 ## How it was checked
+
+On a development machine on 24 November 2026, after wave 8 was merged and
+its cross-stream work done (lane 15 of `tools/dev/stack.sh`; lane 12 for the
+"before" measurements). Run after the last change to code; only these
+documents changed afterwards. Not run: anything on the hosted project or on a
+phone.
+
+| Check              | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit tests         | 1454 pass in 15 packages (native kit 342, core 337, notifications 280, shared web code 91, invoicing 73, seller app 71, shopper app 68, payments 40, drivers' app 34, warehouse app 33, API client 28, brand 21, local API 18, fake providers and gateway 10, fake of Hacienda 8); new in core: the cancellation words (with a test that the SQL writes the same reasons), the cart with nothing to buy, and a check that every function of `084400` to `084600` is defined once and is the definition in force |
+| Database tests     | 38 files pass on PostgreSQL 16 (44 migrations), with the stack down; new: `171_stock_lock_order`, `172_count_into_location`, `173_shopper_followups`, `174_zero_unit_shelf_rows` (a 0-unit shelf row is the same as none for every reader and writer) and `175_refunds_across_streams` (refunds of several orders in one transaction are never grouped; a mutation that drops the order from the grouping fails it)                                                                                             |
+| API contract tests | 218 pass in 36 files (32 contract files), one file at a time; new: `contract.count-into-location-races` (a count against a cancellation at the same shelf; fails with the `084300` cancellation), `contract.frozen-callers` (the store build `3f251c3` and the web apps of `717048f` against the merged database), and test (vii) of `contract.stock-product-races` (packing against a seller switching a shared variant off; fails with the old lock)                                                          |
+| Races              | Every family A to I at 100 natural and 100 forced rounds on a freshly reset lane: 0 everywhere except the documented E5, E5b, E6, E7, E11 and E10b ("Things to know", "Wave 8"); table in `/root/yuntera-audit/races-wave8/integration/table.txt`                                                                                                                                                                                                                                                               |
+| Browser journeys   | 30 pass in Chromium in one full run, with no console or server errors; new `cancel-reasons` (the reason on a cancelled order, 44 px back links, a cart with nothing to buy); `console-followups` now opens both removed stops' own pages                                                                                                                                                                                                                                                                        |
+| Native journeys    | 17 pass through the web export of the four apps at phone size (`tools/dev/stack.sh native 15` then `native-e2e 15`); the bundle scan finds no cipher. New: `shop-cancel-reasons` (why an order was cancelled, a cart with nothing to buy), and the streams' `count-into-location` and `shop-followups`                                                                                                                                                                                                          |
+| Lint and types     | No lint errors (228 warnings and 411 notes, of kinds already there) and no type errors in the 20 typecheck tasks                                                                                                                                                                                                                                                                                                                                                                                                |
 
 On a development machine on 23 November 2026, after wave 7 was merged, its
 cross-stream fixes made, the two reviews' findings fixed, the second
@@ -1558,6 +1567,16 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     with the cart's at cutoffs and midnight; milliseconds of clock skew
     between the web server and the database at an hour boundary could still
     cache a date under the wrong hour. No test moves the clock.
+  - Controls under 44 px on a phone: the back links, "Presente un reclamo",
+    the shop's footer and category links and the links under the console's
+    and seller centre's home figures are 44 px now. Still under 44 px,
+    measured by `tools/e2e/touch-targets.cjs` at 390 px on the main pages of
+    the four web apps and not fixed: product card titles (36 px), the
+    product page's breadcrumb (17 px), "Agregar una dirección" in the shop's
+    account (24 px), the seller centre's price "Cambiar" links (20 px) and its
+    notification-settings link (17 px), the console home's order-status
+    links (36 px), and the summary "No se pudo entregar" on a driver's stop
+    (24 px).
   - A cancelled order says why only for the reasons the system writes (no
     payment in time, parcels came back, cancelled by the shopper); when
     staff cancel, the page says "Cancelamos este pedido" and points to
