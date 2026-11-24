@@ -12,6 +12,11 @@ into `packages/core/src/fees.ts`. _Fact sheet_ means sourced in
 _Assumption_ means a planning guess that the pilot must replace with a measured
 value. No figure here is a result.
 
+The [pricing strategy](pricing-strategy.md) proposes what to charge and works out
+the month with named staff; the [go-to-market](go-to-market.md) budget and the
+[team structure](team-structure.md) cost the people. Their owner questions are in
+[owner decisions](owner-decisions.md).
+
 ## Revenue lines
 
 | Line                | Who pays                                       | When it starts                            | Basis                                                                                                                                                                                        |
@@ -68,6 +73,13 @@ Same assumptions; only the item changes.
 | ₡20,000                                    | Hogar, _pequeño_            |  ₡5,427 |        ₡3,093 |       ₡2,334 |
 | ₡50,000, shipping free above the threshold | Electrónica (8%), _pequeño_ |  ₡6,150 |        ₡3,520 |       ₡2,630 |
 
+A mix of baskets earns less than a single basket of the same average. With 30%
+at ₡8,000, 40% at ₡20,000 and 30% at ₡35,000 (average ₡20,900), the early-launch
+month (572 orders, one driver) earns ₡247,948 less than with ₡20,000 baskets
+throughout, because the
+₡8,000 orders and the free-delivery orders pull it down
+([pricing strategy](pricing-strategy.md) §3.3, 24 November 2026).
+
 Two things stand out. A small basket barely pays for its own delivery. And a
 basket two and a half times larger contributes only a little more once
 shipping is free and the commission rate is lower: the free-shipping threshold
@@ -79,8 +91,12 @@ An earlier version of the fee schedule charged sellers 3.5% for card payments
 and 1% for SINPE Móvil, below the gateway prices in the fact sheet. The
 schedule now follows the cheaper published gateway: 3.9% plus ₡180 per card
 payment (standing for US$0.35 at an assumed ₡515 or so per dollar) and 1.5%
-for SINPE Móvil. On the ₡20,000 item the seller is charged ₡960 by card or
-₡300 by SINPE Móvil, which is what the gateway would charge on that ₡20,000.
+for SINPE Móvil. At the banks' selling rate of 18 November 2026, ₡450 per
+dollar, US$0.35 is ₡157.50, so ₡180 is ₡22.50 above the list price
+([market research](../research/market-and-costs-2026-11.md) §6.4, read 24
+November 2026); owner decision D38 sets the card fee before cards go on. On the ₡20,000 item the seller is charged ₡960 by card (₡22.50
+above the gateway's ₡937.50 at ₡450) or ₡300 by SINPE Móvil, which is what the
+gateway would charge on that ₡20,000.
 
 So the payment line is designed to break even, not to earn. It still leaks in
 two places:
@@ -130,13 +146,35 @@ round numbers, not a budget, and the contribution is the worked order above.
 The ₡1,200 row shows what happens if baskets are smaller or delivery costs more
 than assumed.
 
+For a month with named people, the launch team (one driver, one warehouse
+associate, one sales agent) breaks even at about 585 orders, 22 to 23 a day,
+with ₡20,000 baskets. That is the most one driver carries (about 22 a day);
+above it a second driver is needed and break-even moves to about 830 orders,
+32 a day, or about 912 (35 a day) with mixed baskets
+([pricing strategy](pricing-strategy.md) §3.3). The per-order labour lines above
+(delivery ₡1,800, picking ₡500, support ₡150) leave out leads, spare drivers,
+sales, catalogue and finance staff: with them, payroll per order stays ₡754–₡815
+above ₡2,450 even at 1,000 orders a day ([team structure](team-structure.md) §5).
+So a budget must carry the overhead roles, or density must exceed 25 stops.
+
 The table hides the hardest part: **a driver-day costs the same whether it
 delivers 8 stops or 25.** At 8 stops, the assumed ₡45,000 driver-day is ₡5,625
-per stop and every order loses money. Correos Pymexpress delivers a small
-parcel within the GAM for ₡2,300 before IVA
-([fact sheet, section 7](../research/costa-rica-fact-sheet.md#7-last-mile-and-labour)).
-Under these assumptions an own driver only beats that price above roughly 20
-delivered stops per day.
+per stop and every order loses money. The ₡2,300 before IVA in the
+[fact sheet, section 7](../research/costa-rica-fact-sheet.md#7-last-mile-and-labour)
+is Correos' self-service locker price. Its Pymexpress volume tariff is lower:
+₡1,756.19 to ₡2,005.53 before IVA for the first kilo inside the GAM, by
+monthly volume, each tier needing prior authorisation from Correos' Dirección
+de Pymes, for parcels the sender drops off. If Correos collects, the client
+pays ₡1,500 to ₡2,000 a collection plus ₡1,890 a small parcel
+(correos.go.cr/tarifas, read 24 November 2026). One driver at about 25 stops
+over 26 days is the 451-or-more tier, ₡1,756.19. Against it, an own driver
+costs the same as Correos at **about 23 to 26 delivered stops a day**: 22.8 if
+Correos collects daily, 25.6 if Yuntera drops parcels off, before IVA; about
+20 to 23 if Yuntera cannot credit Correos' IVA (for the accountant to
+confirm); 19.6 at the locker price before authorisation
+([go-to-market](go-to-market.md) §6). At this model's own 25 stops, an own
+driver costs about the same as Correos; an earlier version of this document
+said "roughly 20", from the locker price.
 
 The consequence for the plan: in the pilot, one driver (possibly the founder)
 covers the dense core and a carrier takes everything else. Drivers are added

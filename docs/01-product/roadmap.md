@@ -134,7 +134,10 @@ word of mouth before any paid acquisition.
 - Positive contribution per order on average for four consecutive weeks.
 - At least 25% of first-time shoppers order again within 60 days.
 - Order volume fills at least one own-driver route a day in the core zone
-  (about 20 delivered stops; see the business model).
+  (about 25 delivered stops, the model's density; an own driver costs the same
+  as Correos' volume tariff at about 23 to 26; see the business model and
+  [go-to-market](../00-strategy/go-to-market.md) §6. An earlier version said
+  about 20, from Correos' locker price).
 - Service levels from Phase 1 held at the higher volume.
 - No unresolved complaint older than the response target in
   [customer service](../06-operations/customer-service.md).

@@ -4,7 +4,7 @@
 **Conclusion 1.** It may not be used until the lawyer has said in writing how drivers are engaged and an INS work-risk policy exists (gate G11). The pay, the contract type and the vehicle line are blanks until then.
 **Conclusion 2.** What it can promise today is how the work is done: an ordered route, delivery proved by the customer's code, cash counted with the driver.
 **Conclusion 3.** Code RUTA-1 counts replies; the notice asks for no personal data in the first message.
-**The owner must decide** nothing here. How drivers are engaged, whose vehicle, and the first hire are the team structure's decisions 1 and 2.
+**The owner must decide** nothing here. How drivers are engaged and whose vehicle (D19) and the first hire (D39) are in the [owner decisions](../../docs/00-strategy/owner-decisions.md) list.
 
 **Gates:** G1, G2, G9, G11, G12. The founder drives in the pilot (team structure §5), and drivers are added only when a zone's volume fills a route (`business-model.md`), so this notice may not be needed until after the pilot.
 
@@ -50,12 +50,12 @@ Facts: route ordering, pin, señas, call button, code check, cash total and the 
 
 ## What this notice waits for
 
-These are asked once, in the team structure (`docs/00-strategy/team-structure.md`). The notice fills its blanks from the answers.
+These are asked once, in the [owner decisions](../../docs/00-strategy/owner-decisions.md) list. The notice fills its blanks from the answers.
 
-| Question                                                                                               | Where                      | What it changes here                                                                                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| How drivers are engaged (employee with INS cover, contractor, or a courier company), and whose vehicle | Team structure, decision 1 | The engagement, pay and vehicle lines. If the driver brings a motorbike, the ₡45,000 driver-day is worked out again, the occupation may be "Mensajero", and vehicle ownership bears on employment status (compliance §7), **for the lawyer to confirm** |
-| The first hire after the backup person                                                                 | Team structure, decision 2 | When the notice is posted. In the pilot the founder drives (team structure §5); post it when that decision picks a driver and a zone fills a route most days                                                                                            |
+| Question                                                                                               | Where                       | What it changes here                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| How drivers are engaged (employee with INS cover, contractor, or a courier company), and whose vehicle | Owner decisions D19 and D54 | The engagement, pay and vehicle lines. If the driver brings a motorbike, the ₡45,000 driver-day is worked out again, the occupation may be "Mensajero", and vehicle ownership bears on employment status (compliance §7), **for the lawyer to confirm** |
+| The first hire after the backup person                                                                 | Owner decision D39          | When the notice is posted. In the pilot the founder drives (team structure §5); post it when that decision picks a driver and a zone fills a route most days                                                                                            |
 
 ## Assumptions to verify
 

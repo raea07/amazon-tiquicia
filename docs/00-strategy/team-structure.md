@@ -4,7 +4,7 @@
 **Conclusion 1.** The pilot needs the founder plus one trained backup person (payroll ₡150,600 a month); launch needs 3 or 4 people (₡2,273,300–₡3,443,300). Every hire after that is triggered by a number the console shows, not by a date.
 **Conclusion 2.** Drivers are most of the cost at every level (about 60%–65% of payroll at 100 orders a day). The business model's per-order labour figures are not reached even at 1,000 orders a day: payroll stays about ₡750–₡820 an order above them. So the model must budget the overhead roles, or density must exceed 25 stops.
 **Conclusion 3.** The product automates the money, the promise, the stock and the delivery check, but not people work: seller approval, listing review, payouts, support conversations and late-delivery calls stay manual.
-**The owner must decide** the four questions at the end (driver engagement, first hire, founder pay, combined jobs).
+**The owner must decide** four questions, asked once in the [owner decisions](owner-decisions.md) list: founder pay (D18), driver engagement and vehicle (D19), the first hire (D39) and combined jobs (D40).
 
 All costs are monthly, in colones, at the **2026 legal minimum** for the
 closest occupation in the labour ministry's list, **fully loaded**: salary ×
@@ -47,7 +47,7 @@ that, labour at the minimum is ₡564,600 (₡21,700 a day); the other ₡605,40
 2026), insurance, phone and supervision. That split is an **estimate**; the
 vehicle part is not sourced. This document uses ₡1,170,000 for each driver.
 
-Minimums checked by the writer in the ministry's list
+Minimums checked in the ministry's list
 (lista_salarios_minimos_2026.pdf, Decreto 45303-MTSS, in force 1 January
 2026). Employers with fewer than 5 permanent non-agricultural workers do not
 pay the 1.50% INA charge (Alegra, third party): _for the accountant to
@@ -87,7 +87,7 @@ Console areas by staff role (`apps/ops/src/lib/staff.ts`; `admin` sees all):
 Rules in the product that shape the team:
 
 - **One staff role per person.** Someone who does support and catalogue
-  needs `admin`, or the product must allow two roles (decision 4).
+  needs `admin`, or the product must allow two roles (owner decision D40).
 - **Two people for some steps.** Nobody approves their own payout-account
   request or one for a shop they belong to; the security page warns when
   fewer than two administrators have a second factor; refunds above ₡50,000
@@ -116,7 +116,7 @@ Rules in the product that shape the team:
 | Seller verification, listing, photo and logo review                          | **No**: a person in **Vendedores** and **Catálogo**                                                                    |
 | Paying sellers                                                               | **No**: finance makes each bank transfer by hand and records it; there is no bank connection                           |
 | Refunds of cash orders                                                       | **No**: finance pays back by transfer                                                                                  |
-| Support conversations (WhatsApp, e-mail)                                     | **No**: no inbox, no notes yet; the support desk is being built                                                        |
+| Support conversations (WhatsApp, e-mail)                                     | **No**: no inbox, no notes yet; the support desk is not built yet                                                      |
 | Calling a shopper before a late delivery                                     | **No**: the late list shows it; a person calls                                                                         |
 | Complaint intake from the shop                                               | **No**: the form is not wired (phase 1 of the roll-out plan)                                                           |
 | Seller recruitment, seller help, marketing                                   | **No**                                                                                                                 |
@@ -139,8 +139,8 @@ basis and the lawyer's question it raises.
   **Pagos a vendedores**.
 - **Access:** staff `admin` with a second factor; a driver record; warehouse
   staff `lead`.
-- **Basis:** owner. Whether the founder is on the payroll is decision 3, and
-  a question for the accountant.
+- **Basis:** owner. Whether the founder is on the payroll is owner decision
+  D18, and a question for the accountant.
 
 ### Backup person (warehouse and backup driver)
 
@@ -168,7 +168,7 @@ basis and the lawyer's question it raises.
 - **Access:** driver record `active`, with licence, inspection and insurance
   dates kept current (**Repartidores**).
 - **Basis:** the cost model budgets drivers as **employees** (compliance §7).
-  _For the lawyer:_ employee, contractor or courier company (decision 1);
+  _For the lawyer:_ employee, contractor or courier company (D19);
   whether a motorbike courier is "Mensajero" or "Conductor de vehículo
   liviano"; what the contract and the app must avoid. Work-risk insurance
   (INS) is required either way.
@@ -202,7 +202,7 @@ basis and the lawyer's question it raises.
   password); answers seller questions.
 - **Access:** no staff role. The `support` role would also open **Pedidos**
   and **Atención**, with buyers' names and orders, which this job does not
-  need (decision 4A). The founder or `ops` tells the agent a seller's status.
+  need (D40 A). The founder or `ops` tells the agent a seller's status.
   Seller approval stays with `ops`. A sellers-only role would be a product
   change.
 - **Basis:** employee, or a contractor paid per active seller. _For the
@@ -253,9 +253,9 @@ basis and the lawyer's question it raises.
 - **Lawyer and accountant:** contractors; monthly accountant _assumption_
   ₡100,000–₡300,000, lawyer's first package ₡1,000,000–₡3,000,000 (no source;
   get 3 quotes each).
-- **Builders:** the people or agents changing the code. They need no staff
+- **Builders:** the people changing the code. They need no staff
   role on production; an `engineering` role without buyer data is proposed in
-  the support research for later.
+  the [support research](../research/support-and-system-health-tools.md) for later.
 
 ---
 
@@ -278,7 +278,7 @@ Ratios used (all **assumptions**, each with its basis):
 | Launch  |        20–40 |     1–2 | 1 (also backup driver)    | Founder | Founder                            |   Founder |              Founder |       1 |            — |                        3–4 | ₡2,273,300–₡3,443,300   |
 | Level 1 |          100 |       6 | 3 + 1 lead                |       1 | 1 lead                             |   Founder | Founder + accountant |       1 |            — |                         13 | ₡10,855,500–₡11,857,300 |
 | Level 2 |          300 |      16 | 8 + 1 lead                |       3 | 1 lead + 1 dispatcher              |         1 |                    1 |       2 |            1 |                         35 | ₡29,123,200–₡30,144,500 |
-| Level 3 |        1,000 |      49 | 25 + 2 leads              |       7 | 1 manager + 1 lead + 2 dispatchers |         2 |                    2 |       4 |            1 |                         96 | ₡83,310,000–₡84,892,000 |
+| Level 3 |        1,000 |      49 | 25 + 2 leads              |       7 | 1 manager + 1 lead + 2 dispatchers |         2 |                    2 |       4 |            1 |                         96 | ₡83,310,000–₡84,912,000 |
 
 Founder pay is not included. Launch payroll: 1–2 drivers ₡1,170,000 each +
 associate ₡519,200 + sales agent ₡584,100. By the driver ratio, one driver
@@ -294,7 +294,7 @@ anything outside the GAM.
 | ------- | -------------: | ----------------: | ---------------: | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------: |
 | Level 1 |          2,600 |     ₡4,175–₡4,560 |           ₡2,700 | ₡2,450                                                                            |                                                                   ₡224–₡609 |
 | Level 2 |          7,800 |     ₡3,734–₡3,865 |           ₡2,400 | ₡2,450                                                                            |                                                                 ₡919–₡1,050 |
-| Level 3 |         26,000 |     ₡3,204–₡3,265 |           ₡2,205 | ₡2,450                                                                            |                                                               ₡1,519–₡1,580 |
+| Level 3 |         26,000 |     ₡3,204–₡3,266 |           ₡2,205 | ₡2,450                                                                            |                                                               ₡1,518–₡1,580 |
 
 Contribution here is the model's ₡2,334 less the payroll above the model's
 ₡2,450. The model's labour figures are **never reached**: even at Level 3 the
@@ -310,17 +310,17 @@ pilot's real stops per route before hiring past Level 1.
 
 ## 6. Order of hiring, and the trigger for each
 
-| #   | Hire                                      | Trigger (read in the console or the weekly sheet)                                                                                                                                                                                                                                                              | What the founder stops doing |
-| --- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| 1   | Backup person (warehouse + backup driver) | Before the pilot starts (roadmap phase 1)                                                                                                                                                                                                                                                                      | Nothing yet; covers absence  |
-| 2   | First employed driver                     | Open launch, or the founder's route above 20 delivered stops a day for 2 weeks (**Despacho**). At 20 stops a hired driver costs ₡2,250 a stop, about Correos' ₡2,300 locker price before volume authorisation; the 25-stop figure in [go-to-market](go-to-market.md) §6 applies once that tariff is authorised | Driving                      |
-| 3   | Sales agent                               | Open launch (to go from 50 to 200 sellers; in the base budget)                                                                                                                                                                                                                                                 | Most seller visits           |
-| 4   | Warehouse associate (full time)           | Picks above 40 orders a day for 2 weeks                                                                                                                                                                                                                                                                        | Picking and packing          |
-| 5   | Support agent                             | Above about 60 orders a day, or any week with replies late against the customer-service targets                                                                                                                                                                                                                | WhatsApp and e-mail          |
-| 6   | Operations lead                           | About 100 orders a day, or more than 3 routes a day                                                                                                                                                                                                                                                            | Dispatch and cash settlement |
-| 7   | Finance clerk                             | More than 50 active sellers paid by hand each payout run, or about 200 orders a day                                                                                                                                                                                                                            | Payouts and reconciliation   |
-| 8   | Catalogue reviewer                        | **Resumen** shows "Productos por revisar" above 20 (an assumption) for 2 weeks, or the oldest item in **Catálogo** has waited more than 2 working days, checked by hand (the console shows a count, not the age)                                                                                               | Listing review               |
-| 9   | Social-media person (contractor)          | After the launch exit test, when paid ads start                                                                                                                                                                                                                                                                | Posting                      |
+| #   | Hire                                      | Trigger (read in the console or the weekly sheet)                                                                                                                                                                                                                                                                     | What the founder stops doing |
+| --- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| 1   | Backup person (warehouse + backup driver) | Before the pilot starts (roadmap phase 1)                                                                                                                                                                                                                                                                             | Nothing yet; covers absence  |
+| 2   | First employed driver                     | Open launch, or the founder's route at about 23 delivered stops a day for 2 weeks (**Despacho**): the low end of the 23 to 26 stops at which an own driver costs the same as Correos' volume tariff (22.8 if Correos collects daily, 25.6 if parcels are dropped off, before IVA; [go-to-market](go-to-market.md) §6) | Driving                      |
+| 3   | Sales agent                               | Open launch (to go from 50 to 200 sellers; in the base budget)                                                                                                                                                                                                                                                        | Most seller visits           |
+| 4   | Warehouse associate (full time)           | Picks above 40 orders a day for 2 weeks                                                                                                                                                                                                                                                                               | Picking and packing          |
+| 5   | Support agent                             | Above about 60 orders a day, or any week with replies late against the customer-service targets                                                                                                                                                                                                                       | WhatsApp and e-mail          |
+| 6   | Operations lead                           | About 100 orders a day, or more than 3 routes a day                                                                                                                                                                                                                                                                   | Dispatch and cash settlement |
+| 7   | Finance clerk                             | More than 50 active sellers paid by hand each payout run, or about 200 orders a day                                                                                                                                                                                                                                   | Payouts and reconciliation   |
+| 8   | Catalogue reviewer                        | **Resumen** shows "Productos por revisar" above 20 (an assumption) for 2 weeks, or the oldest item in **Catálogo** has waited more than 2 working days, checked by hand (the console shows a count, not the age)                                                                                                      | Listing review               |
+| 9   | Social-media person (contractor)          | After the launch exit test, when paid ads start                                                                                                                                                                                                                                                                       | Posting                      |
 
 Each trigger is an **assumption** to adjust after the pilot.
 
@@ -368,23 +368,13 @@ Each trigger is an **assumption** to adjust after the pilot.
 
 ## Decisions for the owner
 
-1. **How are drivers engaged?**
-   A. As employees, with INS work-risk cover, in a vehicle Yuntera provides. **(recommended)** The cost model already budgets them so, and two rulings point that way (compliance §7).
-   B. As independent contractors, if the lawyer approves in writing.
-   C. Through a courier company.
-
-   If drivers use their own motorbike with an allowance (as the drivers' notice in the marketing pack proposes), the ₡45,000 driver-day must be worked out again here (§1), in [go-to-market](go-to-market.md) §9 and in the pricing proposal. The labour part may then be "Mensajero" (₡519,200), and who owns the vehicle bears on employment status: _for the lawyer to confirm_.
-2. **Who is the first hire after the backup person?**
-   A. A driver. **(recommended)** Driving takes the founder off everything else for half of each day.
-   B. A sales agent.
-   C. A support agent.
-3. **Is founder pay in the budget?**
-   A. Not until the launch exit test; then at the operations lead's level. **(recommended)** It keeps the pilot's cash out small and the accountant can advise on the form.
-   B. From the pilot.
-4. **How are combined jobs given access, while the product allows one staff role per person?**
-   A. Each person gets the role of their main job; the founder (`admin`) covers the rest. **(recommended)** It keeps buyer data with the fewest people.
-   B. Give combined-job staff `admin`.
-   C. Have the product allow more than one role per person (a change to build).
+The questions this structure raises are asked once, in the
+[owner decisions](owner-decisions.md) list: founder pay (D18), how drivers and
+the backup person are engaged (D19) and whose vehicle they drive (D54), the first
+hire after the backup person (D39) and access for combined jobs (D40). If
+drivers bring their own motorbike, the ₡45,000 driver-day in §1 is worked out
+again here, in [go-to-market](go-to-market.md) §9 and in the
+[pricing strategy](pricing-strategy.md) §3.1.
 
 ---
 
@@ -407,11 +397,11 @@ Each trigger is an **assumption** to adjust after the pilot.
 
 ## Sources
 
-Opened by the writer on 24 November 2026:
+Opened on 24 November 2026:
 
-- MTSS, Lista de salarios mínimos por ocupación 2026, Decreto 45303-MTSS, in force 1 January 2026 (https://www.mtss.go.cr/temas-laborales/salarios/lista_salarios_minimos_2026.pdf; copy kept with the pack's research) — every 2026 minimum in §1.
+- MTSS, Lista de salarios mínimos por ocupación 2026, Decreto 45303-MTSS, in force 1 January 2026 (https://www.mtss.go.cr/temas-laborales/salarios/lista_salarios_minimos_2026.pdf) — every 2026 minimum in §1.
 
-From the pack's market research (`/root/yuntera-audit/strategy-pack/research/market.md`, read 24 November 2026):
+From the [market research](../research/market-and-costs-2026-11.md) (read 24 November 2026):
 
 - MTSS communiqué CP-022-2026 (28 October 2026), https://www.mtss.go.cr/prensa/comunicados/2026/octubre/cp_022_2026.html — 1.70% from 1 January 2027.
 - Alegra, employer charges 26.83% and the INA exception (updated 7 October 2026), https://blog.alegra.com/costa-rica/salario-minimo-costa-rica/ (third party; matches the repository's fact sheet).
@@ -419,4 +409,4 @@ From the pack's market research (`/root/yuntera-audit/strategy-pack/research/mar
 - BCCR average formal salary ₡822,699.50, May 2026 (search result).
 - Fuel prices November 2026 (Repretel, Diario Extra; search results). Exchange rate (El Observador, Diario Extra; search results).
 
-Repository: `docs/00-strategy/business-model.md`; `docs/01-product/roadmap.md`, `scope-by-app.md`, `personas-and-journeys.md`; `docs/06-operations/customer-service.md`, `logistics-playbook.md`; `docs/05-security-compliance/compliance-costa-rica.md` §7; `docs/08-open-questions.md`; `STATUS.md`; `apps/ops/src/lib/staff.ts`; `supabase/migrations/20261121080000_foundation.sql` (staff roles), `20261121080100_identity.sql` (staff members, drivers), `20261121080500_inventory.sql` (warehouse staff), `20261121082300_people_payouts.sql` (people functions); the pack's support research (`support-and-it.md`).
+Repository: `docs/00-strategy/business-model.md`; `docs/01-product/roadmap.md`, `scope-by-app.md`, `personas-and-journeys.md`; `docs/06-operations/customer-service.md`, `logistics-playbook.md`; `docs/05-security-compliance/compliance-costa-rica.md` §7; `docs/08-open-questions.md`; `STATUS.md`; `apps/ops/src/lib/staff.ts`; `supabase/migrations/20261121080000_foundation.sql` (staff roles), `20261121080100_identity.sql` (staff members, drivers), `20261121080500_inventory.sql` (warehouse staff), `20261121082300_people_payouts.sql` (people functions); the [support research](../research/support-and-system-health-tools.md).

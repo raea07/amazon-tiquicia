@@ -10,6 +10,37 @@ block Phase 1 of the [roadmap](01-product/roadmap.md).
 **Who answers:** O = owner · L = lawyer · A = accountant · S = supplier or
 partner.
 
+## Answered or proposed in the strategy documents
+
+The strategy documents of 24 November 2026 propose an answer to several
+questions below. The owner's choice is asked once, in
+[owner decisions](00-strategy/owner-decisions.md); a number such as D17 points
+there.
+
+| #      | What the strategy documents propose                                                                                                              | Where                                                                                                                            |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| 5      | Lean budget in the pilot (₡441,000–₡978,000 a month), base at the launch (₡2.89M–₡4.57M), before founder pay                                     | D17, D18; [go-to-market](00-strategy/go-to-market.md) §9                                                                         |
+| 6, 8   | ONVO contract with written questions; ask how the central bank's 1.95% card cap applies before cards go on                                       | D38; [pricing strategy](00-strategy/pricing-strategy.md) §2.2; [roll-out plan](00-strategy/rollout-plan.md) phase 0              |
+| 9, 10  | Launch categories from market and wedge; five tests for the first sellers; 5 to 10 sellers in the pilot, visited by the owner                    | D53 (categories), D27, D28; go-to-market §2.1 and §4.1                                                                           |
+| 11, 57 | Keep today's fees for the pilot; a price lock to a fixed date for the first sellers; 30 days' notice; the card fee from the contract             | D20, D22, D23, D24, D38; pricing strategy §4                                                                                     |
+| 12, 58 | Keep ₡1,500 and the ₡25,000 threshold; normal charge in the pilot; a dated free-delivery window at the launch                                    | D21, D25; pricing strategy §4.1 and §4.2                                                                                         |
+| 13     | About 20 m² near the first sellers for the pilot, about 50 m² at the launch                                                                      | D11                                                                                                                              |
+| 14     | 3 to 5 adjacent core cantons around the first sellers and the warehouse; a rule for adding each canton                                           | D10; roll-out plan §3                                                                                                            |
+| 16     | One backup person covers both the warehouse and the route, 8 days a month (₡150,600)                                                             | [Team structure](00-strategy/team-structure.md) §4 and §5                                                                        |
+| 17, 18 | Employees at the legal minimum, paid by the day, with INS cover, in a vehicle Yuntera provides                                                   | D19, D54; team structure §1 (pay by the day)                                                                                     |
+| 19     | INS work-risk quote in phase 0; the 1% rate inside the 26.83% is a reference only                                                                | Roll-out plan phase 0 item 9; team structure §1                                                                                  |
+| 26     | Simplified-regime sellers join only once the accountant answers                                                                                  | D27; go-to-market §2.1 test 5                                                                                                    |
+| 30, 32 | Today's return-cost split is printed only as "today's rule, may change", gated on the lawyer                                                     | Pricing strategy §1.5; [seller pitch](../marketing/sales/seller-pitch.md) §5                                                     |
+| 35     | PRODHAB registration budgeted as a yearly US$200 if required                                                                                     | Go-to-market §9                                                                                                                  |
+| 41     | WhatsApp Business app, answered by the owner; a bought inbox only when two people answer at once                                                 | D29, D49                                                                                                                         |
+| 45     | Ask Correos for the volume tariff first; Moovin and Boxful for written quotes                                                                    | D51; go-to-market §8                                                                                                             |
+| 48     | Walmart Marketplace, Boxful, Pyme Store BAC and the Correos–BCR–INS–Mastercard pilot; none publishes seller fees                                 | [Market and wedge](00-strategy/market-and-wedge.md); [market research](research/market-and-costs-2026-11.md) §3                  |
+| 56     | Alerts to the owner's phone through the error-tracking account (decided)                                                                         | D2                                                                                                                               |
+| 59     | ₡50,000 cash-on-delivery ceiling in the pilot                                                                                                    | D14                                                                                                                              |
+| 65     | An own driver costs the same as Correos at about 23 to 26 stops; the launch month breaks even at about 22 to 23 orders a day, one driver's limit | Go-to-market §6; pricing strategy §3.3; team structure §5                                                                        |
+| 76     | Keep the 10-calendar-day payout hold, or count business days so it covers the withdrawal window                                                  | D52                                                                                                                              |
+| 78     | Damaged or lost stock is settled in the seller agreement the lawyer drafts before the pilot                                                      | Marketing gate G12 ([marketing README](../marketing/README.md#the-gates)); [seller pitch](../marketing/sales/seller-pitch.md) §5 |
+
 ## Decide first
 
 These have lead times of weeks or can be lost to someone else.
@@ -93,6 +124,31 @@ assumed as stated until someone confirms it.
 | 46  | The exact number of districts: the research cites 492; the public dataset used to seed the platform has 494 | Engineering | Use the dataset; reconcile against the official territorial division before launch |
 | 47  | The 0.5% IVA rate for organic products                                                                      | A           | Not offered as a rate until confirmed                                              |
 | 48  | A structured review of local marketplaces and retailers                                                     | O           | Not done; competitor names surfaced only during the naming search                  |
+
+## Raised by the strategy documents
+
+New questions from the strategy documents and the marketing pieces of 24
+November 2026. Owner choices among them are in
+[owner decisions](00-strategy/owner-decisions.md).
+
+| #   | Question                                                                                                               | Who  | Default assumed                                                                              | Where it is raised                     |
+| --- | ---------------------------------------------------------------------------------------------------------------------- | ---- | -------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 67  | Can Yuntera credit the 13% IVA on Correos' tariff and on the gateway's fee?                                            | A    | Not assumed: the Correos break-even falls from about 23–26 to about 20–23 stops if it cannot | Go-to-market §6; pricing strategy §2.2 |
+| 68  | Does holding sellers' money for about two weeks before payout need SUGEF registration?                                 | L    | Not known; the money is the sellers', not working capital                                    | Pricing strategy §3.3                  |
+| 69  | How does the 1.95% local card-acquiring cap apply to a gateway that publishes 3.9% + US$0.35?                          | L, S | Ask the gateway in writing before cards go on (D38)                                          | Pricing strategy §2.2                  |
+| 70  | How are part-time pay and charges computed at the minimum, and which category fits a person who both drives and packs? | A, L | Daily driver minimum × 1.3916                                                                | Team structure §4                      |
+| 71  | The INS work-risk rate for drivers and warehouse work                                                                  | S, A | 1% reference rate inside the 26.83%                                                          | Team structure §1                      |
+| 72  | Are the price-lock wording, a dated free-delivery window and a payment-method offer lawful as written?                 | L    | Price lock and window proposed (D22, D25); no payment-method offer                           | Pricing strategy §4.4                  |
+| 73  | Is a first one-to-one WhatsApp or e-mail to a shop "direct sales" under Ley 8642 art. 44?                              | L    | Treated as covered: contact in person, by phone, or in reply only                            | Go-to-market §4; seller outreach       |
+| 74  | Keeping period and notice for the fair sign-up cards and the hand-kept visit log                                       | L    | 90 days, then destroyed; listed in the privacy record once confirmed                         | Fair flyer; seller pitch §8            |
+| 75  | When does a promotional draw need JPS authorisation?                                                                   | L    | No draws in the first 90 days (D41)                                                          | Go-to-market §5; market research §7.4  |
+| 76  | Should the payout hold count business days, so it always covers the 8-business-day withdrawal window?                  | O    | 10 calendar days, as set today; a return after payout comes off the next payout              | Seller pitch §5                        |
+| 77  | Is a permit needed to hand out flyers in a canton?                                                                     | L    | Not known                                                                                    | Marketing pieces                       |
+| 78  | Who pays when stock is damaged or lost in the warehouse, and what the seller agreement says                            | L, O | The seller agreement, drafted by the lawyer before the pilot                                 | Seller pitch §5                        |
+| 79  | May a sales agent be paid by commission only, and what makes a sales contractor an employee?                           | L    | An employee at the legal minimum                                                             | Team structure §4                      |
+| 80  | How may an advert state the legal 30-business-day warranty without using "garantía" wrongly?                           | L    | Stated as the law's minimum, never as "garantía Yuntera"                                     | Go-to-market §3; marketing README      |
+| 81  | Must a paid influencer post be labelled under today's rules, before Ley 10946?                                         | L    | No paid posts                                                                                | Go-to-market §5                        |
+| 82  | Which import-tax thresholds apply to online purchases today (US$50 or US$500)?                                         | A    | Neither is used in customer copy                                                             | Market research §3.2                   |
 
 ## Things that changed recently and must be re-checked before launch
 
