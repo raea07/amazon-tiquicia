@@ -159,14 +159,15 @@
 --   - staff merging two brands (public.ops_merge_brands: one UPDATE of every
 --     product of the brand, in scan order) against a checkout that holds one
 --     of those products after taking its offer across zero and wants another
---     (E11, found by an independent review: natural 0 for a checkout of
---     [x1, low] and 4 to 8 for [second, x2] in 100 rounds; forced up to 38
---     and 56 in 100, depending on which session waits first; the same
+--     (E11, found by an independent review: natural 0 to 20 in 100 rounds
+--     over three runs and the two checkouts tried; forced up to 56 in 100,
+--     depending on which session waits first; the same
 --     before this migration). Not changed here; the function is outside
 --     this migration.
 -- And, not on product rows: a checkout of a variant two shops sell against
 -- the shop that listed it switching it off (E10b, found when the three wave 8
--- workstreams were merged: 17 / 100 before the change below, 6 / 100 with it,
+-- workstreams were merged: 17 / 100 before the change below, 6 and 14 / 100
+-- in two runs with it,
 -- every forced round both times). The seller's function takes the product
 -- row FOR UPDATE (private.own_listing, shared by every listing function of a
 -- seller) and then waits to pause the offer the checkout holds FOR SHARE;
