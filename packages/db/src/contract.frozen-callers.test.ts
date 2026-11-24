@@ -177,33 +177,6 @@ export const placedOrder = z.object({
 // END 3f251c3 placedOrder
 // BEGIN 3f251c3 orderAction
 export const orderAction = z.object({ order_id: id, status: orderStatus });
-
-// ── Account ─────────────────────────────────────────────────────────────────
-
-export const roles = z.object({
-  user_id: id,
-  full_name: z.string().nullable(),
-  staff_role: staffRole.nullable(),
-  sellers: z.array(
-    z.object({
-      id,
-      slug: z.string(),
-      trade_name: z.string(),
-      status: sellerStatus,
-      role: z.enum(["owner", "admin", "staff"]),
-    }),
-  ),
-  driver: z
-    .object({
-      id,
-      status: z.enum(["pending", "active", "suspended", "offboarded"]),
-      full_name: z.string(),
-    })
-    .nullable(),
-  warehouses: z.array(
-    z.object({ id, code: z.string(), name: z.string(), role: z.enum(["associate", "lead"]) }),
-  ),
-});
 // END 3f251c3 orderAction
 
 describe.skipIf(!db.enabled)("callers of before wave 8 (against a seeded database)", () => {
@@ -247,7 +220,8 @@ describe.skipIf(!db.enabled)("callers of before wave 8 (against a seeded databas
   afterAll(async () => {
     const { rows } = await pool.query<{ id: string }>(
       `select o.id from public.orders o join auth.users u on u.id = o.user_id
-        where u.email = $1 and o.status <> 'cancelled'`,
+        where u.email = $1
+          and o.status in ('pending_payment', 'payment_review', 'confirmed', 'processing')`,
       [SHOPPER],
     );
     for (const row of rows) {
