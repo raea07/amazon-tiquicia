@@ -1,0 +1,92 @@
+# Flyer and stand poster: makers and producers at a fair
+
+**What it is.** A flyer handed to exhibitors, a poster for a table or stand, and a sign-up card, for a small-business fair, for makers who have never sold online: crafts, packaged coffee and food, small local brands.
+**Conclusion 1.** It leads with what a maker fears (building a shop, delivering, not being paid) and answers each with a built fact.
+**Conclusion 2.** It is honest about the two entry conditions in the pilot: a barcode on each unit for the warehouse, and the maker's own electronic invoice or the simplified regime.
+**Conclusion 3.** Code FERIA-[month] on the QR and one sign-up card per person, with a short privacy notice and an unticked consent box, measure each fair separately.
+**Conclusion 4.** It cannot be used at the 4–6 December 2026 fair: G1, G2 and G8 are not met. That fair is for looking and listening only.
+**The owner must decide** the question at the end (which fair is the first one with the flyer).
+
+**Gates:** G1, G2, G8, G9. Hand it out only as a visitor or with the fair's permission; a stand needs the organiser's terms (MEIC's EXPOPYME exhibitor fee was not found; market research §7.3).
+
+---
+
+## Format
+
+| Piece | Specification |
+| --- | --- |
+| Flyer | Media carta, 21.6 × 14.0 cm, portrait, Spanish front, English back; 3 mm bleed, 5 mm safe area (assumption: confirm with the print shop); 150 g/m² |
+| Stand poster | Tabloide, 27.9 × 43.2 cm (11 × 17 in), portrait, Spanish only, with a small English line at the foot; 3 mm bleed; readable from 2 m: headline at least 60 pt, body at least 24 pt (assumption; check on a printed proof) |
+| Sign-up card | Media carta cut in two (10.8 × 14.0 cm), one per person, put in a closed box at the table (below) |
+| Quantity | 150 flyers and 60 sign-up cards per fair; 1 poster |
+
+## What the picture shows
+
+A maker's hands at work on their product (a coffee bag being sealed, a wooden piece being sanded, a jar being labelled), then the same product on a shelf in a bin with a label. Real photograph with the maker's written permission, or a drawing. No folk-costume imagery, no flags (brand book §3, §14).
+
+## Flyer copy
+
+| Zone | Español (usted) | English |
+| --- | --- | --- |
+| Headline | ¿Nunca ha vendido en línea? Usted hace el producto. Nosotros hacemos el resto. | Never sold online? You make the product. We do the rest. |
+| Q1 | **"No sé hacer una tienda en línea."** Le ayudamos a publicar sus productos en Yuntera Vende. Su tienda tiene su propia página, con su descripción y su logotipo. | **"I don't know how to build an online shop."** We help you list your products in Yuntera Vende. Your shop gets its own page, with your description and logo. |
+| Q2 | **"No tengo quién entregue."** Guardamos su producto en nuestra bodega, lo empacamos y nuestro repartidor lo entrega en [cantones], de lunes a sábado. | **"I have nobody to deliver."** We store your product in our warehouse, pack it, and our driver delivers it in [cantons], Monday to Saturday. |
+| Q3 | **"Me da miedo que no me paguen."** Le cobramos al cliente por usted, por SINPE Móvil o en efectivo al recibir. Su dinero queda disponible 10 días después de la entrega y se lo transferimos en el pago [semanal] siguiente. | **"I'm afraid I won't get paid."** We collect from the customer for you, by SINPE Móvil or cash on delivery. Your money becomes available 10 days after delivery and we transfer it in the next [weekly] payout. |
+| Fees | Sin mensualidad. Comisión del piloto solo cuando vende: café y alimentos empacados 8%, artesanía 10%. Más el cargo de bodega desde ₡900 por unidad y el cargo de cobro (SINPE Móvil desde 1,5%), con IVA. Ejemplo: una bolsa de café de ₡8 000, tamaño sobre, pagada por SINPE Móvil: usted recibe ₡6 124,20. La categoría la elige usted al publicar y la revisa nuestro equipo. | No monthly fee. Pilot commission only when you sell: coffee and packaged food 8%, crafts 10%. Plus a warehouse fee from ₡900 a unit and a collection fee (SINPE Móvil from 1.5%), plus IVA. Example: an ₡8,000 bag of coffee, envelope size, paid by SINPE Móvil: you receive ₡6,124.20. You choose the category when you list, and our team reviews it. |
+| Conditions | Para el piloto necesita: cédula física o jurídica, una cuenta IBAN, un código de barras en cada unidad, y emitir la factura electrónica de sus ventas. Si está en el Régimen Simplificado, pregúntenos. Si le falta algo, se lo explicamos. | For the pilot you need: a personal or company ID, an IBAN account, a barcode on each unit, and to issue the electronic invoice for your sales. If you are in the simplified regime, ask us. If something is missing, we explain. |
+| Pilot line | Todavía no hemos hecho una venta real. Buscamos las primeras tiendas para un piloto cerrado. | We have not made a real sale yet. We are looking for the first shops for a closed pilot. |
+| Call to action | Escanee el código o déjenos su contacto en una tarjeta de la mesa. | Scan the code or leave your contact on a card at the table. |
+| Footer | [WhatsApp], lunes a sábado, [horas] · [Nombre legal], cédula jurídica [número] · Tarifas del piloto vigentes al [fecha] · Código FERIA-[mes] | [WhatsApp], Monday to Saturday, [hours] · [Legal name], legal ID [number] · Pilot fees valid on [date] · Code FERIA-[month] |
+
+₡6,124.20: coffee sits in _Abarrotes y café_ (sub-category Café) at 8%: commission ₡640 + warehouse ₡900 + collection ₡120 = ₡1,660, IVA ₡215.80 (schedule `2026-11-assumptions`; `catalog_reference.sql`; arithmetic of `fees.ts`). _Hecho en Costa Rica_ at 10% has one sub-category, Artesanía; an ₡8,000 craft piece of envelope size would leave ₡5,943.40 (₡800 + ₡900 + ₡120 = ₡1,820, IVA ₡236.60). The category is chosen in the listing form and staff review every listing (`STATUS.md`, Seller centre and Internal console). Whether an online-only seller can be in the Régimen Simplificado is open (compliance §10 q6), **for the accountant to confirm**. "Le ayudamos a publicar" holds in the pilot because the founder onboards sellers by hand (roadmap phase 1). Barcode: label printing for unlabelled units is a Launch feature, not built (`scope-by-app.md`).
+
+## Poster copy
+
+| Español | English (foot line, small) |
+| --- | --- |
+| **Usted hace el producto. Nosotros lo guardamos, lo entregamos y le cobramos al cliente.** · Sin mensualidad · Comisión solo cuando vende · Sus clientes pagan con SINPE Móvil o al recibir · Pregúntenos aquí. | You make it. We store it, deliver it and collect from the customer. No monthly fee. Ask us here. |
+
+## Sign-up card
+
+One card per person, filled in by that person and dropped into a closed box, so nobody reads the earlier visitors' numbers. The person keeps the bottom strip with the notice.
+
+Fields: business name · first name · WhatsApp or e-mail · what you make · the box. The box starts unticked.
+
+| Zone | Español | English |
+| --- | --- | --- |
+| Consent box | ☐ Acepto que [Nombre legal] (Yuntera) me escriba por WhatsApp o correo sobre el piloto para vendedores. | ☐ I agree that [Legal name] (Yuntera) may write to me by WhatsApp or e-mail about the seller pilot. |
+| Notice (on the strip the person keeps) | Responsable: [Nombre legal], cédula jurídica [número], [dirección]. Para qué: solo para escribirle sobre el piloto para vendedores. No compartimos sus datos con nadie. Guardamos esta tarjeta [90] días y luego la destruimos. Para ver, corregir o borrar sus datos, o para que no le escribamos más, escriba a [correo de privacidad] o responda BAJA. | Controller: [Legal name], legal ID [number], [address]. Purpose: only to write to you about the seller pilot. We share your data with nobody. We keep this card [90] days and then destroy it. To see, correct or delete your data, or to stop our messages, write to [privacy e-mail] or reply BAJA. |
+
+Only cards with the box ticked by the person get a message. The cards are typed into the visit log (business data only) and destroyed after the period. The whole card is **for the lawyer to confirm**: whether it meets Ley 8968's informed, written consent (compliance §6), whether it satisfies Ley 8642 art. 44's prior consent, and the keeping period (90 days is an assumption; the privacy document sets none for paper). The card and the visit log must be added to the privacy document's record of processing, with the deletion step (`privacy.md`).
+
+## How the result is measured
+
+| Measure | Where |
+| --- | --- |
+| QR messages with FERIA-[month] | WhatsApp, counted after the fair |
+| Ticked sign-up cards | The box |
+| Registrations in the console in the 14 days after the fair | **Vendedores**, status `pending` |
+| Done when | All three written in the visit log the Monday after the fair |
+
+## Decision for the owner
+
+Before any option: the Feria Nacional de Economía Social y Solidaria, 4–6 December 2026, Parque Nacional, San José (date from a search result only, low confidence), is 10 days away and G1, G2 and G8 are not met. The owner may visit it to listen to makers, with no flyer, no card and no name on paper. The 2026 editions of Expo Pyme CR (3–4 October) and the regional EXPOPYME (for example Quepos, 24–25 October) are already over.
+
+1. **Which is the first fair with the flyer and the sign-up card?**
+   - A. The first regional EXPOPYME of 2027 in or near the pilot cantons after G1, G2 and G8 are met, asking MEIC for its 2027 calendar and exhibitor terms. **(recommended)** MEIC runs it for small businesses, and a stand gives the sign-up card a table; the exhibitor fee was not found.
+   - B. Expo Pyme CR's 2027 edition, as a visitor (the 2026 edition had free entry).
+   - C. A smaller local craft or producers' fair in a pilot canton, found once the cantons are chosen.
+
+## Assumptions to verify
+
+| Assumption | How to verify |
+| --- | --- |
+| Fair dates and terms | The organiser's own page or a call |
+| Makers at fairs often lack barcodes | Count it on the sign-up cards ("what you make") |
+| Tabloide is readable from 2 m | Printed proof |
+
+## Sources
+
+- Repository: `packages/core/src/fees.ts`; `supabase/migrations/20261121080450_catalog_reference.sql` (`abarrotes` 8% with Café, `hecho-en-cr` 10% with Artesanía); `docs/05-security-compliance/privacy.md`, compliance §6 and §10; `docs/01-product/scope-by-app.md`, `roadmap.md`; `docs/05-security-compliance/compliance-costa-rica.md` §3; `STATUS.md` (shop page with description and logo); `docs/brand/brand-book.md` §3, §14.
+- Market research of 24 November 2026, §7.3: EXPOPYME (Delfino, April 2026, https://www.delfino.cr/2026/04/expopyme-oficial-2026-reunira-a-235-emprendimientos-en-la-antigua-aduana); Expo Pyme CR (Delfino, May 2026, https://delfino.cr/2026/05/expo-pyme-cr-anuncia-cuarta-edicion-con-feria-gratuita-en-parque-la-libertad); Feria Nacional de Economía Social y Solidaria (search result, low confidence); §7.4 (Ley 8642 art. 44). Go-to-market draft §4.1 and §4.2 (the 2026 fair dates).
+- Paper sizes: see [shopper flyer, Sources](shoppers-first-zones.md#sources).
