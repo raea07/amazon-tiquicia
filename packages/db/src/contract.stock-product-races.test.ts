@@ -21,13 +21,18 @@
  *   (v)   staff stopping a parcel while its driver starts the route;
  *   (vi)  staff cancelling an order while the shop packs the parcel it ships
  *         itself (seller_mark_packed took the parcel and the stock row before
- *         the order).
+ *         the order);
+ *   (vii) the warehouse packing a parcel of a variant two shops sell while
+ *         the shop that listed it switches the variant off
+ *         (seller_set_variant_active took the variant FOR UPDATE, which
+ *         blocks the key-share lock the pack's ledger row takes on it, while
+ *         the pack held the offer the seller wanted to pause).
  *
  * Fixtures are this file's own: three products with chosen ids (X with two
  * variants, Z sold by two shops, W which Tienda Sendero ships itself from its
  * own warehouse), a shelf in SJO1, a shopper, a driver of its
  * own (so the demo driver's day is untouched) and, for (v), two packed cash
- * orders planned on one route. Races (i), (iii), (v) and (vi) are rolled back;
+ * orders planned on one route. Races (i), (iii), (v), (vi) and (vii) are rolled back;
  * (ii) and (iv) commit and are undone after each round. At the end the
  * route's parcels are stopped and checked back in and the route is closed;
  * the file's cancelled orders are deleted. The suite passes on a used
@@ -702,6 +707,40 @@ describe.skipIf(!db.enabled)(
           expect(await packing, `round ${round}: pack`).toBe("");
         } finally {
           await finish(holder, cancel, pack);
+        }
+      }
+      await cleanUp();
+    });
+    it("(vii) the warehouse packing a parcel while the shop switches its shared variant off", async () => {
+      await layout({ z1: 10 });
+      const held = await cashInPicking([[OFFER.z1, 1]], 1);
+      for (let round = 0; round < ROUNDS; round++) {
+        const holder = await session(null);
+        const pack = await session(WORKER);
+        const seller = await session(SELLER);
+        try {
+          // The pack queues on the offer (its stock write updates it) holding
+          // the stock row; the seller starts while it waits, takes the product
+          // and the variant, and queues on the same offer to pause it.
+          await holder.client.query("select 1 from public.offers where id = $1 for share", [
+            OFFER.z1,
+          ]);
+          const packing = outcome(
+            pack.client.query("select public.wms_pack_shipment($1, 900, 1::smallint)", [
+              held.shipment,
+            ]),
+          );
+          expect(await waitsForLock(pack.pid), `round ${round}: pack waited`).toBe(true);
+          const switching = outcome(
+            seller.client.query("select public.seller_set_variant_active($1, false)", [SKU.z]),
+          );
+          expect(await waitsForLock(seller.pid), `round ${round}: seller waited`).toBe(true);
+          await holder.client.query("rollback");
+          expect(await packing, `round ${round}: pack`).toBe("");
+          await pack.client.query("rollback");
+          expect(await switching, `round ${round}: variant off`).toBe("");
+        } finally {
+          await finish(holder, pack, seller);
         }
       }
       await cleanUp();

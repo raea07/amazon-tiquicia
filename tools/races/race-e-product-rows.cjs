@@ -499,6 +499,93 @@ scenarios.push({
   }),
 });
 
+// E10b: a checkout of the shared variant Y (place_order: the offer FOR SHARE,
+// then its stock row and reservation, which take a key-share lock on the
+// variant) against Tienda Sendero switching that variant off (the product,
+// the variant, then its offer). Forced: a third session holds the variant's
+// offer FOR SHARE; the seller queues on it first (holding the variant), the
+// checkout starts 40 ms late.
+const e10b = {
+  name: "E10b place_order [low] vs Tienda Sendero switching off variant Y (shared) natural",
+  products: ["low", "second"],
+  setup: async (h) => {
+    await fixture(h);
+    await h.layout(["low", "second"], { "W7-01": 200 });
+    return { orders: [] };
+  },
+  actors: (h, _ctx, round) => [
+    {
+      name: "variant-off",
+      as: sellerUser,
+      sql: "select public.seller_set_variant_active($1, false)",
+      args: [h.offer("low").sku_id],
+    },
+    { ...h.placeArgs(7, [["low", 1]], "cash_on_delivery"), name: "checkout", delayMs: round % 5 },
+  ],
+  verify: async (h, _ctx, results) => {
+    const bad = await summaries(h);
+    const c = results.find((r) => r.name === "checkout");
+    // Allowed: the checkout first, or refused because the offer was paused first.
+    if (c.outcome && !/offer_unavailable/.test(c.outcome))
+      bad.push(`checkout refused with ${c.outcome}`);
+    await h.q("update public.offers set status = 'active' where id = $1", [h.offer("low").id]);
+    await h.q("update public.skus set active = true where id = $1", [h.offer("low").sku_id]);
+    return bad;
+  },
+};
+scenarios.push(e10b, {
+  ...e10b,
+  name: "E10b place_order [low] vs Tienda Sendero switching off variant Y (shared) forced",
+  actors: (h, ctx) => late(e10b.actors(h, ctx, 0)),
+  options: (h) => ({
+    hold: { sql: "select 1 from public.offers where id = $1 for share", args: [h.offer("low").id] },
+    holdMs: 150,
+  }),
+});
+
+// E10c: two sessions of Tienda Sendero switching off the same variant x2 (not
+// shared; X keeps x1) at the same moment. They must run one after the other:
+// exactly one switches it off and the other finds it off already
+// ('unchanged'). Forced: a third session holds the variant FOR SHARE; the
+// first queues on it, the second starts 40 ms late.
+const e10c = {
+  name: "E10c seller_set_variant_active(x2, off) twice at once natural",
+  products: ["x1", "x2"],
+  setup: async (h) => {
+    await fixture(h);
+    await h.layout(["x1", "x2"], { "W7-01": 200 });
+    return { orders: [] };
+  },
+  actors: (h, _ctx, round) =>
+    ["off-1", "off-2"].map((name, i) => ({
+      name,
+      as: sellerUser,
+      sql: "select public.seller_set_variant_active($1, false) ->> 'outcome' as outcome",
+      args: [h.offer("x2").sku_id],
+      delayMs: i === round % 2 ? (round >> 1) % 5 : 0,
+    })),
+  verify: async (h, _ctx, results) => {
+    const bad = await summaries(h);
+    const outcomes = results.map((r) => r.outcome || r.row?.outcome).sort();
+    if (outcomes.join(",") !== "unchanged,variant_off")
+      bad.push(`outcomes ${outcomes.join(",")}, expected one variant_off and one unchanged`);
+    await h.q("update public.skus set active = true where id = $1", [h.offer("x2").sku_id]);
+    return bad;
+  },
+};
+scenarios.push(e10c, {
+  ...e10c,
+  name: "E10c seller_set_variant_active(x2, off) twice at once forced",
+  actors: (h, ctx) => late(e10c.actors(h, ctx, 0)),
+  options: (h) => ({
+    hold: {
+      sql: "select 1 from public.skus where id = $1 for share",
+      args: [h.offer("x2").sku_id],
+    },
+    holdMs: 150,
+  }),
+});
+
 // E11: staff merging two brands (public.ops_merge_brands: one UPDATE of every
 // product of the brand, in scan order) while a checkout takes the last units
 // of [x1, low] (X then Y) or [second, x2] (Y then X): the checkout holds the

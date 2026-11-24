@@ -1,7 +1,7 @@
 -- Stock writers that do not deadlock on product rows or shelves, a product
 -- summary that is never stale, a capped unpaid-order sweep, and a route that
 -- starts, and a shop that packs its own parcel, in the lock order of the
--- parcels' orders.
+-- parcels' orders; a seller switching a variant off no longer blocks packing.
 --
 -- Measured before and after with two real sessions (tools/races, README
 -- there; the tables are in the wave 8 report). Every session of the API runs
@@ -164,12 +164,28 @@
 --     and 56 in 100, depending on which session waits first; the same
 --     before this migration). Not changed here; the function is outside
 --     this migration.
--- And, not on product rows: packing against a seller switching off a variant
--- two shops sell (seller_set_variant_active takes the variant FOR UPDATE,
--- which waits for the key share packing's ledger row takes on it) (E10:
--- 10 to 13 / 100; before this migration 20 / 100). A shop switching off the
--- variant of a parcel it packs itself did not deadlock (H8: 0 / 0). Not
--- changed here.
+-- And, not on product rows: a checkout of a variant two shops sell against
+-- the shop that listed it switching it off (E10b, found when the three wave 8
+-- workstreams were merged: 17 / 100 before the change below, 6 / 100 with it,
+-- every forced round both times). The seller's function takes the product
+-- row FOR UPDATE (private.own_listing, shared by every listing function of a
+-- seller) and then waits to pause the offer the checkout holds FOR SHARE;
+-- the checkout's order line takes a key-share lock on the product, which
+-- FOR UPDATE blocks. Not changed here: it needs private.own_listing to take
+-- the product FOR NO KEY UPDATE, which every seller listing function calls.
+--
+--   * A VARIANT SWITCHED OFF. public.seller_set_variant_active took the
+--     variant FOR UPDATE, which blocks the key-share lock that packing's
+--     ledger row (and a checkout's reservation) takes on the variant, while
+--     packing held the offer the seller wanted to pause: packing against a
+--     seller switching off a variant two shops sell deadlocked (E10, on the
+--     merged database before this change: 14 / 100 natural, 100 / 100
+--     forced). It now takes the variant FOR NO KEY UPDATE: the function
+--     changes only `active`, no key column, and deletes nothing, so the
+--     weaker lock is enough, and two changes of one variant still run one
+--     after the other (E10c: 0 / 0, one switches it off, the other finds it
+--     off). After it: E10 0 / 0; a shop switching off the variant of a parcel
+--     it packs itself, H8, 0 / 0 before and after.
 -- Every statement that writes or locks public.products, and the order each
 -- path takes, is listed in docs/04-algorithms/sourcing-and-inventory.md.
 
@@ -570,7 +586,89 @@ begin
 end;
 $$;
 
--- ═══ 6. Grants (unchanged: replacing a function keeps them) ═══════════════
+-- ═══ 6. A seller switching a variant off takes it FOR NO KEY UPDATE ══════
+
+-- Unchanged from 20261121083600_seller_listings.sql except the strength of
+-- the variant's lock (section 'A VARIANT SWITCHED OFF' of the header).
+create or replace function public.seller_set_variant_active(p_sku_id uuid, p_active boolean)
+returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_product_id uuid;
+  p public.products;
+  k public.skus%rowtype;
+  v_outcome text;
+  v_offer uuid;
+begin
+  select product_id into v_product_id from public.skus where id = p_sku_id;
+  if v_product_id is null then
+    perform private.fail('listing_not_found');
+  end if;
+  p := private.own_listing(v_product_id);
+  -- NO KEY UPDATE, not UPDATE: it still makes two changes of one variant
+  -- wait for each other, but not the key-share lock that a checkout, a
+  -- pack or a count takes on the variant through its reservation or
+  -- ledger row while it holds the offer this function pauses (race E10
+  -- and E10b). This function changes no key column of the variant (only
+  -- `active`) and deletes nothing.
+  select * into k from public.skus where id = p_sku_id for no key update;
+  if p_active is null then
+    perform private.fail('invalid_variant_state');
+  end if;
+  if p.status = 'archived' then
+    perform private.fail('listing_not_editable');
+  end if;
+  if p_active then
+    perform private.require_trading_shop(p.created_by_seller_id);
+  else
+    perform private.require_open_shop(p.created_by_seller_id);
+  end if;
+
+  if not p_active then
+    if not k.active then
+      v_outcome := 'unchanged';
+    elsif private.variant_shared(k.id) then
+      update public.offers set status = 'paused'
+      where sku_id = k.id and seller_id = p.created_by_seller_id and status = 'active';
+      v_outcome := 'offer_paused';
+    elsif not exists (select 1 from public.skus x
+                      where x.product_id = p.id and x.id <> k.id and x.active) then
+      perform private.fail('last_variant');
+    else
+      update public.skus set active = false where id = k.id;
+      v_outcome := 'variant_off';
+    end if;
+  else
+    if not k.active then
+      update public.skus set active = true where id = k.id;
+      v_outcome := 'variant_on';
+    else
+      -- On already: put back on sale this shop's paused offers on it. The
+      -- price floor checks each, so an offer a fee change left too cheap
+      -- says so instead of going back on sale.
+      v_outcome := 'unchanged';
+      for v_offer in
+        select o.id from public.offers o
+        where o.sku_id = k.id and o.seller_id = p.created_by_seller_id and o.status = 'paused'
+        order by o.id
+      loop
+        update public.offers set status = 'active' where id = v_offer;
+        v_outcome := 'offer_resumed';
+      end loop;
+    end if;
+  end if;
+
+  if v_outcome <> 'unchanged' then
+    perform private.emit('product.variant_changed', jsonb_build_object(
+      'product_id', p.id, 'sku_id', k.id, 'outcome', v_outcome));
+  end if;
+  return jsonb_build_object('product_id', p.id, 'slug', p.slug, 'sku_id', k.id, 'outcome', v_outcome);
+end;
+$$;
+
+-- ═══ 7. Grants (unchanged: replacing a function keeps them) ═══════════════
 
 revoke all on function
   private.refresh_product_summary(uuid),
@@ -585,3 +683,6 @@ grant execute on function public.driver_start_route(uuid) to authenticated;
 
 revoke all on function public.seller_mark_packed(uuid, integer, smallint) from public, anon;
 grant execute on function public.seller_mark_packed(uuid, integer, smallint) to authenticated;
+
+revoke all on function public.seller_set_variant_active(uuid, boolean) from public, anon;
+grant execute on function public.seller_set_variant_active(uuid, boolean) to authenticated;
