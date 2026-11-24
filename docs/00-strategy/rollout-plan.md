@@ -4,7 +4,8 @@
 **Conclusion 1.** The software is not what gates the pilot; the company, the lawyer, the accountant, the ONVO contract and the Hacienda registration are, and only the owner can start them.
 **Conclusion 2.** A closed pilot with real money and real parcels in 3 to 5 cantons comes before any public launch, and ends only on the roadmap's evidence (100 orders to standard), not on a date.
 **Conclusion 3.** A canton is added only when the cantons already served fill their routes and keep their promises; the rule is in §3.
-**The owner must decide** the five questions at the end (pilot payment methods, cash ceiling, shopper app, start of week 1, pilot size).
+**Conclusion 4.** At best the pilot starts in week 10 and the open launch in week 23; if invoicing certification takes its full 8 weeks, the pilot starts in week 16 or later (estimates).
+**The owner must decide** the six questions at the end (pilot payment methods, cash ceiling, shopper app, start of week 1, pilot size, warehouse size).
 
 Weeks are counted from **week 1**, the start of phase 0 (decision 4). Week
 numbers after phase 0 are **estimates**: no source gives the lead time of a
@@ -34,7 +35,7 @@ provider, Correos, INS).
 | Complaint form on the shop  | The database function exists; **no app calls it**                                             | B: wire it and correct the help page's answer time (support research)                                               |
 | Monitoring                  | **None installed**                                                                            | B: error tracker and uptime monitor on free tiers                                                                   |
 | Support desk in the console | Queues only; no notes, no customer view (owner chose to build it; task in progress)           | B                                                                                                                   |
-| Phone apps                  | Shopper app 0.1.0 (4) in Google Play internal testing and sent to App Store Connect; the other three never built for a phone | O: install on both phones; a new build with account deletion before any public store submission (`STATUS.md` 11.4) |
+| Phone apps                  | `STATUS.md` (23 November): the shopper app's Android build 0.1.0 (4) is in Google Play internal testing as a draft release the owner still has to release; no iPhone build; no build has run on a phone or simulator; the other three never built for a phone. The project's task list (24 November) adds that the iPhone build was sent to App Store Connect; `STATUS.md` does not say so yet | O: release the Android draft; install on both phones; a new build with account deletion before any public store submission (`STATUS.md` 11.4) |
 | Legal and tax               | Compliance documents written from public sources, not by a professional                      | L, A: the questions in [compliance](../05-security-compliance/compliance-costa-rica.md) §9 and §10 and `STATUS.md` item 6 |
 | Name and domains            | `yuntera.com` and `yuntera.app` bought                                                        | O, L: trademark search at the Registro Nacional; `yuntera.cr`                                                       |
 | English                     | Error messages only                                                                           | B: the plan in the English research; shopper side first                                                             |
@@ -48,9 +49,9 @@ provider, Correos, INS).
 | | |
 | --- | --- |
 | **Entry** | The owner names a lawyer and an accountant and sends them the compliance documents (decision 4: this is week 1). |
-| **What happens** | 1. Trademark search, then filing in the classes from open question 2 (O, L). 2. Register `yuntera.cr` (O). 3. Incorporate the company (default S.R.L., open question 3), register with Hacienda, open the business bank account (O, L, A). 4. The lawyer answers compliance §9 questions 1–7 and drafts terms, seller agreement, privacy notice, driver contract (L). 5. The accountant answers §10 and the 14 questions in [invoicing](../06-operations/invoicing.md) (A). 6. ONVO contract with the written questions in [payments](../06-operations/payments.md) (O, S). 7. Registration as electronic issuer, signing key (O, A). 8. Register the SINPE Móvil numbers Yuntera collects on (Decreto 45953-H; O, A). 9. INS work-risk quote (O, S). 10. Messaging provider, Meta business verification, mailboxes `ayuda@` and the privacy address (O, S). 11. Correos: apply for Pymexpress authorisation (O). |
+| **What happens** | 1. Trademark search, then filing in the classes from open question 2 (O, L). 2. Register `yuntera.cr` (O). 3. Incorporate the company (default S.R.L., open question 3), register with Hacienda, open the business bank account (O, L, A). 4. The lawyer answers compliance §9 questions 1–7 and drafts terms, seller agreement, privacy notice, driver contract (L). 5. The accountant answers §10 and the 14 questions in [invoicing](../06-operations/invoicing.md) (A). 6. ONVO contract with the written questions in [payments](../06-operations/payments.md) (O, S). 7. Registration as electronic issuer, signing key (O, A). 8. Register the SINPE Móvil numbers Yuntera collects on (Decreto 45953-H; O, A). 9. INS work-risk quote (O, S). 10. Messaging provider, Meta business verification, mailboxes `ayuda@` and the privacy address (O, S). 11. Correos: apply for authorisation for the Pymexpress volume tariff (all four tiers need it) and ask the pickup price (O). Until the trademark search is clear and the company exists, seller interviews go on without printed material, contracts or the name on paper ([brand book](../brand/brand-book.md) §15). |
 | **Who** | Owner, lawyer, accountant. |
-| **Exit test** | Written answers from L and A to every question marked "needs lawyer" or "needs accountant" that the pilot touches (cash refunds, driver engagement, who invoices delivery, merchant of record, withholdings); signed ONVO contract; Hacienda sandbox credentials; trademark search clear. |
+| **Exit test** | Written answers from L and A to every question marked "needs lawyer" or "needs accountant" that the pilot touches (cash refunds, driver engagement, who invoices delivery, merchant of record, withholdings); signed ONVO contract; Hacienda sandbox credentials and certification started; trademark search clear. |
 | **Switched on in the product** | Nothing. |
 | **Estimate** | Weeks 1–8. Lead times are not sourced; the owner records the real ones here. |
 
@@ -70,11 +71,11 @@ provider, Correos, INS).
 | | |
 | --- | --- |
 | **Entry** | Phase 0 and phase 1 exit tests met; at least 5 sellers have said yes in writing ([go-to-market](go-to-market.md) §4.1); the warehouse space is leased and set up (shelving, bin labels matching the locations, packaging, a scale, a label printer). |
-| **What happens** | 1. Production database on a paid plan with daily backups; nightly export; a restore drill ([operations](../07-deployment/operations.md)). 2. Production web apps on the real domains; the console on its own domain behind protection. 3. Real company data in the legal footer. 4. Demo data and accounts absent. 5. Payments in `test` with ONVO: a full rehearsal. 6. Invoicing certified in Hacienda's sandbox. 7. Messages: worker deployed; one real password reset and one order message received. 8. Staff second factor required; every staff account enrolled; two administrators. 9. Zones set to the pilot cantons only. 10. Dress rehearsal with real people and a real parcel: list, receive, order, pay, pick, pack, route, deliver with the code, collect cash, settle, return, refund (checklist §7). 11. Switch to `live`; one real small payment and one real refund with each pilot method. |
+| **What happens** | 1. Production database on a paid plan with daily backups; nightly export; a restore drill ([operations](../07-deployment/operations.md)). 2. Production web apps on the real domains; the console on its own domain behind protection. 3. Real company data in the legal footer. 4. Demo data and accounts absent. 5. Payments in `test` with ONVO: a full rehearsal. 6. Invoicing certification in Hacienda's sandbox finished (it runs in the issuer track of §4 from week 2). 7. Messages: worker deployed; one real password reset and one order message received. 8. Staff second factor required; every staff account enrolled; two administrators. 9. Zones set to the pilot cantons only. 10. Dress rehearsal with real people and a real parcel: list, receive, order, pay, pick, pack, route, deliver with the code, collect cash, settle, return, refund (checklist §7). 11. Switch to `live`; one real small payment and one real refund with each pilot method. |
 | **Who** | Owner and builders; sellers send stock; backup person trained. |
-| **Exit test** | Every item in the [go-live checklist](../07-deployment/go-live-checklist.md) is ticked except those that only matter for a public launch (independent penetration test, public store release); the owner writes which ones remain. |
+| **Exit test** | Every item in the [go-live checklist](../07-deployment/go-live-checklist.md) is ticked except those that only matter for a public launch (independent penetration test, public store release); the owner writes which ones remain. A phone outside the team opens the production shop without any login, and the terms, privacy notice and legal footer are readable there. |
 | **Switched on in the product** | `payments_mode` = `test`, then `live`; the invoicing issuer; the notification worker; `require_staff_mfa` = true; bot protection keys; **Operación → Distritos**: only the pilot cantons served; cash on delivery ceiling (decision 2). |
-| **Estimate** | Weeks 8–10. |
+| **Estimate** | Weeks 8–10 if certification is done by week 8. If certification takes its full 8 weeks after registration, weeks 8–16 (an estimate). |
 
 ### Phase 3 — Closed pilot with real money and real parcels
 
@@ -84,8 +85,8 @@ provider, Correos, INS).
 | **What happens** | 5 to 10 sellers; 40 to 80 shoppers invited one by one (decision 5): sellers' own customers, friends and family in the pilot cantons. Payment by SINPE Móvil and cash on delivery (decision 1). The owner runs operations, support and the warehouse; one trained backup person for the warehouse and the route ([team structure](team-structure.md)). Carriers take anything the route cannot. Work done by hand on purpose is listed in the [roadmap](../01-product/roadmap.md), phase 1. The owner fills the weekly numbers sheet ([go-to-market](go-to-market.md) §6). |
 | **Who** | Owner, backup person, sellers. |
 | **Exit test** | The roadmap's phase 1 criteria: at least 100 orders delivered from at least 5 sellers to at least 40 shoppers; on time ≥ 95%; first attempt ≥ 90%; picking ≥ 99% right; cash reconciled to zero every day of the last 2 weeks; every refund within 8 calendar days; the three numbers of the business model measured; at least a third of shoppers ordered again unasked. |
-| **Switched on in the product** | Nothing new. Shop public address still protected or unlisted; shopper app stays in the test tracks (decision 3). |
-| **Estimate** | Weeks 10–22: 100 orders at 5–10 a day is 10–20 operating days, but the 2-week cash test and the repeat test need about 8–12 weeks (an estimate). |
+| **Switched on in the product** | Nothing new. The production shop is on its public domain but not announced and not indexed by search engines; invited shoppers get the address one by one; terms, privacy notice and legal footer are readable without a login. Shopper app stays in the test tracks (decision 3). |
+| **Estimate** | From week 10 (best case) or week 16 or later (slow certification), for 8–12 weeks: 100 orders at 5–10 a day is 10–20 operating days, but the 2-week cash test and the repeat test need the longer time (an estimate). |
 
 ### Phase 4 — Open launch in the GAM core
 
@@ -94,9 +95,9 @@ provider, Correos, INS).
 | **Entry** | Phase 3 exit test met; the owner reads the numbers and chooses go ([go-to-market](go-to-market.md) §10). |
 | **What happens** | 1. Remove the Vercel login on the shop and seller centre; the console stays protected. 2. Cards on (ONVO's hosted page). 3. Privacy policy at a public address; the shopper app submitted to both stores from a build with account deletion, in the company's accounts (legal entity, D-U-N-S number, work e-mail on the company domain: `STATUS.md` 2.5). 4. English for shoppers if the release is ready; it does not gate the launch. 5. Cantons added by the rule in §3. 6. Launch-week and 90-day actions in [go-to-market](go-to-market.md) §7. 7. Independent penetration test before or in the first 30 days. |
 | **Who** | Owner; first hires by the order in [team structure](team-structure.md). |
-| **Exit test** | The roadmap's phase 2 criteria: positive contribution per order on average for 4 consecutive weeks; at least 25% of first-time shoppers order again within 60 days; at least one own-driver route a day of about 23 delivered stops; the phase 3 service levels held; no complaint older than its target; every "needs lawyer" and "needs accountant" item closed. |
+| **Exit test** | The roadmap's phase 2 criteria: positive contribution per order on average for 4 consecutive weeks; at least 25% of first-time shoppers order again within 60 days; at least one own-driver route a day of about 25 delivered stops (the roadmap says about 20; [go-to-market](go-to-market.md) §6 explains the change); the phase 3 service levels held; no complaint older than its target; every "needs lawyer" and "needs accountant" item closed. |
 | **Switched on in the product** | Cards; public shop; cantons by the rule; store listings. |
-| **Estimate** | From about week 23; the exit test cannot be read before 90 days, because of the 60-day repeat window. |
+| **Estimate** | From about week 23 at best, week 29 or later with slow certification; the exit test cannot be read before 90 days, because of the 60-day repeat window. |
 
 After phase 4 the [roadmap](../01-product/roadmap.md) phases 3 (density in the
 GAM) and 4 (national by carrier) apply.
@@ -115,7 +116,10 @@ the numbers sheet):
 
 1. The served cantons averaged **at least 20 delivered stops per driver-day**
    over the last 2 weeks, or an existing route passes the new canton with room
-   for **at least 5 more stops**.
+   for **at least 5 more stops**. The test is 20, not the 25 at which an own
+   driver beats Correos ([go-to-market](go-to-market.md) §6), on purpose: the
+   added canton's stops are what lift a route from 20 towards 25. At 20 stops
+   each order still contributes (orders lose money only below about 11).
 2. On-time delivery **≥ 95%** and first-attempt success **≥ 90%** over the
    same 2 weeks.
 3. The new canton **touches** a served canton.
@@ -146,15 +150,16 @@ Shoppers already promised a date keep it.
 | --------------------------------------------- | ---------------- | ------------------------------------- | ------------------------------ |
 | Company, lawyer, accountant (phase 0)          | 1–8              | The owner starting                    | Phase 2                        |
 | ONVO contract and onboarding                   | 1–8              | The company and bank account          | Phase 2                        |
-| Hacienda issuer registration                   | 2–8              | The company                           | Phase 2                        |
+| Hacienda issuer registration and sandbox certification | 2–8 (up to 2–16) | The company                   | Phase 2                        |
 | Messaging provider and Meta verification       | 2–8              | The company (legal name)              | Phase 2                        |
-| Seller interviews and signing                  | 1–6              | Nothing                               | Phase 2 (5 sellers)            |
+| Seller interviews (no name on paper)           | 1–6              | Nothing                               | Phase 2 (5 sellers)            |
+| Written seller commitments                     | After the search and the company | Trademark search clear; company exists | Phase 2 (5 sellers) |
 | Warehouse space                                | 2–8              | The first sellers' locations          | Phase 2                        |
 | Software gaps (phase 1)                        | 1–6              | Nothing                               | Phase 2                        |
 | English, shopper side                          | 1–12             | Its foundation first (English research) | Nothing before phase 4       |
 | Visual redesign of the apps                    | 1–12             | The owner's choice of direction       | Nothing; must not touch the same files as English at the same time (English research §8) |
 | Store accounts in the company's name           | After the company | Legal entity, D-U-N-S, company e-mail | Phase 4 (public store release) |
-| Marketing material in Spanish and English      | 4–8              | Trademark search clear                | Phase 3 cards and flyers       |
+| Marketing material in Spanish and English      | 4–8 to write; print only after the search | Trademark search clear; company exists (for the legal name on print) | Phase 3 cards and flyers |
 
 The longest chain is the company → bank → ONVO and Hacienda → rehearsal. A
 week lost there is a week lost on the launch; a week lost on English is not.
@@ -168,8 +173,10 @@ week lost there is a week lost on the launch; a week lost on English is not.
    B. SINPE Móvil, cash and cards from the pilot.
    C. Cash on delivery only.
 2. **Cash-on-delivery ceiling in the pilot?**
-   A. ₡50,000 an order. **(recommended)** One driver carries the cash, and the setting is changed in the console in one step. (An assumption; there is no source for the right amount.)
-   B. Keep the current setting, ₡150,000.
+   A. ₡50,000 an order in the pilot; back to ₡150,000 at the open launch only if the pilot's cash variance was zero. **(recommended)** One driver carries the cash, and the setting is changed in the console in one step. (An assumption; there is no source for the right amount.)
+   B. Keep the current setting, ₡150,000, throughout.
+
+   Printed material must not state the ceiling as a fixed number; it reads the setting on the print day.
 3. **The shopper phone app during the pilot?**
    A. Testers only; public in both stores at the open launch. **(recommended)** The store builds so far lack account deletion, and both stores require it.
    B. Public from the pilot.
@@ -179,6 +186,10 @@ week lost there is a week lost on the launch; a week lost on English is not.
 5. **How many invited shoppers in the pilot?**
    A. 40 to 80, invited one by one. **(recommended)** It meets the roadmap's 40-shopper test with room for no-shows, and one driver can serve it.
    B. No cap.
+6. **Warehouse size for the pilot?**
+   A. About 20 m², close to the first sellers. **(recommended)** 5 to 10 sellers at 5–10 orders a day fit, and rent stays at ₡72,000–₡126,000 a month (an assumption; [go-to-market](go-to-market.md) §9).
+   B. About 50 m², to avoid a move at launch.
+   C. About 100 m², as the pricing proposal costs its pilot month.
 
 ---
 
@@ -188,16 +199,16 @@ week lost there is a week lost on the launch; a week lost on English is not.
 | ------------------------------------------------ | --------------------------- | ----------------------------------------------------- |
 | Time to incorporate, register and open a bank account | Up to 8 weeks           | Ask the lawyer and the accountant at the first meeting |
 | Time to sign and onboard with ONVO               | Up to 8 weeks               | Ask ONVO in writing                                   |
-| Time to certify invoicing in Hacienda's sandbox  | Up to 8 weeks               | The accountant                                        |
+| Time to certify invoicing in Hacienda's sandbox  | Up to 8 weeks after registration; sets the pilot start between week 10 and week 16 | The accountant                |
 | Pilot order rate                                 | 5–10 orders a day           | Phase 3 actuals                                       |
 | Pilot length                                     | 8–12 weeks                  | Phase 3 actuals                                       |
 | Builder time for the software gaps              | About 15 builder-days       | Earlier waves' pace in `STATUS.md`                    |
 | Cash ceiling                                     | ₡50,000                     | Pilot refusal rate and cash variance                  |
-| 20 stops a day as the add-a-canton test          | 20 (23 to beat Correos)     | Pilot routes in **Despacho**                          |
+| 20 stops a day as the add-a-canton test          | 20 (about 25 to beat Correos) | Pilot routes in **Despacho**                        |
 
 ## Sources
 
-Repository: `STATUS.md` (23 November 2026: "What needs you", "Not built");
+Repository: `STATUS.md` (23 November 2026: "What needs you", "Not built", "In one paragraph"); the project's task list (24 November 2026, iPhone build); `docs/brand/brand-book.md` §15;
 `docs/01-product/roadmap.md`, `scope-by-app.md`, `pricing-and-fees.md`;
 `docs/07-deployment/go-live-checklist.md`, `operations.md`;
 `docs/06-operations/payments.md`, `invoicing.md`, `notifications.md`,
@@ -207,6 +218,6 @@ the pack's support research (`/root/yuntera-audit/strategy-pack/research/support
 §4.8) and English research (`english.md`, §5 and §8), both written 24 November 2026.
 
 External: Correos de Costa Rica, Tarifas, https://correos.go.cr/tarifas/ —
-Pymexpress needs prior authorisation by the Dirección de Pymes (opened
-24 November 2026). Decreto 45953-H on SINPE Móvil number registration, as
+every Pymexpress volume tier needs prior authorisation by the Dirección de
+Pymes (opened 24 November 2026). Decreto 45953-H on SINPE Móvil number registration, as
 cited in the compliance document.

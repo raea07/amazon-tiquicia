@@ -1,15 +1,18 @@
 # Team structure
 
 **What this is.** The people Yuntera needs at the pilot, at launch and at 100, 300 and 1,000 orders a day: what each does, in which app, with which permissions, on what terms and at what monthly cost.
-**Conclusion 1.** The pilot needs the founder plus one trained backup person; every hire after that is triggered by a number the console shows, not by a date.
-**Conclusion 2.** Drivers are most of the cost at every level (about 60%–65% of payroll at 100 orders a day); the business model's per-order labour figures hold only near 1,000 orders a day, so density decides the team.
+**Conclusion 1.** The pilot needs the founder plus one trained backup person (payroll ₡150,600 a month); launch needs 3 or 4 people (₡2,273,300–₡3,443,300). Every hire after that is triggered by a number the console shows, not by a date.
+**Conclusion 2.** Drivers are most of the cost at every level (about 60%–65% of payroll at 100 orders a day). The business model's per-order labour figures are not reached even at 1,000 orders a day: payroll stays about ₡750–₡820 an order above them. So the model must budget the overhead roles, or density must exceed 25 stops.
 **Conclusion 3.** The product automates the money, the promise, the stock and the delivery check, but not people work: seller approval, listing review, payouts, support conversations and late-delivery calls stay manual.
 **The owner must decide** the four questions at the end (driver engagement, first hire, founder pay, combined jobs).
 
 All costs are monthly, in colones, at the **2026 legal minimum** for the
 closest occupation in the labour ministry's list, **fully loaded**: salary ×
-1.39 (26.83% employer charges, 8.33% aguinaldo, about 4% vacation; market
-research §6.2). The market usually pays more; a range is given where a market
+1.3916, shown as "× 1.39" (26.83% employer charges, 8.33% aguinaldo, about 4%
+vacation; market research §6.2). The 26.83% includes the INS work-risk rate
+at a reference 1%; INS sets the real rate by activity, and it may be higher
+for drivers and warehouse work (Alegra, updated 7 October 2026): _for the
+accountant to confirm_ with an INS quote. The market usually pays more; a range is given where a market
 figure exists. From **1 January 2027** every minimum rises **1.70%** (MTSS
 communiqué CP-022-2026, 28 October 2026). Which occupation fits each role,
 and the loaded factor, are **for the accountant to confirm**; the employment
@@ -143,14 +146,18 @@ basis and the lawyer's question it raises.
 
 - **Daily in the pilot:** 2 days a week (an assumption): receive and count
   inbound stock, pick and pack; drive the route when the founder cannot. The
-  roadmap requires this person trained **before** the pilot.
+  roadmap requires a trained warehouse backup and a backup driver
+  **before** the pilot ([roadmap](../01-product/roadmap.md) phase 1; open
+  question 16). This plan **chooses** one person for both. If the founder is
+  away on a day with both packing and a route, a second backup person is
+  needed for that day.
 - **Access:** warehouse staff `associate`; a driver record (`active`). No
   staff role.
 - **Basis:** employee, part-time. _For the lawyer and accountant:_ how
   part-time pay and charges are computed at the minimum; whether a person who
   both drives and packs falls under the driver or the warehouse category.
-- **Cost:** ₡18,800 a loaded day (TOSC ₡13,523.69 × 1.39); 8 days = ₡150,600
-  a month.
+- **Cost:** ₡18,800 a loaded day (TOSC ₡13,523.69 × 1.3916); 8 days =
+  ₡150,600 a month.
 
 ### Driver
 
@@ -193,8 +200,11 @@ basis and the lawyer's question it raises.
 - **Daily:** visits and calls shops; helps the first listing in the seller
   centre (with the seller signed in on their own account, never with their
   password); answers seller questions.
-- **Access:** no staff role is needed to recruit. To see a seller's status,
-  `support` (reads **Vendedores**). Seller approval stays with `ops`.
+- **Access:** no staff role. The `support` role would also open **Pedidos**
+  and **Atención**, with buyers' names and orders, which this job does not
+  need (decision 4A). The founder or `ops` tells the agent a seller's status.
+  Seller approval stays with `ops`. A sellers-only role would be a product
+  change.
 - **Basis:** employee, or a contractor paid per active seller. _For the
   lawyer:_ whether commission-only pay is allowed below the minimum wage, and
   what makes a sales contractor an employee.
@@ -262,33 +272,39 @@ Ratios used (all **assumptions**, each with its basis):
   cost per order at ₡564,600. **No benchmark for contacts per 100 orders was
   found**; measure it in the pilot.
 
-| Level                  | Orders a day | Drivers | Warehouse      | Support | Operations              | Catalogue | Finance | Sales | Social media | People | Payroll a month              |
-| ---------------------- | -----------: | ------: | -------------- | ------: | ----------------------- | --------: | ------: | ----: | -----------: | -----: | ---------------------------- |
-| Pilot                  |         5–15 | Founder | Founder + backup (8 days) | Founder | Founder        |   Founder | Founder | Founder |          — |  2     | ₡150,600 (backup only)       |
-| Launch                 |        20–50 | 1       | 1 (also backup driver) | Founder | Founder        |   Founder | Founder |     1 |            — |  4     | ₡2,273,300                   |
-| Level 1                |          100 | 6       | 3 + 1 lead     |       1 | 1 lead                  |   Founder | Founder + accountant | 1 | — | 13 | ₡10,855,500–₡11,857,300   |
-| Level 2                |          300 | 16      | 8 + 1 lead     |       3 | 1 lead + 1 dispatcher   |         1 |       1 |     2 |            1 |  35    | ₡29,123,200–₡30,144,500      |
-| Level 3                |        1,000 | 49      | 25 + 2 leads   |       7 | 1 manager + 1 lead + 2 dispatchers |       2 |       2 |     4 |            1 | 96     | ₡83,330,000–₡84,912,000      |
+| Level                  | Orders a day | Drivers | Warehouse      | Support | Operations              | Catalogue | Finance | Sales | Social media | People (excluding founder) | Payroll a month              |
+| ---------------------- | -----------: | ------: | -------------- | ------: | ----------------------- | --------: | ------: | ----: | -----------: | -------------------------: | ---------------------------- |
+| Pilot                  |         5–10 | Founder | Founder + backup (8 days) | Founder | Founder        |   Founder | Founder | Founder |          — |                          1 | ₡150,600 (backup only)       |
+| Launch                 |        20–40 | 1–2     | 1 (also backup driver) | Founder | Founder        |   Founder | Founder |     1 |            — |                        3–4 | ₡2,273,300–₡3,443,300        |
+| Level 1                |          100 | 6       | 3 + 1 lead     |       1 | 1 lead                  |   Founder | Founder + accountant | 1 | — |                       13 | ₡10,855,500–₡11,857,300   |
+| Level 2                |          300 | 16      | 8 + 1 lead     |       3 | 1 lead + 1 dispatcher   |         1 |       1 |     2 |            1 |                         35 | ₡29,123,200–₡30,144,500      |
+| Level 3                |        1,000 | 49      | 25 + 2 leads   |       7 | 1 manager + 1 lead + 2 dispatchers |       2 |       2 |     4 |            1 |              96 | ₡83,310,000–₡84,892,000      |
 
-Founder pay is not included. Launch payroll: driver ₡1,170,000 + associate
-₡519,200 + sales agent ₡584,100. Leads are counted at ₡564,600–₡1,065,500;
+Founder pay is not included. Launch payroll: 1–2 drivers ₡1,170,000 each +
+associate ₡519,200 + sales agent ₡584,100. By the driver ratio, one driver
+carries up to about 22 orders a day (22 ÷ 25 × 1.1 = 0.97); a second is needed
+from about 23 orders a day. The launch level matches the base budget in
+[go-to-market](go-to-market.md) §9. Leads are counted at ₡564,600–₡1,065,500;
 the Level 3 manager at ₡1,065,500–₡1,144,900. Level 3 also needs carriers for
 anything outside the GAM.
 
 **What the payroll means per order** (26 operating days):
 
-| Level   | Orders a month | Payroll per order | Of which drivers | Business model's per-order labour (delivery ₡1,800 + picking ₡500 + support ₡150) |
-| ------- | -------------: | ----------------: | ---------------: | -------------------------------------------------------------------------------- |
-| Level 1 |          2,600 |    ₡4,175–₡4,560  |           ₡2,700 | ₡2,450                                                                           |
-| Level 2 |          7,800 |    ₡3,734–₡3,865  |           ₡2,400 | ₡2,450                                                                           |
-| Level 3 |         26,000 |    ₡3,205–₡3,266  |           ₡2,205 | ₡2,450                                                                           |
+| Level   | Orders a month | Payroll per order | Of which drivers | Business model's per-order labour (delivery ₡1,800 + picking ₡500 + support ₡150) | Contribution per ₡20,000 order with this payroll, before rent and overheads |
+| ------- | -------------: | ----------------: | ---------------: | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------: |
+| Level 1 |          2,600 |    ₡4,175–₡4,560  |           ₡2,700 | ₡2,450                                                                           |                                                                   ₡224–₡609 |
+| Level 2 |          7,800 |    ₡3,734–₡3,865  |           ₡2,400 | ₡2,450                                                                           |                                                                 ₡919–₡1,050 |
+| Level 3 |         26,000 |    ₡3,204–₡3,265  |           ₡2,205 | ₡2,450                                                                           |                                                               ₡1,519–₡1,580 |
 
-The model's labour figures are reached only near Level 3, and even there the
-payroll per order stays ₡755–₡816 above the model's ₡2,450, mostly the
-leads, spare drivers, sales, catalogue and finance roles the model does not
-count. This is the same finding as the business model's: the
-result depends on stops per driver-day. **Verify** with the pilot's real
-stops per route before hiring past Level 1.
+Contribution here is the model's ₡2,334 less the payroll above the model's
+₡2,450. The model's labour figures are **never reached**: even at Level 3 the
+payroll per order stays ₡754–₡815 above ₡2,450, mostly the leads, spare
+drivers, sales, catalogue and finance roles the model does not count. Drivers
+alone cost more than the model's ₡1,800 at every level, because of the 10%
+for failed attempts, the rounding up and the spare: at Level 1, 6 drivers for
+100 orders is 16.7 delivered stops each. So the business model must budget
+the overhead roles, or density must exceed 25 stops. **Verify** with the
+pilot's real stops per route before hiring past Level 1.
 
 ---
 
@@ -297,13 +313,13 @@ stops per route before hiring past Level 1.
 | # | Hire                                       | Trigger (read in the console or the weekly sheet)                                                     | What the founder stops doing |
 | - | ------------------------------------------ | ----------------------------------------------------------------------------------------------------- | ---------------------------- |
 | 1 | Backup person (warehouse + backup driver)  | Before the pilot starts (roadmap phase 1)                                                             | Nothing yet; covers absence  |
-| 2 | First employed driver                      | Open launch, or the founder's route above 20 delivered stops a day for 2 weeks (**Despacho**)          | Driving                      |
-| 3 | Sales agent                                | Open launch (to go from 50 to 200 sellers)                                                            | Most seller visits           |
+| 2 | First employed driver                      | Open launch, or the founder's route above 20 delivered stops a day for 2 weeks (**Despacho**). At 20 stops a hired driver costs ₡2,250 a stop, about Correos' ₡2,300 locker price before volume authorisation; the 25-stop figure in [go-to-market](go-to-market.md) §6 applies once that tariff is authorised | Driving                      |
+| 3 | Sales agent                                | Open launch (to go from 50 to 200 sellers; in the base budget)                                        | Most seller visits           |
 | 4 | Warehouse associate (full time)            | Picks above 40 orders a day for 2 weeks                                                               | Picking and packing          |
 | 5 | Support agent                              | Above about 60 orders a day, or any week with replies late against the customer-service targets        | WhatsApp and e-mail          |
 | 6 | Operations lead                            | About 100 orders a day, or more than 3 routes a day                                                    | Dispatch and cash settlement |
 | 7 | Finance clerk                              | More than 50 active sellers paid by hand each payout run, or about 200 orders a day                   | Payouts and reconciliation   |
-| 8 | Catalogue reviewer                         | Listings waiting more than 2 working days in review (**Resumen**: listings in review)                  | Listing review               |
+| 8 | Catalogue reviewer                         | **Resumen** shows "Productos por revisar" above 20 (an assumption) for 2 weeks, or the oldest item in **Catálogo** has waited more than 2 working days, checked by hand (the console shows a count, not the age) | Listing review               |
 | 9 | Social-media person (contractor)           | After the launch exit test, when paid ads start                                                        | Posting                      |
 
 Each trigger is an **assumption** to adjust after the pilot.
@@ -327,7 +343,7 @@ Each trigger is an **assumption** to adjust after the pilot.
 ```
                               Founder (admin)
             ┌──────────────────────┼──────────────────────┐
-     Driver (1)            Warehouse associate       Sales agent
+   Drivers (1–2)           Warehouse associate       Sales agent
                             (also backup driver)
 
   Founder still does: support, dispatch, finance, catalogue.
@@ -353,9 +369,11 @@ Each trigger is an **assumption** to adjust after the pilot.
 ## Decisions for the owner
 
 1. **How are drivers engaged?**
-   A. As employees, with INS work-risk cover. **(recommended)** The cost model already budgets them so, and two rulings point that way (compliance §7).
+   A. As employees, with INS work-risk cover, in a vehicle Yuntera provides. **(recommended)** The cost model already budgets them so, and two rulings point that way (compliance §7).
    B. As independent contractors, if the lawyer approves in writing.
    C. Through a courier company.
+
+   If drivers use their own motorbike with an allowance (as the drivers' notice in the marketing pack proposes), the ₡45,000 driver-day must be worked out again here (§1), in [go-to-market](go-to-market.md) §9 and in the pricing proposal. The labour part may then be "Mensajero" (₡519,200), and who owns the vehicle bears on employment status: _for the lawyer to confirm_.
 2. **Who is the first hire after the backup person?**
    A. A driver. **(recommended)** Driving takes the founder off everything else for half of each day.
    B. A sales agent.
@@ -374,7 +392,9 @@ Each trigger is an **assumption** to adjust after the pilot.
 
 | Assumption                                   | Value used                                  | How to verify                                                   |
 | -------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------- |
-| Loaded factor                                | Salary × 1.39                               | Accountant's payroll quote per role                             |
+| Loaded factor                                | Salary × 1.3916, shown as 1.39              | Accountant's payroll quote per role                             |
+| INS work-risk rate                           | 1% reference, inside the 26.83%             | INS quote for drivers and warehouse work                        |
+| Pilot order rate                             | 5–10 a day                                  | [Roll-out plan](rollout-plan.md) phase 3 actuals                |
 | MTSS occupation per role                     | Table in §1                                 | Accountant or lawyer                                            |
 | Driver all-in cost                           | ₡45,000 a day; ₡605,400 a month beyond labour | A vehicle, fuel and insurance log for 2 weeks; INS quote        |
 | Delivered stops per driver-day               | 25                                          | Pilot routes in **Despacho**                                    |
