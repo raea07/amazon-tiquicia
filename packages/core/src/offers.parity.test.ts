@@ -54,16 +54,16 @@ function marked(sql: string): string[] {
   return found;
 }
 
-/** The body of the last definition of a function across the files, in migration order. */
-function lastBody(name: string): string {
-  let last = "";
+/** The last definition of a function across the migrations, and the file it is in. */
+function lastDefinition(name: string): { file: string; body: string } {
+  let last = { file: "", body: "" };
   for (const file of ALL) {
     const sql = read(file);
     const pattern = new RegExp(
-      `create or replace function ${name.replace(".", "\\.")}\\([\\s\\S]*?\\n\\$\\$;`,
+      `create (?:or replace )?function ${name.replace(".", "\\.")}\\([\\s\\S]*?\\n\\$\\$;`,
       "g",
     );
-    for (const match of sql.matchAll(pattern)) last = match[0];
+    for (const match of sql.matchAll(pattern)) last = { file, body: match[0] };
   }
   return last;
 }
@@ -80,13 +80,15 @@ describe("the offer order in SQL and TypeScript", () => {
   });
 
   it("is what the definitions in force use", () => {
-    for (const name of [
-      "private.refresh_product_summary",
-      "private.get_product_page",
-      "public.cart_alternatives",
-    ]) {
-      const body = lastBody(name);
-      expect(body, name).not.toBe("");
+    // The file each definition in force is expected in: if a later migration
+    // redefines one, this list must be updated together with its markers.
+    for (const [name, where] of [
+      ["private.refresh_product_summary", "20261121084400_stock_lock_order.sql"],
+      ["private.get_product_page", "20261121083700_console_catalogue.sql"],
+      ["public.cart_alternatives", "20261121084600_shopper_followups.sql"],
+    ] as const) {
+      const { file, body } = lastDefinition(name);
+      expect(file, name).toBe(where);
       expect(marked(body), name).toEqual([OFFER_ORDER_SQL]);
     }
   });
