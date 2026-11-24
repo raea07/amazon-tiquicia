@@ -1514,7 +1514,7 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     a product while the seller changes another offer of it (E6: 24 in 100 natural, every forced round).
     (3) A shop suspended or reinstated against such a writer (E7: 2 in 100 natural, every forced round).
     (4) Staff merging two brands against a checkout crossing zero on two of
-    their products (E11: NUMBERS_E11).
+    their products (E11: 0 and 20 in 100 natural rounds for the two checkouts tried, up to 52 in 100 forced, in the run before the last SQL change of this round; the run after it was not finished when this was written).
   - Fixed in this wave, measured before and after: a cancellation against a
     count, a receipt or a pick of the same shelf (6 to 39 in 100 natural
     rounds, every forced round, to 0); a cancellation against a count into a
@@ -1570,7 +1570,7 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     with the cart's at cutoffs and midnight; milliseconds of clock skew
     between the web server and the database at an hour boundary could still
     cache a date under the wrong hour. No test moves the clock.
-  - Controls under 44 px on a phone: TOUCH_RESULT
+  - Controls under 44 px on a phone: the back links, "Presente un reclamo", the shop's footer, category bar and breadcrumb, "Agregar una dirección", the seller centre's price and notification links, the console's home links and the driver's "No se pudo entregar" are 44 px. A product card's title link covers its whole card. Not re-measured with `tools/e2e/touch-targets.cjs` after the last change.
   - A cancelled order says why only for the reasons the system writes (no
     payment in time, parcels came back, cancelled by the shopper); when
     staff cancel, the page says "Cancelamos este pedido" and points to
