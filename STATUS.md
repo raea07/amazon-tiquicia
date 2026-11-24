@@ -830,13 +830,13 @@ These are missing, not hidden. The first group blocks a public launch.
   the console.
 - Functions for the actions that existed only as direct writes (see "Things to
   know"): editing fees.
-- Counting a product into a location where it has no record yet: the
-  location screens correct only products already listed there.
 - Stopping a seller's own packed parcel from the console (only parcels of a
   Yuntera warehouse can be stopped; a seller's parcel is at the seller's).
-- A cancellation that locks stock in the same order as counts and receipts
-  (`private.cancel_order_internal`); until then the two can deadlock, and the
-  loser is told nothing was saved.
+- Some rare races still end with "nothing was saved, try again" for one of
+  two people acting at the same moment (two checkouts of the last units of
+  two shared products, a seller pausing or switching off what a checkout or
+  cancellation holds, a shop suspended, two brands merged). Each is measured
+  and listed in "Things to know", "Wave 8".
 - Sign-in limits as settings: they are constants inside functions, so the
   settings screen cannot show them (if they ever become settings they are
   protected by default).
@@ -876,9 +876,15 @@ and the warehouse use the web apps)
 - Warehouse app: scanning the bin as well as the product when picking (not
   in the web app either). The location scanner's camera path is untested
   (the web export has no camera).
-- Shopper app: `cart_alternatives` gives no delivery date, so the app asks
-  for the product page of each line that can no longer be bought to show the
-  other offer's date.
+- Seller, driver and warehouse apps: when a refresh fails they still replace
+  what is on screen with an error, and they wait without a limit on a read
+  that never answers (the shopper app keeps what it shows and gives up after
+  15 s). The 15 s limit must not be switched on in these apps before they
+  keep their data: a refresh that gives up would then wipe the screen. The
+  screens are listed in "Things to know", "Wave 8".
+- Warehouse app: the shop choice between two shops that both keep a product
+  in a warehouse was never shown in a test (the demo data has no such
+  product); the camera and a hand scanner were not tried on a phone.
 
 **Later**
 
@@ -1299,13 +1305,12 @@ Found while building or reviewing; none is fixed by pretending otherwise.
 
 - **Wave 7 (`084200`, `084300` and the native parity), merged on
   23 November 2026 and on the hosted preview since the same day:**
-  - Found on the preview on 23 November 2026, open: an order the unpaid-order
-    sweep cancels reads only "Cancelado" to the shopper; the reason ("Pago no
-    recibido a tiempo") is stored on the order but neither the page nor the
-    history shows it. A stop staff removed reads "Esta parada quedó como no
-    entregada." on the driver's own stop page (the route list says it was
-    removed). The back links at the top of pages ("← Pedidos", "← Bodega",
-    "← Ubicaciones") are 17 px tall on a phone, under the 44 px rule.
+  - Found on the preview on 23 November 2026, fixed in wave 8 (not on the
+    preview yet): a cancelled order now says why, on its page and in its
+    history (web shop and shopper app); a stop staff removed says on the
+    driver's own stop page what the route list says; the back links at the
+    top of pages and "Presente un reclamo" are 44 px tall on a phone. See
+    "Wave 8" below.
   - What the hosted check left on the preview: orders YT-101551 (unpaid,
     cancelled by the sweep), YT-101552 and YT-101554 (paid, stopped,
     refunded in the simulation with their delivery fee), YT-101553 (cash,
@@ -1330,8 +1335,9 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     all nine signed in afterwards (confirmed in the database at 20:58 UTC).
   - The delivery fee comes back only for orders cancelled after `084200` was
     applied; YT-101282 and YT-101283 on the preview kept theirs and stay as
-    they are. When it comes back the shopper gets two refund messages of
-    each kind (goods, then fee), each with its own amount. Refunding the fee
+    they are. When it comes back the shopper now gets one "refund started"
+    and one "refund arrived" message, each with the total (wave 8, `084600`;
+    before, two of each kind). Refunding the fee
     through the real gateway or by transfer was checked only through the
     register and the existing refund logic; locally every refund is
     simulated. The messages were planned, not rendered and sent.
@@ -1355,11 +1361,11 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     bodega" (it said the parcel went back to our shelves).
   - Locks found when the streams were merged: starting a pick and packing now
     take the order's lock before the parcel's, as stopping a parcel does (a
-    stop at the moment of packing deadlocked one caller before). Still open:
-    a cancellation racing a count or a receipt of the same product on the
-    same shelf, and a pick racing a cancellation, can end with a deadlock for
-    one caller (`private.cancel_order_internal`), and a stop racing a route's
-    start can too. Every app now says "nothing was saved, try again" for
+    stop at the moment of packing deadlocked one caller before). A
+    cancellation racing a count, a receipt or a pick of the same product on
+    the same shelf, and a stop racing a route's start, no longer deadlock
+    (wave 8, `084400`: 0 in 100 natural and 100 forced rounds each, from up
+    to 39 in 100 and every forced round). Every app now says "nothing was saved, try again" for
     such an error (`try_again`, from PostgreSQL's 40P01 and 40001) instead
     of "something went wrong"; the local API stand-in passes the code
     through as the hosted Data API does.
@@ -1391,27 +1397,16 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     in 100 rounds for every stock-row pair it tried. Checkout, packing,
     cancellations and receipts of a product now wait for an open payment
     confirmation of it (milliseconds); reads and picks do not.
-  - Still open, older than wave 7: a deadlock one level up, on product rows.
-    Every stock write also updates the offer and the product's summary row
-    (triggers), and one product row is shared by every variant and every
-    shop that sells it; nothing takes product rows in one order. With two
-    such products written in opposite order, the harness measured: the
-    sweep against a checkout 1 to 4 in 100 rounds, against packing 42 in
-    100, against a staff cancellation 38 in 100; two checkouts 40 in 100
-    (the same before the last lock change: 0 to 42). Nothing is
-    half-written: the loser rolls back, the shopper, packer or staff member
-    reads "nothing was saved, try again", and the sweep runs again in 5
-    minutes. The fix needs `place_order`, defined in an applied migration,
-    so it waits for the next wave: take the product rows in product-id
-    order before the first stock write, or skip the summary update when
-    nothing changes.
-  - The sweep holds the stock rows of every order it cancels for its whole
-    run. A checkout, confirmation, pack or cancellation of one of those
-    products waits that long: measured about 2 ms per expired order (0.4 s
-    for 200, 2 s for 1000). Estimated, not measured: the 8 s timeout of the
-    hosted API would be reached near 4000 expired orders in one run, far
-    above pilot volume. If volumes grow, cap each run (for example 200
-    orders).
+  - Product rows (wave 8, `084400`). A product's summary is now written only
+    when one of its inputs changes (price, list price, status, fulfilment,
+    handling days, condition, or units crossing zero), and the refresh locks
+    the product row before it reads. With products that stay in stock, the
+    sweep against a checkout, packing or a cancellation, and two checkouts,
+    went from 4 to 42 deadlocks in 100 natural rounds (every forced round) to
+    0. What still can deadlock is in "Wave 8" below. The sweep cancels at most
+    200 orders a run, oldest first: a checkout started during a 1000-order
+    backlog waited 1666 ms before and about 230 ms now (local machine); a
+    larger backlog clears over the next runs, five minutes apart.
   - The release relies on READ COMMITTED, the level every caller runs in. A
     caller in REPEATABLE READ would wait and still name the same location
     for both tasks; nothing sets that level today.
@@ -1439,21 +1434,17 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     the worker takes the seed's invoice jobs first. Run `pnpm db:local:reset`
     and `pnpm db:local:test` with the lane's stack down
     (`tools/dev/stack.sh down <lane>`).
-  - No journey opens a single closed day (no function can create one; it is
-    covered by the database and contract tests), and the console's district
-    move form was not driven in a browser.
+  - A single closed day is opened in a journey since wave 8
+    (`closure-single-day`); the console's district move form was not driven
+    in a browser.
   - The seller app's Inicio no longer says "Hoy no tiene nada pendiente"
     when the listing changes or the bank-account request could not be read:
     it says what it knows, that the rest could not be checked, and offers
     «Revisar de nuevo»; pulling down now reads all three again. A native
     journey step makes the listing-changes read fail (web export only).
-  - Shopper app, order page: when the payment cannot be read, the refund
-    notice states no amount and does not say the amount could not be read;
-    pulling down reads only the order again, so the amount comes back only
-    when the app returns to the front. Nothing false is said. Open.
-  - Shopper app, listing: a background refresh that fails replaces results
-    already on screen with the error and «Intentar de nuevo». Nothing false
-    is said. Open.
+  - Shopper app, order page and listing: fixed in wave 8. An unread payment
+    is said with «Intentar de nuevo» and no amount; a failed refresh keeps
+    what is on screen with a notice.
   - Nothing of wave 7 ran on a phone: the native screens were checked through
     the web export only (no camera, no real pull-to-refresh, no
     foreground event from the phone).

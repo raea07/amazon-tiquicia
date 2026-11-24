@@ -53,6 +53,14 @@ its own entry, not something that happens by drift.
 | 44  | [Warehouse stock: free units, moves the shop never sees, counts only onto shelves](#44-warehouse-stock-what-is-free-moves-that-the-shop-never-sees-counts-only-onto-shelves)                                               | Built; not on the preview yet            |
 | 45  | [Android builds of the shopper app go to the internal testers without a click](#45-android-builds-of-the-shopper-app-go-to-the-internal-testers-without-a-click)                                                           | Decided; settings not changed yet        |
 | 46  | [Product rows written only when the summary changes; one lock order for stock, orders and shelves](#46-product-rows-written-only-when-the-summary-changes-one-lock-order-for-stock-orders-and-shelves)                     | Built; not on the preview yet            |
+| 47  | [Counting a product a location does not list is its own function](#47-counting-a-product-a-location-does-not-list-is-its-own-function)                                                                                     |
+| 48  | [Refunds booked together are announced once; "refund arrived" waits for the last](#48-refunds-booked-together-are-announced-once-refund-arrived-waits-for-the-last)                                                        |
+| 49  | [The cart's date for another shop's offer comes from the product page's function](#49-the-carts-date-for-another-shops-offer-comes-from-the-product-pages-function)                                                        |
+| 50  | [The shopper app keeps what it shows and gives up on a read after 15 s; the other apps do not yet](#50-the-shopper-app-keeps-what-it-shows-and-gives-up-on-a-read-after-15-s-the-other-apps-do-not-yet)                    |
+| 51  | [The unpaid-order sweep cancels at most 200 orders a run](#51-the-unpaid-order-sweep-cancels-at-most-200-orders-a-run)                                                                                                     |
+| 52  | [Shelf rows left at 0 units stay](#52-shelf-rows-left-at-0-units-stay)                                                                                                                                                     |
+| 53  | [A cancelled order says why from the reasons the database writes; staff's note stays internal](#53-a-cancelled-order-says-why-from-the-reasons-the-database-writes-staffs-note-stays-internal)                             |
+| 54  | [Back links and short links are 44 px tall without moving the layout](#54-back-links-and-short-links-are-44-px-tall-without-moving-the-layout)                                                                             |
 
 ---
 
@@ -1606,8 +1614,8 @@ had no screen and few checks.
 stock row (`private.cancel_order_internal`, whose only change here is the order it sorts by), so a
 cancellation racing a count of the same product on the same shelf can end
 with a deadlock for one of the two; the loser is told nothing was saved and
-to try again. A count cannot add a product that has no record on that
-location yet.
+to try again (fixed by decision 46). A product the location does not list is
+counted onto it with its own function (decision 47).
 
 ## 45. Android builds of the shopper app go to the internal testers without a click
 
@@ -1663,7 +1671,13 @@ order, so a cancellation at that moment deadlocked with it.
   its parcels' orders first; a shop packing a parcel it ships itself
   (`seller_mark_packed`) takes the order first, as warehouse packing does; a
   shop's products are refreshed in id order (a convention: no measured race
-  depends on it).
+  depends on it). A count into a location (decision 47) takes the
+  warehouse, the location, the stock row and the shelf, as a correction
+  does. A seller switching a variant off takes it FOR NO KEY UPDATE, not FOR
+  UPDATE: it changes no key column, and the stronger lock blocked the
+  key-share lock packing's ledger row takes on the variant while packing held
+  the offer the seller pauses (race E10: 14 in 100 natural rounds and every
+  forced round before, 0 after).
   Written down in `docs/04-algorithms/sourcing-and-inventory.md`, with every
   statement that writes or locks a product row.
 - **The sweep cancels at most 200 orders a run, the oldest first**, so a run
@@ -1680,7 +1694,147 @@ forced rounds and documented: two writers that each take offers of two
 shared products across zero in opposite order; a cancellation or the sweep
 crossing zero on one offer of a product while the seller changes another
 offer of it; a shop suspended against such a writer; staff merging two
-brands against a checkout crossing zero on two of their products; and, outside
-product rows, packing against a seller switching off a variant two shops
-sell. Each loser rolls back whole and reads "nothing was saved, try again".
+brands against a checkout crossing zero on two of their products; and a
+checkout of a variant two shops sell against the shop that listed it
+switching it off (E10b: the seller's listing functions take the product row
+FOR UPDATE, which blocks the key-share lock of the checkout's order line).
+Each loser rolls back whole and reads "nothing was saved, try again".
 A backlog of more than 200 expired orders takes more than one run to clear.
+
+## 47. Counting a product a location does not list is its own function
+
+**Context.** A worker who found units of a product on a shelf the system does
+not list there had no way to say so. `wms_adjust_stock` with the screen's 0
+looked like it, but it creates a shop's first units of a product in a
+warehouse out of a count, two such saves at the same moment add up (no row to
+wait on), and a location that lists a product only through an open pick
+passes as empty.
+
+**Decision.** (migration 084500) `wms_count_into_location` counts 1 to 10 000
+units of one shop's variant onto a switched-on shelf, pick, returns or
+receiving location that lists nothing of it, only for a shop that already has
+a stock record in that warehouse (`count_no_stock_record` otherwise: the
+first units come in with a receipt), and leaves exactly what an upward
+correction leaves. `wms_count_candidates` finds the product by code, barcode
+or name for the screen. `wms_adjust_stock` is unchanged.
+
+**Consequences.** A count never creates a shop's first units in a warehouse.
+A location that lists the product when the save arrives refuses it
+(`count_already_listed`): two saves at once end with one count, never the
+sum. Short pick tasks are left as an upward correction leaves them.
+
+## 48. Refunds booked together are announced once; "refund arrived" waits for the last
+
+**Context.** An order cancelled because its parcels came back with nobody at
+the door refunds the goods and the delivery fee as two refunds, and the
+shopper got two "refund started" and two "refund arrived" messages, each
+with part of the amount.
+
+**Decision.** (migration 084600) Refunds of one order booked by one
+transaction together with a delivery-fee refund are one group
+(`private.refunds.booked_xact`). "Refund started" goes out once, on the fee's
+event; "refund arrived" once, on the confirmation with the highest sequence
+number (`private.refund_confirmations.seq`), when every refund of the group
+is confirmed. Both name the total, the fee included. Refunds of different
+orders are never grouped, also when one transaction books them (proved in
+`175_refunds_across_streams`). Every other refund is announced alone.
+
+**Consequences.** "Refund arrived" waits for the last refund of the group,
+without a time limit: while the fee's refund is open (the gateway has not
+confirmed, or it failed and finance has not recorded a transfer) nothing is
+said about the goods either.
+
+## 49. The cart's date for another shop's offer comes from the product page's function
+
+**Context.** For a cart line that can no longer be bought the cart offers
+another shop's offer of the same variant, without a date; the shopper app
+asked for each product page to show one.
+
+**Decision.** (migration 084600) `cart_alternatives` takes an optional
+district and returns `promise`, computed by the same `delivery_estimate` call
+with the offer's handling days that the product page uses. The function is
+dropped and created again (arguments and columns change); a call with only
+the offer ids answers as before plus a null `promise`. The web product page's
+cache is keyed by the Costa Rica date and hour, so its date changes at
+cutoffs and midnight together with the cart's.
+
+**Consequences.** The cart and the product page give the same date at the same
+moment. The apps of `717048f` keep working: they send only the offer ids.
+
+## 50. The shopper app keeps what it shows and gives up on a read after 15 s; the other apps do not yet
+
+**Context.** A refresh that failed replaced what the shopper app showed with
+an error, and a read that never answered left a screen loading for ever.
+
+**Decision.** In the shopper app a failed refresh keeps what is on screen
+with a notice and «Intentar de nuevo»; a first read that fails still shows
+the error. A read that has not answered in 15 s counts as failed and is not
+retried by itself (`readTimeoutMs`, opt-in in `packages/expo-kit`, set only by
+the shopper app).
+
+**Consequences.** The seller, driver and warehouse apps still replace data
+with an error and wait without limit. The limit must not be switched on there
+before those apps keep their data: a refresh that gives up would then wipe
+the screen.
+
+## 51. The unpaid-order sweep cancels at most 200 orders a run
+
+**Context.** The sweep held the stock rows of every expired order for its
+whole run (about 2 ms an order); a checkout of one of those products waited
+the whole run.
+
+**Decision.** (migration 084400) At most 200 a run, the oldest first; the
+five-minute schedule takes the rest.
+
+**Consequences.** A checkout during a 1000-order backlog waited 1666 ms before
+and about 230 ms after (local machine). A larger backlog clears over several
+runs, five minutes apart.
+
+## 52. Shelf rows left at 0 units stay
+
+**Context.** A move, a pick or a correction that empties a shelf leaves its
+`bin_stock` row at 0 units; nothing deletes such rows, and the hosted check
+of wave 7 found two.
+
+**Decision.** They stay. `174_zero_unit_shelf_rows` compares a location with a
+0-unit row against one with no row through every reader and writer of
+`bin_stock` (the location page and list, the console list, the product
+lookup, the count and its lookup, corrections, moves, the shelf ranking of
+picks, renaming, switching off and on, the conservation check) and finds
+them the same. Removing them would need redefinitions of the move, the pick
+and the correction and a clean-up statement, for a row that changes no
+answer: the smaller safe change is none.
+
+**Consequences.** Rows at 0 accumulate slowly (one per product and shelf ever
+emptied). A reader added later must keep filtering on units above zero; the
+suite fails if one of today's readers stops doing so.
+
+## 53. A cancelled order says why from the reasons the database writes; staff's note stays internal
+
+**Context.** An order the sweep cancelled read only "Cancelado"; the reason
+was stored on the order but shown nowhere to the shopper.
+
+**Decision.** The shop and the shopper app turn the reasons the database
+writes itself (no payment in time, parcels came back, cancelled by the
+shopper) into a notice on the order page and a line of its history, with
+what the money does and what to do next (`packages/core` `cancellation.ts`;
+a test keeps the sentences equal to the SQL). A reason staff typed is an
+internal note: the shopper reads "Cancelamos este pedido" and is pointed to
+Ayuda. No database answer changed.
+
+**Consequences.** A new kind of cancellation the database writes needs its
+words added there, or it reads as the generic one.
+
+## 54. Back links and short links are 44 px tall without moving the layout
+
+**Context.** The back links at the top of pages and "Presente un reclamo"
+were 17 px tall on a phone, under the 44 px rule.
+
+**Decision.** One `BackLink` in `packages/next-kit` and `touchLinkClass` in
+`packages/ui`: the link is 44 px tall and a negative margin keeps its line,
+so nothing on the page moves. `tools/e2e/touch-targets.cjs` lists every other
+control under 44 px outside running text on the main pages of the four web
+apps.
+
+**Consequences.** A link inside a sentence is still as tall as its line, as
+the accessibility rules allow.
