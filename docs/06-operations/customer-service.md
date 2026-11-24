@@ -52,7 +52,7 @@ shopper to contact the seller: Yuntera does that.
 
 | When                        | What the shopper can do                                                                                                                                                                                                                                                                                    |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Before payment is confirmed | Cancel from the order page; nothing is charged                                                                                                                                                                                                                                                             |
+| Before payment is confirmed | Cancel from the order page; nothing is charged. If the payment does not arrive in time, the order is cancelled by itself and its page says "Cancelamos su pedido porque no recibimos el pago a tiempo", that nothing was charged and to order again; a transfer that arrived late is refunded              |
 | Paid, not yet dispatched    | Cancel from the order page; full refund including shipping                                                                                                                                                                                                                                                 |
 | Paid, already packed        | The shopper cannot cancel any more; support asks operations to stop the parcel (staff order page, "Detener el paquete"). The order reads "Se está cancelando"; once the warehouse checks the parcel in, the order is cancelled and everything paid comes back, shipping included (nobody went to the door) |
 | Out for delivery            | Refuse at the door or contact support; full refund of the items; treated as a withdrawal                                                                                                                                                                                                                   |
@@ -140,7 +140,17 @@ Rules:
   credit note for the original invoice
   ([compliance](../05-security-compliance/compliance-costa-rica.md)).
 - The shopper receives a written confirmation with the amount, method and
-  date.
+  date. When an order is cancelled because its parcels came back with nobody
+  at the door, the goods and the delivery fee are two refunds but one
+  message: one "refund started" and one "refund arrived", each with the
+  total, "el envío incluido". "Refund arrived" waits for the last of them: if
+  the fee's refund is stuck (the gateway has not confirmed, or finance has
+  not recorded the transfer), the shopper hears nothing about the goods
+  either until it is done.
+- A cancelled order says why on its page when the system cancelled it (no
+  payment in time, parcels came back) or the shopper did. When staff cancel,
+  the reason staff type is never shown to the shopper: the page says "Cancelamos
+  este pedido" and points to Ayuda, so be ready to explain.
 - Open refunds are reviewed daily; none may reach day 8.
 
 ## Disputes with sellers

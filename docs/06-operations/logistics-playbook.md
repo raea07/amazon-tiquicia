@@ -115,6 +115,21 @@ saved at once). Open a location by scanning or typing its code.
   would, tell operations, who resolve the order first. Units can be counted
   in only on storage, picking, returns and receiving locations. The shop sees
   each correction and its reason in its stock history.
+- **Count a product the location does not list** ("Contar un producto que
+  no está en la lista", under the location's products): find it by its code,
+  barcode or at least 2 letters of its name, choose the shop if several keep
+  it in this warehouse, type the units you found (1 to 10 000) and a reason.
+  It is saved as a count correction: the shop sees it with the reason. A
+  shop that has never had that product in this warehouse cannot get units
+  from a count: its first units come in with a receipt («Mercadería por
+  recibir»). If the location already lists the product when you save
+  (someone counted or moved it there meanwhile, or an order waits for it
+  there), nothing changes: correct it on the product's own line instead.
+- **"Nothing was saved, try again"**: when two people change the same stock
+  at the same moment, the database may stop one of them to keep the numbers
+  right. Nothing of that action was saved. Look at the screen again (it may
+  have changed) and do it once more; if it happens again for the same
+  product, tell operations.
 - **Returned units** land on the returns location (DEV-01 in SJO1) when a
   parcel is checked in; put them on a shelf with "Mover" when convenient. A
   parcel staff stopped before it left reads "recíbalo y guarde las unidades

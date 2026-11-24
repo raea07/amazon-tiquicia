@@ -313,6 +313,7 @@ repository.
    One project talks to one ONVO environment at a time: `PAYMENTS_ENV` and the
    key's prefix must agree, or the worker reports itself not ready and the
    mode cannot be switched.
+
 5. Non-secret settings, set by `supabase/scripts/deploy-payments.sh config`:
    `PAYMENTS_ENV` (`test` or `live`), `PAYMENTS_API_URL`
    (`https://<PROJECT_REF>.supabase.co`), `PAYMENTS_SHOP_URL`,
@@ -330,6 +331,7 @@ repository.
 
    The script uses the Management API, like `deploy-notifications.sh`. It has
    **not** been run.
+
 7. In the console, as an administrator: **Cobros → Modo y comisiones**, switch
    to **Pruebas del procesador** with a reason.
 

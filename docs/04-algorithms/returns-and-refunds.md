@@ -286,8 +286,16 @@ payout is refused when refunds since it was scheduled leave less than it.
   (and the delivery fee, by the rule above) and cancels the order. A
   seller's own packed parcel cannot be stopped this way, nor one on a route
   that has started.
-- When the delivery fee comes back, the shopper gets two refund messages of
-  each kind (goods, then fee), each with its own amount.
+- When the delivery fee comes back with the goods (booked by one
+  transaction, 084600), the shopper gets one "refund started", on the fee's
+  `refund.requested`, and one "refund arrived", on the last of the two
+  confirmations, each with the total, "el envío incluido"
+  (`private.refund_announcement`, decision 48). Refunds of different orders
+  are never grouped, also when one transaction books them
+  (`175_refunds_across_streams`). "Refund arrived" waits for the last refund
+  of the group without a time limit: a failed gateway refund emits no event,
+  so it comes when finance records the transfer. Rows booked before 084600
+  are announced alone, as before.
 - A cash order whose first delivered parcel collects the whole amount, and
   whose other parcel then comes back, owes the shopper a refund by transfer
   for that parcel (the customer-service guide says how a cash refund is paid).

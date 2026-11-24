@@ -94,8 +94,7 @@ When each event happens:
   reference. Marking a payment refunded no longer announces anything.
 - Refunds of one order booked by one transaction together with a delivery-fee
   refund (the goods of the last parcel and the fee, when an order whose
-  parcels came back without anyone going to the door is cancelled; migration
-  084600) are announced as one: `refund_initiated` once, on the fee's
+  parcels came back without anyone going to the door is cancelled; migration 084600) are announced as one: `refund_initiated` once, on the fee's
   `refund.requested`, and `refund_completed` once, on the event of the last of
   them to be confirmed, both with the total (`amount_minor`) and the fee's
   part (`delivery_fee_minor`; the text says "el envío incluido"). The other
@@ -106,7 +105,9 @@ When each event happens:
   transfer), the shopper is told nothing about the goods until the fee is
   confirmed too, and then once, with the total. A gateway refund that fails
   sends no event, so finance's transfer is what releases the message. A refund
-  settled at the door is never part of a group. Every
+  settled at the door is never part of a group, and refunds of different
+  orders never are, also when one transaction books them (the unpaid-order
+  sweep books none: it cancels only unpaid orders; `175_refunds_across_streams`). Every
   other refund, a fee or goods refunded alone, a later separate refund, is
   announced on its own as before. Planning such an event again plans nothing
   new.

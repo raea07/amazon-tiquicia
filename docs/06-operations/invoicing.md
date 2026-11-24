@@ -163,6 +163,7 @@ In this order. Every step is for the owner; none has been done.
 
    (`-legacy` is for keys from before July 2026; newer keys may open without
    it.) Delete the plain intermediate output; never commit any of these files.
+
 5. **Secrets** (Supabase dashboard → Edge Functions → Secrets, never the
    repository): `INVOICE_SECRET_KEY` (a secret key used by this worker alone),
    `INVOICE_WORKER_TOKEN` and `HACIENDA_CALLBACK_TOKEN` (long random strings),
