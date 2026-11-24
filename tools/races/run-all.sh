@@ -15,7 +15,8 @@ mkdir -p "$OUT"
 # The database guard first: it must refuse every URL that is not a lane's own.
 node guard-check.cjs
 for f in race-a-known-deadlocks race-b-sweep race-c-sort-keys race-d-confirm-table \
-  race-e-product-rows race-f-stale-summary race-g-recall-route race-h-seller-pack; do
+  race-e-product-rows race-f-stale-summary race-g-recall-route race-h-seller-pack \
+  race-i-count-into-location; do
   letter="${f#race-}"
   letter="${letter:0:1}"
   letter="${letter^^}"

@@ -58,17 +58,22 @@
 --     packages/db/src/contract.count-into-location.test.ts, and by review
 --     over 200 rounds each of two workers and of a double tap: one count
 --     every time, no deadlock.
---   * LOCK ORDER. The order of a correction in 084300: the warehouse row FOR
---     NO KEY UPDATE, the location FOR SHARE, the shop's stock row FOR UPDATE,
---     then the shelf's row. A cancellation that returns picked units to the
---     same shelf at the same moment as this count of the same product can
---     still deadlock, as it can with a correction (STATUS.md, decision 44):
---     measured by review over 100 exact collisions, 52 ended in a deadlock
---     (49 lost by the count, 3 by the cancellation), against 57 of 100 for
---     wms_adjust_stock in the same race. The loser rolls back whole (nothing
---     half-saved; on-hand stayed equal to the shelves plus the units in
---     picking in every round) and is told nothing was saved and to try
---     again. The fix is the cancellation's lock order, not this function.
+--   * LOCK ORDER. The order of a correction in 084300, which is the one order
+--     of 20261121084400 (decision 46): the warehouse row FOR NO KEY UPDATE,
+--     the location FOR SHARE, the shop's stock row FOR UPDATE, then the
+--     shelf's row. A cancellation that returns picked units to the same shelf
+--     takes the stock row before the shelf too (since 084400), so the two
+--     queue and never deadlock. Measured with tools/races, family I, on the
+--     merged database, 100 natural and 100 forced rounds each: 0 deadlocks
+--     and no unit lost or created against a staff cancellation putting picked
+--     units back on the shelf, a shopper's cancellation, wms_adjust_stock,
+--     wms_move_stock, wms_receive_returned_shipment, a pick and a second
+--     count (which ends as one count, never the sum). With the cancellation
+--     of 084300 put back, the same race deadlocked in 7 of 100 natural and
+--     100 of 100 forced rounds (an earlier review measured 52 of 100 exact
+--     collisions on a database without 084400).
+--     packages/db/src/contract.count-into-location-races.test.ts keeps a
+--     forced round of it in pnpm test.
 --   * THE LOOKUP (wms_count_candidates). The screen finds the product by its
 --     code, barcode or name, and for each match lists the shops that sell
 --     it, whether each has a stock record in THIS warehouse, and whether the
