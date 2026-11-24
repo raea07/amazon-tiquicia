@@ -30,7 +30,7 @@ Not written here; listed so nobody duplicates them. Sources: `packages/notificat
 | An invitation to buy (again)                              | Prior consent for that channel, recorded in the product. The commercial box covers e-mail only ("por correo"); a WhatsApp consent needs its own box and log first (G10) | Art. 44; `privacy.md`, "Comunicaciones comerciales"                           |
 | Marketing e-mail after a purchase                         | Allowed for **similar** products with a free opt-out, under art. 44's exception; the product's rule is stricter and requires the unticked box                           | Art. 44; `notifications.md`                                                   |
 
-Always: name the sender, give a way to stop, never ask for or write the delivery code, an address, a card number or an ID number (CLAUDE.md privacy rules; help page).
+Always: name the sender, give a way to stop, never ask for or write the delivery code, an address, a card number or an ID number (privacy rules in [privacy](../../docs/05-security-compliance/privacy.md); help page).
 
 ---
 
@@ -116,7 +116,7 @@ Any offer inside it follows art. 55 (dates, quantity, restrictions, former price
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | "¿Cómo nos conoció?" answers by channel        | Saturday spreadsheet                                                                                                                               |
 | Second orders within 60 days by pilot shoppers | By hand until the product has a report (go-to-market §6, number 6), counted by order-number pairs from the console, never by name, e-mail or phone |
-| Problems reported in the check-in              | Written as a case once the console's support desk exists (owner decision D1; being built); until then, the spreadsheet                             |
+| Problems reported in the check-in              | Written as a case once the console's support desk exists (owner decision D1; not built yet); until then, the spreadsheet                           |
 | Opt-outs                                       | Log; the product's suppression list once G10 is met                                                                                                |
 
 ## Decision for the owner

@@ -485,7 +485,7 @@ headline only).
 the card fixed fee, "₡180 ≈ US$0.35" at an assumed ₡515 per dollar. At ₡449,
 US$0.35 is about ₡157. The seller is charged about ₡23 more per card order
 than the gateway's list price. The schedule calls the payment fee a
-pass-through, so this needs a decision (see §9, question 4).
+pass-through, so this needs a decision (owner decision D38).
 
 ### 6.5 Payment processing
 
@@ -633,7 +633,7 @@ These are facts to carry into the plan. Nothing in the repository was changed.
 The five questions this research raised are asked once, with the strategy
 documents' questions, in the [owner decisions](../00-strategy/owner-decisions.md)
 list: the share of people who buy online (D30), the free-delivery threshold
-(D21), the courier for parcels outside the route (D35), the card fixed fee
+(D21), the courier for parcels outside the route (D51), the card fixed fee
 (D38) and draws (D41).
 
 ---

@@ -22,7 +22,7 @@
 
 ## What the picture shows
 
-The back room of a small shop: shelves with boxed goods, a hand putting a product into a labelled bin, or boxes being handed over a counter. No faces needed; no other brand's logo visible (originality rule, CLAUDE.md; brand book §14). Real photograph with permission, or a drawing.
+The back room of a small shop: shelves with boxed goods, a hand putting a product into a labelled bin, or boxes being handed over a counter. No faces needed; no other brand's logo visible (originality rule of the project; brand book §14). Real photograph with permission, or a drawing.
 
 ## Copy
 

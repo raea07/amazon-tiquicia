@@ -157,7 +157,7 @@ The 164 Spanish sentences fall into 4 kinds.
 | Kind                                     | Examples (file:line)                                                                                                                                                                                                          | Who reads it                                                             | Recommendation                                                                                                                                                                    |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Order history notes                      | `'Pedido recibido'` (`081000_checkout.sql:429`), `'Pago recibido'` (`:79`), `'Cancelado por el cliente'` (`:510`), `'Reembolso completado'` (`083400_payments.sql:522`), `'Devolución recibida'` (`082900_integrity.sql:662`) | **Shopper** (`apps/web/src/app/pedidos/[numero]/page.tsx:589`) and staff | Add a `note_code` and `note_params` beside `note` in a new migration. The apps render the code in the reader's language. Keep the Spanish `note` for old rows and old app builds. |
-| Ledger and payment-matching descriptions | `'Pago del pedido ' \|\| number` (`080800_finance.sql:275`), `'El monto no es el del pedido.'` (`083400_payments.sql:1487`)                                                                                                   | Finance staff                                                            | Keep in Spanish. They are accounting records. Translate them only if staff tools get English (decision 1).                                                                        |
+| Ledger and payment-matching descriptions | `'Pago del pedido ' \|\| number` (`080800_finance.sql:275`), `'El monto no es el del pedido.'` (`083400_payments.sql:1487`)                                                                                                   | Finance staff                                                            | Keep in Spanish. They are accounting records. Translate them only if staff tools get English (owner decision D6).                                                                 |
 | Account names of the chart of accounts   | `'Ingresos por envío'` (`080800_finance.sql:176`)                                                                                                                                                                             | Finance staff, accountant                                                | Keep in Spanish (accounting records).                                                                                                                                             |
 | Reference data                           | Category names (both languages exist); zone names such as `'Resto del país'` (`080300_geography_data.sql:22`); provinces, cantons and districts                                                                               | Shopper                                                                  | Place names are proper nouns and stay as they are. Zone names a shopper sees need an English column or a code (one migration).                                                    |
 
@@ -195,7 +195,7 @@ recreate the function in the same migration.
 - **Money.** `packages/core/src/money.ts`, line 153 builds `₡12 500` by hand,
   with a space between thousands and a comma before céntimos. It ignores the
   locale, so it is identical in both languages unless you choose otherwise
-  (decision 6).
+  (owner decision D9).
 - **Numbers.** Ratings use `toLocaleString("es-CR")`
   (`packages/ui/src/commerce.tsx`, line 73;
   `packages/next-kit/src/listing-changes.tsx`, line 23). In English they would
@@ -264,7 +264,7 @@ advice.
 
 - **Sellers' own words.** Product titles, descriptions, shop names, shop
   descriptions and reviews are content, not interface. They stay as written
-  (decision 5).
+  (owner decision D46).
 - **Brand and proper nouns.** These stay as they are: Yuntera, SINPE Móvil,
   ONVO, Hacienda, place names, señas.
 - **The delivery code.** It is a code, not words, so nothing changes. It is
@@ -299,7 +299,7 @@ The repository uses `next@16.4.6` (`apps/web/package.json`, line 22) with
   Handlers [S3]. That source is a library blog, not framework documentation.
 - **A cookie instead of the address is the wrong fit here.** Reading
   `cookies()` makes a page dynamic. The repository's rule is that anything
-  reading cookies sits inside `<Suspense>` (CLAUDE.md, "Web apps"). The root
+  reading cookies sits inside `<Suspense>` (project rules, "Web apps"). The root
   layout's `<html lang>` and the shared header are in every page's prepared
   shell (`apps/web/src/app/layout.tsx`; `CATEGORY_MENU_TAG` in
   `packages/next-kit/src/cache-tags.ts`). A cookie-chosen language would
@@ -387,7 +387,7 @@ packages/i18n/src/
 
 1. **Addresses.** Spanish stays where it is (`/pedidos/YT-123`). English adds
    `/en` in front (`/en/pedidos/YT-123`). The path segments stay Spanish in
-   both languages (decision 4).
+   both languages (owner decision D8).
 2. **Routes.** Every app moves `src/app/*` under `src/app/[lang]/`. The root
    layout reads `lang` through `next/root-params`, sets
    `<html lang="es-CR" | "en">`, and lists
@@ -437,7 +437,7 @@ packages/i18n/src/
 
 1. **First start.** The app reads the phone's language with `expo-localization`.
    If the phone is set to English, the app starts in English. Otherwise it
-   starts in Spanish (decision 3).
+   starts in Spanish (owner decision D7).
 2. **A switch in the account screen** ("Idioma / Language"). The choice is
    stored in `AsyncStorage`, which the apps already use for the cart, because
    it is not sensitive. For a signed-in person it is also stored with
@@ -482,10 +482,10 @@ These are verified in the code, not on a phone.
 | Order events: add `note_code`, `note_params` (jsonb); fill them in every function that writes a note               | The shopper sees these lines in their language    | Ignores the new fields |
 | `category_name_en` beside `category_name` where only `name_es` is returned (`082400_fixes.sql`, lines 612 and 792) | Seller and staff screens                          | Ignores the new field  |
 | Shopper-visible zone names: an English column or a code                                                            | `'Resto del país'` and the other zone names       | Ignores it             |
-| Nothing for product titles, descriptions, shop names or reviews                                                    | Sellers' own words (decision 5)                   | —                      |
+| Nothing for product titles, descriptions, shop names or reviews                                                    | Sellers' own words (owner decision D46)           | —                      |
 | Nothing for place names, ledger texts or the tax document                                                          | Proper nouns, accounting records, Hacienda schema | —                      |
 
-Each function change follows CLAUDE.md: a new migration, `security definer`,
+Each function change follows the project rules: a new migration, `security definer`,
 `set search_path = ''`, caller checked, `private.fail` codes with Spanish and
 English messages, a database test and a contract test.
 
@@ -502,7 +502,7 @@ Each builder works in its own lane of `tools/dev/stack.sh` (lanes 1–12).
 | **W-DB** | Database                        | New migration(s): `update_profile` fix, `set_locale`, order-event codes, English category and zone names; tests; `packages/db/src/areas/locale.ts`                                                                                                                   | — (parallel with W0) |                                2–3 |
 | W1       | Shop website                    | `apps/web`, `messages/shop.ts` (web keys); help page in English beside the Spanish legal text                                                                                                                                                                        | W0, W-DB             |                                5–7 |
 | W2       | Seller centre                   | `apps/seller`, `messages/seller.ts`                                                                                                                                                                                                                                  | W0                   |                                4–6 |
-| W3       | Staff console (if decision 1A)  | `apps/ops`, `messages/staff.ts`                                                                                                                                                                                                                                      | W0                   |                                6–8 |
+| W3       | Staff console (if D6 option A)  | `apps/ops`, `messages/staff.ts`                                                                                                                                                                                                                                      | W0                   |                                6–8 |
 | W4       | Field web app                   | `apps/field`, `messages/field.ts` (web keys)                                                                                                                                                                                                                         | W0                   |                                2–3 |
 | W5       | Shopper phone app               | `apps/shop-native`, its `locales/*.json`, version 0.2.0                                                                                                                                                                                                              | W0, W1 keys          |                                4–5 |
 | W6       | Seller phone app                | `apps/seller-native`                                                                                                                                                                                                                                                 | W0, W2 keys          |                                4–5 |
@@ -556,7 +556,7 @@ Rules that prevent collisions:
 - **Messages (W8).** Each template renders in both languages. The existing
   message rules still pass: no delivery code, no address and the sender named.
 - **Formats.** In English, dates read as English dates, ratings use a decimal
-  point, and money follows decision 6.
+  point, and money follows owner decision D9.
 
 ### 5.2 Order of release
 
@@ -585,7 +585,7 @@ Rules that prevent collisions:
 - **Accountant.** The accountant confirms that the printed tax document stays
   Spanish only.
 - **Code review.** Each workstream's code is reviewed against the rules in
-  `CLAUDE.md` before it is merged.
+  the project rules before it is merged.
 
 Machine-translated drafts are acceptable as a starting point for the editor.
 They are never shipped without the editor's review.
@@ -633,7 +633,7 @@ starts. Labels marked "(?)" are not verified.
 ## 8. Risks
 
 - **Size.** Staff tools are 26% of all words (11,729 of 45,167). Skipping them
-  for now (decision 1B) saves the largest block.
+  for now (D6 option B) saves the largest block.
 - **The prepared pages double.** Each public page is prepared once per
   language, so the build time and the number of prepared pages grow. This was
   not measured.

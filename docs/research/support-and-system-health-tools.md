@@ -264,17 +264,18 @@ lawyer to confirm against `docs/05-security-compliance/privacy.md`.
 ### 3.3 Decisions for the owner
 
 These questions are asked once, in the [owner decisions](../00-strategy/owner-decisions.md)
-list. Two are already decided (24 November 2026): support and system-health
-tools live inside the staff console (D1), and error and outage alerts go
-through the owner's error-tracking account on its free plan, with personal
-data removed (D2). Still open: bug intake and releases (D5) and when a bought
-WhatsApp inbox comes in (D49).
+list. Questions 1 and 2 are decided (24 November 2026): support and
+system-health tools live inside the staff console (D1), and system health is
+watched by a console page plus a free error tracker and a free uptime monitor
+(D2). Still open: which error tracker (question 5, D50), bug intake and
+releases (question 3, D5, which the builders do unless the owner objects) and
+when a bought WhatsApp inbox comes in (question 4, D49).
 
 ---
 
 ## 4. Build specification for the recommended option
 
-Everything below follows `CLAUDE.md`: new migrations, `security definer`
+Everything below follows the project rules: new migrations, `security definer`
 functions with `set search_path = ''`, the caller checked first, errors as
 `private.fail('short_code')`, granted to `authenticated` only, a database test
 for the right caller, the wrong caller and what is left behind, Spanish and
@@ -372,7 +373,7 @@ return_id or report_id, channel, status, assignee, `due_at`,
 and reports get a case row by trigger, so the queues in `/atencion` keep
 working while `/casos` grows. `due_at` comes from the targets in
 `customer-service.md`, kept in one settings table; if those targets also live
-in TypeScript, add a parity test in `packages/core` as `CLAUDE.md` requires.
+in TypeScript, add a parity test in `packages/core` as the project rules require.
 
 New error codes need a Spanish and English message each, for example
 `case_not_found`, `case_closed`, `note_contains_code`, `reply_not_found`.
@@ -386,7 +387,7 @@ New error codes need a Spanish and English message each, for example
 - Every saved-answer change: `private.audit_log`.
 - Error tracker and server logs: no personal data. Scrub names, phones,
   e-mails, addresses and order contents before sending; never put them in a
-  URL (rule in `CLAUDE.md`).
+  URL (a project rule).
 
 ### 4.5 What must never be shown
 

@@ -4,7 +4,7 @@
 **Conclusion 1.** Start with 5 to 10 sellers the owner can visit in person, in 3 to 5 adjacent cantons of the GAM core, and with the shoppers those sellers already have.
 **Conclusion 2.** Most early channels cost the owner's time, not money; paid advertising waits until the pilot has delivered 100 orders to standard.
 **Conclusion 3.** The product cannot yet say which channel brought a shopper, nor the 60-day repeat rate; both must be counted by hand or built before money goes into ads.
-**Conclusion 4.** Cash out is ₡441,000–₡978,000 a month in the pilot and ₡2.89M–₡4.57M at launch, before founder pay. With the launch team on salary the month breaks even at about 22 to 23 orders a day (pricing strategy §3.3). From week 1 to 13 weeks after launch the business needs about ₡2.1M in the central case and up to about ₡11.6M in the worst case (§9, all estimates).
+**Conclusion 4.** Cash out is ₡441,000–₡978,000 a month in the pilot and ₡2.89M–₡4.57M at launch, before founder pay. With the launch team on salary the month breaks even at about 22 to 23 orders a day, the most one driver carries; above that a second driver is needed and break-even moves to about 32 a day, or 35 with a realistic mix of baskets (pricing strategy §3.3). From week 1 to 13 weeks after launch the business needs about ₡2.2M in the central case and up to about ₡11.6M in the worst case (§9, all estimates).
 **The owner must decide** six questions, asked once in the [owner decisions](owner-decisions.md) list: pilot cantons (D10), budget level (D17), the shopper offer (D25), market figures (D30), draws (D41) and the start of paid ads (D42).
 
 All amounts are colones. US dollars are converted at **₡450 per US$**, the bank
@@ -118,8 +118,8 @@ The product defines 16 core cantons with next-day delivery and a 14:00 cutoff
 
 **The pilot serves only 3 to 5 adjacent cantons**, not all 16. The reason is
 route density: a driver-day costs the same ₡45,000 at 8 stops as at 25
-([business model](business-model.md), "Break-even logic"). Below about 25
-stops an own driver costs more than Correos' volume tariff (§6). Below about
+([business model](business-model.md), "Break-even logic"). Below about 23
+to 26 stops an own driver costs more than Correos' volume tariff (§6). Below about
 11 stops each order loses money (₡45,000 ÷ (₡1,800 + ₡2,334) = 10.9, from the
 business model's ₡20,000 order). Scattered orders over 16 cantons cannot fill
 one route.
@@ -307,27 +307,35 @@ roadmap's proposals.
 Correos at ₡2,300 per parcel. That is Correos' self-service locker price.
 Correos' Pymexpress volume tariff is lower: ₡2,005.53 (5–24 parcels a
 month), ₡1,962.17 (25–200), ₡1,853.76 (201–450) and ₡1,756.19 (451 or more),
-for the first kilo inside the GAM, before 13% IVA. Every tier needs prior
-authorisation from Correos' Dirección de Pymes, and a home pickup costs
-₡1,500 (1–3 parcels) to ₡2,000 (11 or more) on top (correos.go.cr/tarifas,
-opened 24 November 2026).
+for the first kilo inside the GAM, before 13% IVA, for parcels the sender
+drops off. Every tier needs prior authorisation from Correos' Dirección de
+Pymes. If Correos collects instead, the client pays a collection fee of
+₡1,500 (1–3 parcels) to ₡2,000 (11 or more) plus a separate per-parcel rate
+for pickup clients: ₡1,890 small, ₡3,080 medium, ₡4,180 large, GAM to GAM,
+before IVA (correos.go.cr/tarifas, opened 24 November 2026; market research
+§3.4).
 
 One driver at 23–25 stops over 26 days is about 600–650 parcels a month,
-which is the 451-or-more tier. Against it, at the assumed ₡45,000 driver-day:
+which is the 451-or-more tier. Against it, at the assumed ₡45,000 driver-day,
+for small parcels:
 
-| Case                                                               | An own driver costs less than Correos above |
-| ------------------------------------------------------------------ | ------------------------------------------: |
-| With authorisation, 451+ tier, one ₡2,000 pickup a day, before IVA |        **24.5 stops** (₡43,000 ÷ ₡1,756.19) |
-| Same, without the pickup (parcels dropped off by Yuntera)          |                                  25.6 stops |
-| Same, if Yuntera cannot credit the IVA                             |                       about 21.5–22.7 stops |
-| Before authorisation, at the ₡2,300 locker price                   |    19.6 stops, plus the drive to a drop-off |
+| Case                                                                |                          An own driver costs less than Correos above |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------: |
+| Yuntera drops parcels off, 451+ tier, before IVA                    | **25.6 stops** (₡45,000 ÷ ₡1,756.19), plus the drive to the drop-off |
+| Correos collects daily (₡2,000 a day + ₡1,890 a parcel), before IVA |                         **22.8 stops** ((₡45,000 − ₡2,000) ÷ ₡1,890) |
+| Drop-off, if Yuntera cannot credit the IVA                          |                                     22.7 stops (₡45,000 ÷ ₡1,984.50) |
+| Daily collection, if Yuntera cannot credit the IVA                  |                                     20.0 stops (₡42,740 ÷ ₡2,135.70) |
+| Before authorisation, at the ₡2,300 locker price                    |                             19.6 stops, plus the drive to a drop-off |
 
-**About 25 stops** (24.5 at the 451-or-more tier with one ₡2,000 pickup a
-day, before IVA) is the one figure every strategy document, the marketing
-pieces and the [business model](business-model.md) use. It equals the
-business model's own assumed density, so at that density an own driver only
-breaks even with Correos. Whether IVA can be credited is _for the accountant
-to confirm_.
+**About 23 to 26 stops** (22.8 if Correos collects daily, 25.6 if Yuntera
+drops parcels off, before IVA; about 20 to 23 if the IVA cannot be credited)
+is the one figure every strategy document, the marketing pieces and the
+[business model](business-model.md) use. At the business model's own assumed
+density of 25 stops, an own driver costs less than Correos' collection
+service and about the same as dropping parcels off. Whether IVA can be
+credited is _for the accountant to confirm_. Which rate Correos applies to a
+451-or-more client who also uses collection is _to confirm with the Dirección
+de Pymes_ before any figure is printed.
 
 **Until the product counts them,** numbers 2, 3, 4, 6 and 10 go in one
 spreadsheet the owner fills every Saturday: orders, late, failed, stops per
@@ -469,8 +477,9 @@ of the level's costs:
 - **Base:** about 582 orders a month (**22 a day**, about all one driver can
   carry) at the low costs with one driver; about 912 (35 a day) at the high costs with two. The pricing
   proposal, with the same people and a 50 m² warehouse, finds 585 orders (22 to
-  23 a day) with ₡20,000 baskets and about 25 a day with mixed baskets
-  (pricing strategy §3.3).
+  23 a day) with ₡20,000 baskets, at the limit of one driver; with mixed
+  baskets one driver cannot break even, and two need about 912 orders, 35 a
+  day (pricing strategy §3.3).
 - **Bold:** about 1,430–1,560 orders a month (55–60 a day), near the top of
   its 50–65 range.
 
@@ -490,12 +499,15 @@ the pilot looks cheaper than it is.
 
 | Period                                                                      | Weeks (months) | Central case: low costs, ₡20,000 baskets         | Worst case: high costs, ₡8,000 baskets |
 | --------------------------------------------------------------------------- | -------------- | ------------------------------------------------ | -------------------------------------- |
-| Set-up: one-off and first-year costs, accountant, platform, 1 month of rent | 1–10 (2.3)     | ₡1,761,000 out                                   | ₡4,843,000 out                         |
+| Set-up: one-off and first-year costs, accountant, platform, 1 month of rent | 1–10 (2.3)     | ₡1,898,000 out                                   | ₡4,843,000 out                         |
 | Pilot at the lean level, 130 orders a month                                 | 10–22 (2.8)    | ₡207,000 a month in; ₡574,000 in over the period | ₡583,000 a month out; ₡1,615,000 out   |
 | Launch at the base level, 20 orders a day, 1 driver                         | 23–35 (3.0)    | ₡296,000 a month out; ₡888,000 out               | ₡1,713,000 a month out; ₡5,144,000 out |
-| **Total to week 35**                                                        |                | **about ₡2.1M**                                  | **about ₡11.6M**                       |
+| **Total to week 35**                                                        |                | **about ₡2.2M**                                  | **about ₡11.6M**                       |
 
-Every input is an estimate from the tables above. The pilot comes out near
+Both cases count the same lines: the one-off costs, the first year of the
+domain, the Apple membership and PRODHAB (if required), 2.3 months of the
+accountant and the platform, and one month of rent, at the low or the high
+end. Every input is an estimate from the tables above. The pilot comes out near
 zero in cash only because the founder drives, packs and answers for free and
 his vehicle costs only fuel. At 260 pilot orders or 40 launch orders a day
 the totals fall; with longer set-up lead times (up to week 16) they rise by
@@ -535,7 +547,7 @@ with numbers):
    **Stop** paid acquisition; find out why first.
 3. After 90 days of launch, fewer than 25% of first-time shoppers return
    within 60 days. **Stop** spending on shopper ads.
-4. After 90 days of launch, no canton fills one route a day (about 25 stops, §6).
+4. After 90 days of launch, no canton fills one route a day (about 25 stops, the model's density; team structure §5).
    **Change** to carrier delivery for everything outside the best canton.
 5. A refund misses the legal 8 days, or a complaint goes unanswered past
    5 working days. **Pause** marketing until the cause is fixed.
@@ -557,7 +569,7 @@ when paid advertising starts (D42).
 | Assumption                        | Range used                                                                          | How to verify                                                             |
 | --------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | Fully loaded driver-day           | ₡45,000                                                                             | Payroll quote from the accountant plus a vehicle and fuel log for 2 weeks |
-| Delivered stops per driver-day    | 25 (model); about 25 to beat Correos (§6)                                           | Pilot routes in **Despacho**                                              |
+| Delivered stops per driver-day    | 25 (model); about 23 to 26 to beat Correos (§6)                                     | Pilot routes in **Despacho**                                              |
 | Correos volume tariff available   | From authorisation; ₡2,300 locker price before                                      | Ask the Dirección de Pymes (§8)                                           |
 | Pilot order rate                  | 5–10 a day, 130–260 a month                                                         | Pilot actuals ([roll-out plan](rollout-plan.md))                          |
 | INS work-risk rate                | 1% reference inside the 26.83%                                                      | INS quote per driver and warehouse worker                                 |
@@ -576,7 +588,7 @@ when paid advertising starts (D42).
 Opened on 24 November 2026:
 
 - MTSS, Lista de salarios mínimos por ocupación 2026 (Decreto 45303-MTSS, in force 1 January 2026), copy of https://www.mtss.go.cr/temas-laborales/salarios/lista_salarios_minimos_2026.pdf — Agente de ventas ₡419,755.80; Oficinista, Telefonista, Bodeguero (encargado) ₡405,710.70; Bodeguero (peón), Mensajero ₡373,092.30; Conductor de vehículo liviano ₡13,523.69 a day.
-- Correos de Costa Rica, Tarifas, https://correos.go.cr/tarifas/ — Pymexpress volume tiers, before IVA, each needing prior authorisation from the Dirección de Pymes; pickup ₡1,500–₡2,000; locker price ₡2,300.
+- Correos de Costa Rica, Tarifas, https://correos.go.cr/tarifas/ — Pymexpress volume tiers, before IVA, each needing prior authorisation from the Dirección de Pymes; collection ₡1,500–₡2,000 plus ₡1,890 / ₡3,080 / ₡4,180 a parcel for collection clients; locker price ₡2,300.
 - UCR, "Un estudio desmonta mitos sobre el uso de las plataformas digitales en Costa Rica" (27 May 2026), https://www.ucr.ac.cr/noticias/2026/5/27/un-estudio-desmonta-mitos-sobre-el-uso-de-las-plataformas-digitales-en-costa-rica.html — WhatsApp 96%, Facebook 80%, YouTube 77%; 792 adults, August 2025.
 
 Read in the [market research](../research/market-and-costs-2026-11.md) (all read 24 November 2026):

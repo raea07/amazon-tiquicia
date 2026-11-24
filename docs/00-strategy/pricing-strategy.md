@@ -4,11 +4,11 @@
 
 **Conclusion 1.** Today's seller fees sit inside the published range for general goods: 8% to 15% commission. Keep them for the pilot. Do not claim Yuntera is cheaper than selling on Instagram. Sell time saved and new buyers. On a ₡20,000 home item kept in the warehouse and paid by SINPE Móvil, the seller receives ₡15,367.
 
-**Conclusion 2 (order break-even).** With a paid driver, an order stops losing money at about 20 delivered stops per driver-day, if the basket is ₡15,000 or more. At 10 stops, almost every order loses money, whatever the commission. This is not the Correos comparison: Correos costs less than an own driver below about 25 stops (24.5 at its 451-or-more volume tier with one ₡2,000 pickup a day, before IVA; [go-to-market](go-to-market.md) §6).
+**Conclusion 2 (order break-even).** With a paid driver, an order stops losing money at about 20 delivered stops per driver-day, if the basket is ₡15,000 or more. At 10 stops, almost every order loses money, whatever the commission. This is not the Correos comparison: Correos costs less than an own driver below about 23 to 26 stops (22.8 at its 451-or-more volume tier if Correos collects daily, 25.6 if Yuntera drops parcels off, before IVA; [go-to-market](go-to-market.md) §6).
 
 **Conclusion 3.** Keep the ₡25,000 free-delivery threshold. Use a dated free-delivery window at the public launch, not a lower threshold. Offer the first sellers a written price lock to a fixed date and free set-up help, not a fee cut.
 
-**The month.** With the launch team on salary (one driver, one warehouse associate, one sales agent; the founder on customer service) and a 50 m² warehouse, the month breaks even at about 585 orders, 22 to 23 a day, with a ₡20,000 basket, and about 25 a day with a realistic mix of baskets. A founder-run pilot at 10 orders a day roughly breaks even, with the founder unpaid (section 3.3).
+**The month.** With the launch team on salary (one driver, one warehouse associate, one sales agent; the founder on customer service) and a 50 m² warehouse, the month breaks even at about 585 orders, 22 to 23 a day, with a ₡20,000 basket. That is the most one driver carries (about 22 a day), so one driver reaches break-even and no more. Above it a second driver is needed, and break-even moves to about 830 orders, 32 a day; with a realistic mix of baskets, about 912 orders, 35 a day. A founder-run pilot at 10 orders a day roughly breaks even, with the founder unpaid (section 3.3).
 
 **What the owner must decide.** Seven questions, asked in the [owner decisions](owner-decisions.md) list: commission (D20), the free-delivery threshold (D21), the seller offer (D22), the storage fee (D23), the notice period (D24), the shopper offer (D25) and the card fee (D38).
 
@@ -329,7 +329,7 @@ Reading:
 |                 ₡20,000 |            ₡70 |   ₡1,570 |   ₡2,320 |
 | ₡35,000 (free delivery) |           ₡130 |   ₡1,630 |   ₡2,380 |
 
-**Own driver or Correos.** Replacing one driver at 22 to 25 stops means 570 to 650 parcels a month, which is Correos' "451 or more" tier (₡1,756.19 before IVA). With one ₡2,000 pickup a day, Correos then costs less than an own ₡45,000 driver-day below **about 25 stops (24.5)**, before IVA; the figure every strategy document uses ([go-to-market](go-to-market.md) §6). If Yuntera cannot credit Correos' 13% IVA, the figure falls to about 22 stops (21.5 to 22.7; **for the accountant to confirm**). The volume tariff needs Correos' prior authorisation; before it, the locker price of ₡2,300 gives 19.6 stops, plus the drive to the locker. The business model's "about 20 stops" used that locker price. Correos does not check the delivery code, and its cash collection is not confirmed. So Correos suits out-of-zone parcels, not the core promise.
+**Own driver or Correos.** Replacing one driver at 22 to 25 stops means 570 to 650 parcels a month, which is Correos' "451 or more" tier (₡1,756.19 before IVA). Correos then costs less than an own ₡45,000 driver-day below **about 23 to 26 stops**, before IVA: 25.6 if Yuntera drops parcels off (₡45,000 ÷ ₡1,756.19), 22.8 if Correos collects daily (₡2,000 a day plus its ₡1,890 collection-client rate per small parcel); the figure every strategy document uses ([go-to-market](go-to-market.md) §6). If Yuntera cannot credit Correos' 13% IVA, the figure falls to about 20 to 23 stops (20.0 with collection, 22.7 with drop-off; **for the accountant to confirm**). Which rate applies to a 451-or-more client who uses collection is to confirm with Correos' Dirección de Pymes. The volume tariff needs Correos' prior authorisation; before it, the locker price of ₡2,300 gives 19.6 stops, plus the drive to the locker. The business model's "about 20 stops" used that locker price. Correos does not check the delivery code, and its cash collection is not confirmed. So Correos suits out-of-zone parcels, not the core promise.
 
 ### 3.3 The month
 
@@ -337,36 +337,36 @@ Average order assumed ₡20,000, warehouse, SINPE Móvil, Hogar. The founder is 
 
 The founder-run pilot follows the staffing in the team-structure and go-to-market proposals: the founder drives, packs and answers customers, a backup person covers 8 days a month (₡150,600, team-structure §5), and the warehouse is 20 m². The launch team also follows team structure: one driver, one warehouse associate and one sales agent, with the founder on customer service, in a 50 m² warehouse (the go-to-market base level). A customer-service person joins at about 60 orders a day. Warehouse sizes are those of the go-to-market levels: 20 m² lean, 50 m² base, 100 m² bold.
 
-|                                               |                       Pilot, founder-run | Pilot, hired staff |     Early launch |    Full core zone |
-| --------------------------------------------- | ---------------------------------------: | -----------------: | ---------------: | ----------------: |
-| Orders a day (26 days)                        |                                       10 |                 10 |               25 |                60 |
-| Orders a month                                |                                      260 |                260 |              650 |             1,560 |
-| Stops per driver-day                          |                             10 (founder) |      10 (1 driver) |    25 (1 driver) |    30 (2 drivers) |
-| Revenue before IVA                            |                               ₡1,411,132 |         ₡1,411,132 |       ₡3,527,830 |        ₡8,466,791 |
-| Per-order costs (gateway, packaging, returns) |                                 ₡167,050 |           ₡167,050 |         ₡417,625 |        ₡1,002,300 |
-| Drivers                                       | Fuel ₡174,850; vehicle ₡312,000–₡520,000 |         ₡1,170,000 |       ₡1,170,000 |        ₡2,340,000 |
-| Warehouse workers                             |                          Backup ₡150,600 |       ₡519,195 (1) |     ₡519,195 (1) |    ₡1,038,390 (2) |
-| Sales agent                                   |                             ₡0 (founder) |       ₡0 (founder) |         ₡584,132 |          ₡584,132 |
-| Customer service                              |                             ₡0 (founder) |       ₡0 (founder) |     ₡0 (founder) |          ₡564,587 |
-| Rent                                          |                          ₡90,000 (20 m²) |    ₡90,000 (20 m²) | ₡225,000 (50 m²) | ₡450,000 (100 m²) |
-| Software, accounting, insurance               |                                 ₡300,000 |           ₡300,000 |         ₡300,000 |          ₡400,000 |
-| **Result for the month**                      |                   **₡8,600 to ₡216,600** |      **−₡835,113** |     **₡311,878** |    **₡2,087,382** |
-| **Per order**                                 |                          **₡33 to ₡833** |        **−₡3,212** |         **₡480** |        **₡1,338** |
+|                                               |                       Pilot, founder-run | Pilot, hired staff |                 Early launch |    Full core zone |
+| --------------------------------------------- | ---------------------------------------: | -----------------: | ---------------------------: | ----------------: |
+| Orders a day (26 days)                        |                                       10 |                 10 |                           22 |                60 |
+| Orders a month                                |                                      260 |                260 |                          572 |             1,560 |
+| Stops per driver-day                          |                             10 (founder) |      10 (1 driver) | about 24 attempts (1 driver) |    30 (2 drivers) |
+| Revenue before IVA                            |                               ₡1,411,132 |         ₡1,411,132 |                   ₡3,104,490 |        ₡8,466,791 |
+| Per-order costs (gateway, packaging, returns) |                                 ₡167,050 |           ₡167,050 |                     ₡367,510 |        ₡1,002,300 |
+| Drivers                                       | Fuel ₡174,850; vehicle ₡312,000–₡520,000 |         ₡1,170,000 |                   ₡1,170,000 |        ₡2,340,000 |
+| Warehouse workers                             |                          Backup ₡150,600 |       ₡519,195 (1) |                 ₡519,195 (1) |    ₡1,038,390 (2) |
+| Sales agent                                   |                             ₡0 (founder) |       ₡0 (founder) |                     ₡584,132 |          ₡584,132 |
+| Customer service                              |                             ₡0 (founder) |       ₡0 (founder) |                 ₡0 (founder) |          ₡564,587 |
+| Rent                                          |                          ₡90,000 (20 m²) |    ₡90,000 (20 m²) |             ₡225,000 (50 m²) | ₡450,000 (100 m²) |
+| Software, accounting, insurance               |                                 ₡300,000 |           ₡300,000 |                     ₡300,000 |          ₡400,000 |
+| **Result for the month**                      |                   **₡8,600 to ₡216,600** |      **−₡835,113** |                 **−₡61,347** |    **₡2,087,382** |
+| **Per order**                                 |                          **₡33 to ₡833** |        **−₡3,212** |                    **−₡107** |        **₡1,338** |
 
-Staff costs here replace the per-order pick, pack and support figures of section 3.2, so nothing is counted twice. The sales agent is Agente de ventas ₡419,755.80 × 1.3916 (MTSS 2026 list; team structure rounds it to ₡584,100). The founder-run vehicle line is the 3.1 assumption for vehicle, insurance and phone × 26 days. The go-to-market lean budget (₡440,900 to ₡978,400 a month, its §9) shows cash out without revenue; this table nets the revenue. The full core zone column runs 2 drivers at 30 stops; at the team structure's 25-stop ratio with 10% for failed attempts, 60 orders a day need 3 drivers (the go-to-market bold level), which costs ₡1,170,000 more and turns the month to about ₡917,000.
+Staff costs here replace the per-order pick, pack and support figures of section 3.2, so nothing is counted twice. The sales agent is Agente de ventas ₡419,755.80 × 1.3916 (MTSS 2026 list; team structure rounds it to ₡584,100). The founder-run vehicle line is the 3.1 assumption for vehicle, insurance and phone × 26 days. The go-to-market lean budget (₡440,900 to ₡978,400 a month, its §9) shows cash out without revenue; this table nets the revenue. The early-launch column stops at 22 orders a day because that is all one driver carries once 10% of attempts fail (team structure §5). At 25 a day the team ratio needs a second driver (₡1,170,000 more), and the month is −₡858,122; with two drivers it breaks even at about 830 orders, 32 a day. The full core zone column runs 2 drivers at 30 stops; at the team structure's 25-stop ratio with 10% for failed attempts, 60 orders a day need 3 drivers (the go-to-market bold level), which costs ₡1,170,000 more and turns the month to about ₡917,000.
 
-What moves the result at early launch (650 orders, 50 m²):
+What moves the result at early launch (572 orders, one driver, 50 m²). Where break-even is above 572 orders, one driver cannot reach it, and the last column also gives the break-even with two drivers:
 
-| Change                                                                                            | Result for the month | Break-even                          |
-| ------------------------------------------------------------------------------------------------- | -------------------: | ----------------------------------- |
-| As above, ₡20,000 basket                                                                          |             ₡311,878 | 585 orders, 22 to 23 a day          |
-| ₡15,000 basket                                                                                    |             −₡78,120 | 669 orders, 26 a day                |
-| ₡30,000 basket (delivery free)                                                                    |             ₡243,673 | 598 orders, 23 a day                |
-| Mixed baskets: 30% at ₡8,000, 40% at ₡20,000, 30% at ₡35,000 (70% under ₡25,000; average ₡20,900) |              ₡30,118 | 644 orders, 25 a day                |
-| Wages 20% above the minimum (driver labour, associate, sales agent)                               |             −₡21,705 | 655 orders, 25 a day                |
-| Each ₡500,000 a month of founder pay or marketing                                                 |            −₡188,122 | about 105 more orders, 4 more a day |
+| Change                                                                                            | Result for the month | Break-even                                                                                                           |
+| ------------------------------------------------------------------------------------------------- | -------------------: | -------------------------------------------------------------------------------------------------------------------- |
+| As above, ₡20,000 basket                                                                          |             −₡61,347 | 585 orders, 22 to 23 a day, at one driver's limit; two drivers: 830, 32 a day                                        |
+| ₡15,000 basket                                                                                    |            −₡404,545 | 669 orders, beyond one driver; two drivers: 949, 37 a day                                                            |
+| ₡30,000 basket (delivery free)                                                                    |            −₡121,367 | 598 orders, beyond one driver; two drivers: 848, 33 a day                                                            |
+| Mixed baskets: 30% at ₡8,000, 40% at ₡20,000, 30% at ₡35,000 (70% under ₡25,000; average ₡20,900) |            −₡309,295 | 644 orders, beyond one driver; two drivers: 912, 35 a day                                                            |
+| Wages 20% above the minimum (driver labour, associate, sales agent)                               |            −₡394,930 | 655 orders, beyond one driver; two drivers: 923, 36 a day                                                            |
+| Each ₡500,000 a month of founder pay or marketing                                                 |            −₡561,347 | about 105 more orders, 4 more a day; the first ₡500,000 takes it beyond one driver (690); two drivers: 934, 36 a day |
 
-- One driver carries about 22 orders a day once 10% of attempts fail (team structure §5), so the early-launch break-even of 22 to 23 a day is about all one driver can carry; the go-to-market base level budgets a second driver above that.
+- One driver carries about 22 orders a day once 10% of attempts fail (team structure §5: 22 ÷ 25 × 1.1 = 0.97). The break-even of 585 orders (22.5 a day) sits at that limit, so one driver at best breaks even. With a realistic mix of baskets, a ₡15,000 basket or wages 20% above the minimum, one driver cannot break even at all; two drivers need 35 to 37 orders a day. The go-to-market base level budgets the second driver.
 - A mix of baskets with a higher average earns less than one ₡20,000 basket. The ₡8,000 orders and the free-delivery orders both pull it down.
 - **Cash timing.** On SINPE Móvil, the gateway pays out the next working day and sellers are paid from 10 days after delivery (`STATUS.md`). So Yuntera holds sellers' money for about two weeks. That money is the sellers', not working capital; whether holding it needs SUGEF registration is **for the lawyer to confirm** (payments research, point c). The cash Yuntera needs is the sum of its monthly losses and one-off costs until the month breaks even. Card withholdings (section 1.6) add to it from the open launch.
 - Every figure rests on the assumptions in section 3.1. The pilot must replace them.
@@ -399,7 +399,7 @@ What moves the result at early launch (650 orders, 50 m²):
    - **What it excludes.** The lock text names the storage fee for slow stock (D23) as excluded, with 30 days' notice. Otherwise a storage fee at the launch would break the lock.
    - **For the lawyer to confirm:** the lock wording.
 2. **Free set-up help.** Staff photograph and list the seller's first 20 products. The seller brings the first stock to the warehouse; a driver pickup is not built. The cost is staff time; no code changes.
-3. **No fee cut.** A 4-point commission cut costs ₡800 an order on a ₡20,000 basket: ₡520,000 a month at early launch, which turns its ₡311,878 result negative. The engine has no per-seller rates, and a rebate by hand in the ledger is not allowed.
+3. **No fee cut.** A 4-point commission cut costs ₡800 an order on a ₡20,000 basket: ₡457,600 a month at early launch (572 orders), which deepens its −₡61,347 result to about −₡519,000. The engine has no per-seller rates, and a rebate by hand in the ledger is not allowed.
 
 **For shoppers (D25).** Recommended:
 
@@ -463,7 +463,7 @@ Words for customers (Spanish uses the product's money format):
 | Seller price lock         | Si se une antes del [fecha], sus tarifas no suben antes del [fecha fija]. Si bajan, usted paga la tarifa más baja. No incluye un cargo por almacenaje prolongado, que se anunciaría con 30 días de aviso. | If you join before [date], your fees do not rise before [fixed date]. If they fall, you pay the lower fee. This does not include a charge for long storage, which would be announced 30 days ahead. |
 | Fee change notice         | Sus tarifas cambian el [fecha]. Los pedidos pagados antes de esa fecha conservan las tarifas actuales. Un pedido contra entrega se cobra con la tarifa del día en que se entrega.                         | Your fees change on [date]. Orders paid before that date keep the current fees. A cash-on-delivery order is charged at the fee of the day it is delivered.                                          |
 
-The seller figure ₡15 367 is the pilot's typical sale (section 1.6): Hogar, tier pequeño, SINPE Móvil at 1.5%. It changes by category: a Moda seller receives less, an Electrónica seller more. `pricing-and-fees.md` says to quote sellers a range until a gateway is contracted; at a 2% SINPE Móvil rate, the same sale pays ₡15 254. So print "₡15 254 a ₡15 367" until the contract, or the single figure after it. If fees change, the line changes. The price-lock and launch-window wording are **for the lawyer to confirm**.
+The seller figure ₡15 367 is the pilot's typical sale (section 1.6): Hogar, tier pequeño, SINPE Móvil at 1.5%. It changes by category: a Moda seller receives less, an Electrónica seller more. `pricing-and-fees.md` says to quote sellers a range until a gateway is contracted; at Tilopay's SINPE Móvil price of 2% plus US$0.35 (₡157.50), the fees are ₡4,357.50 plus ₡566.48 IVA and the same sale pays ₡15 076 (tilopay.com/tarifas, read 24 November 2026). So print "₡15 076 a ₡15 367" until the contract, or the single figure after it. If fees change, the line changes. The price-lock and launch-window wording are **for the lawyer to confirm**.
 
 ---
 

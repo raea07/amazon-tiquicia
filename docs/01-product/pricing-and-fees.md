@@ -141,7 +141,8 @@ points keep it honest: Correos charges ₡2,300 before IVA for a small parcel
 within the GAM at its self-service locker
 ([fact sheet, section 7](../research/costa-rica-fact-sheet.md#7-last-mile-and-labour)),
 and its Pymexpress volume tariff, with prior authorisation, is ₡1,756.19 to
-₡2,005.53 before IVA by monthly volume plus ₡1,500 to ₡2,000 a pickup
+₡2,005.53 before IVA by monthly volume for parcels dropped off; if Correos
+collects, ₡1,500 to ₡2,000 a collection plus ₡1,890 a small parcel
 (correos.go.cr/tarifas, read 24 November 2026); Amazon Bazaar shipped free from
 ₡10,000 at its launch (El Financiero, 9 November 2025, read 24 November 2026;
 terms may have changed);

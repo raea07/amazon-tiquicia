@@ -190,8 +190,11 @@ Primary documents cited repeatedly:
   are the self-service locker prices. The Pymexpress volume tariff inside the
   GAM is lower, by monthly volume, for the first kilo before IVA: ₡2,005.53
   (5–24 parcels), ₡1,962.17 (25–200), ₡1,853.76 (201–450), ₡1,756.19 (451 or
-  more). Every tier needs prior authorisation from Correos' Dirección de Pymes,
-  and a home pickup costs ₡1,500 (1–3 parcels) to ₡2,000 (11 or more).
+  more), for parcels the sender drops off. Every tier needs prior authorisation
+  from Correos' Dirección de Pymes. If Correos collects, the client pays a
+  collection fee of ₡1,500 (1–3 parcels) to ₡2,000 (11 or more) plus a
+  per-parcel rate for collection clients: ₡1,890 small, ₡3,080 medium, ₡4,180
+  large inside the GAM, before IVA.
   (correos.go.cr/tarifas · high; [market research](market-and-costs-2026-11.md) §3.4)
 - Moovin (2–4 hour express, 24–48 hour routes, fulfilment), Boxful (aggregator
   launched Dec 2025, warehouse in Guachipelín) and Uber Direct operate locally;
