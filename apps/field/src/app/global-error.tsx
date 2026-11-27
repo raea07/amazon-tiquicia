@@ -1,5 +1,6 @@
 "use client";
 
+import { appThemeColor, light } from "@yuntera/brand";
 import { GlobalErrorDocument } from "@yuntera/next-kit/error-reports/pages";
 import "./globals.css";
 
@@ -15,6 +16,8 @@ export default function GlobalError({
     <GlobalErrorDocument
       error={error}
       retry={retry}
+      app="driver"
+      themeColor={light[appThemeColor.field]}
       advice="Si acaba de guardar un cambio, revise si quedó aplicado antes de repetirlo."
     />
   );

@@ -36,10 +36,19 @@ describe("the error pages", () => {
       digest: "1234",
     });
     const html = renderToStaticMarkup(
-      <GlobalErrorDocument error={error} retry={() => undefined} advice={ADVICE} />,
+      <GlobalErrorDocument
+        error={error}
+        retry={() => undefined}
+        advice={ADVICE}
+        app="ops"
+        themeColor="#0b5c66"
+      />,
     );
-    expect(html).toMatch(/^<html lang="es-CR" class="font-test">(<head><\/head>)?<body /);
+    expect(html).toMatch(/^<html lang="es-CR" class="font-test">(<head>.*<\/head>)?<body /);
     expect(html).toContain("Algo falló de nuestro lado");
+    // The frame's metadata does not apply: the page brings its theme colour and lockup.
+    expect(html).toContain('<meta name="theme-color" content="#0b5c66"/>');
+    expect(html).toContain("Yuntera");
     expect(html).not.toContain("insufficient_stock");
     expect(html).not.toContain("ana.prueba");
     expect(html).not.toContain("1234");

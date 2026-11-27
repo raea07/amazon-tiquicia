@@ -14,7 +14,8 @@
  * from the server again and renders it, so a passing failure (the database
  * briefly out of reach) is fixed by the button and not only by reloading.
  */
-import { Button, buttonClass, EmptyState } from "@yuntera/ui";
+import type { AppId } from "@yuntera/brand";
+import { Button, buttonClass, EmptyState, YunteraLogo } from "@yuntera/ui";
 import { type ReactNode, useEffect, useState } from "react";
 import { fontClassName } from "../fonts";
 import { reportError } from "./client";
@@ -22,21 +23,34 @@ import { reportError } from "./client";
 /**
  * The page `app/global-error.tsx` shows: it replaces the website's own frame,
  * so it brings the document, the fonts and, through the website's import of
- * its globals.css, the styles.
+ * its globals.css, the styles. The frame's metadata does not apply here, so
+ * it also brings the website's lockup and its theme colour.
  */
 export function GlobalErrorDocument({
   error,
   retry,
   advice,
+  app,
+  themeColor,
 }: {
   error: unknown;
   retry?: () => void;
   advice: ReactNode;
+  /** The website's lockup (packages/brand), as its frame draws it. */
+  app: AppId;
+  /** The website's theme colour (`light[appThemeColor.<app>]`), as its layout sets it. */
+  themeColor: string;
 }) {
   const told = useReportError(error);
   return (
     <html lang="es-CR" className={fontClassName}>
       <body className="flex min-h-dvh flex-col antialiased">
+        <meta name="theme-color" content={themeColor} />
+        <header className="border-b border-border bg-surface">
+          <div className="shell py-3">
+            <YunteraLogo app={app} size={26} />
+          </div>
+        </header>
         <main id="contenido" className="flex-1">
           <ErrorScreen advice={advice} onRetry={retry} told={told} />
         </main>
