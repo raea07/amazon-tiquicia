@@ -1004,6 +1004,10 @@ ones worth knowing about:
   ([decision 53](docs/02-architecture/decisions.md#53-a-cancelled-order-says-why-from-the-reasons-the-database-writes-staffs-note-stays-internal)).
   Back links and short links are 44 px tall
   ([decision 54](docs/02-architecture/decisions.md#54-back-links-and-short-links-are-44-px-tall-without-moving-the-layout)).
+- **A cart line names its product even when its offer is paused**, so the
+  shopper knows which line to remove; the shop, price and stock of that
+  offer stay hidden
+  ([decision 55](docs/02-architecture/decisions.md#55-a-cart-line-names-its-product-even-when-its-offer-is-paused)).
 
 ## Things to know before trusting the numbers
 
@@ -1586,6 +1590,10 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     real attempt at the door, the notice says only the products' money
     comes back and why the delivery fee stays, once (before, it also said
     "we return what you paid").
+  - A cart whose lines can no longer be bought: both carts show no total, no
+    date and no bottom notice, only what to do; each line names its product,
+    also when its offer was paused (before, a paused offer's line read
+    "Producto no disponible"; since `084600`, `177_cart_line_of_paused_offer`).
   - A stop staff removed shows, in both drivers' apps, no directions, call
     or WhatsApp to the customer, only what to do with the parcel.
   - The closure journey leaves its one-day closure visible under "Cierres

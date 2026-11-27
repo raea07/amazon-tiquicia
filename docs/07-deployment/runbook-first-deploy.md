@@ -2064,7 +2064,9 @@ definer`, search path and grants stay as they were (the file re-states
    `private.refund_announcement` is new: refunds booked together are
    announced once. `public.get_order` is redefined: the shopper gets
    `cancel_reason` only when it is one of the three reasons the database
-   writes, null otherwise (staff still read it).
+   writes, null otherwise (staff still read it). `public.cart_lines` is
+   redefined (same arguments and columns): a cart line whose offer was
+   paused still names its product when the product is public.
 
 **Why the web apps come after the migrations, and why that order is safe.**
 The preview's web apps run `717048f` until they are redeployed. Every
@@ -2078,9 +2080,10 @@ shows the reason, still get it); nothing else the old pages read
 changed (`packages/db/src/contract.frozen-callers.test.ts` and
 `contract.shopper-followups.test.ts` prove it on the merged database). The
 store build of the shopper app (`3f251c3`) keeps working too: of the 29
-functions it calls, four run changed code: `cancel_order`, `place_order` and
-`confirm_sandbox_payment` inside, and `get_order`, which `084600` redefines
-directly; all four still answer in that commit's schemas (same test file). For a few seconds while `084600` runs, a
+functions it calls, five run changed code: `cancel_order`, `place_order` and
+`confirm_sandbox_payment` inside, and `get_order` and `cart_lines`, which
+`084600` redefines directly; all five still answer in that commit's schemas
+(same test file). For a few seconds while `084600` runs, a
 cart that asks for alternatives may get "function not found" until the API
 reloads its schema cache. The `717048f` web cart does not catch that error:
 a cart holding a line that can no longer be bought shows the error page
@@ -2096,7 +2099,7 @@ Do this in order.
    products' summary columns (`offer_count`, `featured_offer_id`,
    `min_price_minor`, `in_stock`), the shelves with 0 units (two from the
    wave 7 check; they stay, decision 52), and the definitions and rights of
-   the eight functions 084400 redefines and of `get_order`.
+   the eight functions 084400 redefines and of `get_order` and `cart_lines`.
 2. **Read-only checks**:
 
    ```sql
@@ -2131,18 +2134,20 @@ Do this in order.
    ```
 
    And: the refund rows, confirmations and product summaries as in point 1;
-   the eight functions of 084400 with a new definition, the same owner,
+   the eight functions of 084400, and `get_order` and `cart_lines`, with a
+   new definition, the same owner,
    `security definer`, an empty search path and the same rights; the list of
    functions a visitor may call unchanged (`cart_alternatives` with its new
    arguments); the sweep's first run after the push succeeded.
 
-5. **Run the suites** with `remote-db.sh test`: all 39 files, among them the
+5. **Run the suites** with `remote-db.sh test`: all 40 files, among them the
    new `171_stock_lock_order.sql` (it places 250 unpaid orders inside its own
    rolled-back transaction), `172_count_into_location.sql`,
    `173_shopper_followups.sql` (it switches the trigger `refunds_immutable`
    off and on inside its transaction, which needs the table owner),
    `174_zero_unit_shelf_rows.sql`, `175_refunds_across_streams.sql` and
-   `176_cancel_reason_to_shopper.sql`; the
+   `176_cancel_reason_to_shopper.sql` and `177_cart_line_of_paused_offer.sql`
+   (it pauses one offer inside its own rolled-back transaction); the
    same two `skipped` rows as before and no other. Never run the race
    harness (`tools/races`) or the contract race tests against a hosted
    database.

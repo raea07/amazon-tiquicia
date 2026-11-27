@@ -1850,3 +1850,22 @@ shop's product cards) is measured as the card, which is its target.
 
 **Consequences.** A link inside a sentence is still as tall as its line, as
 the accessibility rules allow.
+
+## 55. A cart line names its product even when its offer is paused
+
+**Context.** `cart_lines` gave an offer the caller could no longer see
+(paused, or its shop not active) nothing but its id, so both carts showed
+"Producto no disponible" and a shopper with several lines could not tell
+which one to remove.
+
+**Decision.** Since 084600 the line carries its product's slug, title,
+variant and first photo whenever the caller may see that product (it is
+public, or the caller is staff or the product's own shop). The offer's own
+facts (shop, price, stock, how it is delivered) still come only from an
+offer the caller may see, and an offer of a product awaiting review still
+gives only its id. The columns are unchanged, so the store build `3f251c3`
+and the `717048f` web shop read the answer as before (suite 177 and
+`contract.frozen-callers`).
+
+**Consequences.** A shopper learns nothing new: the product page of a
+public product shows the same name and photo.
