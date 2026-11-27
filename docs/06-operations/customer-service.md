@@ -234,8 +234,9 @@ and says "A tiempo", "Vence pronto" or "Atrasado".
 1. Open the oldest case first. Use **Asignarme el caso** so colleagues know
    who has it.
 2. Write what you found in **Nota interna**. The customer never sees notes.
-   Never write the delivery code. The console refuses a note, an answer or a
-   contact summary that holds it, records the refusal on Auditoría, and after
+   Never write the delivery code. The console refuses a note, an answer, a
+   contact summary, or an answer or note written in Atención, that holds it,
+   saves nothing of that step, records the refusal on Auditoría, and after
    three refusals in an hour stops you writing for that hour. Four-digit
    numbers count too: after 20 in an hour, write without them or wait.
 3. Answer in **Respuesta al cliente**. Start from **Usar una respuesta

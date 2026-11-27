@@ -508,32 +508,52 @@ How the new parts work, in short:
 ## How it was checked
 
 **Wave 9, on a development machine on 27 November 2026**, after the four
-streams were merged and their cross-stream work done (lane 16 of
+streams were merged, their cross-stream work done and the five findings of
+an outside review of the merged whole fixed (lane 16 of
 `tools/dev/stack.sh`; lane 11 for the races), all run after the last change
 to code. Not run: anything on the hosted project, against real Sentry, on
 Vercel or on a phone.
 
+- **The outside review**: (1) Atención's complaint answer was a free test
+  for a customer's delivery code: a refusal there was rolled back with the
+  call, so it counted nowhere, and a text too long for the timeline failed
+  with a different error. Now Atención's four doors check their text last,
+  keep the refusal on Auditoría and count it, as Casos does (decision 59).
+  (2) A contact recorded while the customer deleted their account stayed
+  open with its summary for good; now it waits for the deletion and is
+  refused (race J7: 61 of 100 natural and 100 of 100 forced rounds wrong
+  before, 0 after). (3) The `error-reports` journey failed on React's
+  message for a server failure it caused on purpose; it now passes. (4)
+  Atención showed finance and catalogue staff complaints and returns, with
+  full names, that Casos refuses them; it now lists only what each role
+  opens in Casos, with first names. (5) The masking of a shopper's own code
+  missed slashes, underscores and wide gaps; it now catches them.
+
 - **Lint and types**: no lint errors (255 warnings and 440 notes, of kinds
   already there); no type errors in the 20 typecheck tasks.
-- **Unit tests**: 1559 pass in 15 packages; new: the answer times kept equal
+- **Unit tests**: 1559 pass in 15 packages (the scrubber's speed check now
+  takes the fastest of three runs, after one run on the busy machine took
+  253 ms); new: the answer times kept equal
   to the database's targets and to customer-service.md, a stopped parcel's
   words, the one rule for the build's commit, the messages' answer times,
   and a scan of the websites' code for error messages built from personal
   values that now proves it reads the support desk's and the health page's
   files.
-- **Database tests**: 48 files pass on PostgreSQL 16 (47 migrations), with
+- **Database tests**: 49 files pass on PostgreSQL 16 (47 migrations), with
   the stack down; new: `181_support_cases`, `185_system_health`, `191` to
-  `195` (the wave 8 follow-ups) and `196_wave9_integration` (Salud, Hoy and
+  `195` (the wave 8 follow-ups), `197_atencion_refusals` (the outside
+  review's findings 1, 4 and 5) and `196_wave9_integration` (Salud, Hoy and
   Casos count the same late cases; every function of the wave called as each
   staff role; a customer's own delivery code masked for staff; the hourly
   allowance of four-digit numbers; account deletion across the wave).
   `165_console_operations` no longer finds a random code inside ids and
   times: it passed 60 times in a row.
-- **API contract tests**: 244 tests in 42 files (37 contract files) pass,
+- **API contract tests**: 246 tests in 43 files (38 contract files) pass,
   twice in a row on the same database; new: `contract.support-cases`,
   `contract.system-health`, `contract.wave8-followups`,
   `contract.frozen-callers` (extended), `contract.support-desk-races` (one
-  forced round of J1 and J5) and `contract.wave9-integration` (the client
+  forced round of J1, J5 and J7), `contract.atencion-refusals` (a refused
+  complaint answer through the client) and `contract.wave9-integration` (the client
   code of the store build `3f251c3` and of the preview's web apps `12ec48c`,
   taken from git, against the merged database).
 - **Races**: every family A to J at 50 natural and 50 forced rounds on a

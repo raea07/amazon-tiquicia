@@ -2431,7 +2431,13 @@ Apply them in filename order, in one sitting, then deploy the four web apps.
    run before the push. The backfill writes cases and their timeline only: it
    **plans no message and emits no event**. It re-creates `ops_care_queues`
    (same arguments and shape; a customer's own delivery code in their words
-   comes masked) and adds the staff and shopper functions of the desk.
+   comes masked, each role lists only what it may open in Casos, and the
+   customer is a first name), re-creates Atención's four doors that write a
+   text the customer reads (`ops_resolve_complaint`, `ops_decide_return` and
+   `ops_receive_return`, dropped and created again because they now answer
+   `true` instead of nothing, with the same arguments and grants, and
+   `ops_complete_return`), and adds the staff and shopper functions of the
+   desk.
 2. `20261121084800_system_health.sql`: the private table `store_builds`, eleven
    partial indexes on queues the health page reads, `ops_system_health`,
    `ops_versions`, `ops_set_store_build`, `ops_remove_store_build`, and
@@ -2455,7 +2461,11 @@ is its id with `buyable` false, which that cart already shows as "no
 disponible"; `get_order` gains only optional fields and one more reason that
 the old page shows with the staff-cancellation words; a complaint filed from
 the old shop opens a case by trigger and is answered from the old Atención
-as before. `packages/db/src/contract.wave9-integration.test.ts` runs the
+as before; the old console ignores what Atención's doors now answer. One
+difference for the minutes in between: a staff text in Atención that holds a
+customer's delivery code is refused with nothing saved, which the old
+console shows as saved (and its refund form as a general error); staff never
+type a code, so this should not happen. `packages/db/src/contract.wave9-integration.test.ts` runs the
 client code of `12ec48c` and of the store build `3f251c3`, taken from git,
 against the merged database and proves it (a return and its withdrawal, the
 quote, the order page, the cart, a complaint filed and answered).
