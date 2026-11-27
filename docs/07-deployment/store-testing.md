@@ -143,7 +143,8 @@ since 24 November 2026): it reaches the internal testers without a click.
 One thing is not verified: Google's help pages do not say whether Google
 accepts such a release from an app it has not reviewed yet, and one report
 from 2026 says it does not. If Google refuses the next build for that
-reason, the developer side sends the same build again as a draft (no new
+reason ("Only releases with status draft may be created on draft app"), the
+developer side sends the same build again as a draft (no new
 build is used) and the owner starts its rollout as below.
 
 For a draft release:

@@ -1,6 +1,14 @@
 # Status
 
-Updated 24 November 2026, after wave 8 was merged on top: stock writers that
+Updated 27 November 2026, after `main`'s documents were merged into the wave 8
+branch (the Carreta design system in `docs/brand/system`, the strategy pack
+in `docs/00-strategy` and `marketing/`, the November research in
+`docs/research`) and the three minor findings of the third outside check of
+wave 8 were closed (suite `171` no longer depends on where its random walk
+ends, `tools/dev/stack.sh` starts a server again when its port was held for
+a moment, and the deadlock ranges cover five runs).
+
+Wave 8 was merged on this branch on 24 November 2026: stock writers that
 take their rows in one order (no more deadlocks between a cancellation and a
 count, a route start and a stop, a shop's pack and a cancellation, packing, a
 checkout or a count and a seller switching a variant off) and a product summary that is never stale
@@ -63,8 +71,8 @@ differed is in the
 [runbook](docs/07-deployment/runbook-first-deploy.md#what-was-done-on-the-preview-22-november-2026-evening)).
 The preview still simulates payments and no worker is deployed. The shopper
 app's Android build was sent to
-Google Play's internal testing on 22 November 2026 and waits for you to
-release it ("What needs you", item 11). Before them, the payment gateway and
+Google Play's internal testing on 22 November 2026; you released it to the
+internal testers on 23 November 2026 ("What needs you", item 11). Before them, the payment gateway and
 electronic invoicing were merged on top of both follow-ups: payments through ONVO in two new modes
 (`test`, `live`) with cards on its hosted page, SINPE Móvil matched by the
 payer, refunds sent through it and completed only on its confirmation, and a
@@ -122,10 +130,14 @@ the position during a route and works without signal; the seller app still
 uploads no images); all four now delete
 the account, reset and change the password inside the app; none of those
 three has been built for a phone yet. The shopper app's Android build
-(version code 4, from commit `3f251c3`, before the account screens) is in
-Google Play's internal testing as a draft release that you still have to
-release; no iPhone build exists, and no build has run on a phone or
-simulator yet.
+(version code 4, from commit `3f251c3`, before the account screens) was
+released to Google Play's internal testers on 23 November 2026, and its
+iPhone build 0.1.0 (4), from the same commit, was sent to App Store Connect
+on 24 November 2026; no build has run on a phone or simulator yet, because
+you put the installs on hold on 24 November (item 11 of "What needs you").
+Every screen still has the earlier look and is in Spanish only: the new look
+("Carreta") is decided and drawn in `docs/brand/system`, but no app uses it
+yet, and English is not built.
 Payments and electronic invoices now exist as code, run against local fakes
 of the gateway and of Hacienda: nothing has charged a card, refunded money or
 sent a document to Hacienda, and no message is sent for real (see "Not
@@ -300,28 +312,38 @@ In the order that unblocks the most.
     preview yet. 5. Decide whether the four apps keep one shared icon, as the brand book
     says today, or get icons that tell them apart in the store. 6. An Apple Developer Program membership (US$99 a year) for any iOS build on
     a phone, TestFlight or the App Store, and a Google Play Console account
-    (US$25). Demo accounts on the hosted project for the stores' reviewers. 7. **Release the Android draft in Play Console.** The build
-    `a20ef1d8-a926-40d4-947d-823cd87be32a` (version 0.1.0, version code 4,
-    commit `3f251c3`) was sent to the internal testing track on
-    22 November 2026 (submission `8d09854a-da67-4919-afe6-114fc50f633f`);
-    your Google key is uploaded on Expo. Because the app was never
-    published, it arrived as a draft: add testers and start its rollout
+    (US$25). Demo accounts on the hosted project for the stores' reviewers. 7. **The shopper app in both stores; your installs are on hold.**
+    Android: the build `a20ef1d8-a926-40d4-947d-823cd87be32a` (version
+    0.1.0, version code 4, commit `3f251c3`) was sent to the internal testing
+    track on 22 November 2026 as a draft and you released it to the internal
+    testers on 23 November 2026. Your decision of 23 November 2026 is in
+    force ([decision 45](docs/02-architecture/decisions.md#45-android-builds-of-the-shopper-app-go-to-the-internal-testers-without-a-click)):
+    since 24 November 2026 `apps/shop-native/eas.json` sends each new Android
+    build as a completed release, so it reaches the internal testers without
+    a click. Not verified: whether Google accepts a completed release on the
+    next submission, before it has reviewed the app. If Google refuses it
+    with "Only releases with status draft may be created on draft app", the
+    same build is sent again as a draft and you start its rollout
     ([store-testing.md](docs/07-deployment/store-testing.md), Part 1,
-    steps 6 to 8). No iPhone build exists yet: run the iPhone command in
-    Part 2 once, interactively, from commit `3f251c3` (`git checkout
-3f251c3` after cloning), so both stores carry the same code. That
-    build keeps working against the updated preview: every call it makes
-    was tried there after the migrations and answered. Of the 29 functions
-    it calls, `084200` changes two (`my_orders`, `get_order`) by adding
-    fields only, and `084600` makes `get_order` give a shopper a null
-    `cancel_reason` when staff cancelled (that build does not show it); a
-    contract test parses their answers on the merged
-    database with that build's own schemas. Your decision of 23 November
-    2026: from your first Android release on, each new Android build goes
-    straight to the internal testers without a click; until then builds
-    stay drafts. The build settings are not changed yet. The team account has used 4 of
-    its 15 Android builds and 2 of its 15 iOS builds in the cycle from
-    1 November to 1 December 2026; nothing was billed.
+    step 7). iPhone: you ran the interactive build on 24 November 2026; build
+    0.1.0 (4), from `3f251c3`, was sent to App Store Connect that day. You
+    asked on 24 November 2026 for a step back before testing (the brand
+    review, the support and system tools, the strategy documents, English
+    and a redesign), so installing on the phones is on hold by your choice.
+    Neither build has been installed on a phone. Both keep working against
+    the updated preview: every call they make was tried there after the
+    migrations and answered. Of the 29 functions they call, `084200` changes
+    two (`my_orders`, `get_order`) by adding fields only, and `084600` makes
+    `get_order` give a shopper a null `cancel_reason` when staff cancelled
+    (that build does not show it); a contract test parses their answers on
+    the merged database with that build's own schemas. The team account has
+    used 4 of its 15 Android builds and 3 of its 15 iOS builds in the cycle
+    from 1 November to 1 December 2026; nothing was billed.
+12. **Answer the five questions needed now** in
+    [`docs/00-strategy/owner-decisions.md`](docs/00-strategy/owner-decisions.md):
+    D4 (when week 1 is), D6, D7, D9 and D45 (English). Every other question
+    for you is asked there once, grouped by when it is needed; D1, D2, D3 and
+    D50 are decided and recorded.
 
 ## What is built
 
@@ -338,8 +360,8 @@ In the order that unblocks the most.
 | Payments             | `packages/payments`, `supabase/functions`, `tools/dev-notify`      | Three modes: `sandbox` (the simulation), `test` and `live` through ONVO. Cards on ONVO's hosted page (3-D Secure there), SINPE Móvil matched by the payer's identification; an order is paid only on ONVO's signed notification or the worker's own question, applied once under the order's lock. Money that does not match is kept for finance. Refunds sent once and completed only on ONVO's confirmation; cash and hand-confirmed transfers paid back by finance by transfer. A pay step on the shop's and the shopper app's order page; the console's Cobros section (review, refunds, reconciliation, mode and fees). Runs locally against a fake ONVO only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Electronic invoices  | `packages/invoicing`, `supabase/functions`, `tools/dev-hacienda`   | Version 4.4 documents issued by the platform: a tiquete (or a factura, if asked at checkout) for the delivery fee, a fee factura to each seller, credit notes on cancellations and returns; numbered without gaps, signed XAdES-EPES, sent once, answers recorded. Simulated money (the sandbox simulation, the gateway's test environment, cash on delivery taken while payments are in sandbox), decided once when it is captured, never gets a document unless `invoicing_policy.simulated_payments` says so; its jobs end on their own. On the shopper's order page, in the seller's statements, and in the console's Comprobantes section (rejected, waiting, unsent, replace and retry). Runs locally against a fake of Hacienda only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Shared code          | `packages/{brand,ui,db,next-kit}`                                  | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session and its lifetime, the sign-in limit, security headers, forms, cache tags)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Documentation        | `docs/`                                                            | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Brand                | `docs/brand/`, `packages/brand/`                                   | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Documentation        | `docs/`                                                            | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase; since 24 November 2026 the strategy pack in `docs/00-strategy` (go-to-market, roll-out plan, team structure and pricing strategy, with one set of figures) and the marketing drafts in `marketing/` that use the same figures; every question for you is asked once in `docs/00-strategy/owner-decisions.md` (D1 to D54: D1, D2, D3 and D50 decided; D5 and D8 builder choices you may object to); the November research in `docs/research/market-and-costs-2026-11.md`, `support-and-system-health-tools.md` and `english-translation-plan.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Brand                | `docs/brand/`, `packages/brand/`                                   | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files; the Carreta design system in `docs/brand/system` (specification, tokens, fonts, logos and 46 reference pages), which no app uses yet                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 How the new parts work, in short:
 
@@ -787,10 +809,11 @@ What these checks do **not** cover, stated plainly:
   `3f251c3`) was sent to Google Play's internal testing track on 22 November
   2026 as a draft release (submission
   `8d09854a-da67-4919-afe6-114fc50f633f`), with your Google key uploaded on
-  Expo; it reaches no tester until you release it
+  Expo, and you released it to the internal testers on 23 November 2026
   ([`docs/07-deployment/store-testing.md`](docs/07-deployment/store-testing.md)
-  has the steps for both stores). No iPhone store build exists yet; run it
-  from `3f251c3`. The account screens inside the apps came after `3f251c3`
+  has the steps for both stores). The iPhone store build 0.1.0 (4), also
+  from `3f251c3`, was sent to App Store Connect on 24 November 2026. The
+  account screens inside the apps came after `3f251c3`
   and are in no store build. Nothing has
   been started on a phone or a simulator: cloud simulators need a paid Expo
   plan, so the first real look will be a tester's phone. Store-testing builds
@@ -828,7 +851,65 @@ What these checks do **not** cover, stated plainly:
 
 ## Not built
 
-These are missing, not hidden. The first group blocks a public launch.
+These are missing, not hidden. The group "Before the pilot with real money"
+blocks the pilot, and "Before launch" blocks a public launch. The list of 24 November 2026
+(from the strategy pack) is filed into these groups; its item "record D1 and
+D2 in the decisions and the Android release in the store documents" is done
+(decisions 56 to 58; "What needs you", item 11).
+
+**Decided on 24 and 27 November 2026, not built**
+
+- **The new look.** On 24 and 27 November 2026 you chose the direction
+  "Carreta": titles, prices and the delivery code in Epilogue, text in Fira
+  Sans, no serif anywhere, the full achiote delivery strip, and the Y mark
+  unchanged (decision 58). The specification, tokens, fonts, logos and 46
+  reference pages are in [`docs/brand/system`](docs/brand/system/README.md).
+  None of the 8 apps uses it yet: every screen still has the earlier look.
+  The rebuild is planned in 4 stages: the foundation; the shopper website
+  and shopper app with English, then store version 0.2.0; the seller
+  website and app; the staff console and the driver and warehouse apps. Not
+  checked: the fonts on a real phone, screen readers, real mail programs and
+  English screens.
+- **English.** Not built: every screen is Spanish only (error messages
+  already exist in both). The plan is in
+  [`docs/research/english-translation-plan.md`](docs/research/english-translation-plan.md).
+- **The support desk, system health and versions.** Decided on 24 November
+  2026 as areas of the staff console (decision 56); not built. The research
+  is in
+  [`docs/research/support-and-system-health-tools.md`](docs/research/support-and-system-health-tools.md).
+- **Error and outage alerts.** Decided on 24 November 2026: Sentry, on the
+  free plan of your existing account, with personal data removed
+  (decision 57); not built. The websites come first; the phone apps get it
+  with store version 0.2.0, because it is a native module.
+
+**Before the pilot with real money**
+
+- **A complaint route in the shop.** The shop has no complaint form: the
+  help page asks for an e-mail and says "Respondemos en un máximo de 2 días
+  hábiles", while
+  [`customer-service.md`](docs/06-operations/customer-service.md) promises
+  an acknowledgement in 1 working day and a written answer in 5. The
+  database's `file_complaint` exists, and no screen calls it. The parcel
+  card and the shopper promise depend on it, and the law requires a
+  complaint route.
+- **The Régimen Simplificado notice** on the listings of sellers in that
+  regime (compliance §3). No screen of the shop reads `sellers.tax_regime`.
+  It is needed only if owner decision D27 admits such sellers.
+- **The listing form's payment sentence.** The seller centre and the seller
+  app say the payment cost "se traslada sin recargo", but the card's fixed
+  ₡180 is ₡22.50 above the gateway's US$0.35 at ₡450, so the sentence is
+  untrue for cards. Change the sentence or the card fee (owner decision D38)
+  before cards go on.
+- **A fee parity test that follows the newest schedule.** The test in
+  `packages/core/src/cr/compliance.test.ts` reads only
+  `20261121080800_finance.sql` and does not compare the category commission
+  rates (`categories.referral_bps` against `referralBpsByCategory`). Without
+  it, a changed fee can drift between SQL and code.
+- **A dated fee change.** No function reads a fee schedule's
+  `effective_from`: a new schedule takes effect when the migration that
+  marks it active is applied. Owner decision D24 promises a dated notice, so
+  either `compute_seller_fees` honours `effective_from` or the documents say
+  a schedule switches when its migration is applied.
 
 **Before launch**
 
@@ -871,6 +952,30 @@ These are missing, not hidden. The first group blocks a public launch.
 - Sign-in limits as settings: they are constants inside functions, so the
   settings screen cannot show them (if they ever become settings they are
   protected by default).
+- **A staff role for the sales agent.** No role opens Vendedores without
+  buyer data: the `support` role also opens Pedidos and Atención, with buyer
+  names and orders. A sellers-only role, or several roles per person, is
+  needed (owner decision D40).
+- **A WhatsApp consent for commercial messages**, with its own box, log and
+  wording version. Today the commercial consent covers e-mail only; shopper
+  message 6 and any WhatsApp marketing wait for it (gate G10 in
+  [`marketing/README.md`](marketing/README.md)).
+- **Where a shopper or seller came from**: a "¿Cómo nos conoció?" field or a
+  campaign code, with no personal data. Channels are counted by hand today,
+  so the cost to win a shopper cannot be measured before paid ads (owner
+  decision D42).
+- **Free delivery said plainly.** No cart line says "Le faltan ₡X para que el
+  envío sea gratis"; with a zone's fee at ₡0 the product page reads "Envío
+  ₡0." instead of "Envío gratis"; and nothing ends a delivery promotion on
+  its end date. Owner decision D25's launch offer needs the product-page
+  line.
+- **Reports** for the 60-day repeat rate per account, delivered stops per
+  route over time, and on-time and first-attempt rates over time. They are
+  the roadmap's exit tests and are counted by hand today.
+- **A count of checkouts refused outside the served zone** (counts only), the
+  input of roll-out §3 rule 5 for adding a canton.
+- **A payout hold in business days**, if you choose D52 A, so the hold covers
+  the 8-business-day withdrawal window (open question 76).
 
 **Native apps** (all four have their screens; none of the seller, driver and
 warehouse apps has been built for a phone yet, so until then sellers, drivers
@@ -919,11 +1024,22 @@ and the warehouse use the web apps)
 
 **Later**
 
-- English. The interface is Spanish only; error messages already exist in both.
+- "Usted recibe" first in the listing form, and fees shown as a share of the
+  price as well as amounts (pricing strategy §4.5). Today the form shows
+  "Usted recibe" last and the fees as amounts only.
+- The age of the oldest listing in review on the console's Resumen (it shows
+  only how many wait), so the catalogue-hire trigger of the team structure
+  can be read directly.
+- Whether the warehouse `lead` role needs rights beyond `associate`: today it
+  grants nothing more and only sorts the list of workers.
 - Background location for drivers and camera barcode scanning in the web app
   (both exist in the native apps, unverified on a phone).
-- Sponsored listings, promotions and coupons, a map on the dispatch screen,
-  bulk listing upload.
+- Sponsored listings, promotions and coupons (discount codes:
+  `orders.discount_minor` is always zero), a map on the dispatch screen,
+  bulk listing upload. Proposed in the pricing strategy or the marketing
+  pieces and not needed for the pilot: a storage-fee charge, a database
+  function and console screen to propose a new fee schedule, driver pickups
+  from sellers, and drop-off time slots for inbound stock.
 
 ## Decisions I made for you
 
@@ -979,8 +1095,9 @@ ones worth knowing about:
 - **Your decision of 23 November 2026 on Android builds**
   ([decision 45](docs/02-architecture/decisions.md#45-android-builds-of-the-shopper-app-go-to-the-internal-testers-without-a-click)):
   from your first Android release of the shopper app on, each new build goes
-  to the internal testers without a click; until then builds stay drafts.
-  Recorded only: no build setting was changed.
+  to the internal testers without a click. You made that first release on
+  23 November 2026, and since 24 November 2026 the build setting sends each
+  new Android build as a completed release (`apps/shop-native/eas.json`).
 - **One lock order for stock** ([decision 46](docs/02-architecture/decisions.md#46-product-rows-written-only-when-the-summary-changes-one-lock-order-for-stock-orders-and-shelves)):
   a product's summary is written only when it changes; every stock writer
   takes its rows in one order; a seller switching a variant off no longer
@@ -1009,10 +1126,48 @@ ones worth knowing about:
   shopper knows which line to remove; the shop, price and stock of that
   offer stay hidden
   ([decision 55](docs/02-architecture/decisions.md#55-a-cart-line-names-its-product-even-when-its-offer-is-paused)).
+- **Your decisions of 24 November 2026 on support and system health** (D1,
+  D2 and D50 in
+  [`docs/00-strategy/owner-decisions.md`](docs/00-strategy/owner-decisions.md)),
+  recorded as decisions
+  [56](docs/02-architecture/decisions.md#56-support-and-system-tools-live-inside-the-staff-console)
+  and
+  [57](docs/02-architecture/decisions.md#57-error-and-outage-alerts-go-through-the-existing-sentry-account-with-personal-data-removed):
+  the support desk and the screens for system health and versions live
+  inside the staff console; error and outage alerts go through your
+  existing Sentry account on its free plan, with personal data and the
+  delivery code removed before anything is sent. Neither is built.
+- **Your decision of 24 and 27 November 2026 on the look**
+  ([decision 58](docs/02-architecture/decisions.md#58-the-look-is-carreta-added-beside-todays-names-and-switched-app-by-app)):
+  the direction "Carreta". Mine around it: the new names are added beside
+  today's, each app switches on its own, and today's names are deleted last.
+  Not built.
 
 ## Things to know before trusting the numbers
 
 Found while building or reviewing; none is fixed by pretending otherwise.
+
+- **The strategy figures of 24 November 2026 are estimates.** An own driver
+  costs the same as Correos' volume tariff at about 23 to 26 delivered stops
+  a day: 22.8 if Correos collects daily, 25.6 if parcels are dropped off,
+  before IVA. Which rate a client of 451 or more parcels who uses collection
+  pays is not confirmed with Correos. One driver carries about 22 orders a
+  day. With the launch team on salary the month breaks even at about 585
+  orders (22 to 23 a day), one driver's limit; above that, break-even needs
+  a second driver and about 32 orders a day (35 with mixed baskets). The
+  workings are in [`docs/00-strategy`](docs/00-strategy/).
+- **No marketing piece is out.** Every piece in `marketing/` is held until
+  the trademark search is done and `yuntera.cr` is registered (gate G1). No
+  piece has been printed, posted, copy-edited or tested on a phone.
+- **Seller payouts and fees, as built:** no schedule is set for payout runs;
+  finance starts each run by hand (owner decision D26). The payout hold is
+  10 calendar days, which can end before the shopper's 8-business-day
+  withdrawal window closes; a return after a payout comes off the next payout
+  (owner decision D52). Fees are computed when a payment is captured, from
+  the schedule marked active, so a cash-on-delivery order placed before a fee
+  change and delivered after it pays the new fees.
+- **Several roles at once** (a staff role, a driver record and a warehouse
+  record for one person) have not been tried on the preview.
 
 - **Refund policy choices to confirm or change:** a refund returns the
   commission to the seller but not the payment and warehouse fees; shipping is
