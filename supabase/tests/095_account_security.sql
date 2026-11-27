@@ -1524,7 +1524,13 @@ begin
       'zone_closure_periods.created_by', 'zone_closure_periods.ended_early_by',
       'route_stops.removed_by', 'routes.closed_by',
       -- kept as a bare id: who stopped a packed parcel before it left (084200)
-      'shipments.recalled_by');
+      'shipments.recalled_by',
+      -- support cases (084700): a deleted account's cases keep the bare id
+      -- and lose their text (a trigger on deleted_at erases summaries, notes
+      -- and answers); who recorded a contact, was assigned a case, wrote an
+      -- entry or a saved answer is staff, kept as a bare id
+      'private.cases.user_id', 'private.cases.created_by', 'private.cases.assignee_id',
+      'private.case_entries.author_id', 'private.saved_replies.updated_by');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end
 $$;
