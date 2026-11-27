@@ -35,8 +35,8 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { variantChange } from "./areas/seller-listings";
-import { cartLine as currentCartLine } from "./schemas";
 import { contractDatabase } from "./contract.helpers";
+import { cartLine as currentCartLine } from "./schemas";
 
 vi.setConfig({ testTimeout: 60_000 });
 
@@ -357,7 +357,9 @@ describe.skipIf(!db.enabled)("callers of before wave 8 (against a seeded databas
     const offer = rows[0];
     expect(offer, "the seed has an active offer of the soap").toBeDefined();
     if (!offer) return;
-    const live = z.array(cartLine).parse(await rpc(SHOPPER, "cart_lines", { p_offer_ids: [offer.id] }));
+    const live = z
+      .array(cartLine)
+      .parse(await rpc(SHOPPER, "cart_lines", { p_offer_ids: [offer.id] }));
     expect(live[0]?.buyable).toBe(true);
     await db.query("update public.offers set status = 'paused' where id = $1", [offer.id]);
     try {
