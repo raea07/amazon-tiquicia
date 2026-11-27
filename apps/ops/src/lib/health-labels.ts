@@ -1,4 +1,5 @@
 import { apps } from "@yuntera/brand";
+import { endSentence } from "@yuntera/core";
 import type {
   HealthJob,
   HealthLine,
@@ -195,7 +196,9 @@ export function healthSentence(line: HealthLine): HealthSentence {
       return {
         title,
         text: [
-          `${plural(line.count, "caso está atrasado", "casos están atrasados")}${line.since ? `; el más antiguo, desde el ${at(line.since)}` : ""}.`,
+          endSentence(
+            `${plural(line.count, "caso está atrasado", "casos están atrasados")}${line.since ? `; el más antiguo, desde el ${at(line.since)}` : ""}`,
+          ),
           late > 0
             ? `${late === 1 ? "De ellos, 1 pasó" : `De ellos, ${late} pasaron`} el plazo para resolverse.`
             : null,

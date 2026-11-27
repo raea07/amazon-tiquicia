@@ -160,6 +160,7 @@ const PAGES = ["/casos", "/casos/respuestas", "/casos/informe", "/clientes", "/s
   const said = await text(line);
   const onHealth = Number(/(\d+) casos? (está|están) atrasados?/.exec(said)?.[1] ?? "0");
   check(onHealth >= 1, `Salud del sistema: "${said.slice(0, 120)}"`);
+  check(!/\.\./.test(said), "the line ends each sentence with one full stop");
   check((await line.locator('a[href="/casos"]').count()) === 1, "the cases line links to Casos");
   await fits(admin, "Salud del sistema");
   await admin.screenshot({ path: SHOTS + "/w9-health-cases-late.png", fullPage: true });
