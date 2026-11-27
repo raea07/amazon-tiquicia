@@ -24,6 +24,7 @@ import {
   Skeleton,
   TextAreaField,
   TextField,
+  touchLinkClass,
 } from "@yuntera/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -289,7 +290,7 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                 </li>
               ))}
               <li>
-                <Link href="/cobros/reembolsos" className="text-link underline">
+                <Link href="/cobros/reembolsos" className={touchLinkClass()}>
                   Ver en Cobros
                 </Link>
               </li>
@@ -362,7 +363,7 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                 label="Motivo"
                 name="note"
                 rows={2}
-                hint="El cliente lo ve en su pedido."
+                hint="Solo lo ve el equipo. El cliente lee «Cancelamos este pedido» y que puede preguntar por qué desde Ayuda."
               />
             </ActionForm>
           </section>

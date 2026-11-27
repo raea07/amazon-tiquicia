@@ -62,7 +62,10 @@ describe("wave 8's function definitions", () => {
   it("are redefined later only where the list says, once", () => {
     for (const [name, file] of Object.entries(REDEFINED_LATER)) {
       expect(WAVE8.flatMap(defined), name).toContain(name);
-      expect(defined(file).filter((n) => n === name), name).toHaveLength(1);
+      expect(
+        defined(file).filter((n) => n === name),
+        name,
+      ).toHaveLength(1);
     }
   });
 
