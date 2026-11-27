@@ -559,3 +559,183 @@ async function receiveReturned(page, tracking, condition, back = "venta") {
 }
 
 Object.assign(module.exports, { returnedRowText, receiveReturned });
+
+// ── Warehouse: locations, moving and counting stock ───────────────────────
+
+/** From the warehouse board, «Ubicaciones», and waits for a location of the list. */
+async function openLocationsFromBoard(page, someCode) {
+  await link(main(page), "Ubicaciones").click();
+  await page.waitForURL((u) => new URL(u).pathname === "/bodega/ubicaciones");
+  await page.locator(`a[data-location="${someCode}"]`).waitFor();
+}
+
+/** A location of the list, as one line. */
+const locationListEntry = (page, code) => text(page.locator(`a[data-location="${code}"]`));
+
+/** How many entries of the list are this location (0 once it left). */
+const locationListed = (page, code) => page.locator(`a[data-location="${code}"]`).count();
+
+/** Opens a location from the list. */
+async function openListedLocation(page, code) {
+  await page.locator(`a[data-location="${code}"]`).click();
+  await page.waitForURL((u) => new URL(u).searchParams.get("codigo") === code);
+}
+
+/** Opens a location by typing its code. */
+async function openLocationByCode(page, code) {
+  await field(main(page), "codigo").fill(code);
+  await button(main(page), "Abrir").click();
+  await page.waitForURL((u) => new URL(u).pathname === "/bodega/ubicacion");
+}
+
+/** Waits for the confirmation saying `wanted`, which is then taken out of the address; returns it. */
+async function stockOutcome(page, wanted) {
+  const said = await kit.waitForMessage(main(page), wanted, { roles: "status" });
+  await page.waitForFunction(
+    () => !/[?&](movidas|destino|contadas|diferencia)=/.test(window.location.search),
+  );
+  await page.waitForLoadState("networkidle");
+  return said;
+}
+
+/** How many confirmations of moved units the page shows (0 when none). */
+async function movedNotices(page) {
+  const all = await main(page).getByRole("status").allInnerTexts();
+  return all.filter((t) => t.includes("Unidades movidas")).length;
+}
+
+/** Opens a stock line's «Mover», unless it is open already. */
+async function openMove(page, sku) {
+  const row = stockLine(page, sku);
+  const open = await row
+    .locator("details")
+    .filter({ has: page.locator('select[name="toLocationId"]') })
+    .getAttribute("open");
+  if (open === null) await testid(row, "stock-move").click();
+}
+
+/** Fills the move form (quantity, destination by its code; either may be left out) and sends it. */
+async function moveStock(page, sku, { quantity, to }) {
+  const row = stockLine(page, sku);
+  if (quantity !== undefined) await field(row, "quantity").fill(quantity);
+  if (to !== undefined) await field(row, "toLocationId").selectOption({ label: to });
+  await button(row, "Mover las unidades").click();
+}
+
+/** The stock line's error, once it shows. */
+async function stockLineError(page, sku) {
+  const row = stockLine(page, sku);
+  await row.getByRole("alert").first().waitFor();
+  return text(row.getByRole("alert").first());
+}
+
+/** What the move form holds: quantity, the destination chosen (its label and value) and the destinations offered. */
+async function moveTyped(page, sku) {
+  const row = stockLine(page, sku);
+  const select = await field(row, "toLocationId").evaluate((el) => ({
+    value: el.value,
+    label: el.selectedOptions[0]?.text ?? "",
+    options: [...el.options].map((o) => o.text),
+    missing: el.validity.valueMissing,
+  }));
+  return { quantity: await field(row, "quantity").inputValue(), ...select };
+}
+
+/** Opens a stock line's «Corregir cantidad», unless it is open already. */
+async function openCount(page, sku) {
+  const row = stockLine(page, sku);
+  const open = await row
+    .locator("details")
+    .filter({ has: page.locator('input[name="counted"]') })
+    .getAttribute("open");
+  if (open === null) await testid(row, "stock-correct").click();
+}
+
+/** Types the counted quantity; returns the difference the form shows and what its button says. */
+async function typeCounted(page, sku, counted) {
+  const row = stockLine(page, sku);
+  await field(row, "counted").fill(counted);
+  return {
+    difference: await text(testid(row, "count-difference")),
+    button: await text(button(row, "Corregir a")),
+  };
+}
+
+/** Types the count's reason and «Corregir a …». */
+async function sendCountCorrection(page, sku, note) {
+  const row = stockLine(page, sku);
+  await row.locator('details[open] input[name="note"]').fill(note);
+  await button(row, "Corregir a").click();
+}
+
+/** What the count form holds: the counted quantity and the reason. */
+async function countCorrectionTyped(page, sku) {
+  const row = stockLine(page, sku);
+  return {
+    counted: await field(row, "counted").inputValue(),
+    note: await row.locator('details[open] input[name="note"]').inputValue(),
+  };
+}
+
+/** How many stock lines of this product the location shows (0 once it left). */
+const stockLineCount = (page, sku) => stockLine(page, sku).count();
+
+/** «Ver en qué ubicaciones está» from a stock line; returns what the product's page says about it. */
+async function productLocations(page, sku) {
+  await link(stockLine(page, sku), "Ver en qué ubicaciones está").click();
+  await page.waitForURL((u) => new URL(u).pathname === "/bodega/buscar");
+  const found = withValue(main(page).locator("section"), sku).first();
+  await found.waitFor();
+  return text(found);
+}
+
+/** The page's refusal that a product left the location, once it shows, after its address is cleaned. */
+async function goneNotice(page) {
+  const said = await kit.waitForMessage(main(page), "Ya no está en esta ubicación", {
+    roles: "alert",
+  });
+  await page.waitForFunction(() => !/[?&](sin|accion)=/.test(window.location.search));
+  await page.waitForLoadState("networkidle");
+  return said && kit.waitForMessage(main(page), "Ya no está en esta ubicación", { roles: "alert" });
+}
+
+/** How many refusals that a product left the location the page shows. */
+async function goneNotices(page) {
+  const all = await main(page).getByRole("alert").allInnerTexts();
+  return all.filter((t) => t.includes("Ya no está en esta ubicación")).length;
+}
+
+/** Waits for a location's summary. */
+const waitForLocationSummary = (page) => testid(page, "location-summary").waitFor();
+
+Object.assign(module.exports, {
+  openLocationsFromBoard,
+  locationListEntry,
+  locationListed,
+  openListedLocation,
+  openLocationByCode,
+  stockOutcome,
+  movedNotices,
+  openMove,
+  moveStock,
+  stockLineError,
+  moveTyped,
+  openCount,
+  typeCounted,
+  sendCountCorrection,
+  countCorrectionTyped,
+  stockLineCount,
+  productLocations,
+  goneNotice,
+  goneNotices,
+  waitForLocationSummary,
+});
+
+/** Fills the move form (quantity, destination by its code) without sending it. */
+async function typeMove(page, sku, { quantity, to }) {
+  const row = stockLine(page, sku);
+  if (quantity !== undefined) await field(row, "quantity").fill(quantity);
+  if (to !== undefined) await field(row, "toLocationId").selectOption({ label: to });
+}
+
+Object.assign(module.exports, { typeMove });

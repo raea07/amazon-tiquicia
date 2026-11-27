@@ -947,7 +947,8 @@ async function setDriverStatus(page, name, status) {
   await field(row, "status").selectOption(status);
   await button(row, "Guardar").click();
   const said = word("driver_status", status);
-  await settledText(row, (t) => t.includes(said), { what: `${name}'s row` });
+  // Outside the row's own select, whose options carry every status word.
+  await kit.waitForShown(row, said, { what: `${name}'s row` });
   return text(row);
 }
 
@@ -1126,3 +1127,646 @@ Object.assign(module.exports, {
   routeStopText,
   dispatchFailed,
 });
+
+// ── The console's main sections (the ops journey) ──────────────────────────
+
+/** Signs in and waits to land on `landsOn`. */
+async function signInLandingOn(page, email, landsOn, password = PASSWORD) {
+  await open(page, "/ingresar");
+  await fillSignIn(page, email, password);
+  await page.waitForURL((u) => new URL(u).pathname === landsOn);
+}
+
+/** The first heading of main (h1 or h2), as one line. */
+const firstHeading = (page) => text(main(page).getByRole("heading").first());
+
+/** How many links the console's main navigation has. */
+const sectionLinks = (page) =>
+  page.getByRole("navigation", { name: "Secciones" }).getByRole("link").count();
+
+/** Waits for the summary's sections. */
+const waitForSummary = (page) => main(page).getByRole("heading", { level: 2 }).first().waitFor();
+
+/** How many rows the page's table has (its body). */
+const tableRows = (page) => main(page).locator("tbody tr").count();
+
+/** The first or last row of the page's table, as one line. */
+const tableRow = (page, which = "first") => text(main(page).locator("tbody tr")[which]());
+
+/** Opens the first order of the list and waits for its page. */
+async function openFirstOrder(page) {
+  await main(page).locator("tbody tr").getByRole("link").first().click();
+  await main(page).getByRole("heading", { level: 1, name: "Pedido YT-" }).waitFor();
+}
+
+/** How many times the page shows a delivery code (staff never see one). */
+const deliveryCodesShown = async (page) =>
+  ((await kit.mainText(page)).match(/código de entrega: \d{4}/g) ?? []).length;
+
+/** «Confirmar la transferencia» without a reference (the browser stops it), then with one; waits for the order to be confirmed. */
+async function confirmTransfer(page, reference) {
+  const box = testid(main(page), "confirm-transfer");
+  await box.locator('button[type="submit"]').click(); // empty -> browser validation
+  await page.waitForTimeout(300);
+  await field(box, "bankReference").fill(reference);
+  await box.locator('button[type="submit"]').click();
+  await settledText(main(page), (t) => t.includes(word("order_status", "confirmed")), {
+    what: "the order page",
+  });
+}
+
+/** Searches orders (sent by POST) and waits for the search to show. */
+async function searchOrders(page, words) {
+  await field(main(page), "q").fill(words);
+  await button(main(page), "Buscar pedidos").click();
+  await settledText(main(page), /Quitar la búsqueda/, { what: "the orders list" });
+}
+
+const listingCard = (page) => main(page).locator("ul > li").first();
+
+/** The first product to review, as one line. */
+const firstReviewCard = (page) => text(listingCard(page));
+
+/** «Rechazar» with this note; returns the refusal and the note kept. */
+async function rejectFirstListing(page, note) {
+  const card = listingCard(page);
+  await field(card, "note", "textarea").fill(note);
+  await button(card, "Rechazar").click();
+  await card.getByRole("alert").first().waitFor();
+  return {
+    refusal: await text(card.getByRole("alert").first()),
+    kept: await field(card, "note", "textarea").inputValue(),
+  };
+}
+
+/** «Publicar» the first listing while its shop is not verified; returns the refusal. */
+async function publishFirstListingRefused(page) {
+  const card = listingCard(page);
+  await field(card, "note", "textarea").fill("");
+  await button(card, "Publicar").click();
+  return kit.waitForMessage(card, "todavía no está verificada", { roles: "alert" });
+}
+
+/** «Publicar» the first listing and waits for the empty queue. */
+async function publishFirstListing(page) {
+  await button(listingCard(page), "Publicar").click();
+  await settledText(main(page), /No hay productos por revisar/, { what: "the review queue" });
+}
+
+const sellerCards = (page) => testid(main(page), "seller-card");
+
+/** The first seller of the list, as one line. */
+const firstSeller = (page) => text(sellerCards(page).first());
+
+/** Verifies the first seller with a note and waits for the empty list. */
+async function verifyFirstSeller(page, note) {
+  const card = sellerCards(page).first();
+  await field(card, "note", "textarea").fill(note);
+  await button(card, "Verificar y activar").click();
+  await settledText(main(page), /Ningún vendedor en este estado/, { what: "the sellers" });
+}
+
+/** How many sellers the list shows. */
+const sellerCount = (page) => sellerCards(page).count();
+
+const dispatchRoutes = (page) =>
+  main(page).getByRole("region", { name: "Rutas del" }).locator(":scope > ul > li");
+
+/** How many routes Despacho lists for the day. */
+const dispatchRouteCount = (page) => dispatchRoutes(page).count();
+
+/** «Proponer y crear rutas», and waits for a new route. */
+async function planRoutes(page) {
+  const before = await dispatchRouteCount(page);
+  await button(main(page), "Proponer y crear rutas").click();
+  await page.waitForFunction(
+    (n) => document.querySelectorAll('main section[aria-labelledby="rutas"] > ul > li').length > n,
+    before,
+  );
+}
+
+/** The newest route of the day, as one line. */
+const newestRoute = (page) => text(dispatchRoutes(page).last());
+
+const firstReturn = (page) =>
+  main(page).getByRole("region", { name: "Devoluciones" }).getByRole("listitem").first();
+
+/** The first return in Atención, as one line. */
+const firstReturnText = (page) => text(firstReturn(page));
+
+/** Approves the first return, records it reached the warehouse (in this condition), and waits for the refund button. */
+async function approveAndReceiveFirstReturn(page, condition) {
+  const card = firstReturn(page);
+  await button(card, "Aprobar").click();
+  // Since 21 November 2026 the refund waits until the product is back.
+  await button(main(page), "Registrar que llegó a bodega").waitFor();
+  await field(card, "condition").selectOption(condition);
+  await button(card, "Registrar que llegó a bodega").click();
+  await button(main(page), "Registrar reembolso de").waitFor();
+}
+
+/** Answers the first complaint and waits for the empty list. */
+async function answerFirstComplaint(page, note) {
+  const card = main(page).getByRole("region", { name: "Reclamos" }).getByRole("listitem").first();
+  await field(card, "note", "textarea").fill(note);
+  await button(card, "Responder y cerrar").click();
+  await settledText(main(page), /No hay reclamos abiertos/, { what: "Atención" });
+}
+
+Object.assign(module.exports, {
+  signInLandingOn,
+  firstHeading,
+  sectionLinks,
+  waitForSummary,
+  tableRows,
+  tableRow,
+  openFirstOrder,
+  deliveryCodesShown,
+  confirmTransfer,
+  searchOrders,
+  firstReviewCard,
+  rejectFirstListing,
+  publishFirstListingRefused,
+  publishFirstListing,
+  firstSeller,
+  verifyFirstSeller,
+  sellerCount,
+  dispatchRouteCount,
+  planRoutes,
+  newestRoute,
+  firstReturnText,
+  approveAndReceiveFirstReturn,
+  answerFirstComplaint,
+});
+
+// ── Cobros: payments mode, review, refunds ────────────────────────────────
+
+/** The first section heading of the page. */
+const firstSectionHeading = (page) => text(main(page).getByRole("heading", { level: 2 }).first());
+
+/** The visible text of the whole page. */
+const pageText = (page) => text(page.locator("body"));
+
+/** Chooses a payments mode, types the reason and asks for the change. */
+async function changePaymentsMode(page, mode, note) {
+  await field(main(page), "mode").selectOption(mode);
+  await field(main(page), "note", "textarea").fill(note);
+  await button(main(page), "Cambiar el modo").click();
+}
+
+/** The first error of main, once it shows. */
+async function firstAlert(page) {
+  await main(page).getByRole("alert").first().waitFor();
+  return text(main(page).getByRole("alert").first());
+}
+
+/** Waits until the page says the payments mode changed. */
+const waitForModeChanged = (page) =>
+  settledText(page.locator("body"), /Modo de pagos cambiado/, { what: "the payments settings" });
+
+/** A review item of a kind (its heading) on Cobros › Revisión. */
+const reviewItem = (page, kind) =>
+  testid(main(page), "payment-review")
+    .filter({ has: page.getByRole("heading", { level: 3, name: kind }) })
+    .first();
+
+/** How many review items of the unmatched-transfer kind there are. */
+const unmatchedTransfers = (page) =>
+  testid(main(page), "payment-review")
+    .filter({ has: page.getByRole("heading", { level: 3, name: "Transferencia sin pedido" }) })
+    .count();
+
+/** Attaches the first unmatched transfer to an order, with a note; returns the settled line once it shows. */
+async function attachTransfer(page, orderNumber, note) {
+  const item = reviewItem(page, "Transferencia sin pedido");
+  await field(item, "resolution").selectOption("attach");
+  await field(item, "orderNumber").fill(orderNumber);
+  await field(item, "note", "textarea").fill(note);
+  await button(item, "Guardar decisión").click();
+  // The item leaves the list and shows among the settled ones, with its order.
+  const settled = withValue(
+    main(page).getByRole("region", { name: "Resueltos recientemente" }).getByRole("listitem"),
+    `(${orderNumber})`,
+  ).first();
+  await settled.waitFor();
+  return text(settled);
+}
+
+/** A refund's row on Cobros › Reembolsos (by its order number), as one line. */
+const refundRow = (page, orderNumber) =>
+  text(withValue(testid(main(page), "refund-row"), orderNumber));
+
+Object.assign(module.exports, {
+  firstSectionHeading,
+  pageText,
+  changePaymentsMode,
+  firstAlert,
+  waitForModeChanged,
+  unmatchedTransfers,
+  attachTransfer,
+  refundRow,
+});
+
+// ── Pagos a vendedores: account changes, the cut-off, a run ────────────────
+
+const accountChanges = (page) =>
+  main(page).getByRole("region", { name: "Cambios de cuenta por resolver" });
+const firstAccountChange = (page) => accountChanges(page).locator("ul > li").first();
+
+/** The first account change waiting, as one line. */
+const firstAccountChangeText = (page) => text(firstAccountChange(page));
+
+/** Rejects the first account change with this note; returns the refusal. */
+async function rejectAccountChangeRefused(page, note) {
+  const card = firstAccountChange(page);
+  await field(card, "note", "textarea").fill(note);
+  await button(card, "Rechazar").click();
+  await card.getByRole("alert").waitFor();
+  return text(card.getByRole("alert"));
+}
+
+/** Approves the first account change (note emptied) and returns the page's confirmation once the queue is empty. */
+async function approveAccountChange(page) {
+  const card = firstAccountChange(page);
+  await field(card, "note", "textarea").fill("");
+  await button(card, "Aprobar la cuenta nueva").click();
+  await settledText(main(page), /No hay cambios de cuenta por resolver/, {
+    what: "Pagos a vendedores",
+  });
+  // The card is gone with its form, so the page itself confirms the decision.
+  const confirmation = accountChanges(page).getByRole("status").first();
+  await confirmation.waitFor();
+  return text(confirmation);
+}
+
+const cutoff = (page) =>
+  main(page).getByRole("region", { name: "Qué se pagaría con una fecha de corte" });
+
+/** The cut-off date the preview starts from. */
+const cutoffDate = (page) => field(cutoff(page), "corte").inputValue();
+
+/** Previews another cut-off date and waits for its figures. */
+async function previewCutoff(page, date) {
+  await field(cutoff(page), "corte").fill(date);
+  await button(cutoff(page), "Ver este corte").click();
+  await page.waitForURL((u) => new URL(u).searchParams.get("corte") === date);
+  await testid(cutoff(page), "cutoff-figures").waitFor();
+}
+
+/** The preview's figure tiles (each tile's text). */
+const cutoffTiles = (page) =>
+  testid(cutoff(page), "cutoff-figures").locator(":scope > div").allInnerTexts();
+
+/** The preview's rows (one per shop). */
+const cutoffRows = (page) => cutoff(page).locator("tbody tr").allInnerTexts();
+
+/** «Crear la corrida de pagos», and waits for the run's page; returns its code. */
+async function createRun(page) {
+  await button(cutoff(page), "Crear la corrida de pagos").click();
+  await page.waitForURL((u) => new URL(u).pathname.startsWith("/pagos-vendedores/corridas/"));
+  const title = main(page).getByRole("heading", { level: 1, name: "Corrida PV-" });
+  await title.waitFor();
+  return (await text(title)).replace("Corrida ", "");
+}
+
+/** The run's figures, as one line. */
+const runFigures = (page) => text(testid(main(page), "run-figures"));
+
+const runPayouts = (page) =>
+  main(page)
+    .getByRole("region", { name: /^Pagos \(/ })
+    .locator("ul > li");
+
+/** How many payouts the run has. */
+const runPayoutCount = (page) => runPayouts(page).count();
+
+/** A shop's payout in the run, by the shop's name. */
+const runPayout = (page, shop) =>
+  runPayouts(page).filter({ has: page.getByRole("heading", { level: 3, name: shop }) });
+
+/** A shop's payout, as one line. */
+const runPayoutText = (page, shop) => text(runPayout(page, shop));
+
+/** «Descargar la lista para el banco»; returns the download. */
+async function downloadBankList(page) {
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    link(main(page), "Descargar la lista para el banco").click(),
+  ]);
+  return download;
+}
+
+/** Records a shop's payout as paid with a bank reference that is refused; returns the refusal. */
+async function recordPaidRefused(page, shop, reference) {
+  const card = runPayout(page, shop);
+  await field(card, "bankReference").fill(reference);
+  await button(card, "Registrar como pagado").click();
+  await card.getByRole("alert").waitFor();
+  return text(card.getByRole("alert"));
+}
+
+/** Records a shop's payout as paid with the bank's reference and waits for it on the page. */
+async function recordPaid(page, shop, reference) {
+  const card = runPayout(page, shop);
+  await field(card, "bankReference").fill(reference);
+  await button(card, "Registrar como pagado").click();
+  await settledText(main(page), (t) => t.includes(`Comprobante ${reference}`), { what: "the run" });
+}
+
+/** Marks a shop's payout as not paid, with the bank's reason, and waits for it to say so. */
+async function recordNotPaid(page, shop, note) {
+  const card = runPayout(page, shop);
+  await testid(card, "payout-failed").click();
+  await field(card, "note", "textarea").fill(note);
+  await button(card, "Marcar como no pagado").click();
+  const failed = word("payout_status", "failed");
+  await settledText(card, (t) => t.includes(failed), { what: `${shop}'s payout` });
+}
+
+/** The first run of «Corridas de pago», as one line. */
+const firstRun = (page) =>
+  text(main(page).getByRole("region", { name: "Corridas de pago" }).locator("tbody tr").first());
+
+Object.assign(module.exports, {
+  firstAccountChangeText,
+  rejectAccountChangeRefused,
+  approveAccountChange,
+  cutoffDate,
+  previewCutoff,
+  cutoffTiles,
+  cutoffRows,
+  createRun,
+  runFigures,
+  runPayoutCount,
+  runPayoutText,
+  downloadBankList,
+  recordPaidRefused,
+  recordPaid,
+  recordNotPaid,
+  firstRun,
+});
+
+// ── Personal, Repartidores, Bodegas, Auditoría ─────────────────────────────
+
+/** A row of the page's table, by a name it shows (seed data, or «(usted)» for your own). */
+const rowOf = (page, name) => main(page).getByRole("row", { name }).first();
+
+/** A row, as one line. */
+const rowText = (page, name) => text(rowOf(page, name));
+
+/** Waits until the page's table has `count` rows. */
+const waitForRowCount = (page, count) =>
+  page.waitForFunction((n) => document.querySelectorAll("main tbody tr").length === n, count);
+
+const grantForm = (page) => main(page).getByRole("region", { name: "Dar acceso a una persona" });
+
+/** Gives a person access to the console with a role; returns the form's message once it shows. */
+async function grantAccess(page, email, role, { refused = false } = {}) {
+  const form = grantForm(page);
+  await field(form, "email").fill(email);
+  await field(form, "role").selectOption(role);
+  await form.locator('button[type="submit"]').click();
+  if (refused) {
+    await form.getByRole("alert").waitFor();
+    return text(form.getByRole("alert"));
+  }
+  return "";
+}
+
+/** What the grant form says and holds after a refusal. */
+async function grantFormState(page) {
+  const form = grantForm(page);
+  return { email: await field(form, "email").inputValue() };
+}
+
+/** The grant form's message, as one line. */
+const grantMessage = (page) => text(grantForm(page).getByRole("status"));
+
+/** Changes a staff member's role or access from their row; waits for the row's message (status or alert). */
+async function setStaff(page, name, { role, access }, answer = "status") {
+  const row = rowOf(page, name);
+  if (role) await field(row, "role").selectOption(role);
+  if (access) await field(row, "access").selectOption(access);
+  await row.locator('button[type="submit"]').click();
+  if (answer) {
+    await row.getByRole(answer).waitFor();
+    return text(row.getByRole(answer));
+  }
+  return "";
+}
+
+/** Waits until a row shows these words. */
+const waitForRowSaying = (page, name, words) =>
+  kit.waitForShown(rowOf(page, name), words, { what: `${name}'s row` });
+
+const driverForm = (page) => main(page).getByRole("region", { name: "Registrar un repartidor" });
+
+/** Fills «Registrar un repartidor» (by field name; selects are chosen) and sends it. */
+async function registerDriver(page, values) {
+  const form = driverForm(page);
+  for (const [name, value] of Object.entries(values)) {
+    const input = field(form, name);
+    if ((await input.evaluate((el) => el.tagName)) === "SELECT") await input.selectOption(value);
+    else await input.fill(value);
+  }
+  await form.locator('button[type="submit"]').click();
+}
+
+/** The driver form's error and the name it keeps, once it shows the error. */
+async function driverFormRefusal(page) {
+  const form = driverForm(page);
+  await form.getByRole("alert").waitFor();
+  return {
+    message: await text(form.getByRole("alert")),
+    name: await field(form, "fullName").inputValue(),
+  };
+}
+
+/** Saves a driver's status from their row and waits for the new word. */
+async function setDriverRowStatus(page, name, status) {
+  const row = rowOf(page, name);
+  await field(row, "status").selectOption(status);
+  await button(row, "Guardar").click();
+  await waitForRowSaying(page, name, word("driver_status", status));
+}
+
+/** Opens «Editar datos» from a driver's row; returns the form's heading and what it holds. */
+async function openDriverEdit(page, name) {
+  await link(rowOf(page, name), "Editar datos").click();
+  const form = main(page).getByRole("region", { name: "Editar a" });
+  await form.waitFor();
+  return {
+    heading: await text(form.getByRole("heading", { level: 2 })),
+    plate: await field(form, "plate").inputValue(),
+    phone: await field(form, "phone").inputValue(),
+  };
+}
+
+/** Changes a driver's record in the open edit form and waits for its message. */
+async function editDriver(page, values) {
+  const form = main(page).getByRole("region", { name: "Editar a" });
+  for (const [name, value] of Object.entries(values)) {
+    const input = field(form, name);
+    if ((await input.evaluate((el) => el.tagName)) === "SELECT") await input.selectOption(value);
+    else await input.fill(value);
+  }
+  await form.locator('button[type="submit"]').click();
+  await form.getByRole("status").waitFor();
+}
+
+/** A warehouse on Bodegas, by its code. */
+const warehouseSite = (page, code) => withValue(main(page).locator("ul > li"), code).first();
+
+/** A warehouse, as one line. */
+const warehouseText = (page, code) => text(warehouseSite(page, code));
+
+/** Adds a person to a warehouse with a role, and waits for them on its list; returns their line. */
+async function addWarehouseWorker(page, code, email, role, name) {
+  const site = warehouseSite(page, code);
+  const form = site
+    .locator("form")
+    .filter({ has: page.getByRole("button", { name: "Agregar a la bodega" }) });
+  await field(form, "email").fill(email);
+  await field(form, "role").selectOption(role);
+  await form.locator('button[type="submit"]').click();
+  const worker = withValue(site.locator("li"), name);
+  await worker.waitFor();
+  return text(worker);
+}
+
+/** Changes a worker's role in a warehouse (or removes them with «remove»). */
+async function setWarehouseRole(page, code, name, role) {
+  const worker = withValue(warehouseSite(page, code).locator("li"), name);
+  await field(worker, "role").selectOption(role);
+  await button(worker, "Guardar").click();
+}
+
+/** Waits until a worker's line says their role. */
+const waitForWorkerRole = (page, code, name, roleWords) =>
+  kit.waitForShown(withValue(warehouseSite(page, code).locator("li"), name), roleWords, {
+    what: `${name}'s line`,
+  });
+
+/** Waits until a name is nowhere on the page. */
+const waitForNameGone = (page, name) =>
+  page.waitForFunction((n) => !document.querySelector("main")?.innerText.includes(n), name);
+
+/** The page's whole table, as one line. */
+const tableText = (page) => text(main(page).locator("table").first());
+
+/** The console's header, as one line. */
+const headerText = (page) => text(page.getByRole("banner").first());
+
+Object.assign(module.exports, {
+  headerText,
+  rowText,
+  waitForRowCount,
+  grantAccess,
+  grantFormState,
+  grantMessage,
+  setStaff,
+  waitForRowSaying,
+  registerDriver,
+  driverFormRefusal,
+  setDriverRowStatus,
+  openDriverEdit,
+  editDriver,
+  warehouseText,
+  addWarehouseWorker,
+  setWarehouseRole,
+  waitForWorkerRole,
+  waitForNameGone,
+  tableText,
+});
+
+// ── Two-step verification; Seguridad ───────────────────────────────────────
+
+Object.assign(module.exports, kit.secondFactor);
+
+/** A staff member's card on Seguridad, by their e-mail (data). */
+const securityCard = (page, email) => withValue(main(page).getByRole("listitem"), email);
+
+/** A staff member's card, as one line. */
+const securityCardText = (page, email) => text(securityCard(page, email));
+
+/** How many buttons your own card offers (none: no reset of one's own factor). */
+const ownCardButtons = (page) =>
+  withValue(main(page).getByRole("listitem"), "(usted)").getByRole("button").count();
+
+/** «Reiniciar su verificación» on a colleague's card; returns the card's message. */
+async function resetTwoStep(page, email) {
+  const card = securityCard(page, email);
+  await button(card, "Reiniciar su verificación").click();
+  return text(card.getByRole("status"));
+}
+
+/** Waits for the summary's sections and returns their first headings. */
+async function summaryHeadings(page) {
+  await main(page).getByRole("heading", { level: 2 }).first().waitFor();
+  return main(page).getByRole("heading", { level: 2 }).allInnerTexts();
+}
+
+Object.assign(module.exports, {
+  securityCardText,
+  ownCardButtons,
+  resetTwoStep,
+  summaryHeadings,
+  hydrated: kit.hydrated,
+});
+
+/** Sends the sign-in form the page shows now (without waiting for where it leads). */
+const fillSignInForm = (page, email, password = PASSWORD) => fillSignIn(page, email, password);
+
+Object.assign(module.exports, { fillSignIn: fillSignInForm });
+
+// ── Operación › Ubicaciones: switching off a shelf with stock ──────────────
+
+/** The first move or correction that shows all these values (codes, a note), as one line. */
+async function stockChangeWith(page, ...values) {
+  let entries = main(page)
+    .getByRole("region", { name: "Movimientos y correcciones de existencias" })
+    .getByRole("listitem");
+  for (const value of values) entries = withValue(entries, value);
+  return text(entries.first());
+}
+
+/** Opens «Desactivar» on a location's row; returns what it explains. */
+async function openLocationSwitchOff(page, code) {
+  const row = page.locator(`li[data-location="${code}"]`);
+  await testid(row, "location-switch-off").click();
+  return text(row.locator("details[open]").first());
+}
+
+/** «Desactivar la ubicación» on a location that still holds stock; returns the refusal. */
+async function switchLocationOffRefused(page, code) {
+  const row = page.locator(`li[data-location="${code}"]`);
+  await button(row, "Desactivar la ubicación").click();
+  await row.getByRole("alert").waitFor();
+  return text(row.getByRole("alert"));
+}
+
+/** «Desactivar la ubicación» and waits for the row to say it is off. */
+async function switchLocationOffNow(page, code) {
+  const row = page.locator(`li[data-location="${code}"]`);
+  await testid(row, "location-switch-off").click();
+  await button(row, "Desactivar la ubicación").click();
+  await settledText(row, /Desactivada/, { what: `location ${code}` });
+}
+
+Object.assign(module.exports, {
+  stockChangeWith,
+  openLocationSwitchOff,
+  switchLocationOffRefused,
+  switchLocationOffNow,
+});
+
+/** Every move or correction that shows all these values, each as one line. */
+async function stockChangesWith(page, ...values) {
+  let entries = main(page)
+    .getByRole("region", { name: "Movimientos y correcciones de existencias" })
+    .getByRole("listitem");
+  for (const value of values) entries = withValue(entries, value);
+  return (await entries.allInnerTexts()).map(kit.squash);
+}
+
+Object.assign(module.exports, { stockChangesWith });

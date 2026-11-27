@@ -708,3 +708,183 @@ const refundTotal = (page) => text(testid(page, "refund-total"));
 const cancelNotice = (page) => cancelReason(page);
 
 Object.assign(module.exports, { orderRow, refundTotal, cancelNotice });
+
+// ── Password recovery ──────────────────────────────────────────────────────
+
+Object.assign(module.exports, kit.passwordRecovery);
+
+/** Opens a full address (a link from an e-mail) and waits until React has taken over its forms. */
+async function openLink(page, url) {
+  await page.goto(url, { waitUntil: "load" });
+  await hydrated(page);
+}
+
+Object.assign(module.exports, { openLink });
+
+// ── Paying an order (and the payment gateway's test page) ─────────────────
+
+/** Buys one unit of a product with this payment method and lands on the order page; returns the order number. */
+async function buy(page, slug, method) {
+  await open(page, `/p/${slug}`, "load");
+  await addToCart(page);
+  await open(page, "/pagar", "load");
+  const radio = page.locator(`input[name="paymentMethod"][value="${method}"]`);
+  await radio.waitFor();
+  await radio.check();
+  await confirmOrder(page);
+  await page.waitForURL((u) => /^\/pedidos\/YT-/.test(new URL(u).pathname));
+  await page.getByRole("heading", { level: 1, name: "Pedido YT-" }).first().waitFor();
+  return new URL(page.url()).pathname.split("/")[2];
+}
+
+/** Reloads an order page and waits until its streamed content is on screen. */
+async function reloadOrder(page) {
+  await page.reload({ waitUntil: "load" });
+  await page.getByRole("heading", { level: 1, name: "Pedido YT-" }).first().waitFor();
+  await page.waitForTimeout(300);
+}
+
+/** Opens (or reloads) an order page and tells whether it shows the delivery code, i.e. it is paid. */
+async function orderShowsPaid(page, number) {
+  if (!new URL(page.url()).pathname.endsWith(number)) {
+    await open(page, `/pedidos/${number}`, "load");
+  } else {
+    await page.reload({ waitUntil: "load" });
+  }
+  await page.getByRole("heading", { level: 1, name: "Pedido YT-" }).first().waitFor();
+  await page.waitForTimeout(300);
+  return deliveryCodeShown(page);
+}
+
+/** Whether the page shows the delivery code now. */
+const deliveryCodeShown = async (page) => (await testid(page, "delivery-code").count()) > 0;
+
+/** The visible text of the whole page. */
+const pageText = (page) => text(page.locator("body"));
+
+/** How many visible times the page says `words` (product words, named by a helper). */
+const timesSaid = async (page, words) => (await pageText(page)).split(words).length - 1;
+
+/** Whether the order page offers to simulate the payment (only in the sandbox). */
+const simulationOffered = async (page) =>
+  (await page.getByRole("button", { name: "Simular pago" }).count()) > 0;
+
+/** «Pagar … con tarjeta», and waits for the gateway's page. */
+async function payByCard(page, gateway) {
+  await button(main(page), "con tarjeta").click();
+  await page.waitForURL((u) => u.href.startsWith(`${gateway}/pay/`));
+}
+
+/** «Intentar de nuevo» after a failed payment, and waits for the gateway's page. */
+async function retryPayment(page, gateway) {
+  await button(main(page), "Intentar de nuevo").click();
+  await page.waitForURL((u) => u.href.startsWith(`${gateway}/pay/`));
+}
+
+/** «Pagar … con tarjeta» when the gateway cannot prepare a payment (no page to go to). */
+const tryCardWithoutGateway = (page) => button(main(page), "con tarjeta").click();
+
+/** On the gateway's test page: the bank's extra step, passed. */
+async function gatewayChallengePass(page) {
+  await testid(page, "fake-challenge").click();
+  await testid(page, "fake-3ds").waitFor();
+}
+
+/** On the gateway's test page: the extra step's «pass». */
+const gatewayPass3ds = (page) => testid(page, "fake-3ds-pass").click();
+
+/** On the gateway's test page: the card is declined. */
+const gatewayDecline = (page) => testid(page, "fake-decline").click();
+
+/** On the gateway's test page: the card is approved. */
+const gatewayApprove = (page) => testid(page, "fake-approve").click();
+
+/** Whether the order page says the payment was received (once). */
+const paymentReceivedNotices = (page) => timesSaid(page, "¡Pago recibido!");
+
+/** Whether the order page says the payment did not go through. */
+const paymentFailedShown = async (page) => (await timesSaid(page, "El pago no se completó")) > 0;
+
+/** Whether the order page says the payment could not be prepared. */
+const paymentNotPreparedShown = async (page) =>
+  (await timesSaid(page, "No pudimos preparar el pago")) > 0;
+
+/** The SINPE Móvil form: who pays (kind, number) and from which phone. Fields left out stay. */
+async function fillSinpe(page, { kind, number, phone }) {
+  if (kind !== undefined) await field(main(page), "kind").selectOption(kind);
+  if (number !== undefined) await field(main(page), "number").fill(number);
+  if (phone !== undefined) await field(main(page), "phone").fill(phone);
+}
+
+/** What the SINPE form holds: kind and number. */
+async function sinpeTyped(page) {
+  return {
+    kind: await field(main(page), "kind").inputValue(),
+    number: await field(main(page), "number").inputValue(),
+  };
+}
+
+/** The SINPE form's «who pays» field (for its size). */
+const sinpeKindField = (page) => field(main(page), "kind");
+
+/** Waits for the SINPE form's button. */
+const waitForSinpeForm = (page) => button(main(page), "Ver los datos para transferir").waitFor();
+
+/** «Ver los datos para transferir». */
+const askSinpeDetails = (page) => button(main(page), "Ver los datos para transferir").click();
+
+/** Waits for the number to transfer to, and returns it. */
+async function sinpeNumber(page) {
+  await testid(page, "sinpe-number").waitFor();
+  return text(testid(page, "sinpe-number"));
+}
+
+/** «Cancelar pedido» on a paid order, and waits for its refund to show. */
+async function cancelPaidOrder(page) {
+  await button(main(page), "Cancelar pedido").click();
+  // The cancel form goes once the order is cancelled; its refund takes its place.
+  await page.locator('[data-testid="refund"]:visible').first().waitFor();
+}
+
+/** The order's first refund, as one line. */
+const firstRefund = (page) => text(testid(page, "refund").first());
+
+/** The order page's summary, as one line. */
+const orderSummary = (page) => text(page.getByRole("complementary", { name: "Resumen" }));
+
+Object.assign(module.exports, {
+  buy,
+  reloadOrder,
+  orderShowsPaid,
+  deliveryCodeShown,
+  pageText,
+  simulationOffered,
+  payByCard,
+  retryPayment,
+  tryCardWithoutGateway,
+  gatewayChallengePass,
+  gatewayPass3ds,
+  gatewayDecline,
+  gatewayApprove,
+  paymentReceivedNotices,
+  paymentFailedShown,
+  paymentNotPreparedShown,
+  fillSinpe,
+  sinpeTyped,
+  sinpeKindField,
+  waitForSinpeForm,
+  askSinpeDetails,
+  sinpeNumber,
+  cancelPaidOrder,
+  firstRefund,
+  orderSummary,
+});
+
+/** Signs in from the shop's sign-in page and waits to land on `landsOn`. */
+async function signInLandingOn(page, email, landsOn, password = PASSWORD) {
+  await open(page, "/ingresar");
+  await fillSignIn(page, email, password);
+  await page.waitForURL((u) => new URL(u).pathname === landsOn);
+}
+
+Object.assign(module.exports, { signInLandingOn });

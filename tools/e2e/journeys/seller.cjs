@@ -5,11 +5,10 @@
 // browser logs an error, or when any response is a 5xx.
 
 const { chromium } = require("playwright");
+const seller = require("../lib/seller.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const BASE = process.env.SELLER_URL || "http://127.0.0.1:3001";
-const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 (async () => {
   const browser = await chromium.launch();
   const errors = [];
@@ -22,15 +21,7 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const signIn = async (page, email) => {
-    await page.goto(BASE + "/ingresar", { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname === "/");
-    await page.waitForSelector("main h1:visible");
-  };
-
+  const signIn = (page, email) => seller.signInHome(page, email);
   const context = await browser.newContext({
     viewport: { width: 1280, height: 900 },
     locale: "es-CR",
@@ -39,134 +30,84 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   watch(page);
 
   // 0. A visitor is sent to sign in
-  await page.goto(BASE + "/productos", { waitUntil: "networkidle" });
+  await seller.open(page, "/productos");
   log("visitor on /productos ->", page.url().replace(BASE, ""));
 
   // 1. Seller with two shops
   await signIn(page, "vendedor@yuntera.example");
-  log("dashboard h1:", await text(page.locator("main h1:visible")));
-  log("nav:", await text(page.locator('nav[aria-label="Secciones"]')));
-  log(
-    "stats:",
-    (await page.locator("main:visible section").first().innerText())
-      .replace(/\s+/g, " ")
-      .slice(0, 200),
-  );
+  log("dashboard h1:", await seller.heading(page));
+  log("nav:", await seller.sectionsNav(page));
+  log("stats:", (await seller.firstSection(page)).slice(0, 200));
   await page.screenshot({ path: SHOTS + "/s1-dashboard.png", fullPage: true });
 
   // 2. Switch shop
-  const shops = await page.locator("#shop option").allInnerTexts();
+  const shops = await seller.shopOptions(page);
   log("shops:", shops);
-  const currentShop = await page.locator("main h1:visible").innerText();
+  const currentShop = await seller.heading(page);
   const target = shops.find((s) => s !== currentShop);
-  await page.selectOption("#shop", { label: target });
-  await page.click('header button:has-text("Cambiar")');
-  await page.waitForSelector(`main h1:visible:has-text("${target}")`);
-  log("switched to:", await text(page.locator("main h1:visible")));
+  await seller.switchShop(page, target);
+  log("switched to:", await seller.heading(page));
   const ferreteria = shops.find((s) => s.includes("Higuer"));
-  if (target !== ferreteria) {
-    await page.selectOption("#shop", { label: ferreteria });
-    await page.click('header button:has-text("Cambiar")');
-    await page.waitForSelector(`main h1:visible:has-text("Higuer")`);
-  }
+  if (target !== ferreteria) await seller.switchShop(page, ferreteria, "Higuer");
 
   // 3. Listings + edit a price (Ferretería)
-  await page.goto(BASE + "/productos", { waitUntil: "networkidle" });
-  log("listing rows:", await page.locator("main:visible tbody tr").count());
-  const row = page.locator("main:visible tbody tr").first();
-  log("first row:", (await text(row)).slice(0, 170));
-  await row.locator("summary").click();
-  const before = await row.locator('input[name="price"]').inputValue();
-  await row.locator('input[name="price"]').fill(String(Number(before) + 100));
-  await row.locator('button[type="submit"]').click();
-  await row.locator('[role="status"], [role="alert"]').first().waitFor();
-  log(
-    "price edit:",
-    before,
-    "->",
-    await text(row.locator("summary")),
-    "|",
-    await text(row.locator('[role="status"], [role="alert"]').first()),
-  );
+  await seller.open(page, "/productos");
+  log("listing rows:", await seller.tableRows(page));
+  log("first row:", (await seller.tableRow(page)).slice(0, 170));
+  const priced = await seller.raiseFirstPrice(page, 100);
+  log("price edit:", priced.before, "->", priced.summary, "|", priced.message);
   // regular price lower than price is refused with a clear message
-  await row.locator('input[name="listPrice"]').fill("1");
-  await row.locator('button[type="submit"]').click();
-  await page.waitForTimeout(800);
-  log("bad regular price:", await text(row.locator('[role="alert"]').first()));
+  log("bad regular price:", await seller.badRegularPrice(page, "1"));
   await page.screenshot({ path: SHOTS + "/s2-listings.png", fullPage: true });
 
   // 4. Inventory for seller-fulfilled items
-  await page.goto(BASE + "/inventario", { waitUntil: "networkidle" });
-  log("inventory sections:", await page.locator("main:visible h2").allInnerTexts());
-  const stockRow = page.locator("main:visible tbody tr").first();
-  await stockRow.locator('input[name="quantity"]').fill("23");
-  await stockRow.locator('button[type="submit"]').click();
-  await stockRow.locator('[role="status"], [role="alert"]').first().waitFor();
-  log(
-    "stock set:",
-    await text(stockRow.locator('[role="status"], [role="alert"]').first()),
-    "| row:",
-    (await text(stockRow)).slice(0, 120),
-  );
+  await seller.open(page, "/inventario");
+  log("inventory sections:", await seller.sectionHeadings(page));
+  const stock = await seller.setFirstStock(page, "23");
+  log("stock set:", stock.message, "| row:", stock.row.slice(0, 120));
   await page.screenshot({ path: SHOTS + "/s3-inventory.png", fullPage: true });
 
   // 5. New listing with fee preview (TecnoCasa: platform fulfilled)
-  await page.selectOption("#shop", { label: shops.find((s) => s.includes("Tecno")) });
-  await page.click('header button:has-text("Cambiar")');
-  await page.waitForSelector('main h1:visible:has-text("TecnoCasa")');
-  await page.goto(BASE + "/productos/nuevo", { waitUntil: "networkidle" });
-  await page.fill('input[name="title"]', "Lámpara de escritorio LED Volcán con brazo flexible");
-  const hogarOption = await page
-    .locator('select[name="categorySlug"] optgroup[label^="Hogar"] option')
-    .first()
-    .getAttribute("value");
-  await page.selectOption('select[name="categorySlug"]', hogarOption);
-  await page.fill('textarea[name="bullets"]', "Luz cálida y fría\nBrazo flexible\nPuerto USB");
-  await page.fill('input[name="price"]', "20 000");
-  await page.fill('input[name="weightGrams"]', "900");
-  await page.fill('input[name="lengthCm"]', "30");
-  await page.fill('input[name="widthCm"]', "15");
-  await page.fill('input[name="heightCm"]', "12");
-  await page.selectOption('aside[aria-label="Lo que usted recibe"] select', "card");
-  log(
-    "fee preview (₡20 000 hogar, bodega, tarjeta):",
-    await text(page.locator('aside[aria-label="Lo que usted recibe"] dl')),
+  await seller.switchShop(
+    page,
+    shops.find((s) => s.includes("Tecno")),
+    "TecnoCasa",
   );
+  await seller.open(page, "/productos/nuevo");
+  const preview = await seller.fillNewListing(page, {
+    title: "Lámpara de escritorio LED Volcán con brazo flexible",
+    group: "Hogar",
+    bullets: "Luz cálida y fría\nBrazo flexible\nPuerto USB",
+    price: "20 000",
+    weight: "900",
+    length: "30",
+    width: "15",
+    height: "12",
+    method: "card",
+  });
+  log("fee preview (₡20 000 hogar, bodega, tarjeta):", preview);
   await page.screenshot({ path: SHOTS + "/s4-new-listing.png", fullPage: true });
-  await page.click('button:has-text("Enviar a revisión")');
-  await page.waitForURL((u) => new URL(u).pathname === "/productos");
-  log("after create:", await text(page.locator('main:visible [role="status"]').first()));
-  log(
-    "new listing row:",
-    (
-      await text(page.locator("main:visible tbody tr", { hasText: "Lámpara de escritorio" }).last())
-    ).slice(0, 150),
-  );
+  await seller.sendNewListing(page);
+  log("after create:", await seller.statusText(page));
+  log("new listing row:", (await seller.lastRowWith(page, "Lámpara de escritorio")).slice(0, 150));
 
   // 6. Inbound shipment to the Yuntera warehouse
-  await page.goto(BASE + "/inventario", { waitUntil: "networkidle" });
-  const qty = page.locator('main:visible input[name^="qty:"]').first();
-  await qty.fill("15");
-  await page.click('main:visible button:has-text("Registrar envío")');
-  await page.waitForSelector('main:visible li:has-text("IN-")');
-  log(
-    "inbound:",
-    (await text(page.locator('main:visible li:has-text("IN-")').first())).slice(0, 160),
-  );
+  await seller.open(page, "/inventario");
+  log("inbound:", (await seller.announceInbound(page, "15")).slice(0, 160));
   await page.screenshot({ path: SHOTS + "/s5-inbound.png", fullPage: true });
 
   // 7. Payouts and account
-  await page.goto(BASE + "/pagos", { waitUntil: "networkidle" });
-  log("payout stats:", (await text(page.locator("main:visible .grid").first())).slice(0, 200));
+  await seller.open(page, "/pagos");
+  log("payout stats:", (await seller.balancesText(page)).slice(0, 200));
   log(
     "statement rows:",
-    await page.locator("main:visible tbody tr").count(),
+    await seller.tableRows(page),
     "| first:",
-    (await text(page.locator("main:visible tbody tr").first())).slice(0, 140),
+    (await seller.tableRow(page)).slice(0, 140),
   );
   await page.screenshot({ path: SHOTS + "/s6-payouts.png", fullPage: true });
-  await page.goto(BASE + "/cuenta", { waitUntil: "networkidle" });
-  log("account:", (await text(page.locator("main:visible section").nth(1))).slice(0, 170));
+  await seller.open(page, "/cuenta");
+  log("account:", (await seller.section(page, 1)).slice(0, 170));
   await context.close();
 
   // 8. A seller who ships their own parcels packs one
@@ -174,30 +115,21 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   const p2 = await c2.newPage();
   watch(p2);
   await signIn(p2, "vendedor@yuntera.example");
-  if (!(await p2.locator("main h1:visible").innerText()).includes("Higuer")) {
-    await p2.selectOption("#shop", { label: "Ferretería El Higuerón" });
-    await p2.click('header button:has-text("Cambiar")');
-    await p2.waitForSelector('main h1:visible:has-text("Higuer")');
-  }
-  await p2.goto(BASE + "/pedidos", { waitUntil: "networkidle" });
-  const parcels = p2.locator('main:visible section[aria-labelledby="empacar"] > ul > li');
-  log("parcels to pack:", await parcels.count());
-  if (await parcels.count()) {
-    log("parcel:", (await text(parcels.first())).slice(0, 200));
-    await parcels.first().locator('input[name="weightGrams"]').fill("850");
-    await parcels.first().locator('button[type="submit"]').click();
-    await p2.waitForTimeout(1500);
+  await seller.chooseShop(p2, "Ferretería El Higuerón");
+  await seller.open(p2, "/pedidos");
+  const parcels = await seller.parcelsToPack(p2);
+  log("parcels to pack:", parcels);
+  if (parcels) {
+    log("parcel:", (await seller.firstParcelToPack(p2)).slice(0, 200));
+    await seller.packFirstParcel(p2, "850");
     log(
       "after packing, to pack:",
-      await p2.locator('main:visible section[aria-labelledby="empacar"] > ul > li').count(),
+      await seller.parcelsToPack(p2),
       "|",
-      (await text(p2.locator('main:visible section[aria-labelledby="empacar"]'))).slice(0, 120),
+      (await seller.toPackText(p2)).slice(0, 120),
     );
   }
-  log(
-    "sales rows:",
-    await p2.locator('main:visible section[aria-labelledby="ventas"] tbody tr').count(),
-  );
+  log("sales rows:", await seller.salesRows(p2));
   await p2.screenshot({ path: SHOTS + "/s7-orders.png", fullPage: true });
   // another seller's data is unreachable even by guessing
   await c2.close();
@@ -211,49 +143,45 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   });
   const p3 = await c3.newPage();
   watch(p3);
-  await p3.goto(BASE + "/registro", { waitUntil: "networkidle" });
+  await seller.open(p3, "/registro");
   log(
     "mobile /registro overflow px:",
     await p3.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
   );
   const stamp = Date.now().toString().slice(-7);
-  await p3.fill('main input[name="fullName"]', "Rosa Vargas Mena");
-  await p3.fill('main input[name="email"]', `rosa${stamp}@yuntera.example`);
-  await p3.fill('main input[name="password"]', "clave-segura-123");
-  await p3.check('main input[name="acepta"]');
-  await p3.click('main button:has-text("Crear cuenta")');
-  await p3.waitForSelector('main:visible h2:has-text("Datos de la tienda")');
-  await p3.fill('input[name="tradeName"]', `Dulces Doña Rosa ${stamp}`);
-  await p3.fill('input[name="idNumber"]', "1-1234-0" + stamp.slice(-3));
-  await p3.fill('input[name="legalName"]', "Rosa Vargas Mena");
-  await p3.fill(
-    'textarea[name="fiscalAddress"]',
-    "Cartago, Paraíso, Orosi, 200 metros norte de la iglesia",
-  );
-  await p3.fill('input[name="contactPhone"]', "8765 4321");
+  await seller.registerAccount(p3, {
+    name: "Rosa Vargas Mena",
+    email: `rosa${stamp}@yuntera.example`,
+    password: "clave-segura-123",
+  });
+  await seller.fillShopDetails(p3, {
+    tradeName: `Dulces Doña Rosa ${stamp}`,
+    idNumber: "1-1234-0" + stamp.slice(-3),
+    legalName: "Rosa Vargas Mena",
+    fiscalAddress: "Cartago, Paraíso, Orosi, 200 metros norte de la iglesia",
+    contactPhone: "8765 4321",
+  });
   // submit without ticking the declaration: the browser blocks it
-  await p3.click('main button:has-text("Enviar solicitud")');
+  await seller.sendShopRequest(p3);
   await p3.waitForTimeout(400);
   log("blocked without declaration:", new URL(p3.url()).pathname === "/registro");
-  await p3.check('input[name="declara"]');
-  await p3.click('main button:has-text("Enviar solicitud")');
+  await seller.declare(p3);
+  await seller.sendShopRequest(p3);
   await p3.waitForURL((u) => new URL(u).pathname === "/");
-  await p3.waitForSelector('main h1:visible:has-text("Dulces")');
+  await p3.getByRole("heading", { level: 1, name: "Dulces" }).waitFor();
   log(
     "new shop dashboard:",
-    await text(p3.locator("main h1:visible")),
+    await seller.heading(p3),
     "|",
-    (await p3.locator('main:visible [role="status"]').allInnerTexts()).map((t) =>
-      t.replace(/\s+/g, " ").slice(0, 60),
-    ),
+    (await seller.statusMessages(p3)).map((t) => t.slice(0, 60)),
   );
   log(
     "mobile dashboard overflow px:",
     await p3.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
   );
   await p3.screenshot({ path: SHOTS + "/s8-mobile-new-shop.png", fullPage: true });
-  await p3.goto(BASE + "/productos", { waitUntil: "networkidle" });
-  log("new shop listings:", await text(p3.locator("main h2:visible, main h3:visible").first()));
+  await seller.open(p3, "/productos");
+  log("new shop listings:", await seller.firstSubheading(p3));
   await c3.close();
 
   log("\nERRORS:", errors.length ? errors : "none");

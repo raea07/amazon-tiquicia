@@ -36,16 +36,20 @@
 
 const { chromium, request } = require("playwright");
 const { ownRoute } = require("../lib/own-route.cjs");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
+const field = require("../lib/field.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
-const FIELD = process.env.FIELD_URL || "http://127.0.0.1:3003";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const SHOPPER = "comprador3@yuntera.example";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
+// The status words these checks look for (tools/e2e/lib/words.cjs).
+const ON_ITS_WAY = word("order_status", "shipped");
+const CANCELLING = word("derived", "cancelling");
+const RESCHEDULED = word("derived", "rescheduled");
 /** Colones as the apps write them (packages/core format): ₡6 450, ₡12 500,50. */
 const colones = (minor) => {
   const whole = String(Math.floor(minor / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
@@ -132,14 +136,6 @@ async function packedOrder(method = "sinpe_movil") {
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const signIn = async (page, base, email) => {
-    await page.goto(base + "/ingresar", { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname !== "/ingresar");
-    await page.waitForLoadState("networkidle");
-  };
   const overflow = (page) =>
     page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   const desktop = () =>
@@ -152,25 +148,6 @@ async function packedOrder(method = "sinpe_movil") {
       locale: "es-CR",
       ...extra,
     });
-
-  // Submits a form of the page and waits for its new outcome.
-  const submit = async (page, scope, button) => {
-    const outcomes = () =>
-      page.locator(
-        '[data-catalogue-outcome] [role="status"], main [role="status"], main [role="alert"]',
-      );
-    const before = (await outcomes().allInnerTexts()).join("|");
-    await scope.locator(`button:has-text("${button}")`).last().click();
-    const deadline = Date.now() + 15000;
-    let now = "";
-    while (Date.now() < deadline) {
-      await page.waitForTimeout(250);
-      now = (await outcomes().allInnerTexts()).join("|");
-      if (now && now !== before) break;
-    }
-    const all = await outcomes().allInnerTexts();
-    return (all.find((t) => !before.includes(t)) ?? all.at(-1) ?? "").replace(/\s+/g, " ").trim();
-  };
 
   // ── 1. Central stops a packed parcel ──────────────────────────────────────
   const order = await packedOrder();
@@ -192,22 +169,13 @@ async function packedOrder(method = "sinpe_movil") {
   const staffContext = await desktop();
   const staff = await staffContext.newPage();
   watch(staff);
-  await signIn(staff, OPS, "central@yuntera.example");
-  await staff.goto(`${OPS}/pedidos/${order}`, { waitUntil: "networkidle" });
-  const stopSummary = staff.locator("summary", {
-    hasText: `Detener el paquete ${parcel.tracking_code}`,
-  });
+  await ops.signIn(staff, "central@yuntera.example");
+  await ops.openOrder(staff, order);
   check(
-    (await stopSummary.count()) === 1,
+    (await ops.stopOffers(staff, parcel.tracking_code)) === 1,
     "the staff order page offers no stop for the packed parcel",
   );
-  await stopSummary.click();
-  const stopForm = staff
-    .locator("form", { has: staff.locator('input[name="shipmentId"]') })
-    .first();
-  const confirmText = await text(
-    stopForm.locator("label", { has: staff.locator('input[name="confirm"]') }),
-  );
+  const confirmText = await ops.openStop(staff, parcel.tracking_code);
   log("confirmation:", confirmText);
   check(
     confirmText.includes(order) &&
@@ -216,44 +184,45 @@ async function packedOrder(method = "sinpe_movil") {
       confirmText.includes("queda cancelado"),
     `the confirmation does not name the order and the money: ${confirmText}`,
   );
-  await stopForm.locator('textarea[name="reason"]').fill("1234 ok");
-  let outcome = await submit(staff, stopForm, "Detener y devolver a la zona de devoluciones");
+  await ops.typeStopReason(staff, "1234 ok");
+  let outcome = await ops.sendStop(staff);
   log("short reason:", outcome);
   check(
     outcome.includes("al menos cinco letras"),
     `a short reason is not refused clearly: ${outcome}`,
   );
-  await stopForm.locator('textarea[name="reason"]').fill("El cliente pidió cancelar por teléfono");
-  outcome = await submit(staff, stopForm, "Detener y devolver a la zona de devoluciones");
+  await ops.typeStopReason(staff, "El cliente pidió cancelar por teléfono");
+  outcome = await ops.sendStop(staff);
   log("no confirmation:", outcome);
   check(
     outcome.includes("Marque la casilla"),
     `a missing confirmation is not refused clearly: ${outcome}`,
   );
   check(
-    (await stopForm.locator('textarea[name="reason"]').inputValue()).includes("pidió cancelar"),
+    (await ops.stopReasonTyped(staff)).includes("pidió cancelar"),
     "the reason typed is lost after a refusal",
   );
   await staff.screenshot({ path: SHOTS + "/of1-stop-confirmation.png", fullPage: true });
-  await stopForm.locator('input[name="confirm"]').check();
-  outcome = await submit(staff, stopForm, "Detener y devolver a la zona de devoluciones");
+  await ops.confirmStop(staff);
+  outcome = await ops.sendStop(staff);
   log("stopped:", outcome);
   check(
     outcome.includes(`Paquete ${parcel.tracking_code} detenido`),
     `the parcel was not stopped: ${outcome}`,
   );
-  await staff.goto(`${OPS}/pedidos/${order}`, { waitUntil: "networkidle" });
-  const staffHeader = await text(staff.locator("main header").first());
+  await ops.openOrder(staff, order);
+  const staffHeader = await ops.orderHeader(staff);
   log("staff heading:", staffHeader);
   check(
-    staffHeader.includes("Se está cancelando"),
+    staffHeader.includes(CANCELLING),
     `the staff heading does not say it is being cancelled: ${staffHeader}`,
   );
-  check(!staffHeader.includes("En camino"), "the staff heading says En camino");
-  const staffParcels = await text(staff.locator("section", { has: staff.locator("#paquetes") }));
+  check(!staffHeader.includes(ON_ITS_WAY), "the staff heading says En camino");
+  const staffParcels = await ops.orderParcels(staff);
   check(
-    staffParcels.includes("Detenido: vuelve a la zona de devoluciones") &&
-      !/Entrega fallida|returning/.test(staffParcels),
+    staffParcels.includes(word("derived", "stoppedStaff")) &&
+      !staffParcels.includes(word("shipment_status", "delivery_failed")) &&
+      !/returning/.test(staffParcels),
     `the parcel is not described in plain words: ${staffParcels}`,
   );
   await staff.screenshot({ path: SHOTS + "/of2-staff-order-stopped.png", fullPage: true });
@@ -262,41 +231,35 @@ async function packedOrder(method = "sinpe_movil") {
   const shopContext = await desktop();
   const shop = await shopContext.newPage();
   watch(shop);
-  await signIn(shop, WEB, SHOPPER);
-  // The list prefetches every order's page, so it is never idle for long: wait for the row.
-  await shop.goto(`${WEB}/pedidos`, { waitUntil: "load" });
-  await shop.locator(`a[href="/pedidos/${order}"]`).waitFor();
-  const row = await text(shop.locator(`a[href="/pedidos/${order}"]`));
+  await web.signIn(shop, SHOPPER);
+  const row = await web.orderRow(shop, order);
   log("list row:", row);
-  check(
-    row.includes("Se está cancelando") && !row.includes("En camino"),
-    `the list row is wrong: ${row}`,
-  );
-  await shop.goto(`${WEB}/pedidos/${order}`, { waitUntil: "networkidle" });
-  const waiting = await text(shop.locator("main"));
+  check(row.includes(CANCELLING) && !row.includes(ON_ITS_WAY), `the list row is wrong: ${row}`);
+  await web.openOrder(shop, order);
+  const waiting = await web.mainText(shop);
   check(
     waiting.includes("Estamos cancelando su pedido") &&
       waiting.includes(`le devolvemos ${colones(placed.total_minor)}, el envío incluido,`),
     "the shopper's page does not say the order is being cancelled and what comes back",
   );
-  check(!waiting.includes("En camino"), "the shopper's page says En camino");
+  check(!waiting.includes(ON_ITS_WAY), "the shopper's page says En camino");
   check(
     !waiting.includes("Su código de entrega"),
     "the delivery code is shown for an order being cancelled",
   );
-  check(waiting.includes("Detenido en la bodega"), "the parcel is not described as stopped");
+  check(
+    waiting.includes(word("derived", "stoppedShopper")),
+    "the parcel is not described as stopped",
+  );
   await shop.screenshot({ path: SHOTS + "/of3-shopper-waiting.png", fullPage: true });
 
   // ── 3. The warehouse receives it ──────────────────────────────────────────
   const fieldContext = await phone();
-  const field = await fieldContext.newPage();
-  watch(field);
-  await signIn(field, FIELD, "bodega@yuntera.example");
-  await field.goto(`${FIELD}/bodega`, { waitUntil: "networkidle" });
-  const returnedRow = field.locator("li", { hasText: parcel.tracking_code }).filter({
-    has: field.locator('select[name="condition"]'),
-  });
-  const returnedText = await text(returnedRow);
+  const worker = await fieldContext.newPage();
+  watch(worker);
+  await field.signIn(worker, "bodega@yuntera.example");
+  await field.open(worker, "/bodega");
+  const returnedText = await field.returnedRowText(worker, parcel.tracking_code);
   log("warehouse row:", returnedText);
   check(
     returnedText.includes("Nunca salió de la bodega") &&
@@ -307,16 +270,13 @@ async function packedOrder(method = "sinpe_movil") {
       !returnedText.includes("0 intentos"),
     `the warehouse is not told the parcel never left: ${returnedText}`,
   );
-  check((await overflow(field)) <= 0, "the warehouse board scrolls sideways on a phone");
-  await field.screenshot({ path: SHOTS + "/of4-warehouse-never-left.png", fullPage: true });
-  await returnedRow.locator('select[name="condition"]').selectOption("resellable");
-  await returnedRow.locator('button:has-text("Recibir el paquete devuelto")').click();
-  await field.waitForURL((u) => new URL(u).searchParams.get("devuelto") === "venta");
-  await field.waitForLoadState("networkidle");
+  check((await overflow(worker)) <= 0, "the warehouse board scrolls sideways on a phone");
+  await worker.screenshot({ path: SHOTS + "/of4-warehouse-never-left.png", fullPage: true });
+  await field.receiveReturned(worker, parcel.tracking_code, "resellable");
 
-  await shop.goto(`${WEB}/pedidos/${order}`, { waitUntil: "networkidle" });
-  const done = await text(shop.locator("main"));
-  log("refund total:", await text(shop.locator('[data-testid="refund-total"]')));
+  await web.openOrder(shop, order);
+  const done = await web.mainText(shop);
+  log("refund total:", await web.refundTotal(shop));
   check(
     done.includes(
       `En total le devolvemos ${colones(placed.total_minor)}: todo lo que pagó, el envío incluido.`,
@@ -328,7 +288,7 @@ async function packedOrder(method = "sinpe_movil") {
       done.includes(`le devolvemos lo que pagó por él: ${colones(placed.items_total_minor)}`),
     "the history does not state the amounts",
   );
-  check(done.includes("Reembolsado"), "the order does not read Reembolsado");
+  check(done.includes(word("order_status", "refunded")), "the order does not read Reembolsado");
   await shop.screenshot({ path: SHOTS + "/of5-shopper-refunded.png", fullPage: true });
   const refunded = await shopperApi("get_order", { p_order_number: order });
   check(
@@ -341,34 +301,31 @@ async function packedOrder(method = "sinpe_movil") {
   const stop = route.stops[0];
   const central = await as("central@yuntera.example");
   await central("ops_remove_route_stop", { p_stop_id: stop.stopId, p_reason: "El camión se varó" });
-  await shop.goto(`${WEB}/pedidos`, { waitUntil: "load" });
-  await shop.locator(`a[href="/pedidos/${stop.orderNumber}"]`).waitFor();
-  const offRoute = await text(shop.locator(`a[href="/pedidos/${stop.orderNumber}"]`));
+  const offRoute = await web.orderRow(shop, stop.orderNumber);
   log("list row off the route:", offRoute);
   check(
-    offRoute.includes("Entrega reprogramada") && !offRoute.includes("En camino"),
+    offRoute.includes(RESCHEDULED) && !offRoute.includes(ON_ITS_WAY),
     `the list says the wrong thing for a parcel off its route: ${offRoute}`,
   );
   await shop.screenshot({ path: SHOTS + "/of6-shopper-list.png", fullPage: true });
-  await staff.goto(`${OPS}/pedidos/${stop.orderNumber}`, { waitUntil: "networkidle" });
-  const offHeader = await text(staff.locator("main header").first());
+  await ops.openOrder(staff, stop.orderNumber);
+  const offHeader = await ops.orderHeader(staff);
   log("staff heading off the route:", offHeader);
   check(
-    !offHeader.includes("En camino") && offHeader.includes("espera otra ruta"),
+    !offHeader.includes(ON_ITS_WAY) && offHeader.includes(word("derived", "awaitingRoute")),
     `heading: ${offHeader}`,
   );
-  await staff.goto(`${OPS}/operacion/rutas`, { waitUntil: "networkidle" });
-  const card = await text(staff.locator(`li[data-stop="${stop.tracking}"]`));
+  await ops.open(staff, "/operacion/rutas");
+  const card = await ops.routeStopText(staff, stop.tracking);
   log("route card stop:", card);
   check(
     card.includes("Paquete: quitado de esta ruta, sin intento de entrega") &&
-      !card.includes("Entrega fallida"),
+      !card.includes(word("shipment_status", "delivery_failed")),
     `the route card calls a removed stop a failed delivery: ${card}`,
   );
   await staff.screenshot({ path: SHOTS + "/of7-route-card.png", fullPage: true });
-  await staff.goto(`${OPS}/despacho`, { waitUntil: "networkidle" });
-  const failedSection = staff.locator("section", { has: staff.locator("#fallidas") });
-  const dispatchText = await text(failedSection);
+  await ops.open(staff, "/despacho");
+  const dispatchText = await ops.dispatchFailed(staff);
   log("dispatch:", dispatchText.slice(0, 200));
   check(
     dispatchText.includes(stop.tracking) &&
@@ -382,20 +339,18 @@ async function packedOrder(method = "sinpe_movil") {
   // way any more, and the order is cancelled once the warehouse receives it.
   const offOrder = await shopperApi("get_order", { p_order_number: stop.orderNumber });
   await central("ops_return_shipment", { p_shipment_id: offOrder.shipments[0].id });
-  await shop.goto(`${WEB}/pedidos`, { waitUntil: "load" });
-  await shop.locator(`a[href="/pedidos/${stop.orderNumber}"]`).waitFor();
-  const backRow = await text(shop.locator(`a[href="/pedidos/${stop.orderNumber}"]`));
+  const backRow = await web.orderRow(shop, stop.orderNumber);
   log("list row sent back:", backRow);
   check(
-    backRow.includes("Se está cancelando") &&
+    backRow.includes(CANCELLING) &&
       backRow.includes("le devolvemos el dinero") &&
-      !backRow.includes("En camino") &&
+      !backRow.includes(ON_ITS_WAY) &&
       !backRow.includes("Llega el"),
     `the list says the wrong thing for a parcel sent back: ${backRow}`,
   );
-  await shop.goto(`${WEB}/pedidos/${stop.orderNumber}`, { waitUntil: "networkidle" });
+  await web.openOrder(shop, stop.orderNumber);
   // The history below may say "En camino": it was, before it came back.
-  const backAll = await text(shop.locator("main"));
+  const backAll = await web.mainText(shop);
   const backPage = backAll.slice(0, backAll.indexOf("Historial"));
   log("page sent back:", backPage.slice(0, 300));
   check(
@@ -404,7 +359,7 @@ async function packedOrder(method = "sinpe_movil") {
     "the shopper's page does not say the order comes back and what is refunded",
   );
   check(
-    !backPage.includes("En camino") &&
+    !backPage.includes(ON_ITS_WAY) &&
       !backPage.includes("Llega el") &&
       !backPage.includes("Su código de entrega"),
     "the shopper's page shows En camino, a date or the delivery code for a parcel sent back",
@@ -414,11 +369,11 @@ async function packedOrder(method = "sinpe_movil") {
     "the database still gives the delivery code for an order whose parcel comes back",
   );
   await shop.screenshot({ path: SHOTS + "/of6b-shopper-sent-back.png", fullPage: true });
-  await staff.goto(`${OPS}/pedidos/${stop.orderNumber}`, { waitUntil: "networkidle" });
-  const backHeader = await text(staff.locator("main header").first());
+  await ops.openOrder(staff, stop.orderNumber);
+  const backHeader = await ops.orderHeader(staff);
   log("staff heading sent back:", backHeader);
   check(
-    backHeader.includes("Se está cancelando") && !backHeader.includes("En camino"),
+    backHeader.includes(CANCELLING) && !backHeader.includes(ON_ITS_WAY),
     `the staff heading for a parcel sent back: ${backHeader}`,
   );
 
@@ -429,18 +384,16 @@ async function packedOrder(method = "sinpe_movil") {
     p_shipment_id: codDetail.shipments[0].id,
     p_reason: "El cliente ya no lo quiere",
   });
-  await shop.goto(`${WEB}/pedidos`, { waitUntil: "load" });
-  await shop.locator(`a[href="/pedidos/${codOrder}"]`).waitFor();
-  const codRow = await text(shop.locator(`a[href="/pedidos/${codOrder}"]`));
+  const codRow = await web.orderRow(shop, codOrder);
   log("list row cash order:", codRow);
   check(
-    codRow.includes("Se está cancelando") &&
+    codRow.includes(CANCELLING) &&
       codRow.includes("No se le cobró nada") &&
       !codRow.includes("devolvemos"),
     `the list promises money back for a cash order: ${codRow}`,
   );
-  await shop.goto(`${WEB}/pedidos/${codOrder}`, { waitUntil: "networkidle" });
-  const codPage = await text(shop.locator("main"));
+  await web.openOrder(shop, codOrder);
+  const codPage = await web.mainText(shop);
   check(
     codPage.includes("No se le cobró nada, así que no hay nada que devolver.") &&
       !/le devolvemos/i.test(codPage),
@@ -451,25 +404,22 @@ async function packedOrder(method = "sinpe_movil") {
   // ── 4d. A stop form left open while the parcel was stopped elsewhere ─────
   const staleOrder = await packedOrder();
   const staleDetail = await shopperApi("get_order", { p_order_number: staleOrder });
-  await staff.goto(`${OPS}/pedidos/${staleOrder}`, { waitUntil: "networkidle" });
-  await staff.locator("summary", { hasText: "Detener el paquete" }).first().click();
-  const staleForm = staff
-    .locator("form", { has: staff.locator('input[name="shipmentId"]') })
-    .first();
-  await staleForm.locator('textarea[name="reason"]').fill("La dirección está equivocada");
-  await staleForm.locator('input[name="confirm"]').check();
+  await ops.openOrder(staff, staleOrder);
+  await ops.openStop(staff);
+  await ops.typeStopReason(staff, "La dirección está equivocada");
+  await ops.confirmStop(staff);
   await central("ops_recall_shipment", {
     p_shipment_id: staleDetail.shipments[0].id,
     p_reason: "Lo detuvo otra persona",
   });
-  outcome = await submit(staff, staleForm, "Detener y devolver a la zona de devoluciones");
+  outcome = await ops.sendStop(staff);
   log("stale form:", outcome);
   check(
     outcome.includes("ya no se puede detener") && outcome.includes("Recargue la página"),
     `a stale stop form does not say why it is refused: ${outcome}`,
   );
   check(
-    (await staleForm.locator('textarea[name="reason"]').inputValue()).includes("equivocada"),
+    (await ops.stopReasonTyped(staff)).includes("equivocada"),
     "the reason typed in a stale stop form is lost",
   );
 
@@ -509,25 +459,23 @@ async function packedOrder(method = "sinpe_movil") {
       againOrder.shipments[0].attempt_count === 1,
     `fixture: the order is not shipped with a packed parcel after one attempt: ${againOrder.status} ${againOrder.shipments[0].status}`,
   );
-  await shop.goto(`${WEB}/pedidos`, { waitUntil: "load" });
-  await shop.locator(`a[href="/pedidos/${againStop.orderNumber}"]`).waitFor();
-  const againRow = await text(shop.locator(`a[href="/pedidos/${againStop.orderNumber}"]`));
+  const againRow = await web.orderRow(shop, againStop.orderNumber);
   log("list row planned again and removed:", againRow);
   check(
-    againRow.includes("Entrega reprogramada") &&
+    againRow.includes(RESCHEDULED) &&
       againRow.includes("Le avisaremos cuando vuelva a salir hacia usted") &&
-      !againRow.includes("En camino") &&
+      !againRow.includes(ON_ITS_WAY) &&
       !againRow.includes("Llega el"),
     `the list says the wrong thing for a parcel waiting to go out again: ${againRow}`,
   );
-  await shop.goto(`${WEB}/pedidos/${againStop.orderNumber}`, { waitUntil: "networkidle" });
-  const againAll = await text(shop.locator("main"));
+  await web.openOrder(shop, againStop.orderNumber);
+  const againAll = await web.mainText(shop);
   const againPage = againAll.slice(0, againAll.indexOf("Historial"));
   log("page planned again and removed:", againPage.slice(0, 300));
   check(
-    againPage.includes("Entrega reprogramada") &&
+    againPage.includes(RESCHEDULED) &&
       againPage.includes("Reprogramamos la entrega") &&
-      !againPage.includes("En camino") &&
+      !againPage.includes(ON_ITS_WAY) &&
       !againPage.includes("Llega el") &&
       !againPage.includes("Llega entre"),
     `the order page says the wrong thing for a parcel waiting to go out again: ${againPage.slice(0, 300)}`,
@@ -543,8 +491,8 @@ async function packedOrder(method = "sinpe_movil") {
     p_reason: "El cliente pidió cancelar",
   });
   const feeLine = `El envío (${colones(againOrder.shipping_minor)}) no se devuelve porque fuimos a entregarlo a su dirección.`;
-  await shop.goto(`${WEB}/pedidos/${againStop.orderNumber}`, { waitUntil: "networkidle" });
-  const keptAll = await text(shop.locator("main"));
+  await web.openOrder(shop, againStop.orderNumber);
+  const keptAll = await web.mainText(shop);
   const keptPage = keptAll.slice(0, keptAll.indexOf("Historial"));
   log("page stopped after an attempt:", keptPage.slice(0, 400));
   check(
@@ -566,11 +514,10 @@ async function packedOrder(method = "sinpe_movil") {
   );
   // "load", not "networkidle": the page may keep asking for its credit note
   // while the invoice worker is busy.
-  await shop.goto(`${WEB}/pedidos/${againStop.orderNumber}`, { waitUntil: "load" });
+  await web.openOrder(shop, againStop.orderNumber, "load");
   // Once cancelled, the cancellation notice says it: only the products' money
   // comes back, and why the fee stays, once on the page.
-  await shop.locator('[data-testid="order-cancel-reason"]').waitFor();
-  const keptAfter = await text(shop.locator('[data-testid="order-cancel-reason"]'));
+  const keptAfter = await web.cancelNotice(shop);
   log("page cancelled after an attempt:", keptAfter);
   check(keptAfter.includes(feeLine), "after the check-in the notice says why the fee stays");
   check(
@@ -579,15 +526,15 @@ async function packedOrder(method = "sinpe_movil") {
     "the notice does not promise back what was paid for the delivery",
   );
   check(
-    (await text(shop.locator("main"))).split(feeLine).length - 1 === 1,
+    (await web.mainText(shop)).split(feeLine).length - 1 === 1,
     "the page says why the fee stays once",
   );
   await shop.screenshot({ path: SHOTS + "/of6f-shopper-fee-kept.png", fullPage: true });
 
   // ── 5. A district moved away and back follows its canton ──────────────────
   await central("ops_move_districts", { p_postal_codes: ["10111"], p_zone_id: "gam-extended" });
-  await staff.goto(`${OPS}/operacion/distritos?canton=101`, { waitUntil: "networkidle" });
-  let district = await text(staff.locator('li[data-district="10111"]'));
+  await ops.open(staff, "/operacion/distritos?canton=101");
+  let district = await ops.districtText(staff, "10111");
   log("district moved away:", district);
   check(
     district.includes("Zona propia, no la del cantón"),
@@ -602,8 +549,8 @@ async function packedOrder(method = "sinpe_movil") {
     back.own_zone === false && back.zone_id === "gam-core",
     `moved back, it keeps a zone of its own: ${JSON.stringify(back)}`,
   );
-  await staff.goto(`${OPS}/operacion/distritos?canton=101`, { waitUntil: "networkidle" });
-  district = await text(staff.locator('li[data-district="10111"]'));
+  await ops.open(staff, "/operacion/distritos?canton=101");
+  district = await ops.districtText(staff, "10111");
   log("district moved back:", district);
   check(
     district.includes("Sigue la zona del cantón"),
@@ -621,8 +568,8 @@ async function packedOrder(method = "sinpe_movil") {
     ["/pedidos", "of9-mobile-list"],
     [`/pedidos/${order}`, "of10-mobile-refunded"],
   ]) {
-    await mobileShop.goto(WEB + path, { waitUntil: "load" });
-    await mobileShop.locator("main h1").first().waitFor();
+    await web.open(mobileShop, path, "load");
+    await web.waitForOrderHeading(mobileShop);
     const px = await overflow(mobileShop);
     log(`mobile shop ${path} overflow px:`, px);
     check(px <= 0, `shop ${path} scrolls sideways on a phone`);
@@ -638,7 +585,7 @@ async function packedOrder(method = "sinpe_movil") {
     ["/operacion/rutas", "of12-mobile-routes"],
     ["/operacion/distritos?canton=101", "of13-mobile-districts"],
   ]) {
-    await mobileOps.goto(OPS + path, { waitUntil: "networkidle" });
+    await ops.open(mobileOps, path);
     await mobileOps.evaluate(() => {
       for (const details of document.querySelectorAll("main details")) details.open = true;
     });

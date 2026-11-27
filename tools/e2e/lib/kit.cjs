@@ -273,3 +273,159 @@ const notificationSettings = {
   waitForNotificationSettings,
 };
 module.exports.notificationSettings = notificationSettings;
+
+// ── Password recovery (next-kit account pages and forms) ───────────────────
+
+/** From the sign-in page, «Olvidé mi contraseña», and waits for /recuperar. */
+async function openForgotPassword(page) {
+  await link(main(page), "Olvidé mi contraseña").click();
+  await page.waitForURL((u) => new URL(u).pathname === "/recuperar");
+}
+
+/** «Enviarme un enlace» for this address; returns the answer (status). */
+async function askResetLink(page, email) {
+  await field(main(page), "email").fill(email);
+  await button(main(page), "Enviarme un enlace").click();
+  return text(main(page).getByRole("status").first());
+}
+
+/** «Enviarme un enlace» for this address, and waits for the code field. */
+async function askResetCode(page, email) {
+  await field(main(page), "email").fill(email);
+  await button(main(page), "Enviarme un enlace").click();
+  await field(main(page), "code").waitFor();
+}
+
+/** «Continuar» on the page an e-mail link opens. */
+const continueFromLink = (page) => button(main(page), "Continuar", true).click();
+
+/** The password rules the new-password form shows. */
+const passwordRules = (page) =>
+  text(main(page).getByRole("list", { name: "Requisitos de la contraseña" }));
+
+/** Types the new password twice and saves it. */
+async function saveNewPassword(page, password, repeat = password) {
+  await field(main(page), "password").fill(password);
+  await field(main(page), "repeat").fill(repeat);
+  await button(main(page), "Guardar la contraseña nueva").click();
+}
+
+/** Types the 6-digit code and continues. */
+async function continueWithCode(page, code) {
+  await field(main(page), "code").fill(code);
+  await button(main(page), "Continuar con el código").click();
+}
+
+/** How many «Pedir otro correo» links the page offers. */
+const askAgainLinks = (page) => main(page).getByRole("link", { name: "Pedir otro correo" }).count();
+
+/** Waits for the reset page's answer, whichever it is (a message, or the form). */
+const waitForResetAnswer = (page) =>
+  main(page).locator('[role="status"], [role="alert"], input[name="password"]').first().waitFor();
+
+const passwordRecovery = {
+  openForgotPassword,
+  askResetLink,
+  askResetCode,
+  continueFromLink,
+  passwordRules,
+  saveNewPassword,
+  continueWithCode,
+  askAgainLinks,
+  waitForResetAnswer,
+};
+module.exports.passwordRecovery = passwordRecovery;
+
+/** The visible text of the whole page (for a screen without a main, as field's not-found). */
+module.exports.pageText = (page) => text(page.locator("body"));
+
+// ── Two-step verification (next-kit account pages and forms) ───────────────
+
+const twoStep = (page) => main(page).getByRole("region", { name: "Verificación en dos pasos" });
+
+/** The account page's two-step section, as one line. */
+const twoStepSection = (page) => text(twoStep(page));
+
+/** The two-step section's badge (what follows its heading), as one line. */
+const twoStepBadge = (page) => text(twoStep(page).locator("h2 + *").first());
+
+/** From the account page, «Activar la verificación», and waits for /dos-pasos. */
+async function openTwoStep(page) {
+  await link(main(page), "Activar la verificación").click();
+  await page.waitForURL((u) => new URL(u).pathname === "/dos-pasos");
+  await hydrated(page);
+}
+
+/** «Empezar» on /dos-pasos: returns the secret shown as text and the QR code's address. */
+async function startEnrolment(page) {
+  await button(main(page), "Empezar").click();
+  const secretBox = main(page).locator("[data-secret]").first();
+  await secretBox.waitFor();
+  return {
+    secret: await secretBox.getAttribute("data-secret"),
+    qr: await main(page).getByRole("img", { name: "Código QR" }).first().getAttribute("src"),
+  };
+}
+
+/** Types the authenticator's code and «Activar la verificación». */
+async function activateTwoStep(page, code) {
+  await field(main(page), "code").fill(code);
+  await button(main(page), "Activar la verificación").click();
+}
+
+/** Types a code on /verificar and «Verificar». */
+async function verifyCode(page, code) {
+  await field(main(page), "code").fill(code);
+  await button(main(page), "Verificar", true).click();
+}
+
+/** «Salir» in the header. */
+const signOut = (page) => button(page.getByRole("banner"), "Salir").click();
+
+/** How many links the main navigation has (0 when it is not offered). */
+const navLinks = (page) =>
+  page.getByRole("navigation", { name: "Secciones" }).getByRole("link").count();
+
+const secondFactor = {
+  twoStepSection,
+  twoStepBadge,
+  openTwoStep,
+  startEnrolment,
+  activateTwoStep,
+  verifyCode,
+  signOut,
+  navLinks,
+};
+module.exports.secondFactor = secondFactor;
+
+/**
+ * The text a row (or any element) shows outside its form controls, white
+ * space squashed: a select's options are part of innerText, but not of what
+ * the row says.
+ */
+const shownText = (locator) =>
+  locator.first().evaluate((el) => {
+    const copy = el.cloneNode(true);
+    for (const control of copy.querySelectorAll("select, option, input, textarea, button"))
+      control.remove();
+    return copy.textContent.replace(/\s+/g, " ").trim();
+  });
+
+/** Waits until an element shows `words` outside its form controls. */
+async function waitForShown(locator, words, { timeout = 15000, what = "the element" } = {}) {
+  const deadline = Date.now() + timeout;
+  let last = "";
+  for (;;) {
+    last = await shownText(locator).catch(() => "");
+    if (last.includes(words)) return last;
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `${what}: waited ${timeout} ms for "${words}"; it showed "${last.slice(0, 300)}"`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+
+module.exports.shownText = shownText;
+module.exports.waitForShown = waitForShown;

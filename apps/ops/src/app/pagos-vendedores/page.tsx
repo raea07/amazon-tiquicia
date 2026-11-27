@@ -306,7 +306,7 @@ function PreviewSection({
         </Alert>
       ) : null}
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid gap-3 sm:grid-cols-3" data-testid="cutoff-figures">
         <Stat
           label={`Corte del ${shortDate(preview.cutoff_on)}`}
           value={formatPrice(preview.to_pay_minor)}

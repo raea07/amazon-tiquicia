@@ -73,6 +73,17 @@ const TODAY = {
     approved: "Aprobada",
     received: "Producto recibido",
   },
+  // A payout to a shop (apps/ops people-labels.ts, apps/seller pagos).
+  payout_status: {
+    scheduled: "Por transferir",
+    paid: "Pagado",
+    failed: "No se pagó",
+  },
+  // A refund as the shopper's order page states it (apps/web payment-panel.tsx).
+  refund_status: {
+    pending: "En camino",
+    succeeded: "Completado",
+  },
   // A message's delivery (apps/ops/src/lib/notification-labels.ts).
   notification_status: {
     pending: "En cola",

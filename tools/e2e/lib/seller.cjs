@@ -369,3 +369,300 @@ Object.assign(module.exports, {
 // ── Notification settings ──────────────────────────────────────────────────
 
 Object.assign(module.exports, kit.notificationSettings);
+
+// ── Pagos: balances and history; Cuenta: the payout account ───────────────
+
+/** The balance tiles of Pagos (each tile's text) and the sentence with the total owed. */
+async function balanceTiles(page) {
+  return {
+    tiles: await testid(main(page), "balances").locator(":scope > div").allInnerTexts(),
+    owed: await text(
+      main(page).getByRole("region", { name: "Su saldo" }).locator(":scope > p").first(),
+    ),
+  };
+}
+
+/** «Cuándo le pagamos», as one line. */
+const whenPaid = (page) => text(main(page).getByRole("region", { name: "Cuándo le pagamos" }));
+
+/** «Pagos que le hemos hecho», as one line. */
+const payoutHistory = (page) =>
+  text(main(page).getByRole("region", { name: "Pagos que le hemos hecho" }));
+
+/** The payout account on file (the first definition list of «Dónde le pagamos»), as one line. */
+const payoutAccount = (page) => text(payoutDetails(page).locator("dl").first());
+
+/** Types an IBAN that does not add up; returns the form's warning. */
+async function typeWrongIban(page, iban) {
+  await field(payoutDetails(page), "iban").fill(iban);
+  await payoutDetails(page).getByRole("alert").waitFor();
+  return text(payoutDetails(page).getByRole("alert"));
+}
+
+/** Types a valid IBAN and waits for the form to say so (with the account grouped). */
+async function typeIban(page, iban, grouped) {
+  await field(payoutDetails(page), "iban").fill(iban);
+  await settledText(payoutDetails(page), (t) => t.includes(`Cuenta válida: ${grouped}`), {
+    what: "the payout form",
+  });
+}
+
+/** Types the account holder's name; returns the SINPE Móvil number the form offers. */
+async function typeHolder(page, name) {
+  await field(payoutDetails(page), "holderName").fill(name);
+  return field(payoutDetails(page), "sinpe").inputValue();
+}
+
+/** Sends the payout account change and waits for it to wait for review. Returns the section, as one line. */
+async function askPayoutAccount(page) {
+  await payoutDetails(page).locator('button[type="submit"]').click();
+  await settledText(payoutDetails(page), /Cambio de cuenta en revisión/, {
+    what: "the payout form",
+  });
+  return text(payoutDetails(page));
+}
+
+/** «Dónde le pagamos», as one line. */
+const payoutSectionText = (page) => text(payoutDetails(page));
+
+Object.assign(module.exports, {
+  balanceTiles,
+  whenPaid,
+  payoutHistory,
+  payoutAccount,
+  typeWrongIban,
+  typeIban,
+  typeHolder,
+  askPayoutAccount,
+  payoutSectionText,
+});
+
+// ── The seller journey: summary, shops, listings, stock, a new listing ─────
+
+/** The console's main navigation, as one line. */
+const sectionsNav = (page) => text(page.getByRole("navigation", { name: "Secciones" }));
+
+/** The first section of main, as one line. */
+const firstSection = (page) => text(main(page).locator("section").first());
+
+/** The n-th section of main (from 0), as one line. */
+const section = (page, n) => text(main(page).locator("section").nth(n));
+
+/** The shops the header's chooser offers. */
+const shopOptions = (page) =>
+  field(page.getByRole("banner"), "shopId").locator("option").allInnerTexts();
+
+/** Switches to a shop by its exact name with the header's chooser and waits for its summary. */
+async function switchShop(page, name, heading = name) {
+  await field(page.getByRole("banner"), "shopId").selectOption({ label: name });
+  await button(page.getByRole("banner"), "Cambiar").click();
+  await main(page).getByRole("heading", { level: 1, name: heading }).waitFor();
+}
+
+/** How many rows the page's table has. */
+const tableRows = (page) => main(page).locator("tbody tr").count();
+
+/** A row of the page's table (first by default), as one line. */
+const tableRow = (page, n = 0) => text(main(page).locator("tbody tr").nth(n));
+
+/** Raises the price of the first listing by `step` and returns what the row says. */
+async function raiseFirstPrice(page, step) {
+  const row = main(page).locator("tbody tr").first();
+  await row.locator("summary").click();
+  const before = await field(row, "price").inputValue();
+  await field(row, "price").fill(String(Number(before) + step));
+  await row.locator('button[type="submit"]').click();
+  const message = row.locator('[role="status"], [role="alert"]').first();
+  await message.waitFor();
+  return { before, summary: await text(row.locator("summary")), message: await text(message) };
+}
+
+/** Types a regular price lower than the price on the first listing; returns the refusal. */
+async function badRegularPrice(page, value) {
+  const row = main(page).locator("tbody tr").first();
+  await field(row, "listPrice").fill(value);
+  await row.locator('button[type="submit"]').click();
+  await page.waitForTimeout(800);
+  return text(row.getByRole("alert").first());
+}
+
+/** The section headings of the page. */
+const sectionHeadings = (page) => main(page).getByRole("heading", { level: 2 }).allInnerTexts();
+
+/** Sets the stock of the first row of Inventario; returns its message and the row. */
+async function setFirstStock(page, quantity) {
+  const row = main(page).locator("tbody tr").first();
+  await field(row, "quantity").fill(quantity);
+  await row.locator('button[type="submit"]').click();
+  const message = row.locator('[role="status"], [role="alert"]').first();
+  await message.waitFor();
+  return { message: await text(message), row: await text(row) };
+}
+
+const earnings = (page) => page.getByRole("complementary", { name: "Lo que usted recibe" });
+
+/** Fills a new listing (category by the label its group starts with) and reads the fee preview for a payment method. */
+async function fillNewListing(
+  page,
+  { title, group, bullets, price, weight, length, width, height, method },
+) {
+  await field(page, "title").fill(title);
+  const category = await field(page, "categorySlug")
+    .locator(`optgroup[label^="${group}"] option`)
+    .first()
+    .getAttribute("value");
+  await field(page, "categorySlug").selectOption(category);
+  await field(page, "bullets").fill(bullets);
+  await field(page, "price").fill(price);
+  await field(page, "weightGrams").fill(weight);
+  await field(page, "lengthCm").fill(length);
+  await field(page, "widthCm").fill(width);
+  await field(page, "heightCm").fill(height);
+  await earnings(page).locator("select").selectOption(method);
+  return text(earnings(page).locator("dl"));
+}
+
+/** «Enviar a revisión», and waits for the product list. */
+async function sendNewListing(page) {
+  await button(page, "Enviar a revisión").click();
+  await page.waitForURL((u) => new URL(u).pathname === "/productos");
+}
+
+/** The last row of the list that shows `value` (a title), as one line. */
+const lastRowWith = (page, value) => text(withValue(main(page).locator("tbody tr"), value).last());
+
+/** Announces an inbound shipment of the first product to the warehouse; returns its line once listed. */
+async function announceInbound(page, quantity) {
+  await main(page).locator('input[name^="qty:"]').first().fill(quantity);
+  await button(main(page), "Registrar envío").click();
+  const line = withValue(main(page).locator("li"), "IN-").first();
+  await line.waitFor();
+  return text(line);
+}
+
+/** The balances on Pagos, as one line. */
+const balancesText = (page) => text(testid(main(page), "balances"));
+
+// Pedidos: packing
+
+const toPack = (page) =>
+  main(page).getByRole("region", { name: "Por empacar" }).locator(":scope > ul > li");
+
+/** How many parcels wait to be packed. */
+const parcelsToPack = (page) => toPack(page).count();
+
+/** The first parcel to pack, as one line. */
+const firstParcelToPack = (page) => text(toPack(page).first());
+
+/** Packs the first parcel with its weight. */
+async function packFirstParcel(page, grams) {
+  await field(toPack(page).first(), "weightGrams").fill(grams);
+  await toPack(page).first().locator('button[type="submit"]').click();
+  await page.waitForTimeout(1500);
+}
+
+/** «Por empacar», as one line (or "" once there is none). */
+const toPackText = async (page) => {
+  const region = main(page).getByRole("region", { name: "Por empacar" });
+  return (await region.count()) ? text(region) : "";
+};
+
+/** How many rows «Ventas recientes» has. */
+const salesRows = (page) =>
+  main(page).getByRole("region", { name: "Ventas recientes" }).locator("tbody tr").count();
+
+// Registro: a new seller
+
+/** Creates the account on /registro and waits for the shop's details. */
+async function registerAccount(page, { name, email, password }) {
+  await field(main(page), "fullName").fill(name);
+  await field(main(page), "email").fill(email);
+  await field(main(page), "password").fill(password);
+  await field(main(page), "acepta").check();
+  await button(main(page), "Crear cuenta").click();
+  await main(page).getByRole("heading", { level: 2, name: "Datos de la tienda" }).waitFor();
+}
+
+/** Fills the shop's details (without the declaration). */
+async function fillShopDetails(
+  page,
+  { tradeName, idNumber, legalName, fiscalAddress, contactPhone },
+) {
+  await field(page, "tradeName").fill(tradeName);
+  await field(page, "idNumber").fill(idNumber);
+  await field(page, "legalName").fill(legalName);
+  await field(page, "fiscalAddress").fill(fiscalAddress);
+  await field(page, "contactPhone").fill(contactPhone);
+}
+
+/** «Enviar solicitud». */
+const sendShopRequest = (page) => button(main(page), "Enviar solicitud").click();
+
+/** Ticks the declaration. */
+const declare = (page) => field(page, "declara").check();
+
+/** The status messages of main, each as one line. */
+const statusMessages = async (page) =>
+  (await main(page).getByRole("status").allInnerTexts()).map(kit.squash);
+
+/** The first sub-heading of main (h2 or h3), as one line. */
+const firstSubheading = (page) =>
+  text(
+    main(page)
+      .getByRole("heading", { level: 2 })
+      .or(main(page).getByRole("heading", { level: 3 }))
+      .first(),
+  );
+
+Object.assign(module.exports, {
+  sectionsNav,
+  firstSection,
+  section,
+  shopOptions,
+  switchShop,
+  tableRows,
+  tableRow,
+  raiseFirstPrice,
+  badRegularPrice,
+  sectionHeadings,
+  setFirstStock,
+  fillNewListing,
+  sendNewListing,
+  lastRowWith,
+  announceInbound,
+  balancesText,
+  parcelsToPack,
+  firstParcelToPack,
+  packFirstParcel,
+  toPackText,
+  salesRows,
+  registerAccount,
+  fillShopDetails,
+  sendShopRequest,
+  declare,
+  statusMessages,
+  firstSubheading,
+});
+
+// ── Inventario: the history in full and the warehouse table ────────────────
+
+/** The first entries of the stock history, each as one line. */
+const historyEntries = async (page) =>
+  (await stockHistory(page).getByRole("listitem").allInnerTexts()).map(kit.squash);
+
+/** How many history entries there are, and how many of them carry a kind. */
+async function historyKinds(page) {
+  return {
+    entries: await stockHistory(page).getByRole("listitem").count(),
+    withKind: await stockHistory(page).locator("li[data-kind]").count(),
+  };
+}
+
+/** The cells of the row of «En la bodega de Yuntera» that shows this product code. */
+const warehouseRowCells = (page, sku) =>
+  withValue(main(page).getByRole("region", { name: "En la bodega de Yuntera" }).locator("tr"), sku)
+    .first()
+    .locator("td")
+    .allInnerTexts();
+
+Object.assign(module.exports, { historyEntries, historyKinds, warehouseRowCells });

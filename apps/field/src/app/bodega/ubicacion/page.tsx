@@ -235,7 +235,10 @@ function Item({
       </p>
 
       <details className="mt-1 border-t border-border pt-1">
-        <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-link">
+        <summary
+          className="flex min-h-11 cursor-pointer items-center font-semibold text-link"
+          data-testid="stock-move"
+        >
           Mover
         </summary>
         <div className="mt-2">
