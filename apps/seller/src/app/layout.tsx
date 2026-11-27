@@ -1,4 +1,4 @@
-import { apps, themeColor } from "@yuntera/brand";
+import { apps, appThemeColor, light } from "@yuntera/brand";
 import { NavLinks } from "@yuntera/next-kit/client";
 import { fontClassName } from "@yuntera/next-kit/fonts";
 import { getViewer } from "@yuntera/next-kit/server";
@@ -22,7 +22,11 @@ export const metadata: Metadata = {
   icons: { icon: "/icon.svg" },
 };
 
-export const viewport: Viewport = { themeColor, width: "device-width", initialScale: 1 };
+export const viewport: Viewport = {
+  themeColor: light[appThemeColor.seller],
+  width: "device-width",
+  initialScale: 1,
+};
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

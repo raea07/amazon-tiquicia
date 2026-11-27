@@ -20,12 +20,6 @@ importers:
 
   apps/driver-native:
     dependencies:
-      '@expo-google-fonts/bricolage-grotesque':
-        specifier: 0.4.1
-        version: 0.4.1
-      '@expo-google-fonts/inter':
-        specifier: 0.4.2
-        version: 0.4.2
       '@expo/log-box':
         specifier: ^58.0.15
         version: 58.0.15(@expo/dom-webview@58.0.2)(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
@@ -83,6 +77,9 @@ importers:
       expo-font:
         specifier: ~58.0.12
         version: 58.0.12(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
+      expo-haptics:
+        specifier: 58.0.8
+        version: 58.0.8(expo@58.0.26)
       expo-image-picker:
         specifier: ~58.0.10
         version: 58.0.10(expo@58.0.26)
@@ -339,12 +336,6 @@ importers:
 
   apps/seller-native:
     dependencies:
-      '@expo-google-fonts/bricolage-grotesque':
-        specifier: 0.4.1
-        version: 0.4.1
-      '@expo-google-fonts/inter':
-        specifier: 0.4.2
-        version: 0.4.2
       '@expo/log-box':
         specifier: ^58.0.15
         version: 58.0.15(@expo/dom-webview@58.0.2)(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
@@ -481,12 +472,6 @@ importers:
 
   apps/shop-native:
     dependencies:
-      '@expo-google-fonts/bricolage-grotesque':
-        specifier: 0.4.1
-        version: 0.4.1
-      '@expo-google-fonts/inter':
-        specifier: 0.4.2
-        version: 0.4.2
       '@expo/log-box':
         specifier: ^58.0.15
         version: 58.0.15(@expo/dom-webview@58.0.2)(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
@@ -623,12 +608,6 @@ importers:
 
   apps/warehouse-native:
     dependencies:
-      '@expo-google-fonts/bricolage-grotesque':
-        specifier: 0.4.1
-        version: 0.4.1
-      '@expo-google-fonts/inter':
-        specifier: 0.4.2
-        version: 0.4.2
       '@expo/log-box':
         specifier: ^58.0.15
         version: 58.0.15(@expo/dom-webview@58.0.2)(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
@@ -683,6 +662,9 @@ importers:
       expo-font:
         specifier: ~58.0.12
         version: 58.0.12(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
+      expo-haptics:
+        specifier: 58.0.8
+        version: 58.0.8(expo@58.0.26)
       expo-keep-awake:
         specifier: ~58.0.4
         version: 58.0.4(expo@58.0.26)(react@19.3.0)
@@ -888,12 +870,6 @@ importers:
         specifier: workspace:*
         version: link:../db
     devDependencies:
-      '@expo-google-fonts/bricolage-grotesque':
-        specifier: 0.4.1
-        version: 0.4.1
-      '@expo-google-fonts/inter':
-        specifier: 0.4.2
-        version: 0.4.2
       '@react-native-async-storage/async-storage':
         specifier: 2.2.0
         version: 2.2.0(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))
@@ -918,6 +894,9 @@ importers:
       expo-font:
         specifier: ~58.0.12
         version: 58.0.12(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
+      expo-haptics:
+        specifier: 58.0.8
+        version: 58.0.8(expo@58.0.26)
       expo-network:
         specifier: ~58.0.5
         version: 58.0.5(expo@58.0.26)(react@19.3.0)
@@ -1142,12 +1121,18 @@ importers:
 
   tools/e2e:
     devDependencies:
+      axe-core:
+        specifier: 4.14.1
+        version: 4.14.1
       playwright:
         specifier: 1.63.0
         version: 1.63.0
 
   tools/native-e2e:
     devDependencies:
+      axe-core:
+        specifier: 4.14.1
+        version: 4.14.1
       playwright:
         specifier: 1.63.0
         version: 1.63.0
@@ -1788,12 +1773,6 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
-
-  '@expo-google-fonts/bricolage-grotesque@0.4.1':
-    resolution: {integrity: sha512-uijLLg+thOrFgw+gXtYA3dQJTBqqqleabcNFpamaYXqUUcbFe0J18C+4nfL0CyGzSJUicxUBLY4Zv7jdHmTGMA==}
-
-  '@expo-google-fonts/inter@0.4.2':
-    resolution: {integrity: sha512-syfiImMaDmq7cFi0of+waE2M4uSCyd16zgyWxdPOY7fN2VBmSLKEzkfbZgeOjJq61kSqPBNNtXjggiQiSD6gMQ==}
 
   '@expo/cli@58.1.21':
     resolution: {integrity: sha512-E+27FQ1Y26fVb0p1wVHBFkbe5oQubUXLwF/au5Vy8OCqDWrmbekBQamRI4mBhY15FhZQxAkyK0e6hXcEFKVBOw==}
@@ -2980,6 +2959,10 @@ packages:
   ast-v8-to-istanbul@1.0.8:
     resolution: {integrity: sha512-lPdpagk13ANXV+HClJEpCZM7kUsl5XcvgqKzZhaj6Ve1ZFICcY2sGhAN1n1vT0tML6EclT7bfVgTxqL57Gkpow==}
 
+  axe-core@4.14.1:
+    resolution: {integrity: sha512-FHfa+lmNjQZfJz1q8wKqIDwC6DExcHt/pkjNQb09a3NPjCKg2rhu5qb2S4r76ASyFNNtuFooJpZe37OgudVGtQ==}
+    engines: {node: '>=4'}
+
   babel-plugin-polyfill-corejs2@0.4.17:
     resolution: {integrity: sha512-aTyf30K/rqAsNwN76zYrdtx8obu0E4KoUME29B1xj+B3WxgvWkp943vYQ+z8Mv3lw9xHXMHpvSPOBxzAkIa94w==}
     peerDependencies:
@@ -3412,6 +3395,11 @@ packages:
       expo: '*'
       react: '*'
       react-native: '*'
+
+  expo-haptics@58.0.8:
+    resolution: {integrity: sha512-hxW9LoJQhAJ4hRlGx0DZ10ncs2NFqC/0nfKSnGy1PcpH6e8dJ4/oJO9eOcAG/vFg8k5oonbZkWL7RK9G3729Tg==}
+    peerDependencies:
+      expo: '*'
 
   expo-image-loader@58.0.3:
     resolution: {integrity: sha512-zlHudxC8OObyqCHmvdxJqURI7886KJ0cUJyn7R/a8FOD9fP837xKDN+u4SIt7XsSSVPNXzMd4Y7mN0pmup8NGA==}
@@ -5694,10 +5682,6 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@expo-google-fonts/bricolage-grotesque@0.4.1': {}
-
-  '@expo-google-fonts/inter@0.4.2': {}
-
   '@expo/cli@58.1.21(@expo/dom-webview@58.0.2)(@expo/metro-runtime@58.0.17)(expo-constants@58.0.16)(expo-font@58.0.12(expo@58.0.26)(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(expo-router@58.0.32)(expo@58.0.26)(react-dom@19.3.0(react@19.3.0))(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@5.9.3)':
     dependencies:
       2g: 1.0.1(typescript@5.9.3)
@@ -6923,6 +6907,8 @@ snapshots:
       estree-walker: 3.0.3
       js-tokens: 10.0.0
 
+  axe-core@4.14.1: {}
+
   babel-plugin-polyfill-corejs2@0.4.17(@babel/core@7.29.13):
     dependencies:
       '@babel/compat-data': 7.29.7
@@ -7404,6 +7390,10 @@ snapshots:
       expo: 58.0.26(@babel/core@7.29.13)(@expo/dom-webview@58.0.2)(@expo/metro-runtime@58.0.17)(expo-router@58.0.32)(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native-worklets@0.13.0(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@5.9.3)
       react: 19.3.0
       react-native: 0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0)
+
+  expo-haptics@58.0.8(expo@58.0.26):
+    dependencies:
+      expo: 58.0.26(@babel/core@7.29.13)(@expo/dom-webview@58.0.2)(@expo/metro-runtime@58.0.17)(expo-router@58.0.32)(react-dom@19.3.0(react@19.3.0))(react-native-web@0.21.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-native-worklets@0.13.0(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.1(@babel/core@7.29.13)(@react-native/metro-config@0.88.1(@babel/core@7.29.13))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)(typescript@5.9.3)
 
   expo-image-loader@58.0.3(expo@58.0.26):
     dependencies:

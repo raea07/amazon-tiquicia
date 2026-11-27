@@ -1,0 +1,15 @@
+{
+  "app": "seller-native",
+  "measuredAt": "a0ad69a",
+  "counts": {
+    "raw ramp classes": 0,
+    "legacy-only semantic classes": 0,
+    "brand outside the delivery components": 3,
+    "warning used as text": 2,
+    "hand-written targets and arbitrary values": 0,
+    "fonts and borders set by hand in the phone apps": 12,
+    "legacy theme in the phone apps": 105,
+    "a bare formatPrice in JSX": 0,
+    "module-level StyleSheet reading colours (rg -U, multiline)": 6
+  }
+}

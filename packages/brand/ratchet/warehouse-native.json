@@ -1,0 +1,15 @@
+{
+  "app": "warehouse-native",
+  "measuredAt": "a0ad69a",
+  "counts": {
+    "raw ramp classes": 0,
+    "legacy-only semantic classes": 0,
+    "brand outside the delivery components": 5,
+    "warning used as text": 0,
+    "hand-written targets and arbitrary values": 0,
+    "fonts and borders set by hand in the phone apps": 24,
+    "legacy theme in the phone apps": 64,
+    "a bare formatPrice in JSX": 0,
+    "module-level StyleSheet reading colours (rg -U, multiline)": 7
+  }
+}
