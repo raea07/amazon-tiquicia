@@ -21,6 +21,11 @@ apps/
                      Built; not yet built for a phone.
 packages/
   brand/      Name, app family, design tokens, logo. The only place the brand is defined.
+              src/ today's tokens (legacy.ts) and the Carreta tokens; styles/ the
+              generated tokens.legacy.css, Carreta tokens.css and carreta-base.css;
+              ratchet/<app>.json the counts of today's look per app; assets/ the
+              lockups and app icons; lib/ and test/ helpers and tests, outside
+              src/ so Tailwind does not scan them (decision 58).
   core/       Domain logic as pure TypeScript: money, fees, offers, search ranking,
               sourcing, delivery promise, routing, risk, seller score, lifecycles,
               recommendations, Costa Rican formats and legal constants.
@@ -74,9 +79,17 @@ tools/
   dev-hacienda/ A fake of Hacienda's identity provider and reception API, and a
               host that runs the invoice functions against it with a throwaway
               signing key. Local only.
-  e2e/        Browser journeys for the four web apps (Playwright).
+  e2e/        Browser journeys for the four web apps (Playwright). journeys/ hold
+              the flow and the checks; lib/{web,seller,ops,field,kit}.cjs every
+              screen step; lib/words.cjs the status words (read from
+              packages/core); selectors.mjs counts and guards the selectors;
+              check-words.cjs checks words.cjs; compare.mjs and compare/<app>.json
+              put screenshots beside the reference pages (decision 60).
   native-e2e/ Browser journeys through the web export of the native apps, and the
-              small static server that serves those exports.
+              small static server that serves those exports. lib/<app>.cjs hold
+              the screen steps, lib/screen.cjs the shared lookups, lib/words.cjs
+              the status words; testids/<app>.json list every testID of each
+              phone app and expo-kit, checked by testids/check.mjs.
   dev/        stack.sh (an isolated copy of the whole stack per numbered lane),
               native-icons.cjs (draws the native apps' icons from the brand geometry).
   races/      Two-session races against a lane's database (stock, offers,
@@ -136,26 +149,31 @@ These rules are conventions today; no lint rule enforces import boundaries.
 
 Run from the repository root. Requires Node 22 or later and pnpm 10.
 
-| Command                                | What it does                                                                                              |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `pnpm install`                         | Install every workspace's dependencies                                                                    |
-| `pnpm lint`                            | Biome: lint and format check for the whole repository                                                     |
-| `pnpm format`                          | Biome: apply fixes                                                                                        |
-| `pnpm typecheck`                       | TypeScript in every package and app                                                                       |
-| `pnpm test`                            | Unit tests in every package (Vitest). No database needed                                                  |
-| `pnpm build`                           | Build every app                                                                                           |
-| `pnpm ci`                              | `lint`, `typecheck`, `test`, `build`, in that order                                                       |
-| `pnpm db:local:up`                     | Start the machine's PostgreSQL 16 if it is not running                                                    |
-| `pnpm db:local:reset`                  | Drop and recreate the local database; apply the shim, every migration and the seed                        |
-| `pnpm db:local:test`                   | Run every SQL test suite against the local database                                                       |
-| `pnpm --filter @yuntera/dev-api start` | Start the local API stand-in on `127.0.0.1:54321`                                                         |
-| `pnpm --filter @yuntera/web dev`       | Start the storefront on `localhost:3000`                                                                  |
-| `pnpm --filter @yuntera/brand tokens`  | Regenerate `tokens.css` from `tokens.ts`                                                                  |
-| `tools/dev/stack.sh up [lane]`         | Database, API, every web app, the three workers (notifications, payments, invoices) and their three fakes |
-| `tools/dev/stack.sh notify [lane]`     | Restart only the notification and payments workers, the fake providers and the fake gateway               |
-| `tools/dev/stack.sh invoicing [lane]`  | Restart only the invoice worker and the fake of Hacienda                                                  |
-| `tools/dev/stack.sh native [lane]`     | Export the native apps for the web and serve them on the lane's app ports + 10–13                         |
-| `tools/dev/stack.sh native-e2e [lane]` | Run the native journeys against those exports                                                             |
+| Command                                                          | What it does                                                                                              |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `pnpm install`                                                   | Install every workspace's dependencies                                                                    |
+| `pnpm lint`                                                      | Biome: lint and format check for the whole repository                                                     |
+| `pnpm format`                                                    | Biome: apply fixes                                                                                        |
+| `pnpm typecheck`                                                 | TypeScript in every package and app                                                                       |
+| `pnpm test`                                                      | Unit tests in every package (Vitest). No database needed                                                  |
+| `pnpm build`                                                     | Build every app                                                                                           |
+| `pnpm ci`                                                        | `lint`, `typecheck`, `test`, `build`, in that order                                                       |
+| `pnpm db:local:up`                                               | Start the machine's PostgreSQL 16 if it is not running                                                    |
+| `pnpm db:local:reset`                                            | Drop and recreate the local database; apply the shim, every migration and the seed                        |
+| `pnpm db:local:test`                                             | Run every SQL test suite against the local database                                                       |
+| `pnpm --filter @yuntera/dev-api start`                           | Start the local API stand-in on `127.0.0.1:54321`                                                         |
+| `pnpm --filter @yuntera/web dev`                                 | Start the storefront on `localhost:3000`                                                                  |
+| `pnpm --filter @yuntera/brand tokens`                            | Regenerate `src/tokens.css` and the three sheets in `styles/` from the tokens                             |
+| `pnpm --filter @yuntera/brand exec tsx scripts/write-ratchet.ts` | Record lower ratchet counts in `packages/brand/ratchet/` (refuses higher ones)                            |
+| `node tools/e2e/selectors.mjs --check`                           | Fail on a class or text selector, a status word as a literal, or a lookup in a journey file               |
+| `node tools/e2e/check-words.cjs`                                 | Check that the journeys' status words are core's                                                          |
+| `node tools/e2e/compare.mjs --shots .lane/<lane>/screenshots`    | Pages of journey screenshots beside the reference pages                                                   |
+| `node tools/native-e2e/testids/check.mjs`                        | Fail when a listed testID is gone from the phone apps or expo-kit (`--write` updates the lists)           |
+| `tools/dev/stack.sh up [lane]`                                   | Database, API, every web app, the three workers (notifications, payments, invoices) and their three fakes |
+| `tools/dev/stack.sh notify [lane]`                               | Restart only the notification and payments workers, the fake providers and the fake gateway               |
+| `tools/dev/stack.sh invoicing [lane]`                            | Restart only the invoice worker and the fake of Hacienda                                                  |
+| `tools/dev/stack.sh native [lane]`                               | Export the native apps for the web and serve them on the lane's app ports + 10–13                         |
+| `tools/dev/stack.sh native-e2e [lane]`                           | Run the native journeys against those exports                                                             |
 
 Every lane's ports lie inside the kernel's range of temporary ports for
 outgoing connections, so a server of the stack can find its port held for a

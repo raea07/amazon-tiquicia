@@ -1,5 +1,24 @@
 # Status
 
+**Stage 1 of the Carreta rebuild, the foundation, was built on 27 November
+2026 on its own branch** (decisions
+[58](docs/02-architecture/decisions.md#58-the-look-is-carreta-added-beside-todays-names-and-switched-app-by-app),
+[59](docs/02-architecture/decisions.md#59-every-status-word-comes-from-one-module-in-packagescore)
+and
+[60](docs/02-architecture/decisions.md#60-journeys-find-elements-through-one-helper-file-per-app-never-by-class-or-text)).
+It adds the Carreta tokens and stylesheets beside today's names, and no page
+is restyled: colours, spacing and layout are the earlier look in all 8 apps.
+Four things on screen did change. Every app shows text in Fira Sans and
+titles and prices in Epilogue (Inter and Bricolage Grotesque are gone).
+Every app has its new icon and theme colour; the phone apps also have the new
+splash. Status badges and labels read the words of the design system, from
+one module in `packages/core` (for example «Por preparar», «No se pudo
+entregar», «Quitada por Central»; an invoice reads «Aceptada»). The journeys
+now find elements by role, name or test id, so a restyle does not break them.
+None of this is in a store build: the testers' shopper app is still 0.1.0
+(4). Not checked: the fonts, icons and splash on a real phone, screen
+readers, real mail programs and English screens.
+
 Updated 27 November 2026, after wave 8 was applied to the hosted preview
 (below), and before that after `main`'s documents were merged into the wave 8
 branch (the Carreta design system in `docs/brand/system`, the strategy pack
@@ -139,9 +158,10 @@ released to Google Play's internal testers on 23 November 2026, and its
 iPhone build 0.1.0 (4), from the same commit, was sent to App Store Connect
 on 24 November 2026; no build has run on a phone or simulator yet, because
 you put the installs on hold on 24 November (item 11 of "What needs you").
-Every screen still has the earlier look and is in Spanish only: the new look
-("Carreta") is decided and drawn in `docs/brand/system`, but no app uses it
-yet, and English is not built.
+Every screen keeps the earlier colours, spacing and layout and is in Spanish
+only. The new look ("Carreta") is decided and drawn in `docs/brand/system`;
+its foundation (stage 1, top of this file) changed the fonts, the icons and
+theme colours and the status words, and English is not built.
 Payments and electronic invoices now exist as code, run against local fakes
 of the gateway and of Hacienda: nothing has charged a card, refunded money or
 sent a document to Hacienda, and no message is sent for real (see "Not
@@ -367,7 +387,7 @@ In the order that unblocks the most.
 | Electronic invoices  | `packages/invoicing`, `supabase/functions`, `tools/dev-hacienda`   | Version 4.4 documents issued by the platform: a tiquete (or a factura, if asked at checkout) for the delivery fee, a fee factura to each seller, credit notes on cancellations and returns; numbered without gaps, signed XAdES-EPES, sent once, answers recorded. Simulated money (the sandbox simulation, the gateway's test environment, cash on delivery taken while payments are in sandbox), decided once when it is captured, never gets a document unless `invoicing_policy.simulated_payments` says so; its jobs end on their own. On the shopper's order page, in the seller's statements, and in the console's Comprobantes section (rejected, waiting, unsent, replace and retry). Runs locally against a fake of Hacienda only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Shared code          | `packages/{brand,ui,db,next-kit}`                                  | Brand tokens and logo, components, the typed API client with a message for every error, and what all apps share (session and its lifetime, the sign-in limit, security headers, forms, cache tags)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Documentation        | `docs/`                                                            | Strategy, product scope, architecture and decisions, data model, access control, API reference, one document per algorithm, security and compliance, operations, deployment runbook and go-live checklist, research notes for the next phase; since 24 November 2026 the strategy pack in `docs/00-strategy` (go-to-market, roll-out plan, team structure and pricing strategy, with one set of figures) and the marketing drafts in `marketing/` that use the same figures; every question for you is asked once in `docs/00-strategy/owner-decisions.md` (D1 to D54: D1, D2, D3 and D50 decided; D5 and D8 builder choices you may object to); the November research in `docs/research/market-and-costs-2026-11.md`, `support-and-system-health-tools.md` and `english-translation-plan.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Brand                | `docs/brand/`, `packages/brand/`                                   | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files; the Carreta design system in `docs/brand/system` (specification, tokens, fonts, logos and 46 reference pages), which no app uses yet                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Brand                | `docs/brand/`, `packages/brand/`                                   | Naming report, brand book ([published page](https://claude.ai/artifact/MJv6X1GarCNg1sZfuGjxfT), private to you until you share it; text in `docs/brand/brand-book.md`), logo files; the Carreta design system in `docs/brand/system` (specification, tokens, fonts, logos and 46 reference pages); since stage 1 every app uses its fonts, icons, theme colours and status words, and no page its layout yet                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 How the new parts work, in short:
 
@@ -936,12 +956,22 @@ D2 in the decisions and the Android release in the store documents" is done
   Sans, no serif anywhere, the full achiote delivery strip, and the Y mark
   unchanged (decision 58). The specification, tokens, fonts, logos and 46
   reference pages are in [`docs/brand/system`](docs/brand/system/README.md).
-  None of the 8 apps uses it yet: every screen still has the earlier look.
-  The rebuild is planned in 4 stages: the foundation; the shopper website
-  and shopper app with English, then store version 0.2.0; the seller
-  website and app; the staff console and the driver and warehouse apps. Not
-  checked: the fonts on a real phone, screen readers, real mail programs and
-  English screens.
+  The rebuild has 4 stages. **Stage 1, the foundation, is built** (27
+  November 2026, see the top of this file): the Carreta tokens and
+  stylesheets beside today's, the new fonts, icons and theme colours, the
+  status words of the design system, and journeys that survive a restyle.
+  No page is restyled yet: colours, spacing and layout are the earlier look
+  in all 8 apps. Still owed: the shared components (buttons, status stamp,
+  delivery strip, prices and dates through the new helpers); the shopper
+  website and shopper app with English, then store version 0.2.0; the
+  seller website and app; the staff console and the driver and warehouse
+  apps; then removing the old token names. The driver and warehouse apps
+  have the haptics library installed, but no screen vibrates yet and their
+  Android builds remove its VIBRATE permission until a later stage wires
+  the haptics. Dates and times on screen still use today's short forms
+  («27 nov, 10:31 a. m.»); the new date helpers come with the shared
+  components. Not checked: the fonts on a real phone, screen readers, real
+  mail programs and English screens.
 - **English.** Not built: every screen is Spanish only (error messages
   already exist in both). The plan is in
   [`docs/research/english-translation-plan.md`](docs/research/english-translation-plan.md).
@@ -1213,7 +1243,12 @@ ones worth knowing about:
   ([decision 58](docs/02-architecture/decisions.md#58-the-look-is-carreta-added-beside-todays-names-and-switched-app-by-app)):
   the direction "Carreta". Mine around it: the new names are added beside
   today's, each app switches on its own, and today's names are deleted last.
-  Not built.
+  The foundation is built (stage 1, top of this file); no app is switched
+  yet. With it, decisions
+  [59](docs/02-architecture/decisions.md#59-every-status-word-comes-from-one-module-in-packagescore)
+  (every status word from one module in `packages/core`) and
+  [60](docs/02-architecture/decisions.md#60-journeys-find-elements-through-one-helper-file-per-app-never-by-class-or-text)
+  (journeys find elements through one helper file per app) are built.
 
 ## Things to know before trusting the numbers
 

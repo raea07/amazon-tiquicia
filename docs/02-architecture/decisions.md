@@ -64,7 +64,9 @@ its own entry, not something that happens by drift.
 | 55  | [A cart line names its product even when its offer is paused](#55-a-cart-line-names-its-product-even-when-its-offer-is-paused)                                                                                             |
 | 56  | [Support and system tools live inside the staff console](#56-support-and-system-tools-live-inside-the-staff-console)                                                                                                       | Decided; not built                       |
 | 57  | [Error and outage alerts go through the existing Sentry account, with personal data removed](#57-error-and-outage-alerts-go-through-the-existing-sentry-account-with-personal-data-removed)                                | Decided; not built                       |
-| 58  | [The look is Carreta, added beside today's names and switched app by app](#58-the-look-is-carreta-added-beside-todays-names-and-switched-app-by-app)                                                                       | Decided; not built                       |
+| 58  | [The look is Carreta, added beside today's names and switched app by app](#58-the-look-is-carreta-added-beside-todays-names-and-switched-app-by-app)                                                                       | Foundation built; no app switched yet    |
+| 59  | [Every status word comes from one module in packages/core](#59-every-status-word-comes-from-one-module-in-packagescore)                                                                                                    | Built                                    |
+| 60  | [Journeys find elements through one helper file per app, never by class or text](#60-journeys-find-elements-through-one-helper-file-per-app-never-by-class-or-text)                                                        | Built                                    |
 
 ---
 
@@ -1960,6 +1962,138 @@ stages: the foundation; the shopper website and app with English, then
 store version 0.2.0; the seller website and app; the staff console and the
 driver and warehouse apps.
 
-**Not verified.** Decided, not built: no app uses it yet. Not checked: the
-fonts on a real phone, screen readers, real mail programs and English
-screens.
+**What the first stage built (27 November 2026).** The foundation, added
+beside today's names:
+
+- `packages/brand` keeps every export of today in `src/legacy.ts` (marked
+  deprecated) and adds the Carreta tokens (`palette`, `light`, `dark`,
+  `type`, `spacing`, `radii`, `elevation`, `motion`, `target`,
+  `headerHeightMax`, `typeface`, `fontFiles`, `appThemeColor`), equal to
+  `docs/brand/system/tokens.json` (a test compares every value). It writes
+  three new stylesheets into `styles/`: `tokens.legacy.css` (today's sheet
+  plus the Carreta-only names), the Carreta `tokens.css` and
+  `carreta-base.css`. They are exported as `@yuntera/brand/tokens.legacy.css`,
+  `@yuntera/brand/carreta/tokens.css` and `@yuntera/brand/carreta-base.css`.
+  `@yuntera/brand/tokens.css`, which every web app imports, still serves
+  today's sheet byte for byte; the specification's plan to give that name to
+  the Carreta sheet waits until the last web app has moved. So the switch of
+  each web app (§2.5 phase B) is `@yuntera/brand/tokens.css` →
+  `@yuntera/brand/carreta/tokens.css`, not `tokens.legacy.css` →
+  `tokens.css`.
+- A ratchet test counts the 9 patterns of the specification (§2.5.7) in each
+  of the 8 apps against `packages/brand/ratchet/<app>.json`; a count may only
+  go down.
+- Tests for the 28 contrast pairs in light and dark, the 14 font files, the
+  lockups and app icons.
+- The web apps load Fira Sans and Epilogue (Inter and Bricolage Grotesque are
+  gone), use the new icons and the theme colour of each app. The `next/font`
+  variables are `--font-fira-sans` and `--font-epilogue`, not §2.4's
+  `--font-text` and `--font-title`: those two names are the Carreta aliases
+  of the `@theme` block, and a `next/font` variable of the same name would
+  point at itself. Today's `--font-sans` and `--font-display` and the
+  Carreta `--yt-font-text` and `--yt-font-title` all point at the two. The phone apps
+  embed the same fonts, use the new icons and splash, and expo-kit adds
+  `theme`, `themeDark`, `useTheme()` and `ThemeProvider` beside today's
+  exports. `expo-haptics` (driver and warehouse apps) and `axe-core` were
+  installed. expo-haptics declares Android's `VIBRATE` permission; no screen
+  vibrates yet and no build may gain a permission in this stage, so
+  `VIBRATE` joins the permissions expo-kit removes from every app. The change
+  that wires the haptics (§20.1 step 2c) declares it in that app's
+  `androidPermissions` and records it for the store listing.
+- `packages/core` adds `status-words.ts` (decision 59), `formatDay`,
+  `formatTime`, `formatQuantity`, its own `formatPrice` and
+  `deliveryStripSentence`; no screen uses the date, quantity, price or strip
+  helpers yet. `formatDateTime` in `packages/ui` and in expo-kit is still
+  today's (abbreviated months, «27 nov, 10:31 a. m.»): making it a wrapper of
+  `formatDay` (§10.4, step 1) changes what every date reads, which this stage
+  may not, so it moves with the shared components (steps 2a and 2c).
+
+No page was restyled: colours, spacing and layout are today's until each
+app switches its stylesheet (web) or wraps its root in `ThemeProvider`
+(phone) in the next stages.
+
+**Not verified.** The fonts on a real phone, the new icons on a real home
+screen, an Android build's merged manifest (the removal of `VIBRATE` is
+checked in the resolved app config, the same way the biometric removal
+was), screen readers, real mail programs and English screens.
+The phone apps get the fonts and icons only with a new store build; the
+tester build 0.1.0 (4) is unchanged.
+
+## 59. Every status word comes from one module in packages/core
+
+**Context.** The word of a status (an order, a parcel, a payment, a stop, a
+payout…) was written in at least twelve places: the shared badges, the label
+files of the four web apps and the four phone apps, pages with their own
+tables, the invoice badge and both journey word files. The same state read
+differently from app to app («Entrega fallida», «No entregado», «Omitida»),
+and the design system (§4.3) gives each state one word per viewer.
+
+**Decision.** `packages/core/src/status-words.ts` holds the sign and the word
+of every status the database has, in Spanish and English, for each viewer
+(shopper, seller, staff, driver, warehouse): `statusWord(kind, value,
+{ viewer, locale, attemptCount? })`. `statusWordMap` and `statusLabels` give a
+screen its table of words in the shape it already reads. Every badge, label
+table and journey reads it for the states of the database; colours stay in
+each screen's tone table until
+the status stamp of the next stage replaces the badge. The file has no
+run-time import, so plain Node loads it: `tools/e2e/lib/words.cjs` and
+`tools/native-e2e/lib/words.cjs` require it directly. Where §4.3 has no row,
+the module's words are chosen in the same register and marked «chosen»; the
+seller reads the state of their shop and identity in today's feminine words
+(«Activa», «Verificada»).
+
+**Consequences.** A word of a database state changes in one edit, on every
+screen and in every journey. `status-words-copies.test.ts` reads the source
+of every app, shared package and journey and fails on a status value written
+next to one of the module's words, on one of the 26 replaced words written as
+a string, a regular expression or the text of a JSX element, and on one of
+the module's words written as a whole regular expression; a line for
+something that is not a database status ends with `// not a status word`.
+Words that describe more than one state are not in the module yet and are
+still written on their screens: what the shopper's order heading and list
+say of a whole order («Entrega reprogramada», «Se está cancelando»), a
+refund as the shopper's order page states it, and the subjects of the
+notifications. The journeys take these from the `SCREEN_ONLY` table of
+`tools/e2e/lib/words.cjs`; they move into the module with the status stamp
+of the next stage. Sentences that carry a state (a return's line, a
+notice's title) and badges of conditions that are not a status («Faltante»,
+«Desactivada», «Cambios en revisión») are not covered and move with the
+screens. Some words are shorter than before (an invoice reads «Aceptada»,
+not «Aceptado por Hacienda»).
+
+**Not verified.** The English words are on no screen yet. The test is a
+pattern match, not a parser: a copy built another way is not found.
+
+## 60. Journeys find elements through one helper file per app, never by class or text
+
+**Context.** The rebuild changes every class and many words on screen. The
+browser and native journeys found elements by CSS class and by their words
+(15 class and 603 text selectors in the browser journeys, counted by
+`tools/e2e/selectors.mjs` on main at `89f2422`, and 99 in the native ones,
+counted with the same text patterns by `git grep -o`), so a restyled screen would break them for
+reasons that are not bugs.
+
+**Decision.** Each app's screen steps live in one helper file
+(`tools/e2e/lib/{web,seller,ops,field}.cjs` plus `kit.cjs`;
+`tools/native-e2e/lib/{shop,seller,driver,warehouse}.cjs` plus `screen.cjs`
+and `accounts.cjs`). Helpers find an element by its role and accessible name,
+its `[name]`, a `data-testid` or a `testID`; journey files hold the flow and
+the checks and call no Playwright lookup themselves (counts and scoped steps
+by testID go through `testIds`, `testIdsFrom` and `roleAll` of
+`screen.cjs`). Status words come from `words.cjs` (decision 59). The app builder
+of each later stage keeps that app's helper file passing.
+
+**Consequences.** `node tools/e2e/selectors.mjs --check` fails on a class or
+text selector, an xpath, a status word written as a literal and an element
+lookup in a journey file; `tools/native-e2e/lib/journeys.test.cjs` (run by
+`pnpm test` and before every native journey run) fails on a lookup in a
+native journey file and on a bare text match anywhere in the native
+journeys. Every `testID` of the four phone apps and expo-kit
+is listed in `tools/native-e2e/testids/*.json`; the native runner and
+`pnpm test` fail when a listed id disappears. A rebuilt screen may add ids,
+never drop or rename one, unless the same change updates the list and the
+helper. `tools/e2e/compare.mjs` puts journey screenshots beside the reference
+pages of the design system.
+
+**Not verified.** Role and name lookups show only what the browser's
+accessibility tree holds, not what a phone's screen reader announces.
