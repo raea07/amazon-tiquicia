@@ -6,14 +6,18 @@ drivers, launching in the Gran Área Metropolitana (GAM). It is written for a
 solo founder working with AI tooling and little capital, so every phase is
 gated by evidence rather than by dates.
 
-**Where things stand.** The domain logic, the database and the shopper
-storefront are built and tested on a local machine. The seller centre is
-built; the operations console and the mobile web app for drivers and the
-warehouse are in progress. **Nothing is deployed, and nothing has been run
-against the real hosting platforms.** No domain, company, payment gateway or
-cloud project exists yet. The repository's `STATUS.md`, when present, has the
-latest state; these documents say for each thing whether it is built,
-specified only, or planned.
+**Where things stand.** The shop, the seller centre, the staff console, the
+web app for drivers and the warehouse, and the four native apps are built and
+tested on a development machine, with payments and electronic invoices
+running only against local fakes. A hosted preview exists: a Supabase
+project with 41 of the 44 migrations and the four web apps on Vercel behind a
+login, with payments simulated, no worker deployed and nothing sent, charged
+or invoiced. Nothing has run against the real payment gateway, Hacienda or a
+messaging provider, and no app has run on a phone. The shopper app's first
+builds are in Google Play's internal testing and in App Store Connect, and
+every screen still has the earlier look, in Spanish only. The repository's
+[`STATUS.md`](../STATUS.md) has the latest state; these documents say for
+each thing whether it is built, specified only, or planned.
 
 ## Read these first
 
