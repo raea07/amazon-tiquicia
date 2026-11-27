@@ -186,6 +186,40 @@ describe("the delivery strip sentence (§5.5)", () => {
     );
   });
 
+  it("says only the last day for a range that starts on the day of dispatch", () => {
+    const zone: ZoneService = { ...SERVICE_PRESETS.gamCore, transitDays: [0, 1] };
+    same(
+      strip(cr("2026-11-27", 8), zone).sentence,
+      `Pida hoy antes de las ${TWO_PM} y le llega a más tardar el sábado 28 de noviembre, en el GAM.`,
+    );
+    same(
+      strip(cr("2026-11-27", 8), zone, { locale: "en" }).sentence,
+      "Order today before 2 pm and it arrives by Saturday 28 November, in the GAM.",
+    );
+    const place: StripPlace = { kind: "chosen", name: "San Pedro" };
+    same(
+      strip(cr("2026-11-27", 8), zone, { place }).arrival,
+      "y le llega a más tardar el sábado 28 de noviembre, en San Pedro.",
+    );
+    // A later range end, after the weekend: still only the last day.
+    const wide: ZoneService = { ...SERVICE_PRESETS.gamCore, transitDays: [0, 2] };
+    same(
+      strip(cr("2026-11-27", 8), wide).arrival,
+      "y le llega a más tardar el lunes 30 de noviembre, en el GAM.",
+    );
+  });
+
+  it("accepts a cut-off at midnight, which the zones table allows: never «antes de»", () => {
+    const zone: ZoneService = { ...SERVICE_PRESETS.gamCore, cutoffHour: 0 };
+    const s = strip(cr("2026-11-27", 8), zone);
+    same(s.order, "Pida hoy");
+    same(s.sentence, "Pida hoy y le llega el lunes 30 de noviembre, en el GAM.");
+    same(
+      strip(cr("2026-11-27", 8), zone, { locale: "en" }).sentence,
+      "Order today and it arrives on Monday 30 November, in the GAM.",
+    );
+  });
+
   it("refuses a promise that was not computed for this moment", () => {
     const zone = SERVICE_PRESETS.gamCore;
     const morning = computeDeliveryPromise({ now: cr("2026-11-27", 10), zone, handlingDays: 0 });
@@ -209,7 +243,15 @@ describe("the delivery strip sentence (§5.5)", () => {
       deliveryStripSentence({
         promise: morning,
         now: cr("2026-11-27", 10),
-        cutoffHour: 0,
+        cutoffHour: 24,
+        place: STRIP_DEFAULT_PLACE.es,
+      }),
+    ).toThrow(RangeError);
+    expect(() =>
+      deliveryStripSentence({
+        promise: morning,
+        now: cr("2026-11-27", 10),
+        cutoffHour: -1,
         place: STRIP_DEFAULT_PLACE.es,
       }),
     ).toThrow(RangeError);

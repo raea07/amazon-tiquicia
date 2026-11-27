@@ -18,6 +18,10 @@
  * - a zone with a range of days:
  *   «Pida hoy antes de las 12 p. m. y le llega entre el miércoles 2 de
  *   diciembre y el lunes 7 de diciembre, en Limón.»
+ * - a range that starts on the day of dispatch names only its last day,
+ *   because «hoy» belongs to the order (wording chosen here, not drawn in
+ *   §5.5): «Pida hoy antes de las 2 p. m. y le llega a más tardar el sábado
+ *   28 de noviembre, en el GAM.» / «… and it arrives by Saturday 28 November, …»
  *
  * The time is the zone's cut-off written by formatClock (U+00A0 inside); the
  * dates are written by formatDay in the long form.
@@ -69,6 +73,7 @@ const WORDS = {
     on: (day: string) => `el ${day}`,
     the: (day: string) => `el ${day}`,
     between: (a: string, b: string) => `entre ${a} y ${b}`,
+    by: (day: string) => `a más tardar el ${day}`,
     in: (place: string) => `en ${place}`,
     ownDrivers: "Con nuestros propios repartidores.",
   },
@@ -79,6 +84,7 @@ const WORDS = {
     on: (day: string) => `on ${day}`,
     the: (day: string) => day,
     between: (a: string, b: string) => `between ${a} and ${b}`,
+    by: (day: string) => `by ${day}`,
     in: (place: string) => `in ${place}`,
     ownDrivers: "With our own drivers.",
   },
@@ -99,7 +105,9 @@ export function deliveryStripSentence(input: DeliveryStripInput): DeliveryStripS
   const local = toCostaRicaTime(now);
   const today = local.date;
 
-  if (!Number.isInteger(cutoffHour) || cutoffHour < 1 || cutoffHour > 23) {
+  // zones.cutoff_hour allows 0 to 23. With 0 no moment is before the cut-off,
+  // so the promise never makes it and the sentence is always «Pida hoy …».
+  if (!Number.isInteger(cutoffHour) || cutoffHour < 0 || cutoffHour > 23) {
     throw new RangeError(`Not a cut-off hour: ${cutoffHour}`);
   }
   // The promise must be the one computed for this moment and zone; anything
@@ -132,10 +140,14 @@ export function deliveryStripSentence(input: DeliveryStripInput): DeliveryStripS
     return inRange ? words.the(long(date)) : words.on(long(date));
   };
 
+  // A range that starts on the day of dispatch would need «hoy» or «el mismo
+  // día» as its first end, which reads badly; it names only its last day.
   const when =
     promise.earliest === promise.latest
       ? oneDay(promise.latest, false)
-      : words.between(oneDay(promise.earliest, true), words.the(long(promise.latest)));
+      : daysBetween(today, promise.earliest) === 0
+        ? words.by(long(promise.latest))
+        : words.between(oneDay(promise.earliest, true), words.the(long(promise.latest)));
 
   const arrival = `${words.arrives} ${when}, ${words.in(place.name)}.`;
   return {

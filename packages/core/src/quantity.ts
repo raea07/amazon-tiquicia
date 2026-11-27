@@ -4,8 +4,10 @@
  * what follows are joined by U+00A0 NO-BREAK SPACE, so they never break
  * across two lines; thousands are grouped with U+202F, as money is.
  *
- * Plurals follow the same rule in Spanish and English: exactly 1 is singular,
- * everything else (0, 1,5, 2 …) plural.
+ * Plurals follow the same rule in Spanish and English: a number shown as
+ * exactly «1» is singular, everything else (0, 1,5, 2, −1 …) plural. The
+ * choice is made on the number as written, after rounding, so 1.0001 reads
+ * «1 unidad», never «1 unidades».
  */
 
 import { type CoreLocaleInput, coreLocale, NBSP } from "./dates";
@@ -80,14 +82,16 @@ export function formatQuantity(
 ): string {
   const locale = coreLocale(opts.locale);
   const number = formatNumber(n, opts);
+  // Singular or plural follows the number the reader sees, not the raw value.
+  const one = number === "1";
   let word: string;
   if (typeof unit === "object") {
-    word = n === 1 ? unit.one : unit.other;
+    word = one ? unit.one : unit.other;
   } else if ((QUANTITY_UNITS as readonly string[]).includes(unit)) {
     word = unit;
   } else if (unit in COUNTED_NOUNS) {
     const forms = COUNTED_NOUNS[unit as CountedNoun][locale];
-    word = n === 1 ? forms[0] : forms[1];
+    word = one ? forms[0] : forms[1];
   } else {
     throw new RangeError(`Not a unit or counted noun: ${String(unit)}`);
   }

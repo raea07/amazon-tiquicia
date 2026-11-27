@@ -40,6 +40,17 @@ describe("formatQuantity: the examples of §3 rule 8, character by character", (
     same(formatQuantity(0, "parcel", { locale: "en" }), "0 parcels");
   });
 
+  it("chooses singular or plural from the number it shows, not the raw number", () => {
+    same(formatQuantity(1.0001, "unit"), "1 unidad");
+    same(formatQuantity(1.004, "unit", { locale: "en" }), "1 unit");
+    same(formatQuantity(0.996, "hour"), "1 hora");
+    same(formatQuantity(1.004, { one: "caja", other: "cajas" }), "1 caja");
+    same(formatQuantity(1.5, "unit", { maxDecimals: 0 }), "2 unidades");
+    same(formatQuantity(1.4, "unit", { maxDecimals: 0 }), "1 unidad");
+    same(formatQuantity(1.01, "unit"), "1,01 unidades");
+    same(formatQuantity(-1, "unit"), "−1 unidades");
+  });
+
   it("takes a noun that is not in the list", () => {
     same(formatQuantity(2, { one: "caja", other: "cajas" }), "2 cajas");
     same(formatQuantity(1, { one: "caja", other: "cajas" }), "1 caja");
