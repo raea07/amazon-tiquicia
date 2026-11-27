@@ -137,6 +137,9 @@ const sentText = (bodies) =>
     .replace(/"(event_id|trace_id|span_id|debug_id)":"[0-9a-f-]+"/g, "")
     .replace(/"(timestamp|sent_at|lineno|colno)":("[^"]*"|[\d.]+)/g, "");
 
+/** The path of a reported page address, or undefined if it is not one. */
+const pathOf = (url) => /^https?:\/\/[^/?#\s]+(\/[^?#\s]*)$/.exec(url)?.[1];
+
 /** What reached the stand-in so far, as parsed envelopes. */
 const arrivals = () =>
   LOG && existsSync(LOG)
@@ -201,16 +204,20 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
         `${site.app}: the browser posted ${toTracker.length} of ${count} reports`,
       );
     };
+    const onDrill = (text) =>
+      page.url().includes("/prueba-de-errores") && /error #(441|419)\b/.test(text);
     page.on("console", (m) => {
-      // On the failing page, React says (as error #441 in a production build)
+      // On the failing page, React says (as error #441 in a production build,
+      // and as the recoverable error #419 when it renders the failed part again)
       // that a server render failed: that is the drill itself.
-      const drill = page.url().includes("/prueba-de-errores") && /error #441\b/.test(m.text());
+      const drill = onDrill(m.text());
       if (m.type() === "error" && !deliberate(m.text()) && !drill) {
         errors.push(`${site.app} console: ${m.text().slice(0, 200)}`);
       }
     });
     page.on("pageerror", (e) => {
-      if (!deliberate(String(e))) errors.push(`${site.app} pageerror: ${String(e).slice(0, 200)}`);
+      if (!deliberate(String(e)) && !onDrill(String(e)))
+        errors.push(`${site.app} pageerror: ${String(e).slice(0, 200)}`);
     });
     page.on("response", (r) => {
       if (r.status() >= 500 && !r.url().includes("/prueba-de-errores")) {
@@ -317,9 +324,7 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
 
     // 4. A failure while rendering in the browser: the error page catches it
     // and reports it from there.
-    await page.goto(`${site.base}/prueba-de-errores?en=navegador`, {
-      waitUntil: "networkidle",
-    });
+    await page.goto(`${site.base}/prueba-de-errores?en=navegador`, { waitUntil: "load" });
     await page.getByText("Algo falló de nuestro lado").waitFor({ timeout: 15_000 });
     await told("browser failure");
     await sent(3);
@@ -327,9 +332,7 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
     // 5. "Intentar de nuevo" fetches the page from the server again: this
     // one fails the first time only.
     const mark = Date.now().toString(36);
-    await page.goto(`${site.base}/prueba-de-errores?una-vez=${mark}`, {
-      waitUntil: "networkidle",
-    });
+    await page.goto(`${site.base}/prueba-de-errores?una-vez=${mark}`, { waitUntil: "load" });
     await page.getByText("Algo falló de nuestro lado").waitFor({ timeout: 15_000 });
     await page.getByRole("button", { name: "Intentar de nuevo" }).click();
     const recovered = await page
@@ -390,12 +393,24 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
       }
       expect(!payload.request?.headers, `${site.app}: report has request headers`);
       const value = payload.exception?.values?.[0]?.value || "";
-      expect(value.startsWith("Prueba"), `${site.app}: unexpected report "${value.slice(0, 80)}"`);
-      // Which page failed, without its query (the browser's reports too).
-      const url = payload.request?.url || "";
+      // React's own word that the drill's failed part was rendered again
+      // (#419) may also arrive from the drill page.
+      const drillEcho =
+        /error #419\b/.test(value) && pathOf(payload.request?.url || "") === "/prueba-de-errores";
       expect(
-        url.startsWith(site.base) && !/[?#]/.test(url),
-        `${site.app}: report names the page as "${url}"`,
+        value.startsWith("Prueba") || drillEcho,
+        `${site.app}: unexpected report "${value.slice(0, 80)}"`,
+      );
+      // Which page failed, without its query: the browser names the page's
+      // address (here the host is 127.0.0.1, which the IP rule replaces), the
+      // server the request's path.
+      const where =
+        payload.platform === "node"
+          ? `http://host${payload.contexts?.nextjs?.request_path || ""}`
+          : payload.request?.url || "";
+      expect(
+        pathOf(where) !== undefined && !/[?#]/.test(where),
+        `${site.app}: report names the page as "${where}"`,
       );
       // None of these was handled by the page's code.
       const mechanism = payload.exception?.values?.[0]?.mechanism || {};
@@ -406,7 +421,7 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
     }
     const browserPaths = events
       .filter((e) => e.payload.platform === "javascript")
-      .map((e) => new URL(e.payload.request?.url || site.base).pathname);
+      .map((e) => pathOf(e.payload.request?.url || ""));
     expect(
       browserPaths.includes(dataPage) && browserPaths.includes("/prueba-de-errores"),
       `${site.app}: browser reports name the pages ${JSON.stringify(browserPaths)}`,
