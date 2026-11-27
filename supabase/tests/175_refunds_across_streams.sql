@@ -132,7 +132,8 @@ declare
 begin
   for o in select * from public.orders where id in (current_setting('t.a')::uuid, current_setting('t.b')::uuid) loop
     -- Refunded at once where the money was simulated (as here), cancelled otherwise.
-    assert o.status in ('cancelled', 'refunded') and o.cancel_reason = 'Los paquetes regresaron sin entregarse',
+    -- Stopped by staff before it left: since 085000 the reason says it never left.
+    assert o.status in ('cancelled', 'refunded') and o.cancel_reason = 'Los paquetes no salieron de la bodega',
       format('a: order %s cancelled by the return (%s)', o.order_number, o.status);
     assert (select array_agg(f.reason order by f.reason) from private.refunds f where f.order_id = o.id)
          = array['delivery_fee', 'parcel_returned'],

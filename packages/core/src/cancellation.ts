@@ -15,6 +15,11 @@ export const CANCEL_REASON = {
   unpaid: "Pago no recibido a tiempo",
   /** Every parcel came back without being delivered (wms_receive_returned_shipment). */
   returned: "Los paquetes regresaron sin entregarse",
+  /**
+   * Staff stopped every parcel that came back before it went out
+   * (ops_recall_shipment, then wms_receive_returned_shipment; since 085000).
+   */
+  stopped: "Los paquetes no salieron de la bodega",
   /** The shopper cancelled it (cancel_order, from the web shop or the shopper app). */
   shopper: "Cancelado por el cliente",
 } as const;
@@ -72,6 +77,12 @@ export function cancellationWords(
         title: "Cancelamos su pedido porque los paquetes regresaron sin entregarse",
         body: `Los paquetes volvieron a nuestra bodega sin llegar a usted. ${money} Si todavía quiere los productos, haga el pedido de nuevo.`,
         history: "Cancelado: los paquetes regresaron sin entregarse",
+      };
+    case "stopped":
+      return {
+        title: "Cancelamos su pedido antes de que saliera de nuestra bodega",
+        body: `Detuvimos el envío y los paquetes no llegaron a salir de nuestra bodega. ${money} Si quiere saber por qué, escríbanos desde Ayuda y se lo explicamos. Si todavía quiere los productos, haga el pedido de nuevo.`,
+        history: "Cancelado: el pedido no llegó a salir de nuestra bodega",
       };
     case "shopper":
       return {

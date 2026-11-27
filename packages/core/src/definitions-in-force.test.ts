@@ -19,6 +19,17 @@ const WAVE8 = [
   "20261121084600_shopper_followups.sql",
 ];
 
+/**
+ * Wave 8's functions that a later migration redefines, and where: the
+ * follow-ups of the hosted check and the outside attack of 27 November 2026
+ * (085000: cart_lines answers only the id of an offer of a product the caller
+ * may not see; get_order gives the shopper one more of the database's reasons).
+ */
+const REDEFINED_LATER: Record<string, string> = {
+  "public.cart_lines": "20261121085000_wave8_followups.sql",
+  "public.get_order": "20261121085000_wave8_followups.sql",
+};
+
 /** Every `create [or replace] function schema.name(` in one file, in order. */
 function defined(file: string): string[] {
   const sql = readFileSync(`${MIGRATIONS}${file}`, "utf8");
@@ -44,7 +55,15 @@ describe("wave 8's function definitions", () => {
   it("are the definitions in force", () => {
     const last = inForce();
     for (const file of WAVE8)
-      for (const name of defined(file)) expect(last.get(name), name).toBe(file);
+      for (const name of defined(file))
+        expect(last.get(name), name).toBe(REDEFINED_LATER[name] ?? file);
+  });
+
+  it("are redefined later only where the list says, once", () => {
+    for (const [name, file] of Object.entries(REDEFINED_LATER)) {
+      expect(WAVE8.flatMap(defined), name).toContain(name);
+      expect(defined(file).filter((n) => n === name), name).toHaveLength(1);
+    }
   });
 
   it("put the planner, the refund grouping, the cancellation and the count where the documents say", () => {

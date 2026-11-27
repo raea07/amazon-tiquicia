@@ -749,7 +749,9 @@ class Harness {
         if (
           r.status === "cancelled" &&
           r.cancelled_events !== 1 &&
-          r.reason !== "Los paquetes regresaron sin entregarse"
+          r.reason !== "Los paquetes regresaron sin entregarse" &&
+          // Since 085000: the check-in's reason for parcels staff stopped before they left.
+          r.reason !== "Los paquetes no salieron de la bodega"
         )
           bad.push(`${where}: ${r.cancelled_events} order.cancelled events`);
       }
