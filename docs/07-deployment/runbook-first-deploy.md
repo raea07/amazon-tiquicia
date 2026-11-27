@@ -2030,9 +2030,12 @@ only on a database with data; check the isolation level before the push.
 
 ### Migrations 084400 to 084600
 
-Three migrations of wave 8, merged on 24 November 2026 and **applied nowhere
-yet**: written before anyone applies them. Apply them in filename order, in one
-sitting, then redeploy the four web apps together:
+Three migrations of wave 8, merged on 24 November 2026 and **applied to the
+hosted preview on 27 November 2026** (it now has 44; what was done is in the
+next section). This section was written before anyone applied them; the
+corrections that applying them brought are marked "(on the preview: …)".
+Apply them in filename order, in one sitting, then redeploy the four web apps
+together:
 
 1. `20261121084400_stock_lock_order.sql` (8 functions, all `create or
 replace`; no table changes, nothing backfilled): a product's listing
@@ -2085,7 +2088,8 @@ functions it calls, five run changed code: `cancel_order`, `place_order` and
 `084600` redefines directly; all five still answer in that commit's schemas
 (same test file). For a few seconds while `084600` runs, a
 cart that asks for alternatives may get "function not found" until the API
-reloads its schema cache. The `717048f` web cart does not catch that error:
+reloads its schema cache (on the preview: not seen; the first call, 1.5 s
+after the push ended, already answered). The `717048f` web cart does not catch that error:
 a cart holding a line that can no longer be bought shows the error page
 until the cache reloads, and the next load works. Point 3 below checks the
 reload straight after the push; the new web code shows the line without an
@@ -2167,12 +2171,245 @@ Do this in order.
    paused shows another shop's offer with its date, an order stopped and
    checked in gets one "refund started" planned with the total (the messages
    are planned only; no worker is deployed), and an unpaid order cancelled
-   by the sweep says why on its page.
+   by the sweep says why on its page. (On the preview: nothing plans
+   messages at all while no worker is deployed. `private.notify_plan` runs
+   only when the worker is called, so the events wait as pending `notify`
+   jobs and `private.notification_deliveries` gets no row. Check the
+   planning by running `private.notify_plan_event` for the order's pending
+   events inside a transaction that is always rolled back.)
 
 **Not verified on a hosted database:** the races (they run only locally, on
-a lane), that the API runs every caller in READ COMMITTED (from the
-documentation), the 200-per-run cap through the scheduled job (tested by
-calling the function), and the refund messages through a real gateway.
+a lane), that the API runs every caller in READ COMMITTED (the database and
+the API's roles set no other level, which was checked; that every request
+runs at the default is from the documentation), the 200-per-run cap through
+the scheduled job (tested by calling the function inside suite `171`), the
+planner on a real event stream (no worker is deployed: checked in a
+rolled-back transaction only) and the refund messages through a real
+gateway.
+
+### What was done on the preview, 27 November 2026
+
+The three migrations, `084400`, `084500` and `084600`, in one sitting (09:34
+to 10:30 UTC), in the order above. Vercel CLI 65.12.1, Playwright in headless
+Chromium, the Management API through the network proxy; worktree at
+`12ec48c`.
+
+1. **Recorded first** (09:35). `status`: 41 applied, these three pending,
+   nothing else. Row counts of all 141 tables (43 914 rows, most of them the
+   scheduler's history); every row of `app_settings` (31 keys,
+   `payments_mode` `sandbox`); the three zones; no district with a zone of
+   its own; the 14 holidays; 0 `zone_closures` rows and one cancelled
+   closure period; SJO1's 20 locations and their 29 shelf rows (the two
+   0-unit rows of wave 7 among them: charger on `B-01-01-A`, cutting board
+   on `B-01-02-A`; `DEV-01` holding 2 coffee and 1 headphones); every
+   `stock_levels` row with on hand, reserved and on hand minus its shelves
+   (one pre-existing difference: notebook 57 on hand, 56 on shelves); 9
+   open pick tasks; orders, shipments and payments by status; the 13 rows
+   of `private.refunds` and the 13 of `private.refund_confirmations`; 53
+   ledger transactions, none unbalanced; the summary columns of all 28
+   products (0 whose `in_stock` disagrees with its offers); owner `postgres`,
+   definer, `search_path=""`, the grants and the definition's md5 of the
+   eight functions `084400` redefines and of `get_order`, `cart_lines`,
+   `cart_alternatives` and `private.notify_plan_event`; the seven scheduled
+   jobs with their last five runs (all succeeded; the sweep
+   `expire-unpaid-orders`, `*/5 * * * *`, "1 row"); `reservation_minutes`
+   30 and no order in `pending_payment`; 0 table privileges of the app
+   roles; 21 accounts (11 demo), 0 second factors; no Edge Function; 117
+   audit rows; 35 functions a visitor may execute.
+2. **Read-only checks.** `default_transaction_isolation` is `read
+   committed`; no database or role setting (`authenticator`,
+   `authenticated`, `anon`, `postgres`) changes it (they set only timeouts,
+   a search path and the pre-request check). Nothing depends on
+   `cart_alternatives(uuid[])` besides its grants (no view, policy or
+   function body names it). The two tables that change are small (13 rows
+   each) and owned by `postgres`, which the API runs as.
+3. **`push`** applied the three at the first try in 1.6 s (09:40:09 to
+   09:40:11); `status` lists 44. No platform difference; no file was
+   edited. From 1.5 s after the push for 15 s (21 rounds),
+   `cart_alternatives` as a visitor with only `p_offer_ids` (`[]` and a
+   real offer) and `my_orders`, `get_order` and `cart_lines` as `comprador`
+   all answered 200: no "function not found" was seen.
+4. **What they left** (09:41). The runbook's checks give the expected
+   answers: `cart_alternatives` takes `p_offer_ids uuid[], p_postal_code
+   text` and ends with `promise`; visitors may call it, and may not call
+   `wms_count_into_location`, which signed-in users may; 0 refunds with a
+   `booked_xact`; 13 confirmations and 13 `seq` values; 0 products whose
+   `in_stock` disagrees. `app_settings`, zones, holidays, closures,
+   districts, orders, shipments, payments, the ledger, stock levels,
+   shelves, open pick tasks and all 28 product summaries identical; the
+   refund rows identical but for the new null `booked_xact`, the
+   confirmations but for `seq` (numbered in the table's physical order, not
+   by date: harmless, no old row is grouped). The guard: 0 table
+   privileges, 0 write policies, row-level security on all 98 tables; the
+   15 new or redefined functions each exist once, owner `postgres`,
+   definer, `search_path=""`, none executable by PUBLIC; the redefined ones
+   have a new md5 and exactly the grants they had; `wms_count_*` for
+   `authenticated` only; `private.refund_announcement` for no app role. The
+   visitor list differs only by `cart_alternatives(p_offer_ids uuid[])`
+   becoming `cart_alternatives(p_offer_ids uuid[], p_postal_code text)`;
+   `authenticated` 282 → 284. The sweep's job is unchanged and its first run
+   after the push (09:45:00) succeeded with "1 row"; the other jobs kept
+   succeeding. A token after sign-out still gets `400 session_ended`.
+5. **Suites** (09:45:30 to 09:46:44): all 40 pass at the first run; the
+   only `skipped` rows are `125_followups` `net_grants` and part 2 of
+   `100_notifications`. `171` (250 unpaid orders) and `173` (the trigger
+   switched off and on, as `postgres`, the table owner) ran without
+   change. Row counts before and after identical except the scheduler's
+   history; the suites' rolled-back inserts used 79 values of
+   `refund_confirmations`' identity sequence (the next real one was 94).
+   No test had to change.
+6. **Redeploy**, one at a time from the repository root with `vercel deploy
+--prod --yes --token dummy`, 36 to 46 s each: web
+   `dpl_3FF3BNJSVFmeWGWFZXiZvVJXieN3` (ready 09:48:01), vende
+   `dpl_3Hjd7BkDzpbVfAu3RsxmqvT8XVWT`, central
+   `dpl_zKvqq93iR3AfQPinZBwe2RXgvWvo`, campo
+   `dpl_EJaWgrBLSgmq93sXdFudNHt78N2b` (ready 09:50:25), each with commit
+   `12ec48c`. Without a bypass all 16 addresses tried (the four production
+   addresses and the four new deployments, `/` and `/ingresar`) answer
+   `302` to `vercel.com/sso-api` when asked 2 s apart; asked in a quick
+   burst, some answered `403` with the same "Protected by Vercel
+   Authentication" text. **The window** (09:40 to 09:50): the old apps' 39
+   pages (as in the wave 7 window, the shop's cart, orders and order pages
+   among them) loaded against the new database with no error, before and
+   after the push. The old cart's error page for a line with no buyable
+   offer was not met: the schema cache had reloaded before any call.
+7. **The shopper app of `3f251c3`** (the store builds): from that commit's
+   `apps/shop-native` and the `packages/db` client it uses, the read calls
+   and their named arguments (`search_products`, `suggest_products`,
+   `list_categories`, `list_districts`, `get_product`, `cart_lines`,
+   `checkout_quote`, `my_roles`, `my_profile`, `my_addresses`, `my_orders`
+   (`p_limit` 50), `get_order`, `order_payment`, `my_order_returns`; plus
+   `delivery_estimate` and `my_notification_settings`, which that build does
+   not call), called with that commit's own client and schemas as a
+   visitor and as `comprador` and `comprador3`: 72 and 72 calls before the
+   smoke test, 72 and 81 after it with the four orders of point 8, 0 parse
+   failures. `cart_lines` of an offer the shopper cannot see (Cafetal's
+   archived bottle offer; the paused offer of point 8 was back on sale by
+   then) parsed with its title and no shop. What that build shows: the
+   unpaid order swept, "Cancelado", parcel "Cancelado", history "Pedido
+   recibido | Paquete: cancelado | Cancelado"; the order the shopper
+   cancelled and the one staff cancelled, "Reembolsado", parcel
+   "Cancelado", the refund of ₡14 400; the stopped and checked-in order,
+   "Reembolsado", parcel "Devuelto", two refunds (₡12 900 and ₡1 500) and
+   the history's sentences about the stop and the fee. No delivery code on
+   any of them. It never shows `cancel_reason`; for the order staff
+   cancelled it now receives null; for a line whose offer it cannot see its
+   cart now shows the product's title instead of "Producto no disponible".
+8. **Smoke test** through bypass secrets made at 09:38 and revoked at
+   10:26, sent to the four `vercel.app` hosts only, failing on console
+   errors, page errors, failed requests and 5xx. Every order went through
+   the shop's own checkout as `comprador3` (district 40101), one coffee
+   beans each (₡14 400).
+   - **Shop** at 1280 and 390 px: home, the district picker, the coffee's
+     promise ("Llega el sábado, 28 de noviembre"), the cart, checkout
+     (nothing chosen, payments said to be simulated, the session cookie
+     `HttpOnly` and `Secure`), YT-101999 paid by the simulation, its
+     four-digit code on the shopper's page, the list, sign-out with no
+     cookie left (41 checks).
+   - **Unpaid** YT-101998 (SINPE Móvil, placed 09:53:04, the free units
+     57 → 56): the sweep cancelled it at 10:25:00 (job run 10:25:00.02 to
+     10:25:00.25, "succeeded", "1 row"); reason "Pago no recibido a
+     tiempo", reservation `released`, payment `cancelled`, no refund, free
+     units back to 57. Its page: "Cancelamos su pedido porque no recibimos
+     el pago a tiempo … No se le cobró nada. Si todavía los quiere, haga el
+     pedido de nuevo."; its history "Cancelado: no recibimos el pago a
+     tiempo".
+   - **Cancelled by the shopper** (YT-101999, before picking): "Usted
+     canceló este pedido", history "Cancelado por usted", ₡14 400 refunded
+     in the simulation.
+   - **Stopped and checked in** (YT-102000): picked from `A-01-01-B` and
+     packed by `bodega` in the field app; stopped by `central` from the
+     console's order page with the reason "Prueba: detenido por el equipo
+     para verificar la ola 8"; checked in by `bodega`. The shopper's pages,
+     at 1280 and 390 px, never showed that reason (while the parcel came
+     back nor after); staff still see it on the order page. After check-in
+     the order is cancelled for the database's own reason ("Los paquetes
+     regresaron sin entregarse"), so the shopper reads "Cancelamos su
+     pedido porque los paquetes regresaron sin entregarse", not the generic
+     words. `private.refunds` holds the goods (₡12 900) and the fee (₡1 500)
+     with the same, non-null `booked_xact`; the payment ended `refunded`;
+     the order's five ledger transactions each sum to zero. The planner
+     run for the order's pending events in a rolled-back transaction gives
+     one `refund_initiated` (on the fee's event, ₡14 400, fee ₡1 500) and
+     one `refund_completed` (₡14 400), nothing for the goods' own events.
+     No delivery row was kept; the events wait as pending `notify` jobs.
+     The unit landed on `DEV-01` and was moved back to `A-01-01-B` with the
+     location page's form; `DEV-01` keeps a 0-unit row of it.
+   - **Cancelled by staff** (YT-102001, an extra order to see the generic
+     words): cancelled from the console with "Prueba: cancelado por el
+     equipo para verificar la ola 8". The shopper reads "Cancelamos este
+     pedido … escríbanos desde Ayuda", never the reason; `get_order` gives
+     her `cancel_reason` null and gives `central` the typed reason. The
+     console's form still says of that reason "El cliente lo ve en su
+     pedido", which is no longer true. The first reload of the console page,
+     right after the action, still showed the order confirmed; the next
+     showed it refunded.
+   - **The cart of wave 8**: `sendero` paused its headphones offer in the
+     seller centre (price, list price and handling days left as they
+     were); `comprador3`'s cart, at 1280 and 390 px: the line names the
+     product, says the chosen offer is no longer on sale, offers
+     TecnoCasa's at ₡19 900 with "Llega el sábado, 28 de noviembre" (the
+     product page's date for 40101 at that moment), "Cambiar a la oferta de
+     TecnoCasa"; the summary shows no total, no date and no way on, only
+     "Ahora no hay nada en su carrito que se pueda comprar. Cambie cada
+     producto por la oferta de otra tienda, si la hay, o quítelo …". The
+     offer was put back on sale (twice paused and resumed: the first try's
+     script stopped before reading the page); the cart could go on again.
+     `sendero` switched the T-shirt's size S off and on in the seller
+     centre. The seller centre logged two "did not refresh its catalogue:
+     HTTP 302" lines (the Vercel login stops its refresh call to the shop,
+     as before).
+   - **Count into a location** (field app, 390 px, `bodega`): one
+     TecnoCasa charger counted into `B-01-01-A` (its 0-unit row means the
+     shelf does not list it) at 10:05:46 with "Prueba: una unidad
+     encontrada detrás de otra caja"; the shelf listed it ("En el estante
+     1, Esperan pedidos 0, Libres 1", as in the database: shelf 1, on hand
+     149, offer 148); corrected to 0 at 10:05:50 with "Prueba: fin del
+     conteo de la ola ocho". Refused in words, what was typed kept: forced
+     onto `CUA-01`, `EMP-01` and `DES-R1` ("En esta zona no se suman
+     unidades …"), onto the switched-off `Z-99-98-Z` ("Esa ubicación está
+     desactivada …"), 0 and −1 units ("Escriba cuántas unidades contó …"),
+     and Tienda Sendero's headphones, of which SJO1 holds nothing ("Esa
+     tienda no tiene existencias registradas …"); the same calls through
+     the API gave `count_not_shelf`, `location_inactive`,
+     `invalid_adjustment`, `count_no_stock_record` and, on a shelf that
+     lists the product, `count_already_listed`. A returns location is not
+     refused: by design `084500` counts into returns and receiving areas
+     too. TecnoCasa's "Historial de existencias" lists the two rows with
+     their reasons, no shelf and no person; Operación → Ubicaciones lists
+     both with who.
+   - **Pages** (390 px, the field app also at 1280; 35 page views, 321 checks):
+     one `h1`, `lang` `es-CR`, no sideways scroll, no machine code, the
+     back links, footer links and category links 44 px. Two links under 44
+     px were found: the category page's breadcrumb ("Inicio", "Abarrotes y
+     café", 17 px, on `/c/cafe`) and the console's "Ver en Cobros" (17 px,
+     on a refunded order). No demo driver has a removed stop, so that page
+     was not opened; `repartidor`'s stop page of R-1003 was.
+9. **Afterwards** (10:26). Vercel since the deployments: the two seller
+   centre lines above, nothing on the other three. The scheduled jobs ran
+   249 times since the push, none failed; the sweep 9 times. Advisors:
+   security 321 (319; the two `wms_count_*` functions; `cart_alternatives`
+   replaced by its new signature), performance 101 (102: one unused index
+   fewer). The bypass secrets were revoked; each project lists none.
+   Against point 1: everything identical except the orders of the test and
+   what they wrote (4 orders, 4 refunds, 9 ledger transactions, 6 stock
+   movements, 1 audit entry for the stop, 30 outbox events) and one new
+   0-unit shelf row (coffee beans on `DEV-01`); every product's on hand
+   per shop, every location's units and all 28 product summaries are as
+   they were.
+
+What this round left on the preview, on purpose: YT-101998 to YT-102001 of
+`comprador3` (see point 8) with their simulated refunds (₡14 400 three
+times), ledger rows (each order sums to zero), stock movements and pending
+event jobs; the two count corrections of the charger and the move of the
+returned coffee in the stock history; the 0-unit row of coffee beans on
+`DEV-01`; one audit entry; sessions of demo accounts left to expire. No
+throwaway account was made.
+
+**For production**: the same order. Check the isolation level before the
+push; expect no "function not found" but check it straight after. There the
+messages planner runs, so check the planned rows of one stopped order for
+real.
 
 ## 4. Confirm the database is what the migrations say
 

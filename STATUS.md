@@ -1,6 +1,7 @@
 # Status
 
-Updated 27 November 2026, after `main`'s documents were merged into the wave 8
+Updated 27 November 2026, after wave 8 was applied to the hosted preview
+(below), and before that after `main`'s documents were merged into the wave 8
 branch (the Carreta design system in `docs/brand/system`, the strategy pack
 in `docs/00-strategy` and `marketing/`, the November research in
 `docs/research`) and the three minor findings of the third outside check of
@@ -15,11 +16,15 @@ checkout or a count and a seller switching a variant off) and a product summary 
 (migration `084400`); counting a product a location does not list (`084500`);
 the shopper app keeping what it shows when a refresh fails, the cart's date
 for another shop's offer and one refund message for one cancellation
-(`084600`); and the three findings of the hosted check of wave 7. **The
-hosted preview does not have migrations `084400`, `084500` and `084600` or
-this code yet**: it still has 41 migrations and runs the web apps of
-`717048f`. How to apply them is written in the
-[runbook](docs/07-deployment/runbook-first-deploy.md#migrations-084400-to-084600).
+(`084600`); and the three findings of the hosted check of wave 7. **On
+27 November 2026 the three migrations were applied to the hosted preview,
+which now has all 44, and its four web apps were redeployed with this code
+(`12ec48c`)**; the suites pass there and the browser checks passed, with
+three small findings listed under "How it was checked" (what was done and
+what differed is in the
+[runbook](docs/07-deployment/runbook-first-deploy.md#what-was-done-on-the-preview-27-november-2026)).
+The native apps' new screens are in no store build. The preview still
+simulates payments and no worker is deployed.
 
 Before that, on 23 November 2026, wave 7 was merged on top: order follow-ups
 (staff stop a packed parcel, the delivery fee refunded when nobody went to
@@ -28,8 +33,8 @@ while parcels come back or wait to go out again; migration `084200`),
 warehouse stock (open a location, move stock, correct a count, the shop's
 stock history; migration `084300`) and the native apps' parity with the
 websites (no migration). **On 23 November 2026 both migrations were applied
-to the hosted preview, which now has all 41, and its four web apps were
-redeployed with this code (`717048f`)**; the suites pass there and the
+to the hosted preview, which then had all 41, and its four web apps were
+redeployed with that code (`717048f`)**; the suites pass there and the
 browser checks passed (what was done and what differed is in the
 [runbook](docs/07-deployment/runbook-first-deploy.md#what-was-done-on-the-preview-23-november-2026-afternoon)).
 The native apps' new screens are in no store build. The preview still
@@ -111,12 +116,11 @@ Everyone can reset a password, confirm their e-mail and delete their account;
 staff and sellers can add a second factor; messages for every step of an order
 are planned and sent, but only to local fake providers. **A hosted preview
 exists.** The database is a Supabase project in your separate free
-organisation, with 41 of the repository's 44 migrations applied (the
-three of wave 8, `084400` to `084600`, are not applied there yet; the
+organisation, with all 44 of the repository's migrations applied (the
 security review's fixes, both follow-ups, payments, invoicing and its fixes,
 seller listings, the console catalogue, the native accounts, the operations
-tools, the catalogue follow-ups and wave 7's `084200` and `084300`
-included), and the demo data loaded.
+tools, the catalogue follow-ups, wave 7's `084200` and `084300` and wave 8's
+`084400` to `084600` included), and the demo data loaded.
 Payments there are simulated, and no worker is deployed, so nothing is sent,
 charged or invoiced. Since the review, apps and visitors can reach the database
 only through its functions: no table is readable or writable directly. The
@@ -147,10 +151,11 @@ built").
 
 In the order that unblocks the most.
 
-0. **Wave 8 is not on the hosted preview yet.** Migrations `084400`,
-   `084500` and `084600` and this code are applied and deployed by the
-   supervisor after this merge, as the runbook describes; nothing is needed
-   from you for that. **Wave 7 is on the hosted preview.** Migrations
+0. **Wave 8 is on the hosted preview.** Migrations `084400`, `084500` and
+   `084600` were applied there on 27 November 2026 and the four web apps run
+   this code (`12ec48c`); nothing is needed from you for that. The test left
+   four simulated orders of `comprador3` (YT-101998 to YT-102001). **Wave 7
+   is on the hosted preview too.** Migrations
    `084200` and `084300` were applied there on 23 November 2026 and the four
    web apps run its code. YT-101282 and YT-101283, two
    simulated demo orders taken off routes without an attempt, stay as they
@@ -331,8 +336,9 @@ In the order that unblocks the most.
     review, the support and system tools, the strategy documents, English
     and a redesign), so installing on the phones is on hold by your choice.
     Neither build has been installed on a phone. Both keep working against
-    the updated preview: every call they make was tried there after the
-    migrations and answered. Of the 29 functions they call, `084200` changes
+    the updated preview: every read call they make was tried there after the
+    wave 8 migrations, with that build's own client and schemas, and parsed
+    (27 November 2026, 0 failures). Of the 29 functions they call, `084200` changes
     two (`my_orders`, `get_order`) by adding fields only, and `084600` makes
     `get_order` give a shopper a null `cancel_reason` when staff cancelled
     (that build does not show it); a contract test parses their answers on
@@ -353,7 +359,7 @@ In the order that unblocks the most.
 | Seller centre        | `apps/seller`                                                      | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, a request to change the payout account, and the team (invitations that the invited person accepts) and requests to change the shop's name, fiscal details or contact. Selling an existing product of another shop (found by name, brand or barcode, no review), switching variants off and on, taking a listing back to draft, the Tienda page (description and logo, both reviewed), and offers paused below the price floor with the reason and a one-step fix. A photo manager on each listing (resized in the browser, reviewed before they show), the shop's notification settings, an optional second factor. Inventario's "Historial de existencias": every change to the shop's stock, with the warehouse's reason for a count correction (084300)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Internal console     | `apps/ops`                                                         | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail, shop-change requests, routes released by a driver who stopped being active, recording a return's goods back, checking in a returned parcel and releasing a locked delivery code. Photo review and take-down, the messages each order produced and the stuck ones with a resend button, staff's second factor (enrolment, the second step at sign-in, an administrator's reset of a colleague's). Offers a fee change paused (`/tarifas`), a listing edit that would pause other shops' offers shown with a confirmation, shops' logos (`/catalogo/logotipos`) and descriptions (`/cambios-tienda`). Catálogo: categories (create, rename with redirect, move, order, hide, delete if unused), brands (create, rename, hide, merge), search synonyms with a preview, review moderation with reasons, and correcting, taking down and putting back a published product (the console's catalogue forms work without JavaScript), and on dispatch a door position outside the country or a closing received late. Order search by name without the name in the address; navigation that folds into a menu on a phone. Operación (084000): delivery zones (create, edit, switch off and on, delete if unused), districts moved between zones or marked not served with a preview of what they touch, holidays, zone closures with an end that can change, warehouse locations, stuck routes (remove a pending stop, close a route) and, for administrators, the operational settings; brands deleted when no product names them (084100); the order page tells a parcel taken off a route from a failed delivery. Wave 7: stopping a packed parcel from the staff order page, with a confirmation that names the order and the money (084200); a single closed day opened again under Cierres; districts that follow their canton's zone again; Operación → Ubicaciones lists the warehouse's moves and count corrections with who made them (084300) |
 | Routes and warehouse | `apps/field`                                                       | Driver: the day's route with each stop's district, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with the scanned code checked by the database, packing, receiving, stock lookup, checking in a returned parcel. A suspended driver sees a plain message and no route. Password reset and account deletion as in the other apps. A stop Central removed reads "Omitida" with what to do with the parcel, and the route's count leaves it out ("0 de 1 entregadas · 1 omitida"). Since wave 7: Bodega → Ubicaciones opens a location by its code and shows what it holds, what open picks wait for and what is free, moves free units to another shelf and corrects a count with a reason; a returned parcel staff stopped reads "Nunca salió de la bodega"; a stop removed before the route started still says not to collect its parcel after the start                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Database             | `supabase/`                                                        | 44 migrations (41 on the hosted preview; `084400` to `084600` not yet), 98 tables (65 public, 33 private), 285 functions in `public` (263 for signed-in users, 17 of them also open to visitors, 22 server-side only), no table, view or sequence reachable by an app role, two storage buckets with their rules, row-level security on every table as a second lock, double-entry ledger, one register for every refund and one way back for each, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Database             | `supabase/`                                                        | 44 migrations (all 44 on the hosted preview), 98 tables (65 public, 33 private), 285 functions in `public` (263 for signed-in users, 17 of them also open to visitors, 22 server-side only), no table, view or sequence reachable by an app role, two storage buckets with their rules, row-level security on every table as a second lock, double-entry ledger, one register for every refund and one way back for each, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Domain logic         | `packages/core`                                                    | Money and IVA, fees, the offer order (one rule shared with the database by a parity test), search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Native apps          | `apps/*-native`, `packages/expo-kit`                               | Expo SDK 58. Shopper app: every shopper flow of the website. Seller app (Yuntera Vende): the seller centre's flows from packing to payouts and shop registration, the team and invitations, the reviewed changes to the shop's name, fiscal details and contact, where its description and logo stand (written and uploaded in the seller centre), and the shop's notification settings. Drivers' app (Yuntera Ruta): every driver flow, plus position sharing during a route and work without signal; each stop shows its district, and actions queued without signal keep the time they happened. Warehouse app (Yuntera Bodega): picking by camera or hand scanner, packing, receiving, checking in returned parcels, stock lookup. All four delete the account (the password typed again, blockers explained, nothing left on the phone afterwards), send the password-reset link (which opens the website) and change the password; the shopper app asks for the second step inside the app, reports a listing and saves message channels with the commercial consent, the consent logged as given in the app. The three ask for the second factor. `packages/expo-kit` is what all four share. None of the three has been built for a phone yet; until then, their users work in the web apps, too. Since wave 7 (in no store build): the shopper app's cart offers another shop's offer for a line that can no longer be bought, its search and categories have the brand filter, its category menu is read again on every return to the foreground, and a taken-down product shows the website's not-found page; the seller app sells on another shop's product, switches variants, takes a listing back to draft, puts a paused offer back on sale, stops selling another shop's product, writes the shop's description, shows the stock history, and withdraws or removes a logo (uploading still happens in the seller centre); the warehouse app opens locations, moves stock and corrects counts                                                                                                                                                                                                                                         |
 | Notifications        | `packages/notifications`, `supabase/functions`, `tools/dev-notify` | A planner in the database turns each event into one message per person and channel, exactly once; a worker sends them by e-mail, WhatsApp, SMS and push with retries and dead letters; signed delivery reports; quiet hours; suppressions; account e-mails in the same words as Auth's templates. Runs locally against fake providers only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -491,6 +497,56 @@ hosted project or on a phone.
 | Browser journeys   | 30 pass in Chromium in one full run, with no console or server errors; new `cancel-reasons` (the reason on a cancelled order, 44 px back links, a cart with nothing to buy whose paused line still names its product); `console-followups` now opens both removed stops' own pages. `tools/e2e/touch-targets.cjs` at 390 px over the journeys' pages: no control under 44 px outside running text                                                                                                                                                                                                                                         |
 | Native journeys    | 17 pass through the web export of the four apps at phone size (`tools/dev/stack.sh native 15` then `native-e2e 15`); the bundle scan finds no cipher. New: `shop-cancel-reasons` (why an order was cancelled, a cart with nothing to buy: no total, no date, no bottom notice, and the paused line names its product), the streams' `count-into-location` and `shop-followups`, and a check in `order-followups` that no sentence ends with two full stops                                                                                                                                                                                |
 | Lint and types     | No lint errors (230 warnings and 411 notes, of kinds already there) and no type errors in the 20 typecheck tasks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+
+On the hosted preview on 27 November 2026 (09:34 to 10:30 UTC), after
+`084400`, `084500` and `084600` were applied and the four web apps
+redeployed from `12ec48c` (details in the
+[runbook](docs/07-deployment/runbook-first-deploy.md#what-was-done-on-the-preview-27-november-2026)):
+
+- **Migrations**: applied at the first try in 1.6 s; no file was edited. The
+  API answered the re-created `cart_alternatives` and the redefined
+  `get_order` and `cart_lines` from the first call, 1.5 s after the push.
+  Settings, zones, districts, holidays, closures, orders, payments, refunds,
+  the ledger, stock, shelves and all 28 product summaries were identical
+  afterwards; the guard holds (no table privilege for an app role, no write
+  policy, row-level security on every table, every new or redefined
+  function a definer with an empty search path and its migration's
+  grants).
+- **Database suites**: all 40 files pass at the first run, among them the new
+  `171` to `177`. The only `skipped` rows are the documented ones
+  (`125_followups` `net_grants`; part 2 of `100_notifications`). The suites
+  left nothing behind. No test had to change.
+- **Verified there for the first time**: the unpaid-order sweep, redefined by
+  `084400`, cancelled a real unpaid order on schedule and its page and
+  history say why in plain Spanish; a shopper's own cancellation reads
+  "Usted canceló este pedido"; a staff cancellation reads "Cancelamos este
+  pedido" with Ayuda, and `get_order` gives the shopper null for the reason
+  while staff read it; a stopped parcel checked in books the goods and the
+  delivery fee as two refunds of one transaction (`booked_xact`); a cart
+  line whose offer was paused names its product and shows the other shop's
+  offer with the product page's date; a variant switched off and on in the
+  seller centre; a product counted into a location that did not list it,
+  and corrected back, with every refusal in words; the back links and the
+  shop's footer and category links are 44 px at 390 px.
+- **The store build of `3f251c3`**: every read it makes, called with its own
+  client and schemas as a visitor, `comprador` and `comprador3`, parsed (0
+  failures), also for the four test orders and a line whose offer the
+  shopper cannot see.
+- **Found there, not fixed**: the category page's breadcrumb and the
+  console's "Ver en Cobros" are 17 px tall on a phone; the console's
+  staff-cancel form says the shopper sees the reason, which is no longer
+  true; a parcel staff stop before it leaves ends with "los paquetes
+  regresaron sin entregarse" on the shopper's page.
+- **Not verified there**: the lock order under parallel sessions (the race
+  tests never run against a hosted database), the 200-order cap through the
+  scheduled job, the messages planner on real events (no worker is
+  deployed; checked in a rolled-back transaction), anything on a phone, a
+  real payment gateway, a real message and an electronic invoice.
+- **What it left**: orders YT-101998 to YT-102001 of `comprador3` (all
+  cancelled or refunded, in the simulation), two count corrections of a
+  charger and one move in the stock history, a 0-unit shelf row of coffee
+  beans on `DEV-01` (decision 52), one audit entry. Every product's stock per
+  shop and every location's units are as before. No bypass secret remains.
 
 On a development machine on 23 November 2026, after wave 7 was merged, its
 cross-stream fixes made, the two reviews' findings fixed, the second
@@ -1519,8 +1575,8 @@ Found while building or reviewing; none is fixed by pretending otherwise.
 
 - **Wave 7 (`084200`, `084300` and the native parity), merged on
   23 November 2026 and on the hosted preview since the same day:**
-  - Found on the preview on 23 November 2026, fixed in wave 8 (not on the
-    preview yet): a cancelled order now says why, on its page and in its
+  - Found on the preview on 23 November 2026, fixed in wave 8 (on the
+    preview since 27 November 2026): a cancelled order now says why, on its page and in its
     history (web shop and shopper app); a stop staff removed says on the
     driver's own stop page what the route list says; the back links at the
     top of pages and "Presente un reclamo" are 44 px tall on a phone. See
@@ -1662,8 +1718,8 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     the web export only (no camera, no real pull-to-refresh, no
     foreground event from the phone).
 
-- **Wave 8 (`084400`, `084500`, `084600`), merged on 24 November 2026, not
-  on the hosted preview yet:**
+- **Wave 8 (`084400`, `084500`, `084600`), merged on 24 November 2026 and
+  on the hosted preview since 27 November 2026:**
   - What still can deadlock, in plain words: when two people change the
     same last units at the same moment, one of them can be told "nothing was
     saved, try again". The loser's change rolls back whole; nothing is
@@ -1730,7 +1786,11 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     confirmed, or it failed and finance has not recorded the transfer),
     nothing is said about the goods either. Refunds of different orders are
     never grouped (`175_refunds_across_streams`). The messages were planned
-    in tests, never sent (no worker is deployed).
+    in tests, never sent (no worker is deployed). On the hosted preview
+    nothing is planned at all, because the planner runs only when the
+    worker is called: a stopped order's events wait as pending jobs, and a
+    planner run inside a rolled-back transaction gave one "refund started"
+    and one "refund arrived" with the total.
   - The shopper app keeps what it shows when a refresh fails and gives up on
     a read after 15 s. **The seller, driver and warehouse apps do not**: a
     failed refresh still replaces the screen with an error, and a read that
@@ -1748,7 +1808,7 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     with the cart's at cutoffs and midnight; milliseconds of clock skew
     between the web server and the database at an hour boundary could still
     cache a date under the wrong hour. No test moves the clock.
-  - Controls under 44 px on a phone: the back links, "Presente un reclamo", the shop's footer, category bar and breadcrumb, "Agregar una dirección", the seller centre's price and notification links, the console's home links and the driver's "No se pudo entregar" are 44 px. A product card's title link covers its whole card. Measured with `tools/e2e/touch-targets.cjs` at 390 px after the last change (27 November): no control under 44 px outside running text.
+  - Controls under 44 px on a phone: the back links, "Presente un reclamo", the shop's footer, category bar and breadcrumb, "Agregar una dirección", the seller centre's price and notification links, the console's home links and the driver's "No se pudo entregar" are 44 px. A product card's title link covers its whole card. Measured with `tools/e2e/touch-targets.cjs` at 390 px after the last change (27 November): no control under 44 px outside running text. On the hosted preview the same measure found two more pages that script does not visit: the category page's breadcrumb ("Inicio" and the category, 17 px, `/c/…`) and the console's "Ver en Cobros" on a refunded order (17 px). Neither is fixed.
   - A cancelled order says why only for the reasons the system writes (no
     payment in time, parcels came back, cancelled by the shopper); when
     staff cancel, the page says "Cancelamos este pedido" and points to
@@ -1767,8 +1827,18 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     or WhatsApp to the customer, only what to do with the parcel.
   - The closure journey leaves its one-day closure visible under "Cierres
     cancelados" for 7 days on the lane it ran on.
-  - Nothing of wave 8 ran on a phone or on the hosted project; the native
-    screens were checked through the web export only.
+  - Nothing of wave 8 ran on a phone; the native screens were checked
+    through the web export only. On the hosted preview (27 November 2026)
+    the database parts and the four web apps were checked, and the store
+    build's calls parsed; see "How it was checked".
+  - The console's staff-cancel form still says of the reason "El cliente lo
+    ve en su pedido". Since `084600` that is not true: the shopper never
+    sees it. Not fixed.
+  - An order staff stop before it leaves is cancelled at check-in for the
+    database's own reason, so the shopper reads "Cancelamos su pedido porque
+    los paquetes regresaron sin entregarse" (the parcel never left the
+    warehouse), not the generic words of a staff cancellation. The staff's
+    typed reason is never shown to the shopper.
 
 ## Running it
 

@@ -10,7 +10,7 @@ gated by evidence rather than by dates.
 web app for drivers and the warehouse, and the four native apps are built and
 tested on a development machine, with payments and electronic invoices
 running only against local fakes. A hosted preview exists: a Supabase
-project with 41 of the 44 migrations and the four web apps on Vercel behind a
+project with all 44 migrations and the four web apps on Vercel behind a
 login, with payments simulated, no worker deployed and nothing sent, charged
 or invoiced. Nothing has run against the real payment gateway, Hacienda or a
 messaging provider, and no app has run on a phone. The shopper app's first
