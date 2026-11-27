@@ -40,8 +40,20 @@ note, so the next person does not ask the shopper to repeat themselves.
 | Formal complaint                                            | Acknowledged in 1 working day                    | Written answer within 5 working days                          |
 | Any other question                                          | 1 working day                                    | 5 working days                                                |
 
-Being late against these targets is itself an exception that appears in the
-operations queue.
+Being late against these targets is itself an exception: the case says
+"Atrasado" in Casos, and Hoy and Salud del sistema count it.
+
+These targets are the rows of `private.case_targets` in the database, which
+computes every due date; the words shoppers read come from
+`packages/core/src/service-times.ts`, and a test keeps this table, those rows
+and those words equal. A return for a damaged, wrong or warranty item takes
+the "Wrong, damaged or missing item" row; a report about a listing or review
+takes the complaint's. **A working day** is Monday to Friday, without the
+holidays under Operación → Feriados, ending at midnight Costa Rica time; a
+**working hour** counts between 08:00 and 17:00 of a working day. Both are
+assumptions until the service hours are published (owner question D56):
+service runs Monday to Saturday, so a target counted this way may end a day
+later than promised, never earlier.
 
 ## Tone
 
@@ -181,9 +193,14 @@ suspend an account; a suspended seller is told why and can appeal.
 The law requires a free complaint mechanism, and Ley 10946 will add an internal
 complaint system for platform decisions from about mid-2027.
 
-1. **How to complain.** A form linked from every page footer and every order,
-   and by email or WhatsApp. Free, in Spanish, no account needed to complain
-   about an order if the shopper has the order number.
+1. **How to complain.** A form linked from every page footer and every order
+   (`/reclamo` on the website, "Presentar un reclamo" in the shopper app),
+   and by email or WhatsApp. Free, in Spanish. The aim is that no account is
+   needed to complain about an order with its number; **today the form needs
+   an account** (the database's `file_complaint` requires one). A complaint
+   that arrives by WhatsApp, phone or e-mail is recorded by staff with
+   **Registrar un contacto** (topic "Reclamo formal") and gets the same
+   targets.
 2. **Acknowledgement** within 1 working day, with a reference number.
 3. **A written answer** within 5 working days: what was found, what Yuntera
    will do, and how to escalate.
@@ -203,6 +220,45 @@ misleading. A person reviews each report, records the decision and the reason,
 and tells the reporter and the seller. Reviews are removed only for illegal
 content, personal data or irrelevance, never for being negative: the law
 requires that negative reviews be published.
+
+## Working cases in the console
+
+Every request has a case under **Casos** in the staff console. Complaints,
+return requests and content reports open one by themselves. A WhatsApp,
+phone or e-mail conversation is recorded with **Registrar un contacto** on
+the order's page (or the customer's page when no order is involved), with
+the channel, the topic and a one-line summary. The topic sets the targets
+above. The case shows when the first response and the resolution are due,
+and says "A tiempo", "Vence pronto" or "Atrasado".
+
+1. Open the oldest case first. Use **Asignarme el caso** so colleagues know
+   who has it.
+2. Write what you found in **Nota interna**. The customer never sees notes.
+   Never write the delivery code. The console refuses a note, an answer or a
+   contact summary that holds it, records the refusal on Auditoría, and after
+   three refusals in an hour stops you writing for that hour. Four-digit
+   numbers count too: after 20 in an hour, write without them or wait.
+3. Answer in **Respuesta al cliente**. Start from **Usar una respuesta
+   guardada** when one fits, then adjust it. The customer reads the answer in
+   their account ("Sus consultas") and on the order's page; a message tells
+   them an answer is waiting, never what it says.
+4. Use **Responder y cerrar** when nothing more is needed. **Responder** keeps
+   the case open. A return or a report is decided in **Atención**: its case
+   closes by itself then, so only **Responder** is offered. A closed case can
+   be reopened, and it then counts as reopened in the monthly report.
+5. **Ver el cliente** shows one customer's orders, returns, complaints and
+   cases. Their phone and e-mail appear only with **Mostrar contacto**, which
+   asks why; the reason is recorded on Auditoría. If a customer typed their own
+   delivery code into a complaint, staff read it as "••••".
+6. Review **Informe del mes** on the first working day of each month: cases by
+   type, first responses on time, complaints answered within 5 working days,
+   refunds within the legal period, reopened cases.
+
+Who reads which case: support and administrators every case; operations the
+cases tied to an order; finance payments and refunds; catalogue staff the
+reports about listings. Only support and administrators answer, assign,
+reopen, record contacts and reveal a contact. When a customer deletes their
+account, the text of their cases is erased and an open contact closes.
 
 ## What support is measured on
 
