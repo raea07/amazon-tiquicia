@@ -23,6 +23,9 @@
 
 const { chromium, request } = require("playwright");
 const { ownRoute } = require("../../e2e/lib/own-route.cjs");
+const driverApp = require("../lib/driver.cjs");
+const { word } = require("../lib/words.cjs");
+const { overflow, screenText } = require("../lib/screen.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const URL_ = process.env.NATIVE_DRIVER_URL || "http://127.0.0.1:3012";
@@ -103,17 +106,11 @@ async function as(email) {
     if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
   });
   const byId = (id) => page.getByTestId(id).filter({ visible: true }).first();
-  const routeCard = (code) =>
-    page
-      .getByTestId("driver-route")
-      .filter({ visible: true, hasText: `Ruta ${code}` })
-      .first();
+  const routeCard = (code) => driverApp.routeCard(page, code);
   const flat = async (locator) => (await locator.innerText()).replace(/\s+/g, " ");
 
   await page.goto(`${URL_}/`, { waitUntil: "networkidle" });
-  await byId("sign-in-email").fill(DRIVER);
-  await byId("sign-in-password").fill(PASSWORD);
-  await byId("sign-in-submit").click();
+  await driverApp.signIn(page, DRIVER, PASSWORD);
   await byId("driver-route").waitFor();
   await byId("stop-R-1003-1").waitFor();
   const card = await flat(routeCard("R-1003"));
@@ -125,7 +122,7 @@ async function as(email) {
   const removedStop = (await byId("stop-R-1003-1").innerText()).replace(/\s+/g, " ");
   log("removed stop:", removedStop);
   check(
-    removedStop.includes("Omitida") &&
+    removedStop.includes(word("stop_status", "skipped", "driver")) &&
       removedStop.includes(
         "Central quitó esta parada de la ruta. Si lleva el paquete, devuélvalo a la bodega.",
       ),
@@ -133,10 +130,7 @@ async function as(email) {
   );
   const other = (await byId("stop-R-1003-2").innerText()).replace(/\s+/g, " ");
   check(!other.includes("Central quitó"), "the stop still on the route says nothing of the kind");
-  check(
-    (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-    "no sideways scrolling at 390 px",
-  );
+  check((await overflow(page)) <= 0, "no sideways scrolling at 390 px");
   await page.screenshot({ path: `${SHOTS}/native-driver-removed-stop.png`, fullPage: true });
 
   // ── 3. The assigned route: the removed parcel is not collected ──
@@ -155,7 +149,7 @@ async function as(email) {
   const earlyText = await flat(earlyStop);
   log("removed stop (assigned):", earlyText);
   check(
-    earlyText.includes("Omitida") &&
+    earlyText.includes(word("stop_status", "skipped", "driver")) &&
       earlyText.includes(
         "Central quitó esta parada de la ruta. No recoja este paquete: volvió a Despacho.",
       ) &&
@@ -164,7 +158,7 @@ async function as(email) {
   );
   check(
     (await earlyStop.getAttribute("role")) !== "link" &&
-      (await page.locator(`a[href*="${own.stops[0].stopId}"]`).count()) === 0,
+      (await driverApp.linksTo(page, own.stops[0].stopId).count()) === 0,
     "the removed stop does not open as a stop to deliver",
   );
   const keptStop = await flat(byId(`stop-${own.code}-2`));
@@ -183,12 +177,12 @@ async function as(email) {
   );
   check(
     (await page.getByTestId("stop-arrive").count()) === 0 &&
-      !(await page.locator("body").innerText()).includes("Inicie la ruta para poder entregar"),
+      !(await screenText(page)).includes("Inicie la ruta para poder entregar"),
     "the removed stop's screen offers nothing to do at the door",
   );
-  const screenText = await page.locator("body").innerText();
+  const stopScreen = await screenText(page);
   check(
-    !screenText.includes("Cómo llegar") && !screenText.includes("Llamar"),
+    !stopScreen.includes("Cómo llegar") && !stopScreen.includes("Llamar"),
     "the removed stop's screen offers no directions and no call to the customer",
   );
   await page.screenshot({

@@ -25,7 +25,9 @@
 // Fails on any console error, uncaught exception or 5xx.
 
 const { chromium, request } = require("playwright");
-const { settledText } = require("../../e2e/lib/settle.cjs");
+const { overflow, settledText, shows } = require("../lib/screen.cjs");
+const seller = require("../lib/seller.cjs");
+const { word } = require("../lib/words.cjs");
 
 const BASE = process.env.NATIVE_SELLER_URL || "http://127.0.0.1:3011";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -96,10 +98,7 @@ async function as(email) {
   const shot = (name) =>
     page.screenshot({ path: `${SHOTS}/native-seller-listings-${name}.png`, fullPage: true });
   const noSideways = async (where) =>
-    check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-      `${where}: no sideways scrolling at 390 px`,
-    );
+    check((await overflow(page)) <= 0, `${where}: no sideways scrolling at 390 px`);
   const tall = async (id, what) => {
     const box = await visible(id).boundingBox();
     check(box !== null && box.height >= 44, `${what} is at least 44 px high`);
@@ -110,10 +109,7 @@ async function as(email) {
   await visible("sign-in-email").fill(OWNER);
   await visible("sign-in-password").fill(PASSWORD);
   await visible("sign-in-submit").click();
-  await page
-    .getByRole("tab", { name: /^Productos/ })
-    .first()
-    .waitFor();
+  await seller.tabs.listings(page).waitFor();
 
   // ── 1. An offer on a product another shop created ──────────────────────────
   await page.goto(`${BASE}/productos`, { waitUntil: "networkidle" });
@@ -141,7 +137,7 @@ async function as(email) {
   await noSideways("offering on another shop's product");
   await shot("01-offer-existing");
   await visible(`${form}-submit`).click();
-  await page.getByText("Agregamos su oferta. Envíe mercadería a la bodega").first().waitFor();
+  await shows(page, `${form}-result`, "Agregamos su oferta. Envíe mercadería a la bodega");
   check(true, "the offer is added and the app says what to do next");
   await shot("01b-offer-added");
   const blenderOffer = (await listings()).find((l) => l.product_slug === blender);
@@ -210,7 +206,7 @@ async function as(email) {
   await noSideways("the paused offers");
   await shot("02-paused-offer");
   await visible(`paused-resume-${blenderOffer.offer_id}`).click();
-  await page.getByText("Precio guardado. Su oferta está a la venta otra vez.").first().waitFor();
+  await shows(page, "paused-offer-result", "Precio guardado. Su oferta está a la venta otra vez.");
   // Without a reload: the paused box lets go of the offer, the confirmation
   // stays, and the list shows the offer on sale.
   await page
@@ -220,11 +216,7 @@ async function as(email) {
     (await said("paused-offer-result")) === "Precio guardado. Su oferta está a la venta otra vez.",
     "the resumed offer leaves the paused box at once and the confirmation stays",
   );
-  await page
-    .getByTestId(`listing-${blenderOffer.offer_id}`)
-    .filter({ visible: true, hasNotText: "En pausa" })
-    .first()
-    .waitFor({ timeout: 10_000 });
+  await seller.listingNotPaused(page, blenderOffer.offer_id).waitFor({ timeout: 10_000 });
   check(true, "Productos shows the resumed offer without 'En pausa'");
   await shot("02b-resumed");
   const resumed = (await listings()).find((l) => l.offer_id === blenderOffer.offer_id);
@@ -241,7 +233,7 @@ async function as(email) {
   await visible("shared-listing").waitFor();
   await visible("offer-status-paused").click();
   await visible("offer-save").click();
-  await page.getByText("Cambios guardados.").first().waitFor();
+  await shows(page, "offer-result", "Cambios guardados.");
   check(
     !(await offersOf(earphones.product_slug)).some((o) => o.seller.slug === "tienda-sendero"),
     "once paused in the app, the shop no longer sells Sendero's earphones",
@@ -249,11 +241,7 @@ async function as(email) {
   await shot("03-paused-own-offer");
   await visible("offer-status-active").click();
   await visible("offer-save").click();
-  await page
-    .getByTestId("offer-result")
-    .filter({ visible: true, hasText: "Cambios guardados." })
-    .first()
-    .waitFor();
+  await shows(page, "offer-result", "Cambios guardados.");
   await page.waitForTimeout(300);
   check(
     (await offersOf(earphones.product_slug)).some((o) => o.seller.slug === "tienda-sendero"),
@@ -276,7 +264,7 @@ async function as(email) {
   await noSideways("the offer on another shop's product");
   await shot("04-withdraw-offer");
   await visible("withdraw-offer-submit").click();
-  await page.getByText("Dejó de venderlo: su oferta ya no aparece").first().waitFor();
+  await shows(page, "withdraw-offer-result", "Dejó de venderlo: su oferta ya no aparece");
   check(
     !(await offersOf(blender)).some((o) => o.seller.slug === "tienda-sendero"),
     "the blender's product page no longer lists Sendero's offer",
@@ -307,12 +295,16 @@ async function as(email) {
   await visible("variants").waitFor();
   await tall(`variant-${small.sku_code}-toggle`, "the variant button");
   await visible(`variant-${small.sku_code}-toggle`).click();
-  await page.getByText("Variante retirada: ya no se puede pedir.").first().waitFor();
+  await shows(page, `variant-${small.sku_code}-result`, "Variante retirada: ya no se puede pedir.");
   check(
     Boolean(
-      await settledText(visible(`variant-${small.sku_code}`), /Retirada/, {
-        what: "the retired size",
-      }),
+      await settledText(
+        visible(`variant-${small.sku_code}`),
+        (text) => text.includes(word("variant_status", "retired", "seller")),
+        {
+          what: "the retired size",
+        },
+      ),
     ),
     "the size reads as retired, in words",
   );
@@ -320,7 +312,7 @@ async function as(email) {
   await noSideways("the variants");
   await shot("05-variant-off");
   await visible(`variant-${small.sku_code}-toggle`).click();
-  await page.getByText("La variante está a la venta otra vez.").first().waitFor();
+  await shows(page, `variant-${small.sku_code}-result`, "La variante está a la venta otra vez.");
   check((await sizesOnSale()).includes("Talla S"), "brought back, the shop offers size S again");
 
   // ── 5. Back to draft ───────────────────────────────────────────────────────
@@ -344,7 +336,11 @@ async function as(email) {
   check(
     (await said("unpublish-result")).includes("Ya no aparece en la tienda ni en las búsquedas") &&
       Boolean(
-        await settledText(visible("edit-state"), /Borrador/, { what: "the listing's state" }),
+        await settledText(
+          visible("edit-state"),
+          (text) => text.includes(word("product_status", "draft", "seller")),
+          { what: "the listing's state" },
+        ),
       ),
     "the app says it is back to draft and what that means",
   );
@@ -366,12 +362,11 @@ async function as(email) {
   );
   await visible("shop-description").fill(description);
   await visible("shop-description-submit").click();
-  await page
-    .getByText(
-      "Enviamos la descripción a revisión. Mientras tanto la tienda muestra la que ya tenía.",
-    )
-    .first()
-    .waitFor();
+  await shows(
+    page,
+    "shop-description-result",
+    "Enviamos la descripción a revisión. Mientras tanto la tienda muestra la que ya tenía.",
+  );
   await visible("shop-face-description-status").waitFor();
   check(
     /Descripción nueva en revisión/.test(await said("shop-face-description-status")),

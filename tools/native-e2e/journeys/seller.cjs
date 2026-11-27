@@ -24,7 +24,9 @@
 
 const { createHmac } = require("node:crypto");
 const { chromium, request } = require("playwright");
-const { settledText } = require("../../e2e/lib/settle.cjs");
+const { allText, overflow, screenText, settledText, shows } = require("../lib/screen.cjs");
+const seller = require("../lib/seller.cjs");
+const { word } = require("../lib/words.cjs");
 
 const BASE = process.env.NATIVE_SELLER_URL || "http://127.0.0.1:3011";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -167,47 +169,21 @@ function colones(text) {
 
   const { context, page } = await open("seller");
   const visible = (id) => page.getByTestId(id).filter({ visible: true }).first();
-  // The tabs keep their screens (and each one's header) in the page; the one
-  // in front is the one whose centre is not covered by another screen.
-  const front = async (id) => {
-    const all = page.getByTestId(id);
-    const index = await all.evaluateAll((elements) =>
-      elements.findIndex((el) => {
-        const box = el.getBoundingClientRect();
-        if (box.width === 0) return false;
-        const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-        return top !== null && el.contains(top);
-      }),
-    );
-    if (index < 0) throw new Error(`Nothing called ${id} is on screen`);
-    return all.nth(index);
-  };
+  const front = (id) => seller.inFront(page, id);
   const textOf = async (id) => (await visible(id).innerText()).replace(/\s+/g, " ").trim();
   const shot = (name) => page.screenshot({ path: `${SHOTS}/native-seller-${name}.png` });
   const shotFull = (name) =>
     page.screenshot({ path: `${SHOTS}/native-seller-${name}.png`, fullPage: true });
   const noSideways = async (where) =>
-    check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-      `${where}: no sideways scrolling at 390 px`,
-    );
-  const tab = (name) => page.getByRole("tab", { name: new RegExp(`^${name}`) }).first();
-  const signIn = async (p, email) => {
-    await p.goto(`${BASE}/`, { waitUntil: "networkidle" });
-    await p.getByTestId("sign-in-email").first().waitFor();
-    await p.getByTestId("sign-in-email").first().fill(email);
-    await p.getByTestId("sign-in-password").first().fill(PASSWORD);
-    await p.getByTestId("sign-in-submit").first().click();
-  };
+    check((await overflow(page)) <= 0, `${where}: no sideways scrolling at 390 px`);
+  const signIn = (p, email) => seller.signIn(p, BASE, email, PASSWORD);
 
   // 1. Sign in as the seller with two shops. The screen says which account
   // (the Yuntera one) and offers to create it.
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await visible("sign-in-email").waitFor();
   check(
-    /cuenta de Yuntera, la misma con que compra/.test(
-      (await page.locator("body").textContent()).replace(/\s+/g, " "),
-    ),
+    /cuenta de Yuntera, la misma con que compra/.test(await allText(page)),
     "the sign-in screen says the account is the Yuntera one",
   );
   await visible("show-sign-up").waitFor();
@@ -221,25 +197,9 @@ function colones(text) {
   // 2. Choose a shop: first the other one, then Ferretería El Higuerón, whose
   // products the seller ships and whose parcel waits to be packed.
   const chooseShop = async (name) => {
-    await (await front("change-shop")).click();
-    const sheet = page.getByText("¿En qué tienda va a trabajar?").first();
-    await sheet.waitFor();
-    await page.waitForTimeout(400); // the sheet slides up
-    if (name === "Ferretería El Higuerón") await shot("02-choose-shop");
-    await page
-      .getByRole("radio", { name: new RegExp(name) })
-      .first()
-      .click();
-    await sheet.waitFor({ state: "hidden" });
-    await page.waitForFunction(
-      (shopName) =>
-        [...document.querySelectorAll('[data-testid="current-shop"]')].every((el) =>
-          el.textContent.includes(shopName),
-        ),
-      name,
-      { timeout: 10_000 },
-    );
-    await visible("seller-overview").getByText(name).first().waitFor();
+    await seller.chooseShop(page, name, async () => {
+      if (name === "Ferretería El Higuerón") await shot("02-choose-shop");
+    });
     check(true, `after choosing ${name}, the header and the home screen are that shop's`);
   };
   await chooseShop(firstShop.includes("Tecno") ? "Ferretería El Higuerón" : "TecnoCasa");
@@ -267,7 +227,7 @@ function colones(text) {
     route.fulfill({ status: 503, contentType: "application/json", body: '{"message":"down"}' });
   await page.route("**/rest/v1/rpc/seller_listing_edits", failEdits);
   await page.reload({ waitUntil: "networkidle" });
-  await visible("seller-overview").getByText("Ferretería El Higuerón").first().waitFor();
+  await seller.overviewOf(page, "Ferretería El Higuerón");
   const partial = await settledText(visible("today-summary"), /No pudimos revisar/, {
     what: "the home screen's summary when the listing edits cannot be read",
   });
@@ -288,8 +248,8 @@ function colones(text) {
   check(true, "'Revisar de nuevo' reads it again and the warning goes");
 
   // 4. Change a price and a stock count
-  await tab("Productos").click();
-  const firstListing = page.locator('[data-testid^="listing-"]').filter({ visible: true }).first();
+  await seller.tabs.listings(page).click();
+  const firstListing = seller.listingRows(page).first();
   await firstListing.waitFor();
   const listingTitle = (await firstListing.innerText()).split("\n")[0];
   log("    listing:", listingTitle);
@@ -301,18 +261,16 @@ function colones(text) {
   const after = String(Number(before) + 100);
   await visible("offer-price").fill(after);
   await visible("offer-save").click();
-  await page.getByText("Cambios guardados.").first().waitFor();
+  await seller.offerResult(page, "Cambios guardados.").waitFor();
   check(true, `price changed from ₡${before} to ₡${after}`);
   // A price below what the sale would pay in fees: the database refuses it and
   // says the lowest price it would take.
   dbRefusals = true;
   await visible("offer-price").fill("1");
   await visible("offer-save").click();
-  const floor = page
-    .getByText(/El precio mínimo para este producto es ₡/)
-    .filter({ visible: true });
-  await floor.first().waitFor();
-  const floorText = (await floor.first().innerText()).replace(/\s+/g, " ");
+  const floor = seller.offerResult(page, /El precio mínimo para este producto es ₡/);
+  await floor.waitFor();
+  const floorText = (await floor.innerText()).replace(/\s+/g, " ");
   log("   ", floorText);
   check(
     /Suba el precio/.test(floorText) && !/[a-z]+_[a-z_]+/.test(floorText),
@@ -323,11 +281,11 @@ function colones(text) {
   const stockField = page.locator('[data-testid^="stock-quantity-"]').filter({ visible: true });
   await stockField.first().fill("23");
   await page.locator('[data-testid^="stock-save-"]').filter({ visible: true }).first().click();
-  await page.getByText("Existencias actualizadas.").first().waitFor();
+  await seller.stockResult(page, "Existencias actualizadas.").waitFor();
   check(true, "stock at the seller's own place set to 23");
   await noSideways("offer");
   await shotFull("05-offer-price-stock");
-  await page.getByRole("button", { name: "Volver" }).filter({ visible: true }).first().click();
+  await seller.back(page).click();
   await page.waitForFunction(
     (price) =>
       [...document.querySelectorAll('[data-testid="listing-price"]')].some((el) =>
@@ -376,19 +334,18 @@ function colones(text) {
     /enviado a revisión/.test(await textOf("created-message")),
     "the listing is sent for review and the list says so",
   );
-  await page
-    .getByText("Lámpara de escritorio LED Volcán")
-    .filter({ visible: true })
-    .first()
-    .waitFor();
+  await seller.listingRow(page, "Lámpara de escritorio LED Volcán").waitFor();
   check(true, "and it is in the list");
   await shot("07-listing-created");
 
   // 6. Edit the title of a published listing: it waits for review
-  await page.locator('[data-testid^="listing-"]').filter({ hasText: listingTitle }).first().click();
+  await seller.listingRow(page, listingTitle).click();
   await visible("edit-listing").click();
   await visible("edit-state").waitFor();
-  check(/Publicado y a la venta/.test(await textOf("edit-state")), "the listing is published");
+  check(
+    (await textOf("edit-state")).includes(word("product_status", "active", "seller")),
+    "the listing is published",
+  );
   const newTitle = `${listingTitle} (empaque nuevo)`;
   await visible("edit-title").fill(newTitle);
   await visible("edit-submit").click();
@@ -411,13 +368,13 @@ function colones(text) {
   await noSideways("edit");
   await visible("edit-pending").scrollIntoViewIfNeeded();
   await shot("08-edit-in-review");
-  await page.getByRole("button", { name: "Volver" }).filter({ visible: true }).first().click();
-  await page.getByText("Cambios en revisión").filter({ visible: true }).first().waitFor();
+  await seller.back(page).click();
+  await seller.changeInReview(page);
   check(true, "the product's screen marks the change in review");
-  await page.getByRole("button", { name: "Volver" }).filter({ visible: true }).first().click();
+  await seller.back(page).click();
 
   // 7. Payouts: the three balances add up to the total
-  await tab("Pagos").click();
+  await seller.tabs.payouts(page).click();
   await visible("balance-total").waitFor();
   const available = colones(await textOf("balance-available"));
   const pending = colones(await textOf("balance-pending"));
@@ -438,10 +395,7 @@ function colones(text) {
   const masked = await textOf("payout-iban-masked");
   log("    payout account:", masked);
   check(/^CR•• •••• •••• •••• \d{4}$/.test(masked), "the payout account is shown masked");
-  check(
-    !/CR\d{20}/.test(await page.locator("body").innerText()),
-    "no full account number on screen",
-  );
+  check(!/CR\d{20}/.test(await screenText(page)), "no full account number on screen");
   await visible("payout-iban").fill(SWAPPED_IBAN);
   await visible("payout-holder").fill("Ana Mora Solís");
   await visible("payout-request-submit").click();
@@ -454,15 +408,11 @@ function colones(text) {
   await noSideways("account");
   await visible("payout-iban").scrollIntoViewIfNeeded();
   await shot("10-account-wrong-iban");
-  await page.getByRole("button", { name: "Volver" }).filter({ visible: true }).first().click();
+  await seller.back(page).click();
 
   // 9. Mark an order packed, reached from what the home screen says needs doing
-  await tab("Inicio").click();
-  await page
-    .getByRole("link", { name: /^Pedidos por empacar: 1/ })
-    .filter({ visible: true })
-    .first()
-    .click();
+  await seller.tabs.home(page).click();
+  await seller.toPackLink(page, 1).click();
   await page.waitForURL((url) => new URL(url).pathname === "/pedidos");
   check(
     (await page.getByRole("tab", { selected: true }).first().innerText()).includes("Pedidos"),
@@ -486,20 +436,20 @@ function colones(text) {
   await shot("12-orders-packed");
 
   // 10. Inventory: the seller's own place, then stock sent to the warehouse (TecnoCasa)
-  await tab("Inventario").click();
+  await seller.tabs.inventory(page).click();
   await page.locator('[data-testid^="location-"]').filter({ visible: true }).first().waitFor();
   await noSideways("inventory");
   await shot("12b-inventory-own-place");
   await chooseShop("TecnoCasa");
 
   // The first shop's messages stay with it
-  await tab("Pedidos").click();
-  await page.getByText("Por empacar").filter({ visible: true }).first().waitFor();
+  await seller.tabs.orders(page).click();
+  await seller.toPackHeading(page).waitFor();
   check(
     (await page.getByTestId("pack-result").filter({ visible: true }).count()) === 0,
     "in TecnoCasa, Pedidos no longer says Ferretería's parcel is ready",
   );
-  await tab("Productos").click();
+  await seller.tabs.listings(page).click();
   await visible("new-listing").waitFor();
   check(
     (await page.getByTestId("created-message").filter({ visible: true }).count()) === 0,
@@ -507,7 +457,7 @@ function colones(text) {
   );
 
   // Each balance is the API's figure, on a shop where they are not zero
-  await tab("Pagos").click();
+  await seller.tabs.payouts(page).click();
   await visible("balance-total").waitFor();
   // The response handler reads the body asynchronously; give it a moment.
   for (let i = 0; i < 50 && !balancesBy.get(shopIds.get("TecnoCasa")); i++) {
@@ -541,7 +491,7 @@ function colones(text) {
   );
   await shot("12a-payouts-tecnocasa");
 
-  await tab("Inventario").click();
+  await seller.tabs.inventory(page).click();
   await visible("new-inbound").click();
   await page.locator('[data-testid^="inbound-qty-"]').filter({ visible: true }).first().fill("15");
   await visible("inbound-submit").click();
@@ -591,7 +541,7 @@ function colones(text) {
   await by("shop-id-number").fill("3-0456-0789");
   await by("shop-submit").click();
   await p.getByTestId("seller-overview").filter({ visible: true }).first().waitFor();
-  await p.getByText("Recibimos su solicitud").first().waitFor();
+  await seller.welcome(p).waitFor();
   check(
     (await by("current-shop").innerText()).includes("Cerámica La Guaria"),
     "the new shop opens, in review, with a welcome",
@@ -599,10 +549,7 @@ function colones(text) {
   await p.screenshot({ path: `${SHOTS}/native-seller-15-registered.png` });
 
   // The new shop saves a draft it will ship itself, then registers where we collect
-  await p
-    .getByRole("tab", { name: /^Productos/ })
-    .first()
-    .click();
+  await seller.tabs.listings(p).click();
   await by("new-listing").click();
   await by("listing-title").fill("Taza de cerámica pintada a mano 350 ml");
   await by("category").click();
@@ -617,10 +564,7 @@ function colones(text) {
   await by("listing-draft").click();
   await by("created-message").waitFor();
   check(/Borrador guardado/.test(await by("created-message").innerText()), "a draft is saved");
-  await p
-    .getByRole("tab", { name: /^Inventario/ })
-    .first()
-    .click();
+  await seller.tabs.inventory(p).click();
   await by("add-location").click();
   await by("location-name").fill("Taller Orosi");
   await by("province").click();
@@ -639,15 +583,15 @@ function colones(text) {
   // The short form Google Maps shows beside a place, with the place's name.
   await by("location-plus-code").fill("Q4XR+RH Orosi, Cartago");
   await by("location-plus-apply").click();
-  await p.getByText("Punto marcado").first().waitFor();
+  await seller.pointMarked(p).waitFor();
   check(
-    (await p.locator("body").textContent()).includes("Código Plus 66XRQ4XR+RH"),
+    (await allText(p)).includes("Código Plus 66XRQ4XR+RH"),
     "the short Plus Code is read as the full one (66XRQ4XR+RH)",
   );
   await p.waitForTimeout(500); // the district sheet slides away
   await p.screenshot({ path: `${SHOTS}/native-seller-16-pickup-place.png` });
   await by("location-save").click();
-  await p.getByText("Taller Orosi").filter({ visible: true }).first().waitFor();
+  await seller.placeCard(p, "Taller Orosi").waitFor();
   check(true, "the pickup place is saved and the inventory lists it, ready for a stock count");
   await p.screenshot({ path: `${SHOTS}/native-seller-17-inventory-new-place.png` });
   await newcomer.context.close();
@@ -709,11 +653,7 @@ function colones(text) {
   for (let left = 3; left >= 0; left--) {
     await on("second-step-code").fill(wrongCode());
     await on("second-step-submit").click();
-    await q
-      .getByTestId("second-step-message")
-      .filter({ visible: true, hasText: left > 0 ? `Le quedan ${left} intento` : "espere" })
-      .first()
-      .waitFor();
+    await shows(q, "second-step-message", left > 0 ? `Le quedan ${left} intento` : "espere");
   }
   check(
     /Por seguridad, espere \d+ minutos? antes de intentarlo de nuevo/.test(
@@ -723,11 +663,7 @@ function colones(text) {
   );
   await on("second-step-code").fill(await freshCode(factor.totp.secret));
   await on("second-step-submit").click();
-  await q
-    .getByTestId("second-step-message")
-    .filter({ visible: true, hasText: "demasiados códigos" })
-    .first()
-    .waitFor();
+  await shows(q, "second-step-message", "demasiados códigos");
   check(
     /Escribió demasiados códigos incorrectos.*Podrá intentarlo de nuevo en/.test(
       await said("second-step-message"),

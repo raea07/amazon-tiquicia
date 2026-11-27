@@ -22,6 +22,27 @@ const all = readdirSync(`${here}journeys`)
 const chosen = process.argv.slice(2).filter((name) => all.includes(name));
 const journeys = chosen.length > 0 ? chosen : all;
 
+// The test ids the journeys find screens by: none may have gone from the
+// source without its list changing too (testids/check.mjs).
+const ids = spawnSync(process.execPath, [`${here}testids/check.mjs`], { stdio: "inherit" });
+if (ids.status !== 0) {
+  console.error("The test-id check failed; no journey was run.");
+  process.exit(1);
+}
+// The check itself and the status words (its tests, and words.cjs's switch).
+const own = spawnSync(
+  process.execPath,
+  ["--test", `${here}testids/check.test.mjs`, `${here}lib/words.test.cjs`],
+  { stdio: ["ignore", "ignore", "inherit"] },
+);
+if (own.status !== 0) {
+  console.error(
+    "The tests of the test-id check or of words.cjs failed; no journey was run. Run: node --test tools/native-e2e/testids/check.test.mjs tools/native-e2e/lib/words.test.cjs",
+  );
+  process.exit(1);
+}
+console.info("testids and words: their tests pass");
+
 const shots = process.env.NATIVE_SHOTS ?? `${here}screenshots`;
 mkdirSync(shots, { recursive: true });
 

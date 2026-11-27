@@ -177,7 +177,10 @@ export default function OfferScreen() {
             {listing.sku_code}
             {listing.variant_name ? ` · ${listing.variant_name}` : ""}
           </Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1] }}>
+          <View
+            style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1] }}
+            testID="offer-badges"
+          >
             <Badge tone={status.tone}>{status.label}</Badge>
             {edit?.edit_status === "pending" ? (
               <Badge tone="warning">Cambios en revisión</Badge>

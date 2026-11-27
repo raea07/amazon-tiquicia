@@ -141,7 +141,7 @@ function SignedOut() {
       <AccountDeletedNotice />
       <Text variant="title">Su cuenta</Text>
       {status === "secondStep" ? (
-        <Text tint="muted">
+        <Text tint="muted" testID="account-second-step">
           Falta un paso para entrar a su cuenta: el código de su aplicación de autenticación.
         </Text>
       ) : (

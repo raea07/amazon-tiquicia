@@ -24,6 +24,8 @@
 
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
+const { overflow } = require("../lib/screen.cjs");
+const warehouse = require("../lib/warehouse.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const BASE = process.env.NATIVE_WAREHOUSE_URL || "http://127.0.0.1:3013";
@@ -165,20 +167,12 @@ async function rpcAs(email, calls) {
     return false;
   };
   const noSideways = async (where) =>
-    check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-      `no sideways scrolling at 390 px: ${where}`,
-    );
+    check((await overflow(page)) <= 0, `no sideways scrolling at 390 px: ${where}`);
   const shot = (name) =>
     page.screenshot({ path: `${SHOTS}/native-count-into-location-${name}.png`, fullPage: true });
   const open = async (code) => {
-    await page.goto(`${BASE}/ubicaciones`, { waitUntil: "networkidle" });
-    await byId("location-scan-input").fill(code);
-    await byId("location-scan-submit").click();
-    await page.getByTestId("location-title").filter({ hasText: code }).first().waitFor();
-    await byId("count-in").waitFor();
-    // The search (and on a phone its camera) opens only when asked for.
-    if ((await page.getByTestId("count-in-open").count()) > 0) await byId("count-in-open").click();
+    await warehouse.openLocation(page, BASE, code);
+    await warehouse.openCountIn(page);
   };
   const scan = async (code) => {
     await byId("count-in-scan-input").fill(code);
@@ -187,9 +181,7 @@ async function rpcAs(email, calls) {
 
   // ── Sign in; the new shelf, empty ──
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  await byId("sign-in-email").fill("bodega@yuntera.example");
-  await byId("sign-in-password").fill(PASSWORD);
-  await byId("sign-in-submit").click();
+  await warehouse.signIn(page, "bodega@yuntera.example", PASSWORD);
   await byId("warehouse-board").waitFor();
   await open(SHELF);
   check((await textOf("location-summary")).includes("Está vacía"), "the new shelf is empty");
@@ -412,7 +404,7 @@ async function rpcAs(email, calls) {
     await card(sku).getByTestId("count-quantity").first().fill("0");
     await card(sku).getByTestId("count-note").first().fill("Fin de la prueba de conteo");
     await card(sku).getByTestId("count-submit").first().click();
-    await page.getByText(`ahora hay 0 unidades (−${onShelf})`).first().waitFor();
+    await warehouse.stockResult(page, `ahora hay 0 unidades (−${onShelf})`);
     check(true, `${sku} counted back to 0`);
   }
   await page.getByTestId(`item-${earphones.sku_code}`).first().waitFor({ state: "detached" });

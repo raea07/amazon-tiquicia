@@ -17,7 +17,8 @@
 // Fails on any console error, uncaught exception or 5xx.
 
 const { chromium, request } = require("playwright");
-const { settledText } = require("../../e2e/lib/settle.cjs");
+const { overflow, settledText, shows } = require("../lib/screen.cjs");
+const seller = require("../lib/seller.cjs");
 
 const BASE = process.env.NATIVE_SELLER_URL || "http://127.0.0.1:3011";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -111,10 +112,7 @@ async function logoFor(owner, staff, shopId, jpeg, { publish }) {
   const shot = (name) =>
     page.screenshot({ path: `${SHOTS}/native-seller-stock-logo-${name}.png`, fullPage: true });
   const noSideways = async (where) =>
-    check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-      `${where}: no sideways scrolling at 390 px`,
-    );
+    check((await overflow(page)) <= 0, `${where}: no sideways scrolling at 390 px`);
   const tall = async (id, what) => {
     const box = await visible(id).boundingBox();
     check(box !== null && box.height >= 44, `${what} is at least 44 px high`);
@@ -160,10 +158,7 @@ async function logoFor(owner, staff, shopId, jpeg, { publish }) {
   await visible("sign-in-email").fill(OWNER);
   await visible("sign-in-password").fill(PASSWORD);
   await visible("sign-in-submit").click();
-  await page
-    .getByRole("tab", { name: /^Inventario/ })
-    .first()
-    .waitFor();
+  await seller.tabs.inventory(page).waitFor();
   await page.goto(`${BASE}/inventario`, { waitUntil: "networkidle" });
   await visible("stock-history").waitFor();
   const history = await said("stock-history");
@@ -203,7 +198,7 @@ async function logoFor(owner, staff, shopId, jpeg, { publish }) {
   await noSideways("the shop's logo actions");
   await shot("02-logo-actions");
   await visible("logo-withdraw").click();
-  await page.getByText("Retiramos el logotipo que esperaba revisión.").first().waitFor();
+  await shows(page, "logo-result", "Retiramos el logotipo que esperaba revisión.");
   await page.getByTestId("logo-withdraw").waitFor({ state: "detached" });
   let front = await owner("seller_shop_front", { p_seller_id: shopId });
   check(
@@ -224,7 +219,7 @@ async function logoFor(owner, staff, shopId, jpeg, { publish }) {
   );
   await visible("logo-remove-confirm").click();
   await visible("logo-remove").click();
-  await page.getByText("Quitamos el logotipo de su tienda.").first().waitFor();
+  await shows(page, "logo-result", "Quitamos el logotipo de su tienda.");
   await page.getByTestId("logo-remove").waitFor({ state: "detached" });
   front = await owner("seller_shop_front", { p_seller_id: shopId });
   check(front.logo === null, "the shop no longer shows a logo");

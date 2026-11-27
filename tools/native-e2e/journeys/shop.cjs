@@ -15,7 +15,8 @@
 // is allowed by URL and status, at that step only.
 
 const { chromium, request } = require("playwright");
-const { settledText } = require("../../e2e/lib/settle.cjs");
+const { overflow: overflowOf, screenText, settledText } = require("../lib/screen.cjs");
+const shop = require("../lib/shop.cjs");
 
 const BASE = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -110,18 +111,13 @@ async function claimAs(email, orderItemId) {
 
   const visible = (testId) => page.getByTestId(testId).filter({ visible: true }).first();
   const shot = (name) => page.screenshot({ path: `${SHOTS}/native-shop-${name}.png` });
-  const overflow = () =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  const tab = (name) => page.getByRole("tab", { name: new RegExp(`^${name}`) }).first();
+  const overflow = () => overflowOf(page);
 
   // 0. A link that opens a product directly still has a way back to the shop
   await page.goto(`${BASE}/p/camiseta-algodon-sendero`, { waitUntil: "networkidle" });
   await visible("buy-box").waitFor();
   check((await page.getByRole("tab").count()) === 0, "a product opened by link fills the screen");
-  const back = page
-    .getByRole("button", { name: "Volver a Inicio" })
-    .filter({ visible: true })
-    .first();
+  const back = shop.backToHome(page);
   const backBox = await back.boundingBox();
   check(
     backBox !== null && backBox.width >= 44 && backBox.height >= 44,
@@ -136,21 +132,21 @@ async function claimAs(email, orderItemId) {
 
   // 1. Home, signed out
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  await page.getByText("Lo que ocupa, a su puerta.").first().waitFor();
+  await shop.home(page);
   check((await overflow()) <= 0, "home has no sideways scrolling at 390 px");
   await shot("01-home");
-  await page.getByText("Lo que más se está llevando").first().scrollIntoViewIfNeeded();
+  await shop.popularHeading(page).scrollIntoViewIfNeeded();
   await page.waitForTimeout(300);
   await shot("01b-home-products");
 
   // 2. Browse a category
-  await tab("Categorías").click();
-  const firstDepartment = page.locator('[data-testid^="department-"]').first();
+  await shop.tabs.categories(page).click();
+  const firstDepartment = shop.departments(page).first();
   await firstDepartment.waitFor();
   const departmentName = (await firstDepartment.innerText()).split("\n")[0];
   await firstDepartment.click();
   await page.waitForURL(/\/c\//);
-  await page.locator('[data-testid^="product-"]').filter({ visible: true }).first().waitFor();
+  await shop.productCards(page).first().waitFor();
   log("  category:", departmentName, "→", page.url().replace(BASE, ""));
   check((await overflow()) <= 0, "category has no sideways scrolling");
   await shot("02-category");
@@ -158,16 +154,12 @@ async function claimAs(email, orderItemId) {
   await page.waitForURL(/\/categorias/);
 
   // 3. Search with a typo
-  await tab("Buscar").click();
+  await shop.tabs.search(page).click();
   await page.waitForURL(/\/buscar/);
-  await visible("search-input").fill("licuadra");
-  await visible("search-input").press("Enter");
+  await shop.search(page, "licuadra");
   await page.waitForURL(/q=licuadra/);
-  await page.locator('[data-testid^="product-"]').filter({ visible: true }).first().waitFor();
-  const typoResults = await page
-    .locator('[data-testid^="product-"]')
-    .filter({ visible: true })
-    .allInnerTexts();
+  await shop.productCards(page).first().waitFor();
+  const typoResults = await shop.productCards(page).allInnerTexts();
   check(
     typoResults.some((text) => /Licuadora/.test(text)),
     'the search "licuadra" finds the blender despite the typo',
@@ -175,8 +167,7 @@ async function claimAs(email, orderItemId) {
   await shot("03-search-typo");
 
   // 4. Product page with competing offers and a delivery date
-  await visible("search-input").fill("audífonos");
-  await visible("search-input").press("Enter");
+  await shop.search(page, "audífonos");
   await page.waitForURL(/q=aud/);
   await visible("product-audifonos-inalambricos-nimbo-aire").click();
   await page.waitForURL(/\/p\/audifonos-inalambricos-nimbo-aire/);
@@ -199,10 +190,10 @@ async function claimAs(email, orderItemId) {
   await page.goBack();
   await page.waitForURL(/\/buscar/);
   check(
-    Boolean(await settledText(tab("Carrito"), /1/, { what: "the cart tab" })),
+    Boolean(await settledText(shop.tabs.cart(page), /1/, { what: "the cart tab" })),
     "the cart tab shows one unit",
   );
-  await tab("Carrito").click();
+  await shop.tabs.cart(page).click();
   await page.waitForURL(/\/carrito/);
   await visible("cart-summary").waitFor();
   check(
@@ -281,7 +272,7 @@ async function claimAs(email, orderItemId) {
   // 9. The order is in the list
   await page.goBack();
   await page.waitForURL((url) => !/^\/pedidos\//.test(new URL(url).pathname));
-  await tab("Cuenta").click();
+  await shop.tabs.account(page).click();
   await page.waitForURL(/\/cuenta/);
   await visible("account-orders").click();
   await page.waitForURL(/\/pedidos$/);
@@ -295,7 +286,7 @@ async function claimAs(email, orderItemId) {
   await page.waitForURL(/\/cuenta/);
   check(
     Boolean(
-      await settledText(tab("Carrito"), (text) => !/\d/.test(text), { what: "the cart tab" }),
+      await settledText(shop.tabs.cart(page), (text) => !/\d/.test(text), { what: "the cart tab" }),
     ),
     "the cart badge is gone after ordering",
   );
@@ -308,8 +299,7 @@ async function claimAs(email, orderItemId) {
     `a delivered order to return from (${delivered?.order_number})`,
   );
   await page.goto(`${BASE}/pedidos/${delivered.order_number}`, { waitUntil: "networkidle" });
-  await page.getByText("Devolver o reclamar garantía").filter({ visible: true }).first().click();
-  await page.getByText("Solicitar devolución").filter({ visible: true }).first().click();
+  await shop.requestReturn(page);
   // The line is fully returned, so its form gives way to where the return
   // stands, which says what happens next.
   await visible("return-status").waitFor({ timeout: 15_000 });
@@ -322,9 +312,7 @@ async function claimAs(email, orderItemId) {
     "the withdrawal is approved, to be collected first and refunded once it is back",
   );
   check(
-    !/reembolsamos en un máximo de 8 días|Devolución en trámite/.test(
-      await page.locator("body").innerText(),
-    ),
+    !/reembolsamos en un máximo de 8 días|Devolución en trámite/.test(await screenText(page)),
     "nothing promises a refund within 8 days any more",
   );
   check((await overflow()) <= 0, "the order with a return has no sideways scrolling");
@@ -336,22 +324,10 @@ async function claimAs(email, orderItemId) {
   if (other) {
     await claimAs(SHOPPER, other.id);
     await page.goto(`${BASE}/pedidos/${delivered.order_number}`, { waitUntil: "networkidle" });
-    await page
-      .getByText("¿La abrió por error? Retirar la solicitud")
-      .filter({ visible: true })
-      .first()
-      .click();
+    await shop.openWithdrawal(page);
     await shot("10c-withdraw");
-    await page
-      .getByText("Retirar la solicitud", { exact: true })
-      .filter({ visible: true })
-      .first()
-      .click();
-    await page
-      .getByText("Retirada: usted retiró esta solicitud.")
-      .filter({ visible: true })
-      .first()
-      .waitFor({ timeout: 15_000 });
+    await shop.confirmWithdrawal(page);
+    await shop.withdrawn(page, { timeout: 15_000 });
     check(true, "a claim waiting for a decision is withdrawn from the app");
     check((await overflow()) <= 0, "the order after withdrawing has no sideways scrolling");
     await shot("10c-withdrawn");
@@ -362,7 +338,7 @@ async function claimAs(email, orderItemId) {
 
   // 11. Sign out
   await visible("sign-out").click();
-  await page.getByText("Crear una cuenta").filter({ visible: true }).first().waitFor();
+  await shop.signedOut(page);
   check(true, "signed out");
   await shot("11-signed-out");
 

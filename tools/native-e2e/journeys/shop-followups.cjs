@@ -28,7 +28,9 @@
 // the journey makes on purpose.
 
 const { chromium, request } = require("playwright");
-const { settledText } = require("../../e2e/lib/settle.cjs");
+const { overflow, screenText, settledText } = require("../lib/screen.cjs");
+const shopApp = require("../lib/shop.cjs");
+const { word } = require("../lib/words.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const SHOP = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
@@ -186,10 +188,7 @@ async function stoppedOrder(buyer) {
   const shot = (name) =>
     page.screenshot({ path: `${SHOTS}/native-shop-followups-${name}.png`, fullPage: true });
   const noSideways = async (where) =>
-    check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-      `no sideways scrolling at 390 px: ${where}`,
-    );
+    check((await overflow(page)) <= 0, `no sideways scrolling at 390 px: ${where}`);
   // The phone leaves the app and comes back (the web export hears it through
   // the page's visibility, as a phone through AppState).
   const backToTheApp = () =>
@@ -209,9 +208,7 @@ async function stoppedOrder(buyer) {
   const amount = colones(order.total_minor);
 
   await page.goto(`${SHOP}/ingresar?siguiente=%2Fpedidos`, { waitUntil: "networkidle" });
-  await visible("sign-in-email").fill(SHOPPER);
-  await visible("sign-in-password").fill(PASSWORD);
-  await visible("sign-in-submit").click();
+  await shopApp.signIn(page, SHOPPER, PASSWORD);
   await visible(`order-${order.order_number}`).waitFor();
 
   fail("order_payment");
@@ -236,11 +233,11 @@ async function stoppedOrder(buyer) {
       !stopping.includes("₡"),
     "the refund notice states no amount and says why",
   );
-  const body = await flat(page.locator("body"));
+  const body = await screenText(page);
   check(
     body.includes(`Pedido ${order.order_number}`) &&
-      body.includes("Se está cancelando") &&
-      body.includes("Detenido en la bodega"),
+      body.includes(word("order_stopping", "cancels", "shopper")) &&
+      body.includes(word("order_stopping", "held", "shopper")),
     "what the order itself says stays on screen",
   );
   check(
@@ -337,9 +334,8 @@ async function stoppedOrder(buyer) {
     "two brands with different products",
   );
   const shownSlugs = () =>
-    page
-      .locator('[data-testid^="product-"]')
-      .filter({ visible: true })
+    shopApp
+      .productCards(page)
       .evaluateAll((cards) => cards.map((c) => c.getAttribute("data-testid").slice(8)));
 
   await page.goto(`${SHOP}/buscar?marca=nimbo`, { waitUntil: "networkidle" });
@@ -371,13 +367,7 @@ async function stoppedOrder(buyer) {
     during.length === before.length && during.every((slug) => nimboSlugs.has(slug)),
     "the results already on screen stay",
   );
-  check(
-    (await page
-      .getByText("No pudimos cargar esta información")
-      .filter({ visible: true })
-      .count()) === 0,
-    "they are not replaced by the error state",
-  );
+  check((await shopApp.loadFailed(page).count()) === 0, "they are not replaced by the error state");
   await noSideways("results kept");
   await shot("04-results-kept");
 
@@ -385,11 +375,7 @@ async function stoppedOrder(buyer) {
   await visible("brand").click();
   await visible("brand-option-volcan").click();
   await page.waitForURL(/marca=volcan/);
-  await page
-    .getByText("No pudimos cargar esta información")
-    .filter({ visible: true })
-    .first()
-    .waitFor();
+  await shopApp.loadFailed(page).first().waitFor();
   const other = await shownSlugs();
   check(other.length === 0, "a new brand's failed first search shows none of Nimbo's products");
   check(
@@ -399,11 +385,7 @@ async function stoppedOrder(buyer) {
   );
   await shot("05-other-brand-failed");
   heal();
-  await page
-    .getByRole("button", { name: "Intentar de nuevo" })
-    .filter({ visible: true })
-    .first()
-    .click();
+  await shopApp.retryButtons(page).first().click();
   await settledText(visible("brand-summary"), /^Mostrando \d+ productos? de Volcán$/, {
     what: "the Volcán summary",
   });
@@ -418,31 +400,24 @@ async function stoppedOrder(buyer) {
   fail("list_categories");
   await page.goto(`${SHOP}/c/electronica`, { waitUntil: "networkidle" });
   const categoryError = await settledText(
-    page.getByText("No pudimos cargar esta información").filter({ visible: true }).first(),
+    shopApp.loadFailed(page).first(),
     (text) => text.length > 0,
     { what: "the category page's error state" },
   );
   log("   ", categoryError);
-  const categoryBody = await flat(page.locator("body"));
+  const categoryBody = await screenText(page);
   check(
     !categoryBody.includes("No encontramos esa categoría") &&
-      (await page
-        .getByRole("button", { name: "Intentar de nuevo" })
-        .filter({ visible: true })
-        .count()) === 1,
+      (await shopApp.retryButtons(page).count()) === 1,
     "a category whose read failed is not called missing, and can be asked again",
   );
   await noSideways("category page, categories unread");
   await shot("05b-category-unread");
   heal();
-  await page
-    .getByRole("button", { name: "Intentar de nuevo" })
-    .filter({ visible: true })
-    .first()
-    .click();
-  await page.locator('[data-testid^="product-"]').filter({ visible: true }).first().waitFor();
+  await shopApp.retryButtons(page).first().click();
+  await shopApp.productCards(page).first().waitFor();
   check(
-    !(await flat(page.locator("body"))).includes("No pudimos cargar esta información"),
+    !(await screenText(page)).includes("No pudimos cargar esta información"),
     "asked again, the category and its products come",
   );
 
@@ -564,25 +539,17 @@ async function stoppedOrder(buyer) {
   // ── 4b. The order never answers on its first read ───────────────────────────
   hang("get_order");
   await page.goto(`${SHOP}/pedidos/${order.order_number}`, { waitUntil: "domcontentloaded" });
-  await page
-    .getByText("No pudimos cargar esta información")
-    .filter({ visible: true })
+  await shopApp
+    .loadFailed(page)
     .first()
     .waitFor({ timeout: READ_LIMIT_MS + 15_000 });
   check(
-    (await page
-      .getByRole("button", { name: "Intentar de nuevo" })
-      .filter({ visible: true })
-      .count()) === 1,
+    (await shopApp.retryButtons(page).count()) === 1,
     "an order that never answers ends with the error state and 'Intentar de nuevo'",
   );
   await shot("09-order-hung");
   heal();
-  await page
-    .getByRole("button", { name: "Intentar de nuevo" })
-    .filter({ visible: true })
-    .first()
-    .click();
+  await shopApp.retryButtons(page).first().click();
   await visible("order-title").waitFor();
   check(true, "asked again, the order comes");
 
@@ -592,7 +559,7 @@ async function stoppedOrder(buyer) {
   await visible("order-title").waitFor();
   await visible("payment-loading").waitFor();
   check(
-    !(await flat(page.locator("body"))).includes("le devolvemos ₡"),
+    !(await screenText(page)).includes("le devolvemos ₡"),
     "while the payment is being read the page says so and states no amount",
   );
   const hungPayment = await settledText(

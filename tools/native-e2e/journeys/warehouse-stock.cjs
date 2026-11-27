@@ -23,6 +23,8 @@
 // browser logs, expected there).
 
 const { chromium, request } = require("playwright");
+const { overflow } = require("../lib/screen.cjs");
+const warehouseApp = require("../lib/warehouse.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const BASE = process.env.NATIVE_WAREHOUSE_URL || "http://127.0.0.1:3013";
@@ -119,18 +121,13 @@ async function rpcAs(email, calls) {
     return false;
   };
   const noSideways = async (where) =>
-    check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-      `no sideways scrolling at 390 px: ${where}`,
-    );
+    check((await overflow(page)) <= 0, `no sideways scrolling at 390 px: ${where}`);
   const shot = (name) =>
     page.screenshot({ path: `${SHOTS}/native-warehouse-stock-${name}.png`, fullPage: true });
 
   // ── Sign in; the board offers the locations ──
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  await byId("sign-in-email").fill("bodega@yuntera.example");
-  await byId("sign-in-password").fill(PASSWORD);
-  await byId("sign-in-submit").click();
+  await warehouseApp.signIn(page, "bodega@yuntera.example", PASSWORD);
   await byId("warehouse-board").waitFor();
   await byId("open-locations").click();
   await byId("location-scan-input").waitFor();
@@ -155,7 +152,7 @@ async function rpcAs(email, calls) {
     "the shelf shows whose units, how many and how many are free",
   );
   check(
-    (await page.getByText(/necesitan señal/).count()) > 0,
+    (await warehouseApp.signalNote(page).count()) > 0,
     "the screen says moves and counts need signal",
   );
   await noSideways("location");
@@ -187,12 +184,9 @@ async function rpcAs(email, calls) {
   // ── The new shelf, from the list: a count ──
   await page.goBack();
   await byId(`location-${TARGET}`).waitFor();
-  await page
-    .getByText(/3 unidades · 1 producto/)
-    .first()
-    .waitFor();
+  await warehouseApp.locationRowSays(page, TARGET, /3 unidades · 1 producto/);
   await byId(`location-${TARGET}`).click();
-  await page.getByTestId("location-title").filter({ hasText: TARGET }).first().waitFor();
+  await warehouseApp.locationOpen(page, TARGET);
   await inItem("open-count").click();
   await inItem("count-quantity").fill("2");
   check(
@@ -222,15 +216,13 @@ async function rpcAs(email, calls) {
   await inItem("count-note").fill("Una libreta con la tapa rota");
   expectRefusal = true;
   await inItem("count-submit").click();
-  await item()
-    .getByText(/cambió mientras usted contaba/)
-    .first()
-    .waitFor();
+  await warehouseApp.cardSays(item(), "count-error", /cambió mientras usted contaba/);
   check(true, "the count made from the old number is refused by the database");
-  await item()
-    .getByText("Diferencia: −2 unidades (faltan). Quedarán 2 unidades.")
-    .first()
-    .waitFor();
+  await warehouseApp.cardSays(
+    item(),
+    "count-difference",
+    "Diferencia: −2 unidades (faltan). Quedarán 2 unidades.",
+  );
   check(
     (await inItem("count-quantity").inputValue()) === "2" &&
       (await inItem("count-note").inputValue()) === "Una libreta con la tapa rota",
@@ -258,10 +250,7 @@ async function rpcAs(email, calls) {
   );
   await inItem("count-note").fill("Dos libretas detrás de una caja");
   await inItem("count-submit").click();
-  await page
-    .getByText(/ahora hay 4 unidades \(\+2\)/)
-    .first()
-    .waitFor();
+  await warehouseApp.stockResult(page, /ahora hay 4 unidades \(\+2\)/);
   check(true, "the count upwards is confirmed");
   check(await itemSays("En el estante 4"), "the shelf shows four");
 
@@ -274,10 +263,7 @@ async function rpcAs(email, calls) {
   ]);
   expectRefusal = true;
   await inItem("move-submit").click();
-  await item()
-    .getByText(/está desactivada/)
-    .first()
-    .waitFor();
+  await warehouseApp.cardSays(item(), "move-error", /está desactivada/);
   check(true, "a move to a shelf switched off meanwhile is refused by the database");
   check(
     (await page.getByTestId("stock-result").count()) === 0,
@@ -304,10 +290,10 @@ async function rpcAs(email, calls) {
   await shot("05b-move-refused-switched-off");
   await item().getByTestId(`move-target-${source.location_id}`).first().click();
   await inItem("move-submit").click();
-  await page
-    .getByText(`Se movió 1 unidad a ${source.location_code}. Guárdela allí ahora.`)
-    .first()
-    .waitFor();
+  await warehouseApp.stockResult(
+    page,
+    `Se movió 1 unidad a ${source.location_code}. Guárdela allí ahora.`,
+  );
   check(true, "one unit: the confirmation agrees with the number");
   check(await itemSays("En el estante 3"), "the shelf shows three");
 
@@ -322,7 +308,7 @@ async function rpcAs(email, calls) {
     "the product's lookup lists both shelves",
   );
   await byId(`lookup-bin-${TARGET}`).click();
-  await page.getByTestId("location-title").filter({ hasText: TARGET }).first().waitFor();
+  await warehouseApp.locationOpen(page, TARGET);
   check(true, "a shelf of the lookup opens its location");
   await shot("06-lookup");
 
