@@ -65,3 +65,6 @@ apps/*-native/android/
 
 # Git worktrees created for parallel work
 .claude/worktrees/
+
+# screenshots of the design system reference pages (regenerate with node docs/brand/system/src/shots.js)
+docs/brand/system/shots

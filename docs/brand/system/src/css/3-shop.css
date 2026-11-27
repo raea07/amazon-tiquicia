@@ -1,0 +1,200 @@
+/* ================= 3. shop (apps/web, and the shop screens of shop-native) ================= */
+
+/* ---- Shop header: 2 rows on a phone (≤ 120 px), sticky, hides on scroll
+   down, returns on a small scroll up; scroll-padding = its height. ---- */
+.hdr{position:sticky;top:0;z-index:20;background:var(--yt-page);border-bottom:1px solid var(--yt-rule);transition:transform var(--yt-motion-panel)}
+.hdr.hide{transform:translateY(-100%)}
+.hdr-row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--yt-space-1);min-height:48px}
+.hdr-actions{margin-left:auto;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:var(--yt-space-1);min-width:0}
+.hdr-link{display:inline-flex;align-items:center;gap:var(--yt-space-2);min-height:44px;min-width:44px;padding:0 var(--yt-space-2);color:var(--yt-ink);text-decoration:none;font:500 15px/20px var(--yt-font-text)}
+.hdr-link:hover{text-decoration:underline}
+.hdr-link .ico{display:none}
+.search{display:flex;flex-direction:column;gap:var(--yt-space-1);flex:1;min-width:0}
+.search-label{font:600 13px/18px var(--yt-font-text);color:var(--yt-ink)}
+.search-row{display:flex;min-width:0}
+.search .input:focus-visible{position:relative;z-index:1}
+.search .input{min-width:0;min-height:44px;border-color:var(--yt-ink);border-right:0;border-radius:var(--yt-radius-control) 0 0 var(--yt-radius-control)}
+.search .btn{min-height:44px;border-radius:0 var(--yt-radius-control) var(--yt-radius-control) 0}
+.mobile-search{padding-bottom:var(--yt-space-1)}
+.hdr .zone,.hdr .desk-search{display:none}
+.dept-bar{display:none}
+@media (min-width:900px){
+ :root{--yt-header-h:122px}
+ .hdr-row{min-height:72px;gap:var(--yt-space-5)}
+ .hdr .lockup img{width:30px;height:30px}.hdr .wordmark{font-size:28px}
+ .hdr .zone,.hdr .desk-search{display:flex}
+ .hdr .search{max-width:620px}.search .input,.search .btn{min-height:48px}
+ .hdr .mobile-search{display:none}
+ .hdr-link{padding:0 var(--yt-space-2)}.hdr-link .ico{display:block}
+ .dept-bar{display:flex;flex-wrap:wrap;align-items:stretch;border-top:1px solid var(--yt-rule);min-height:48px}
+ .dept-bar a,.dept-bar button{display:inline-flex;align-items:center;gap:var(--yt-space-2);min-height:48px;padding:0 var(--yt-space-3);color:var(--yt-ink);text-decoration:none;font:500 15px/20px var(--yt-font-text);background:none;border:0;border-bottom:3px solid transparent;cursor:pointer}
+ .dept-bar a:hover{text-decoration:underline}
+ .dept-bar .all{font-weight:700;padding-left:0;padding-right:var(--yt-space-4)}
+ .dept-bar [aria-current]{font-weight:700;border-bottom-color:var(--yt-ink)}
+ .dept-bar .help{margin-left:auto}
+}
+/* enclosed checkout header: lockup, Ayuda, Volver al carrito */
+.hdr.closed .hdr-row{min-height:56px}
+
+/* ---- Footer: facts strip, link lists, legal line. Links are 44 px. ---- */
+.footer{background:var(--yt-band);margin-top:var(--yt-space-7);padding:var(--yt-space-6) 0 var(--yt-space-5);overflow-wrap:break-word;container:foot/inline-size}
+.footer h2{font:700 15px/20px var(--yt-font-text);margin-bottom:var(--yt-space-1)}
+.footer ul{list-style:none;margin:0;padding:0}
+.footer li a{display:inline-flex;min-height:44px;align-items:center;color:var(--yt-ink)}
+.footer .cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--yt-space-5)}
+.footer .lead{grid-column:1/-1}
+.footer .lead ul.cols3{columns:2;column-gap:var(--yt-space-5)}
+.footer .facts{display:grid;gap:var(--yt-space-2);font-size:14px;line-height:20px;border-bottom:1px solid var(--yt-rule);padding-bottom:var(--yt-space-5);margin-bottom:var(--yt-space-5)}
+.footer .legal{margin-top:var(--yt-space-5);padding-top:var(--yt-space-4);border-top:1px solid var(--yt-rule);font-size:13px;line-height:18px;color:var(--yt-ink-muted)}
+@media (min-width:900px){.footer .cols{grid-template-columns:minmax(0,2fr) repeat(2,minmax(0,1fr))}.footer .lead{grid-column:auto}.footer .lead ul.cols3{columns:3}.footer .facts{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* ---- Sections: rules and space, not boxes ---- */
+.sec{padding:var(--yt-space-5) 0;border-top:1px solid var(--yt-rule)}
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--yt-space-3);margin-bottom:var(--yt-space-3);flex-wrap:wrap}
+.sec-head a{display:inline-flex;align-items:center;min-height:44px}
+@media (min-width:900px){.sec{padding:var(--yt-space-6) 0}.sec-head{margin-bottom:var(--yt-space-4)}}
+.pager{display:flex;gap:var(--yt-space-3);justify-content:center;padding:var(--yt-space-5) 0;flex-wrap:wrap}
+
+/* ---- T1 home ---- */
+.two-col{display:grid;gap:0;grid-template-columns:minmax(0,1fr)}
+.depts{list-style:none;margin:0;padding:0}
+.depts a{display:flex;justify-content:space-between;align-items:center;gap:var(--yt-space-2);min-height:44px;padding:0 var(--yt-space-1);color:var(--yt-ink);text-decoration:none;border-bottom:1px solid var(--yt-rule);font-size:15px;line-height:20px}
+.depts a:hover{text-decoration:underline}
+.depts a span:first-child{overflow-wrap:break-word;min-width:0}
+.depts .n{color:var(--yt-ink-muted);font-size:14px;line-height:20px;display:inline-flex;align-items:center;gap:var(--yt-space-1)}
+.depts .all a{font-weight:700;border-bottom:2px solid var(--yt-ink)}
+.dept-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--yt-space-4)}
+/* under 360 px one department per row, so no name breaks inside a word */
+@media (max-width:359px){.dept-grid,.phone .dept-grid{grid-template-columns:minmax(0,1fr)}}
+/* under 360 px the header keeps two rows: Ayuda leaves row 1 (it stays in the footer and in Cuenta) */
+@media (max-width:359px){.hdr-actions .hdr-link.mob-only{display:none}}
+.sellers{display:grid;grid-template-columns:minmax(0,1fr)}
+@media (max-width:899px){.dept-aside .dept-grid li:nth-child(n+7){display:none}.dept-aside{padding:var(--yt-space-3) 0 var(--yt-space-1)}.home-main .sec:first-child{border-top:0;padding-top:var(--yt-space-3)}}
+@media (min-width:900px){.two-col{grid-template-columns:15em minmax(0,1fr);gap:var(--yt-space-7)}.dept-aside{padding-top:var(--yt-space-6);min-width:0}.dept-grid{grid-template-columns:minmax(0,1fr)}.sellers{grid-template-columns:repeat(auto-fill,minmax(14em,1fr));column-gap:var(--yt-space-5)}}
+
+/* ---- T2 list ---- */
+.list-layout{display:grid;grid-template-columns:minmax(0,1fr)}
+.filters{background:var(--yt-band);padding:var(--yt-space-4)}
+.filters fieldset{border:0;margin:0;padding:var(--yt-space-3) 0;border-bottom:1px solid var(--yt-rule);min-width:0}
+.filters legend{font:600 15px/20px var(--yt-font-text);padding:0;margin-bottom:var(--yt-space-1)}
+.applied{display:flex;flex-wrap:wrap;gap:var(--yt-space-2);align-items:center}
+.chip{display:inline-flex;align-items:center;gap:var(--yt-space-2);min-height:44px;padding:0 var(--yt-space-3) 0 var(--yt-space-3);border:2px solid var(--yt-ink);border-radius:var(--yt-radius-control);background:var(--yt-page);font:500 15px/20px var(--yt-font-text);color:var(--yt-ink);max-width:100%}
+.applied-bar{padding:0 0 var(--yt-space-4)}
+.chip .ico{width:16px;height:16px}
+.toolbar{display:flex;flex-wrap:wrap;gap:var(--yt-space-3);align-items:end;justify-content:space-between;padding:0 0 var(--yt-space-3);min-width:0}
+.toolbar > div{min-width:0}
+.mob-filter{display:flex;padding:var(--yt-space-2) 0 var(--yt-space-3)}
+.mob-filter .btn{flex:1;border-color:var(--yt-ink)}
+@media (max-width:899px){.filters,.toolbar .sortbox{display:none}}
+@media (min-width:900px){.list-layout{grid-template-columns:260px minmax(0,1fr);gap:var(--yt-space-6)}.list-layout .grid{grid-template-columns:repeat(3,minmax(0,1fr))}.mob-filter{display:none}.toolbar{padding:var(--yt-space-3) 0 var(--yt-space-4)}}
+/* seller storefront header (T2 variant): a person, not a banner */
+.shopface{display:grid;grid-template-columns:64px minmax(0,1fr);gap:var(--yt-space-1) var(--yt-space-4);padding:var(--yt-space-4) 0 var(--yt-space-5);border-bottom:1px solid var(--yt-rule)}
+.shopface .mono{width:64px;height:64px;font-size:30px;grid-column:1;grid-row:1 / span 5}
+.shopface > :not(.mono){grid-column:2}
+.shopface .facts{display:flex;flex-wrap:wrap;gap:var(--yt-space-1) var(--yt-space-4);font-size:14px;line-height:20px;color:var(--yt-ink-muted)}
+/* sheet (phone filter panel) */
+.sheet-page{min-height:100vh;display:flex;flex-direction:column;background:var(--yt-page)}
+.sheet-top{display:flex;align-items:center;justify-content:space-between;gap:var(--yt-space-2);padding:var(--yt-space-2) var(--yt-space-4);border-bottom:1px solid var(--yt-rule);min-height:60px;flex-wrap:wrap}
+.sheet-body{padding:var(--yt-space-2) var(--yt-space-4) var(--yt-space-4);flex:1}
+.sheet-body .filters{display:block;background:none;padding:0}
+.sheet-foot{position:sticky;bottom:0;background:var(--yt-page);border-top:1px solid var(--yt-rule);padding:var(--yt-space-3) var(--yt-space-4);display:flex;gap:var(--yt-space-3)}
+
+/* ---- T3 product ---- */
+.pd{display:grid;gap:var(--yt-space-3);grid-template-columns:minmax(0,1fr) 128px;grid-template-areas:"info gal" "buy buy" "desc desc"}
+.gallery{grid-area:gal}.pd-info{grid-area:info;min-width:0}.buy{grid-area:buy}.pd-desc{grid-area:desc;min-width:0}
+.gallery .main{aspect-ratio:1;background:var(--yt-photo)}
+.thumbs{display:flex;gap:var(--yt-space-1);margin-top:var(--yt-space-1);flex-wrap:wrap}
+.thumbs span{width:40px;height:40px;background:var(--yt-photo);border:2px solid var(--yt-rule)}
+.thumbs span.on{border-color:var(--yt-ink)}
+.pd-info .brand-link{display:inline-flex;align-items:center;min-height:44px;min-width:44px;font-size:14px;line-height:20px}
+@media (max-width:359px){.pd{grid-template-columns:minmax(0,1fr);grid-template-areas:"info" "gal" "buy" "desc"}.gallery{max-width:200px}}
+.buy{background:var(--yt-band);padding:var(--yt-space-4) var(--yt-space-4);margin:0 -16px;display:flex;flex-direction:column;gap:var(--yt-space-3);min-width:0}
+.buy .b-price{order:1}.buy .b-when{order:2}.buy .b-qty{order:3}.buy .b-add{order:4}.buy .b-ship{order:6}.buy .b-seller{order:7}.buy .b-rows{order:8}
+.when{font:700 18px/24px var(--yt-font-text);color:var(--yt-brand)}
+.seller-link{display:inline-flex;align-items:center;min-height:44px;font-weight:700}
+.offer{display:grid;gap:var(--yt-space-3);padding:var(--yt-space-4) 0;border-top:1px solid var(--yt-rule);border-bottom:1px solid var(--yt-rule)}
+.offer > *{min-width:0}
+.bars{display:grid;gap:var(--yt-space-2);max-width:360px}
+.bars .bar{display:grid;grid-template-columns:minmax(0,90px) minmax(0,1fr) 24px;gap:var(--yt-space-3);align-items:center;font-size:14px;line-height:20px}
+.bars i{display:block;height:10px;background:var(--yt-band);border:1px solid var(--yt-edge)}
+.bars i b{display:block;height:100%;background:var(--yt-ink)}
+.review{padding:var(--yt-space-4) 0;border-top:1px solid var(--yt-rule)}
+.sticky-buy{display:none}
+/* the fixed bar never covers the page end: body gets a bottom padding equal to its
+   measured height (--bar-h, set by a ResizeObserver) */
+@media (max-width:899px){body.scrolled{padding-bottom:var(--bar-h,0)}body.scrolled .sticky-buy.static{position:static!important}body.scrolled .sticky-buy{display:flex;flex-wrap:wrap;position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--yt-page);border-top:2px solid var(--yt-ink);padding:var(--yt-space-3) var(--yt-space-4);gap:var(--yt-space-2) var(--yt-space-3);align-items:center;justify-content:space-between}.sticky-buy .btn{flex:1 0 100%}}
+@media (min-width:900px){
+ .pd{grid-template-columns:minmax(0,5fr) minmax(0,4fr) 340px;grid-template-areas:"gal info buy" "gal desc buy";grid-template-rows:auto 1fr;gap:0 var(--yt-space-6);align-items:start}
+ .thumbs{gap:var(--yt-space-2);margin-top:var(--yt-space-2)}.thumbs span{width:64px;height:64px}
+ .buy{margin:0;padding:var(--yt-space-5);gap:var(--yt-space-4)}
+ .offer{grid-template-columns:repeat(3,minmax(0,1fr)) auto;align-items:center}
+ .rev-grid{display:grid;grid-template-columns:320px minmax(0,1fr);gap:var(--yt-space-7)}
+}
+
+/* ---- T4 cart and checkout ---- */
+.cart{display:grid;gap:var(--yt-space-5);grid-template-columns:minmax(0,1fr)}
+.line{display:grid;grid-template-columns:88px minmax(0,1fr);gap:var(--yt-space-3) var(--yt-space-4);padding:var(--yt-space-4) 0;border-bottom:1px solid var(--yt-rule)}
+.line .ph{width:88px;height:88px;background:var(--yt-photo)}
+.line .controls{grid-column:2;display:flex;align-items:center;gap:var(--yt-space-2) var(--yt-space-4);flex-wrap:wrap;justify-content:space-between}
+.line > div{min-width:0;overflow-wrap:anywhere}
+.summary{background:var(--yt-band);padding:var(--yt-space-5);display:flex;flex-direction:column;gap:var(--yt-space-3);min-width:0}
+.sumrow{display:flex;justify-content:space-between;gap:var(--yt-space-3);flex-wrap:wrap}
+.sumrow.total{border-top:2px solid var(--yt-ink);padding-top:var(--yt-space-3);font:700 18px/24px var(--yt-font-text);align-items:baseline}
+@media (min-width:900px){.cart{grid-template-columns:minmax(0,1fr) 380px;gap:var(--yt-space-7);align-items:start}.line{grid-template-columns:120px minmax(0,1fr)}.line .ph{width:120px;height:120px}}
+.entry{display:grid;gap:var(--yt-space-4);grid-template-columns:minmax(0,1fr)}
+.entry .opt{padding:var(--yt-space-5);border:2px solid var(--yt-edge);border-radius:var(--yt-radius-control);display:flex;flex-direction:column;gap:var(--yt-space-3)}
+.entry .opt.main{border-color:var(--yt-ink);border-width:3px}
+@media (min-width:900px){.entry{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pending-label{display:inline-flex;gap:var(--yt-space-2);align-items:center;background:var(--yt-warning);color:var(--yt-on-warning);font:700 14px/20px var(--yt-font-text);padding:var(--yt-space-2) var(--yt-space-3);border-radius:var(--yt-radius-tag)}
+.formcol{display:flex;flex-direction:column;gap:var(--yt-space-5);max-width:640px;min-width:0}
+
+/* ---- T5 shopper's order (A's structure) ---- */
+.order-head{padding:var(--yt-space-5) 0 var(--yt-space-3);display:flex;flex-direction:column;gap:var(--yt-space-2);border-bottom:2px solid var(--yt-ink)}
+.order-head .row{gap:var(--yt-space-2) var(--yt-space-3)}
+.code{background:var(--yt-brand);color:var(--yt-on-brand);padding:var(--yt-space-5);display:grid;gap:var(--yt-space-2);min-width:0}
+.code .t-code{overflow-wrap:anywhere;max-width:100%}
+.code p{max-width:62ch}
+.order-sec{padding:var(--yt-space-5) 0;border-top:2px solid var(--yt-ink)}
+.order-sec h2{margin-bottom:var(--yt-space-3)}
+.pkg{display:flex;justify-content:space-between;align-items:center;gap:var(--yt-space-2) var(--yt-space-3);padding:var(--yt-space-3) 0;border-bottom:1px solid var(--yt-rule);flex-wrap:wrap}
+.pkg > span:first-child{min-width:0;overflow-wrap:break-word}
+.hist{list-style:none;margin:0;padding:0}
+.hist li{display:grid;grid-template-columns:minmax(0,11em) minmax(0,1fr);gap:var(--yt-space-1) var(--yt-space-4);padding:var(--yt-space-3) 0;border-bottom:1px solid var(--yt-rule);font-size:15px;line-height:20px}
+.hist time{color:var(--yt-ink-muted)}
+@media (max-width:599px){.hist li{grid-template-columns:minmax(0,1fr)}}
+.aside-block{padding:var(--yt-space-4) 0;border-top:2px solid var(--yt-ink);display:flex;flex-direction:column;gap:var(--yt-space-2)}
+.aside-stack{display:flex;flex-direction:column;gap:var(--yt-space-5);min-width:0}
+.list-orders .ord{display:grid;grid-template-columns:72px minmax(0,1fr);gap:var(--yt-space-1) var(--yt-space-4);padding:var(--yt-space-4) 0;border-bottom:1px solid var(--yt-rule)}
+.list-orders .ord .ph{width:72px;height:72px;background:var(--yt-photo)}
+.list-orders .ord a.big{font-weight:700;display:inline-flex;align-items:center;min-height:44px}
+
+/* ---- T11 account hub, T12 one question, T13 sign-in, T14 notice, T15 help ---- */
+.narrow{max-width:560px}
+.hub{list-style:none;margin:0;padding:0;border-top:1px solid var(--yt-rule)}
+.hub a{display:grid;grid-template-columns:minmax(0,1fr) 20px;gap:var(--yt-space-1) var(--yt-space-3);align-items:center;min-height:64px;padding:var(--yt-space-3) 0;border-bottom:1px solid var(--yt-rule);color:var(--yt-ink);text-decoration:none}
+.hub a b{font-weight:600}.hub a span{grid-column:1;font-size:14px;line-height:20px;color:var(--yt-ink-muted)}
+.hub a .ico{grid-row:1/span 2;grid-column:2}
+.hub a:hover b{text-decoration:underline}
+.auth{display:grid;gap:var(--yt-space-6);grid-template-columns:minmax(0,1fr);padding:var(--yt-space-5) 0 var(--yt-space-7)}
+@media (min-width:900px){.auth{grid-template-columns:minmax(0,440px) minmax(0,1fr);gap:var(--yt-space-8);padding-top:var(--yt-space-7)}}
+.notice-page{padding-top:var(--yt-space-6);padding-bottom:var(--yt-space-7);display:flex;flex-direction:column;gap:var(--yt-space-4);max-width:640px}
+.notice-page .pic{width:64px;height:64px}
+.prose{max-width:68ch}
+.prose h2{font:700 21px/26px var(--yt-font-title);letter-spacing:-.03em;margin:var(--yt-space-6) 0 var(--yt-space-2)}
+@media (min-width:900px){.prose h2{font-size:24px;line-height:28px}}
+.prose p,.prose li{margin:0 0 var(--yt-space-3)}
+.toc{border-left:3px solid var(--yt-ink);padding-left:var(--yt-space-4)}
+.toc a{display:inline-flex;align-items:center;min-height:44px}
+
+@media (min-width:900px){.help-grid{grid-template-columns:280px minmax(0,1fr)!important}}
+
+@media (max-width:899px){body.scrolled .sticky-buy.static{position:static}}
+.hdr .lockup{flex:none}
+@media (min-width:900px){.hdr .lockup{padding:0 var(--yt-space-3)}}
+
+/* Large text (200 %): the lists of the footer and the departments go to one
+   column when their frame is narrow IN em, so no word breaks inside itself
+   (§3 rule 6). At normal size on a 390 px phone they keep two columns. */
+.dept-aside{container:dept/inline-size}
+@container dept (max-width:20em){.dept-grid{grid-template-columns:minmax(0,1fr)}}
+@container foot (max-width:18em){.footer .cols{grid-template-columns:minmax(0,1fr)}.footer .lead{grid-column:auto}.footer .lead ul.cols3{columns:1}}

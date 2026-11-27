@@ -22,7 +22,8 @@
       "!supabase/seed/geo-cr.json",
       "!pnpm-lock.yaml",
       "!**/dist-web",
-      "!tools/native-e2e/screenshots"
+      "!tools/native-e2e/screenshots",
+      "!docs/brand/system"
     ]
   },
   "formatter": {

@@ -1,0 +1,7 @@
+Source: npm fontsource-epilogue-5.3.0 (package dir /tmp/fb2dl/x/fontsource-epilogue-5.3.0/package)
+epilogue-600-latin.woff2: U+202F mapped to its own thin space (400/2000 em)
+epilogue-600-latin-ext.woff2: copied unchanged
+epilogue-700-latin.woff2: U+202F mapped to its own thin space (400/2000 em)
+epilogue-700-latin-ext.woff2: copied unchanged
+epilogue-800-latin.woff2: U+202F mapped to its own thin space (400/2000 em)
+epilogue-800-latin-ext.woff2: copied unchanged

@@ -1,0 +1,453 @@
+[
+[
+"home.html",
+"Yuntera, inicio",
+"T1 Inicio de la tienda",
+"web",
+[
+390,
+1280
+]
+],
+[
+"lista.html",
+"Electrodomésticos, Yuntera",
+"T2 Lista con filtros (2 filtros aplicados)",
+"web",
+[
+390,
+1280
+]
+],
+[
+"lista-filtros.html",
+"Filtrar y ordenar, Yuntera",
+"T2 Lista: panel de filtros abierto (teléfono)",
+"web",
+[
+390
+]
+],
+[
+"tienda.html",
+"Cafetal Los Santos, Yuntera",
+"T2 Variante: la tienda de un vendedor (vendedor como persona)",
+"web",
+[
+390,
+1280
+]
+],
+[
+"producto.html",
+"Audífonos Nimbo Aire, Yuntera",
+"T3 Producto",
+"web",
+[
+390,
+1280
+]
+],
+[
+"sugerencias.html",
+"Sugerencias de búsqueda, Yuntera",
+"Búsqueda con sugerencias (N5)",
+"web",
+[
+390
+]
+],
+[
+"carrito.html",
+"Su carrito, Yuntera",
+"T4 Carrito",
+"web",
+[
+390,
+1280
+]
+],
+[
+"pago.html",
+"Pago, Yuntera",
+"T4 Pago: entrada (K1), pasos con la línea de ruta, error (K3)",
+"web",
+[
+390,
+1280
+]
+],
+[
+"pedido.html",
+"Pedido YT-100018, Yuntera",
+"T5 Pedido del comprador (estructura de A, línea de ruta de C, rueda en la estación)",
+"web",
+[
+390,
+1280
+]
+],
+[
+"pedidos.html",
+"Sus pedidos, Yuntera",
+"T5 Lista de sus pedidos",
+"web",
+[
+390,
+1280
+]
+],
+[
+"comprobante.html",
+"Factura de Tienda Sendero, Yuntera",
+"T9 Documento fiscal (vista del comprador)",
+"web",
+[
+390,
+1280
+]
+],
+[
+"cuenta.html",
+"Su cuenta, Yuntera",
+"T11 Su cuenta y ajustes (menú de cuenta)",
+"web",
+[
+390,
+1280
+]
+],
+[
+"zona.html",
+"Elija su zona, Yuntera",
+"T12 Una pregunta (zona)",
+"web",
+[
+390,
+1280
+]
+],
+[
+"ingresar.html",
+"Ingresar, Yuntera",
+"T13 Ingresar y recuperar",
+"web",
+[
+390,
+1280
+]
+],
+[
+"avisos.html",
+"Avisos de página, Yuntera",
+"T14 Avisos: no encontrado, error, sin conexión, confirmación destructiva, hecho, sin acceso",
+"web",
+[
+390,
+1280
+]
+],
+[
+"ayuda.html",
+"Ayuda, Yuntera",
+"T15 Ayuda y textos legales",
+"web",
+[
+390,
+1280
+]
+],
+[
+"consola.html",
+"Pedidos, yuntera central",
+"T7 Tabla con filtros, vistas, barra de selección, paginador y panel de detalle (consola)",
+"ops",
+[
+1280,
+1024,
+390
+]
+],
+[
+"central-resumen.html",
+"Resumen, yuntera central",
+"T6 Tablero de tareas (consola)",
+"ops",
+[
+1280,
+390
+]
+],
+[
+"central-atencion.html",
+"Atención, yuntera central",
+"T8 Cola por decidir: devoluciones y reclamos (consola)",
+"ops",
+[
+1280,
+390
+]
+],
+[
+"central-catalogo.html",
+"Productos por revisar, yuntera central",
+"T8 Cola de cosas por decidir (consola, con subsecciones de Catálogo)",
+"ops",
+[
+1280,
+390
+]
+],
+[
+"central-pedido.html",
+"Pedido YT-100018, yuntera central",
+"T9 Página de detalle con acciones (estructura del pedido de A)",
+"ops",
+[
+1280,
+390
+]
+],
+[
+"central-feriados.html",
+"Feriados, yuntera central",
+"T11 Ajustes y listas de referencia (consola, subsecciones de Operación)",
+"ops",
+[
+1280,
+390
+]
+],
+[
+"vende-inicio.html",
+"Resumen, yuntera vende",
+"T6 Tablero de tareas (centro de vendedores)",
+"seller",
+[
+1280,
+390
+]
+],
+[
+"vende-productos.html",
+"Productos, yuntera vende",
+"T7 Tabla que se vuelve lista de tarjetas bajo 640 px (centro de vendedores)",
+"seller",
+[
+1280,
+390
+]
+],
+[
+"vende-publicar.html",
+"Publicar un producto, yuntera vende",
+"T10 Formulario largo con error y barra de envío fija",
+"seller",
+[
+1280,
+390
+]
+],
+[
+"vende-invitaciones.html",
+"Equipo, yuntera vende",
+"T8 Cola por decidir + T11 lista de ajustes (centro de vendedores)",
+"seller",
+[
+1280,
+390
+]
+],
+[
+"vende-comprobante.html",
+"Factura de comisión, yuntera vende",
+"T9 Documento fiscal dentro de una herramienta",
+"seller",
+[
+1280,
+390
+]
+],
+[
+"campo.html",
+"Ruta o bodega, yuntera",
+"T6 Variante: elegir trabajo (campo, quien tiene los dos papeles)",
+"field",
+[
+390,
+1280
+]
+],
+[
+"ruta.html",
+"Ruta 3, yuntera ruta",
+"T16 Ruta: la línea de paradas, con la rueda en la parada actual",
+"field",
+[
+390
+]
+],
+[
+"ruta-parada.html",
+"Parada 2, yuntera ruta",
+"T16 Parada (repartidor)",
+"field",
+[
+390
+]
+],
+[
+"ruta-entregar.html",
+"Entregar, yuntera ruta",
+"T16 Parada: entregar con el código que dice el cliente",
+"field",
+[
+390
+]
+],
+[
+"bodega-tareas.html",
+"Bodega, yuntera bodega",
+"T6 Tablero de la bodega",
+"field",
+[
+390
+]
+],
+[
+"bodega.html",
+"Recoger, yuntera bodega",
+"T17 Tarea con escáner (bodega) y lectura rechazada",
+"field",
+[
+390
+]
+],
+[
+"app-tienda.html",
+"App de la tienda",
+"T1, T3, T5, T11, T13 en el teléfono (claro y oscuro)",
+"shop-native",
+[
+390,
+1280
+]
+],
+[
+"app-vende.html",
+"App vende",
+"T6, T7 en el teléfono del vendedor",
+"seller-native",
+[
+390,
+1280
+]
+],
+[
+"app-ruta.html",
+"App ruta",
+"T16, T14 (permiso) en el teléfono del repartidor; una pantalla en Android",
+"driver-native",
+[
+390,
+1280
+]
+],
+[
+"app-bodega.html",
+"App bodega",
+"T6, T17 en el teléfono de la bodega",
+"warehouse-native",
+[
+390,
+1280
+]
+],
+[
+"sistema.html",
+"Sistema Carreta",
+"El sistema en una hoja",
+"todas",
+[
+1280,
+390
+]
+],
+[
+"iconos.html",
+"Íconos de las apps",
+"Íconos de las apps",
+"todas",
+[
+1280,
+390
+]
+],
+[
+"logotipos.html",
+"Logotipos en contornos",
+"Logotipos en contornos",
+"todas",
+[
+1280,
+390
+]
+],
+[
+"mensajes.html",
+"Mensajes, Yuntera",
+"T18 Marco de mensajes (correo, cuenta, WhatsApp)",
+"mensajes",
+[
+390,
+1280
+]
+],
+[
+"cubrir-logo.html",
+"Prueba de cubrir el logo",
+"Prueba de cubrir el logo",
+"web",
+[
+1280
+]
+],
+[
+"confirmar.html",
+"Confirmar una cancelación, Yuntera",
+"T14 Confirmación de una acción que no se deshace (diálogo, comprador y personal)",
+"web, ops",
+[
+390,
+1280
+]
+],
+[
+"franja2-home.html",
+"Inicio, franja versión 2",
+"Franja versión 2 (prueba)",
+"web",
+[
+390
+]
+],
+[
+"franja2-producto.html",
+"Producto, franja versión 2",
+"Franja versión 2 (prueba)",
+"web",
+[
+390
+]
+],
+[
+"index.html",
+"Carreta, páginas de referencia",
+"Índice",
+"todas",
+[
+1280,
+390
+]
+]
+]

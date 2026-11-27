@@ -1,0 +1,269 @@
+/* ================= 2. components (shared by every app) ================= */
+
+/* ---- Button. Sizes: 48 px (web default), 44 px (.btn-sm, work tools and
+   secondary), 56 px (.btn-lg, phone app primary and driver actions), 64 px
+   (.btn-xl, the driver's fixed action). States: rest, hover, focus, pressed,
+   disabled, loading. Its label is written to fit on one line at 390 px (X5); when the text is enlarged it wraps instead of pushing the page sideways. ---- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--yt-space-2);min-height:48px;min-width:44px;padding:0 var(--yt-space-4);border-radius:var(--yt-radius-control);
+  font:600 16px/20px var(--yt-font-text);text-decoration:none;overflow-wrap:normal;border:2px solid var(--yt-primary);cursor:pointer;text-align:center;max-width:100%;
+  background:var(--yt-primary);color:var(--yt-on-primary);transition:transform var(--yt-motion-fast),background-color var(--yt-motion-fast)}
+.btn:hover,.btn.is-hover{text-decoration:underline;text-underline-offset:3px}
+.btn:active,.btn.is-pressed{transform:translateY(1px);box-shadow:inset 0 3px 0 rgba(0,0,0,.25)}
+.btn-outline{background:var(--yt-page);color:var(--yt-ink);border-color:var(--yt-edge)}
+.btn-outline:hover,.btn-outline.is-hover{border-color:var(--yt-ink)}
+.btn-danger{background:var(--yt-danger);border-color:var(--yt-danger);color:var(--yt-on-danger)}
+.btn-on-band{background:var(--yt-on-app);border-color:var(--yt-on-app);color:var(--yt-ink-fixed)}
+.btn-ghost-band{background:transparent;border-color:var(--yt-on-app);color:var(--yt-on-app)}
+.btn[disabled],.btn.is-disabled{background:var(--yt-band);border:2px dashed var(--yt-edge);color:var(--yt-ink-muted);cursor:not-allowed;text-decoration:none;transform:none;box-shadow:none}
+.btn.is-loading{position:relative;cursor:progress}
+.btn.is-loading::after{content:"";position:absolute;left:12px;right:12px;bottom:6px;height:2px;background:currentColor;opacity:.7;transform-origin:left;animation:yt-load 1.2s ease-in-out infinite}
+@keyframes yt-load{0%{transform:scaleX(.1)}50%{transform:scaleX(1)}100%{transform:scaleX(.1)}}
+.btn-block{width:100%;white-space:normal;text-align:center}
+.btn-sm{min-height:44px;padding:0 var(--yt-space-4);font-size:15px}
+.btn-lg{min-height:56px;font-size:17px;line-height:22px}
+.btn-xl{min-height:64px;font-size:20px;line-height:24px;width:100%}
+.link-btn{display:inline-flex;justify-content:center;align-items:center;background:none;border:0;padding:0 var(--yt-space-1);min-height:44px;min-width:44px;font:500 15px/20px var(--yt-font-text);color:var(--yt-link);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.t-44,.link44{display:inline-flex;align-items:center;min-height:44px;min-width:44px}
+
+/* ---- Field. Label above (always visible), hint under the label, the
+   error message above the input, the typed value kept. ---- */
+.field{display:flex;flex-direction:column;gap:var(--yt-space-2);min-width:0}
+.field > label,.field > .label{font:600 15px/20px var(--yt-font-text)}
+.field .hint{font-size:14px;line-height:20px;color:var(--yt-ink-muted)}
+.input,.select,.textarea{min-height:48px;border:2px solid var(--yt-edge);border-radius:var(--yt-radius-control);padding:0 var(--yt-space-3);font:400 16px var(--yt-font-text);color:var(--yt-ink);background:var(--yt-page);width:100%;min-width:0}
+.textarea{padding:var(--yt-space-3) var(--yt-space-3);min-height:112px;line-height:24px;resize:vertical}
+.input:hover,.select:hover,.input.is-hover{border-color:var(--yt-ink)}
+.input::placeholder{color:var(--yt-ink-muted)}
+.input[disabled],.input.is-disabled,.select[disabled]{background:var(--yt-band);border-style:dashed;color:var(--yt-ink-muted)}
+.input[readonly]{background:var(--yt-band);border-color:var(--yt-band)}
+.select{appearance:none;padding-right:var(--yt-space-7);background:var(--yt-page) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="%231E1A16" stroke-width="2.75" stroke-linecap="round"/></svg>') no-repeat right 10px center/20px}
+[data-theme="dark"] .select{background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="%23F3EEE6" stroke-width="2.75" stroke-linecap="round"/></svg>')}
+.field.error .input,.field.error .select,.field.error .textarea{border-color:var(--yt-danger);border-width:3px}
+.field .err{display:flex;gap:var(--yt-space-2);align-items:flex-start;color:var(--yt-danger);font:600 15px/20px var(--yt-font-text)}
+.field .err .ico{margin-top:0}
+.check{display:flex;align-items:center;gap:var(--yt-space-3);min-height:44px;font-size:15px;line-height:20px;cursor:pointer}
+.check .box{width:24px;height:24px;border:2px solid var(--yt-edge);border-radius:var(--yt-radius-tag);flex:none;display:grid;place-items:center;background:var(--yt-page)}
+.check.on .box{background:var(--yt-primary);border-color:var(--yt-primary)}
+.check.on .box::after{content:"";width:11px;height:6px;border:solid var(--yt-on-primary);border-width:0 0 3px 3px;transform:rotate(-45deg) translate(1px,-1px)}
+.check .count{margin-left:auto;color:var(--yt-ink-muted);font-size:14px}
+.check.radio .box{border-radius:50%}
+.check.radio.on .box::after{width:10px;height:10px;border:0;border-radius:50%;background:var(--yt-on-primary);transform:none}
+.check.is-disabled{color:var(--yt-ink-muted);cursor:not-allowed}.check.is-disabled .box{border-style:dashed;background:var(--yt-band)}
+/* a choice that carries a sentence (payment, address): the whole row is the target */
+.choice{display:flex;gap:var(--yt-space-3);padding:var(--yt-space-4) var(--yt-space-4);border:2px solid var(--yt-edge);border-radius:var(--yt-radius-control);align-items:flex-start;min-height:56px;cursor:pointer}
+.choice.on{border-color:var(--yt-primary);border-width:3px;padding:13px 15px}
+.choice p{font-size:14px;line-height:20px;color:var(--yt-ink-muted)}
+.choice .check{min-height:0}
+/* a fieldset with a visible legend */
+fieldset.plain{border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:var(--yt-space-3);min-width:0}
+fieldset.plain legend{font:700 21px/26px var(--yt-font-title);letter-spacing:-.03em;margin-bottom:var(--yt-space-2);padding:0}
+@media (min-width:900px){fieldset.plain legend{font-size:24px;line-height:28px}}
+
+/* ---- Status stamp (.tag). Shape + word, never colour alone, never a pill.
+   Five signs, the same in every app:
+   ○ .tag            not yet      (Pendiente, Por preparar, Al entregar)
+   ◐ .tag.half       in progress  (Preparando, En camino, En la puerta)
+   ✓ .tag.done/.ok   done         (Confirmado on primary; Pagado, Entregado on success)
+   ! .tag.warn/.err  attention    (Por atender, Esperando el pago on warning; Pago rechazado on danger)
+   – .tag.ended      ended        (Cancelado, Vencido) ---- */
+/* A stamp wraps only between words (never inside a word: overflow-wrap normal,
+   no automatic hyphens); in a table its column is at least as wide as the
+   longest stamp word plus the glyph. Checked by src/audit.js (mid-word breaks). */
+.tag{display:inline-flex;align-items:center;gap:6px;border-radius:var(--yt-radius-tag);padding:2px 8px;font:600 13px/18px var(--yt-font-text);border:1.5px solid var(--yt-edge);color:var(--yt-ink);background:var(--yt-page);max-width:100%;vertical-align:middle;overflow-wrap:normal;word-break:normal;hyphens:manual}
+.tag::before{content:"";width:8px;height:8px;border:2px solid currentColor;border-radius:50%;flex:none}
+.tag.half::before{background:linear-gradient(90deg,currentColor 50%,transparent 50%)}
+.tag.done,.tag.solid{background:var(--yt-primary);border-color:var(--yt-primary);color:var(--yt-on-primary)}
+.tag.ok{background:var(--yt-success);border-color:var(--yt-success);color:var(--yt-on-success)}
+.tag.ok::before,.tag.done::before{border:0;width:10px;height:6px;border-left:2.5px solid;border-bottom:2.5px solid;border-radius:0;transform:rotate(-45deg) translateY(-2px)}
+.tag.err{background:var(--yt-danger);border-color:var(--yt-danger);color:var(--yt-on-danger)}
+.tag.warn{background:var(--yt-warning);border-color:var(--yt-warning);color:var(--yt-on-warning)}
+.tag.err::before,.tag.warn::before{content:"!";border:0;width:auto;height:auto;font-weight:800;line-height:1}
+.tag.ended::before{border:0;border-radius:0;width:10px;height:2.5px;background:currentColor}
+.tag.plain::before{display:none}
+.tag.yt{border-color:var(--yt-brand);color:var(--yt-brand)}
+.tag.yt::before{display:none}
+.tag.discount{background:var(--yt-primary);border-color:var(--yt-primary);color:var(--yt-on-primary)}
+.tag.discount::before{display:none}
+.count-badge{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;background:var(--yt-primary);color:var(--yt-on-primary);border-radius:var(--yt-radius-tag);font:700 14px/20px var(--yt-font-text)}
+
+/* ---- Notice (alert). Four kinds; the first line says what happened, the
+   second what to do. Never a coloured box with a pastel fill. ---- */
+.notice{display:flex;gap:var(--yt-space-3);padding:var(--yt-space-4) 0;border-top:3px solid var(--yt-ink);font-size:15px;line-height:20px}
+.notice .ico{width:24px;height:24px;margin-top:-1px}
+.notice b{display:block}
+.notice.ok{border-top-color:var(--yt-success)}.notice.ok .ico{color:var(--yt-success)}
+.notice.warn{--yt-ring:var(--yt-on-warning);background:var(--yt-warning);color:var(--yt-on-warning);border-top:0;padding:var(--yt-space-4) var(--yt-space-4)}
+.notice.err{border:3px solid var(--yt-danger);padding:var(--yt-space-4) var(--yt-space-4);border-radius:var(--yt-radius-control)}.notice.err .ico,.notice.err b{color:var(--yt-danger)}
+.notice.offline{background:var(--yt-band);border-top-color:var(--yt-ink-muted);padding:var(--yt-space-4) var(--yt-space-4)}
+.errsum{border:3px solid var(--yt-danger);padding:var(--yt-space-4);display:flex;flex-direction:column;gap:var(--yt-space-1);border-radius:var(--yt-radius-control)}
+.errsum h2{display:flex;gap:var(--yt-space-2);align-items:center;color:var(--yt-danger);font:700 18px/24px var(--yt-font-text)}
+.errsum a{color:var(--yt-danger);font-weight:600;display:inline-flex;align-items:center;min-height:44px}
+
+/* ---- The wheel. One meaning: Yuntera's own delivery (when it arrives,
+   where it is now). At most one per screen. Sizes: 24 (strip on a phone),
+   28 (strip on desktop), 32 (marker on the route line), 48 (empty state,
+   unpainted), app icons. ---- */
+.wheel{flex:none;display:block}
+.wheel.w24{width:24px;height:24px}.wheel.w28{width:28px;height:28px}.wheel.w32{width:32px;height:32px}.wheel.w48{width:48px;height:48px}
+
+/* ---- Delivery strip. Version 1 (.strip): achiote band, cal text, the
+   wheel. Version 2 (.strip.regla): white band, a 4 px achiote top rule,
+   the lead words and the date in achiote. ---- */
+.strip{background:var(--yt-brand);color:var(--yt-on-brand);border-top:4px solid var(--yt-brand);border-bottom:1px solid var(--yt-brand)} /* same box as version 2, so the test isolates the colour */
+.strip .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:var(--yt-space-3);min-height:52px;padding-top:var(--yt-space-2);padding-bottom:var(--yt-space-2)}
+.strip p{font:500 14px/20px var(--yt-font-text);flex:1 1 12em;min-width:0;overflow-wrap:break-word}
+.strip strong{font-weight:700}
+.strip a{color:inherit;font-weight:600;white-space:nowrap;min-height:44px;padding:0 8px;display:inline-flex;align-items:center;font-size:14px;line-height:20px}
+.strip.regla{background:var(--yt-page);color:var(--yt-ink);border-top:4px solid var(--yt-brand);border-bottom:1px solid var(--yt-rule);--yt-ring:var(--yt-focus)}
+.strip.regla strong{color:var(--yt-brand)}
+.strip.regla a{color:var(--yt-link)}
+@media (min-width:900px){.strip p{font-size:15px;line-height:20px}.strip a{font-size:15px}.strip .wrap{gap:var(--yt-space-3)}}
+
+/* ---- Route line (from C, made Carreta). One line with stations for every
+   sequence: checkout steps, order tracking, the driver's stops. Stations:
+   done = filled ink disc with a check; now = ink ring 4 px (or the wheel,
+   when the sequence is the delivery itself); not yet = hollow edge ring.
+   Done stretch = 4 px ink line; to-do stretch = 2 px dashed edge line.
+   Every station has its word under it, plus Hecho / Ahora / Falta. ---- */
+.linea{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));counter-reset:st}
+.linea-box{container:linea/inline-size}
+.linea li{position:relative;padding-top:var(--yt-space-7);padding-right:var(--yt-space-2);min-width:0;font-size:14px;line-height:20px;overflow-wrap:break-word}
+.linea li::before{content:"";position:absolute;top:19px;left:0;right:0;border-top:2px dashed var(--yt-edge)}
+.linea li.done::before,.linea li.now::before{border-top:4px solid var(--yt-ink);top:18px}
+.linea li.now::before{right:auto;width:16px}
+.linea li:last-child::before{right:auto;width:0}
+.linea .st{position:absolute;top:6px;left:0;width:30px;height:30px;border-radius:50%;background:var(--yt-page);border:2.5px solid var(--yt-edge);display:grid;place-items:center;font:700 14px/20px var(--yt-font-text);color:var(--yt-ink);z-index:1}
+.linea li.done .st{background:var(--yt-ink);border-color:var(--yt-ink);color:var(--yt-page)}
+.linea li.done .st::after{content:"";width:11px;height:6px;border:solid var(--yt-page);border-width:0 0 3px 3px;transform:rotate(-45deg) translate(1px,-1px)}
+.linea li.now .st{border:4px solid var(--yt-ink)}
+.linea li.now .st.has-wheel{border:0;background:none;width:32px;height:32px;top:5px;left:-1px}
+.linea .when-word{display:block;font:700 13px/18px var(--yt-font-text);color:var(--yt-ink-muted)}
+.linea li.now .when-word{color:var(--yt-ink)}
+.linea .what{display:block;font-weight:600;color:var(--yt-ink)}
+.linea li:not(.done):not(.now) .what{font-weight:500}
+.linea .sub{display:block;color:var(--yt-ink-muted)}
+/* vertical form: under 600 px for tracking, always for the driver's stops */
+.linea.v{grid-template-columns:minmax(0,1fr)}
+.linea.v li{padding:0 0 var(--yt-space-4) var(--yt-space-7);min-height:52px}
+.linea.v li::before{top:30px;bottom:0;left:14px;right:auto;border-top:0;border-left:2px dashed var(--yt-edge);height:auto}
+.linea.v li.done::before{border-left:4px solid var(--yt-ink);left:13px;top:30px;width:0}
+.linea.v li.now::before{border-left:2px dashed var(--yt-edge);border-top:0;left:14px;width:0;top:34px}
+.linea.v li:last-child::before{display:none}
+.linea.v .st{top:0}
+@container linea (max-width:36em){.linea.track{grid-template-columns:minmax(0,1fr)}
+ .linea.track li{padding:0 0 var(--yt-space-4) var(--yt-space-7);min-height:52px}
+ .linea.track li::before{top:30px;bottom:0;left:14px;right:auto;border-top:0;border-left:2px dashed var(--yt-edge);width:0}
+ .linea.track li.done::before{border-left:4px solid var(--yt-ink);left:13px}
+ .linea.track li.now::before{border-left:2px dashed var(--yt-edge);top:34px}
+ .linea.track li:last-child::before{display:none}
+ .linea.track .st{top:0}}
+/* checkout steps: the same line, compact; numbers in the stations */
+.linea.pasos li{padding-top:var(--yt-space-7)}
+.linea.pasos .what{font-weight:600}
+
+/* ---- Product card. Name, price, old price and discount, rating number
+   and count, seller (a person), who delivers or the date. The whole card is
+   the target (the name's ::after covers it). ---- */
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--yt-space-5) var(--yt-space-3)}
+@media (min-width:900px){.grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--yt-space-6) var(--yt-space-5)}}
+.card{display:flex;flex-direction:column;gap:var(--yt-space-1);position:relative;min-width:0}
+.card .ph{aspect-ratio:1;background:var(--yt-photo);margin-bottom:var(--yt-space-2);position:relative}
+.card .ph img{width:100%;height:100%}
+.card .ph .tag{position:absolute;left:8px;top:8px;white-space:normal;max-width:calc(100% - 16px);background:var(--yt-page)}
+.card .brand{font:500 14px/20px var(--yt-font-text);color:var(--yt-ink-muted)}
+.card .name{font:500 16px/24px var(--yt-font-text);color:var(--yt-ink);text-decoration:none;overflow-wrap:anywhere}
+.card .name::after{content:"";position:absolute;inset:0}
+.card .name:hover{text-decoration:underline}
+.stars{display:inline-flex;align-items:center;gap:var(--yt-space-2);font-size:14px;line-height:20px;flex-wrap:wrap}
+.stars svg{height:14px;width:74px}
+.price-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:var(--yt-space-1) var(--yt-space-2);margin-top:var(--yt-space-1)}
+.old{color:var(--yt-ink-muted);text-decoration:line-through;font-size:14px;line-height:20px}
+.unit,.by{font-size:14px;line-height:20px;color:var(--yt-ink-muted);overflow-wrap:break-word}
+.yt-line{font:600 14px/20px var(--yt-font-text);color:var(--yt-brand);overflow-wrap:break-word}
+@media (max-width:899px){.card .stars svg{display:none}}
+/* a long price may break inside a card instead of pushing the page sideways (200 % text) */
+.card .t-price{overflow-wrap:anywhere;min-width:0}
+
+/* ---- Seller as a person: monogram (or their logo), name, their own
+   one-line trade, town. ---- */
+.seller{display:grid;grid-template-columns:48px minmax(0,1fr);gap:var(--yt-space-1) var(--yt-space-3);padding:var(--yt-space-4) 0;border-bottom:1px solid var(--yt-rule);align-items:start;overflow-wrap:break-word}
+.mono{grid-row:span 3;width:48px;height:48px;display:grid;place-items:center;background:var(--yt-band);border:1.5px solid var(--yt-edge);font:800 22px/1 var(--yt-font-title);border-radius:var(--yt-radius-tag);color:var(--yt-ink)}
+.seller > a{font-weight:600;color:var(--yt-ink);display:inline-flex;align-items:center;min-height:44px}
+.seller p{font-size:14px;line-height:20px;color:var(--yt-ink-muted)}
+
+/* ---- Quantity stepper. − and + are 48 px (44 in the cart line). ---- */
+.qty{display:inline-flex;flex:none;align-items:center;border:2px solid var(--yt-edge);border-radius:var(--yt-radius-control);background:var(--yt-page)}
+.qty button{width:48px;height:48px;border:0;background:none;display:grid;place-items:center;cursor:pointer;color:var(--yt-ink)}
+.qty button[disabled]{color:var(--yt-ink-muted);cursor:not-allowed}
+.qty output{min-width:40px;text-align:center;font:600 18px/24px var(--yt-font-text)}
+.qty.sm button{width:44px;height:44px}
+
+/* ---- Definition rows: term and value; the value wraps under the term
+   when the text grows (fixes the 200 % overlap). ---- */
+.rows{margin:0;border-top:1px solid var(--yt-rule)}
+.rows > div{display:flex;flex-wrap:wrap;column-gap:var(--yt-space-4);row-gap:var(--yt-space-1);padding:var(--yt-space-3) 0;border-bottom:1px solid var(--yt-rule);font-size:15px;line-height:20px}
+.rows dt{flex:0 1 8em;font-weight:600;min-width:0}
+.rows dd{flex:1 1 12em;min-width:0;margin:0}
+
+/* ---- Tabs (saved views, from A) and sub-navigation. They wrap onto a
+   second line; they never scroll out of sight. Current: weight + 3 px
+   underline. ---- */
+.tabs-row{display:flex;flex-wrap:wrap;gap:0 var(--yt-space-1);border-bottom:1px solid var(--yt-rule)}
+.tabs-row a{display:inline-flex;align-items:center;gap:var(--yt-space-2);min-height:44px;padding:0 var(--yt-space-3);color:var(--yt-ink);text-decoration:none;border-bottom:3px solid transparent;font-size:15px;line-height:20px}
+.tabs-row a:hover{text-decoration:underline}
+.tabs-row a[aria-current]{font-weight:700;border-bottom-color:var(--yt-ink)}
+.tabs-row .n{color:var(--yt-ink-muted)}
+
+/* ---- Empty, error, offline, loading. Pictures: the unpainted wheel for
+   "nothing here yet" (only where the subject is a delivery), the plain
+   ! disc for errors and blocks, a cut cord for offline, never a mascot. ---- */
+.empty{display:grid;grid-template-columns:56px minmax(0,1fr);gap:var(--yt-space-1) var(--yt-space-4);align-items:start;padding:var(--yt-space-5) 0}
+.empty .pic{grid-row:span 3;width:56px;height:56px}
+.empty h2{font:700 21px/26px var(--yt-font-title);letter-spacing:-.03em}
+@media (min-width:900px){.empty h2{font-size:24px;line-height:28px}}
+.empty .acts{display:flex;gap:var(--yt-space-2);flex-wrap:wrap;margin-top:var(--yt-space-3)}
+.mark-err{width:56px;height:56px;border-radius:50%;border:5px solid currentColor;display:grid;place-items:center;font:800 32px/1 var(--yt-font-text)}
+.skel{background:var(--yt-band);border-radius:var(--yt-radius-tag);display:block}
+.skel.line{height:14px;margin:var(--yt-space-2) 0}.skel.line.w60{width:60%}.skel.line.w40{width:40%}
+.skel.box{aspect-ratio:1}
+
+/* ---- Overlays: sheet (phone), drawer, dialog, menu. 10 px corner on the
+   open side, one shadow, a 55 % scrim, "Cerrar" with a word. ---- */
+.overlay{background:var(--yt-page);border-radius:var(--yt-radius-overlay);box-shadow:var(--yt-elevation-overlay)}
+.scrim{background:rgba(30,26,22,.55)}
+.dialog{max-width:480px;padding:var(--yt-space-5);display:flex;flex-direction:column;gap:var(--yt-space-3)}
+.dialog-stage{background:rgba(30,26,22,.55);padding:var(--yt-space-7) var(--yt-space-4);display:grid;place-items:center}
+.dialog-stage > *{width:100%;min-width:0}
+.dialog .head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:var(--yt-space-2)}
+.dialog .head > h2{flex:1 1 12em;min-width:0}
+.dialog .acts{display:flex;gap:var(--yt-space-2);flex-wrap:wrap;justify-content:flex-end}
+
+/* ---- Disclosure ---- */
+details.more summary{min-height:44px;display:flex;align-items:center;gap:var(--yt-space-2);font-weight:600;cursor:pointer;color:var(--yt-link);text-decoration:underline;text-underline-offset:3px;list-style:none}
+details.more summary::-webkit-details-marker{display:none}
+details.more summary::after{content:"";width:8px;height:8px;border:solid currentColor;border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translateY(-2px);margin-left:var(--yt-space-1)}
+details.more[open] summary::after{transform:rotate(-135deg)}
+
+/* ---- Breadcrumbs ---- */
+.crumbs{font-size:14px;line-height:20px;color:var(--yt-ink-muted);display:flex;flex-wrap:wrap;align-items:center;gap:0 var(--yt-space-1)}
+.crumbs a{color:var(--yt-ink-muted);display:inline-flex;align-items:center;min-height:44px;min-width:44px;justify-content:center;padding:0 var(--yt-space-2)}
+
+/* ---- Lockup in the interface ---- */
+.lockup{display:inline-flex;align-items:center;gap:var(--yt-space-2);text-decoration:none;color:var(--yt-ink);min-height:44px;flex-wrap:nowrap;max-width:100%}
+.lockup img{width:26px;height:26px;flex:none}
+.wordmark{font-weight:800;font-size:23px;line-height:1.2;letter-spacing:-.03em;white-space:nowrap}
+.wordmark .desc{font-weight:600;opacity:.62;margin-left:.26em}
+
+/* ---- Money ---- */
+.money{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.humancheck{border:2px dashed var(--yt-edge);padding:var(--yt-space-4);border-radius:var(--yt-radius-control);display:flex;flex-direction:column;gap:var(--yt-space-1)}
+
+/* The checkout steps stay across while each step has about 5 em; narrower
+   (200 % text, 320 px) they stack like the tracking line. */
+@container linea (max-width:17em){.linea.pasos{grid-template-columns:minmax(0,1fr)}
+ .linea.pasos li{padding:0 0 var(--yt-space-4) var(--yt-space-7);min-height:52px}
+ .linea.pasos li::before{top:30px;bottom:0;left:14px;right:auto;border-top:0;border-left:2px dashed var(--yt-edge);width:0}
+ .linea.pasos li.done::before{border-left:4px solid var(--yt-ink);left:13px}
+ .linea.pasos li.now::before{border-left:2px dashed var(--yt-edge);top:34px}
+ .linea.pasos li:last-child::before{display:none}
+ .linea.pasos .st{top:0}}
