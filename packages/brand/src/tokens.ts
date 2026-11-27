@@ -10,10 +10,11 @@
  * - The Carreta names below (`palette`, `light`, `dark`, `type`, `spacing`,
  *   `radii`, `elevation`, `motion`, `target`, `headerHeightMax`, `typeface`,
  *   `fontFiles`, `appThemeColor`) carry the values of
- *   docs/brand/system/tokens.json; `tokens.test.ts` compares every one.
+ *   docs/brand/system/tokens.json; a test compares every one.
  *
  * No Carreta name equals a name of today, so no import changes meaning.
- * Stylesheets made from both: `css.ts`. Contrast pairs: `tokens.test.ts`.
+ * Stylesheets made from both: `src/css.ts` (today's) and `lib/stylesheets.ts`
+ * (Carreta). Checks: `test/carreta-tokens.test.ts`.
  */
 
 export {
@@ -243,15 +244,12 @@ export const elevation = {
   overlay: "0 10px 30px rgba(30,26,22,.25)",
 } as const;
 
-/** Durations (§2). Every one runs `ease-out`; under reduced motion: `none`. */
+/** Durations (§2, Motion; the easing is in the stylesheet). Under reduced motion: `none`. */
 export const motion = {
   fast: "100ms",
   panel: "200ms",
   none: "0ms",
 } as const;
-
-/** The easing every `motion` duration uses. */
-export const motionEasing = "ease-out";
 
 /** Smallest control in px: web 44, phone apps 48, driver actions 56 and 64. */
 export const target = {

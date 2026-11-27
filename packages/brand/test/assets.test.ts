@@ -3,8 +3,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { assetCopies } from "./asset-map";
-import { brokenImageGrey, pngStats, readPng } from "./png";
+import { assetCopies } from "../lib/asset-map";
+import { brokenImageGrey, pngStats, readPng } from "../lib/png";
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const sourceDir = here("../../../docs/brand/system/assets");

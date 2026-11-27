@@ -17,7 +17,7 @@ draws new lockups, with the letters as outlines, and new app icons. They are
 **copies**, byte for byte, of the files in
 [`docs/brand/system/assets`](../../../docs/brand/system/assets), under English
 names: `scripts/copy-assets.ts` makes them from the map in
-`src/asset-map.ts`, and `src/assets.test.ts` fails when a copy differs from
+`lib/asset-map.ts`, and `test/assets.test.ts` fails when a copy differs from
 its source (sha256), is missing, is not in the map, or when a PNG is blank,
 broken or the same as another. Never edit them here: redraw them with the
 specification's generators (`docs/brand/system/src/logo.py`, `assets.py`,

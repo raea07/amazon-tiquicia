@@ -15,7 +15,7 @@ import {
   type RatchetFile,
   ratchetApps,
   ratchetPatterns,
-} from "../src/ratchet";
+} from "../lib/ratchet";
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const root = here("../../../");

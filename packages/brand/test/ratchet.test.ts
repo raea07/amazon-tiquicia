@@ -1,7 +1,13 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { countApp, countPattern, type RatchetFile, ratchetApps, ratchetPatterns } from "./ratchet";
+import {
+  countApp,
+  countPattern,
+  type RatchetFile,
+  ratchetApps,
+  ratchetPatterns,
+} from "../lib/ratchet";
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const root = here("../../../");

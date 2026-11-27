@@ -2,8 +2,14 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { fontAdvance, fontCmap, fontName, fontWeightClass, readFontTables } from "./font-tables";
-import { fontFiles, typeface } from "./tokens";
+import {
+  fontAdvance,
+  fontCmap,
+  fontName,
+  fontWeightClass,
+  readFontTables,
+} from "../lib/font-tables";
+import { fontFiles, typeface } from "../src/tokens";
 
 /*
  * The Carreta font files (SISTEMA.md §2.4), read table by table: the names

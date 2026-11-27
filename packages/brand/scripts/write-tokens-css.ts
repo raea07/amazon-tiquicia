@@ -5,7 +5,7 @@ import {
   renderCarretaTokensCss,
   renderLegacyTokensCss,
   renderTokensCss,
-} from "../src/css";
+} from "../lib/stylesheets";
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const system = (path: string) => readFileSync(here(`../../../docs/brand/system/${path}`), "utf8");

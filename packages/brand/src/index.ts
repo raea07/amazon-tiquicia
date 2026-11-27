@@ -1,12 +1,5 @@
 export { type AppId, type AppIdentity, apps, brand } from "./brand";
-export {
-  carretaOnlyColors,
-  legacyAliases,
-  renderCarretaBaseCss,
-  renderCarretaTokensCss,
-  renderLegacyTokensCss,
-  renderTokensCss,
-} from "./css";
+export { renderTokensCss } from "./css";
 export { markGeometry } from "./mark";
 export {
   appThemeColor,
@@ -21,7 +14,6 @@ export {
   headerHeightMax,
   light,
   motion,
-  motionEasing,
   palette,
   radii,
   radius,
