@@ -1,5 +1,5 @@
 import type { CaseClock, CaseRow, CaseTargetUnit } from "@yuntera/db";
-import type { Tone } from "@yuntera/ui";
+import { formatDate, formatDateTime, type Tone } from "@yuntera/ui";
 import { COMPLAINT_CATEGORY, REPORT_REASON, RETURN_KIND, RETURN_STATUS } from "@/lib/labels";
 
 /** The roles that work in Casos (each reads its own kinds of case; admin all). */
@@ -18,6 +18,14 @@ export const CASE_CHANNEL: Record<string, string> = {
   whatsapp: "WhatsApp",
   phone: "Teléfono",
   email: "Correo",
+};
+
+/** The channel inside a sentence: "llegó por la tienda", "llegó por teléfono". */
+export const CASE_CHANNEL_IN_SENTENCE: Record<string, string> = {
+  shop: "la tienda",
+  whatsapp: "WhatsApp",
+  phone: "teléfono",
+  email: "correo",
 };
 
 /** What a recorded contact can be about, with the target it takes. */
@@ -64,9 +72,34 @@ export function span(ms: number): string {
   return days === 1 ? "1 día" : `${days} días`;
 }
 
+/** Whether an instant is midnight in Costa Rica (the end of the day before). */
+function isMidnightInCostaRica(value: string): boolean {
+  const time = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "America/Costa_Rica",
+  }).format(new Date(value));
+  return time === "00:00";
+}
+
 /**
- * What the case is waiting for and how long is left, from `now`:
- * "Responder: quedan 3 h" or "Resolver: atrasado por 2 días".
+ * A due time in words. Due times in working or calendar days fall at
+ * midnight, which reads as the next day; they are said as the end of the day
+ * they close: "el final del lunes, 30 de nov." rather than "1 dic, 12:00 a. m.".
+ */
+export function deadline(value: string): string {
+  if (!isMidnightInCostaRica(value)) return formatDateTime(value);
+  const dayBefore = new Date(new Date(value).getTime() - 1000).toISOString();
+  return `el final del ${formatDate(dayBefore, { weekday: "long", day: "numeric", month: "short" })}`;
+}
+
+/**
+ * What the case is waiting for, how long is left from `now` and the due time:
+ * "Responder: quedan 3 h (plazo: 27 nov, 3:00 p. m.)", "Resolver: atrasado
+ * por 2 h (plazo: …)", or, a day or more ahead, "Responder: a más tardar el
+ * final del lunes, 30 de nov." (a count of days would include weekends and
+ * holidays, which the targets do not count).
  */
 export function timeLeft(
   row: Pick<CaseRow, "next_due_at" | "first_response_at">,
@@ -74,8 +107,11 @@ export function timeLeft(
 ): string | null {
   if (!row.next_due_at) return null;
   const what = row.first_response_at ? "Resolver" : "Responder";
+  const due = deadline(row.next_due_at);
   const left = new Date(row.next_due_at).getTime() - now;
-  return left >= 0 ? `${what}: quedan ${span(left)}` : `${what}: atrasado por ${span(-left)}`;
+  if (left < 0) return `${what}: atrasado por ${span(-left)} (plazo: ${due})`;
+  if (left < 86_400_000) return `${what}: quedan ${span(left)} (plazo: ${due})`;
+  return `${what}: a más tardar ${due}`;
 }
 
 /** What each timeline entry says. */

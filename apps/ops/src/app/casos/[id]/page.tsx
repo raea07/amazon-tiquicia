@@ -15,11 +15,12 @@ import {
   ReopenCaseForm,
 } from "@/components/case-forms";
 import {
-  CASE_CHANNEL,
+  CASE_CHANNEL_IN_SENTENCE,
   CASE_CLOCK,
   CASE_KIND,
   CASE_ROLES,
   caseTopic,
+  deadline,
   entryLabel,
   timeLeft,
 } from "@/lib/case-labels";
@@ -76,20 +77,20 @@ async function Case({ params }: Pick<PageProps<"/casos/[id]">, "params">) {
             <Badge tone={clock.tone}>{clock.label}</Badge>
           </div>
           <p className="mt-1 text-ink-muted">
-            {caseTopic(item)} · llegó por {CASE_CHANNEL[item.channel] ?? item.channel} el{" "}
-            {formatDateTime(item.created_at)}
+            {caseTopic(item)} · llegó por {CASE_CHANNEL_IN_SENTENCE[item.channel] ?? item.channel}{" "}
+            el {formatDateTime(item.created_at)}
           </p>
-          {left && item.next_due_at ? (
+          {left ? (
             <p className={item.clock === "overdue" ? "mt-1 font-semibold text-danger" : "mt-1"}>
-              {left} (plazo: {formatDateTime(item.next_due_at)})
+              {left}
             </p>
           ) : null}
           <p className="mt-1 text-sm text-ink-muted">
-            Primera respuesta antes de {formatDateTime(item.first_response_due_at)}
+            Primera respuesta a más tardar {deadline(item.first_response_due_at)}
             {item.first_response_at
               ? ` (respondido ${formatDateTime(item.first_response_at)})`
               : ""}
-            {" · "}resolver antes de {formatDateTime(item.due_at)}
+            {" · "}resolver a más tardar {deadline(item.due_at)}
           </p>
           <p className="mt-1 text-sm">
             {item.assignee

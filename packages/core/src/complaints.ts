@@ -78,13 +78,13 @@ export function checkComplaint(form: {
   };
 }
 
-/** What the form says once the complaint is filed; the dates come formatted. */
-export function complaintFiledText(receipt: {
-  reference: string;
-  acknowledgeBy: string;
-  answerBy: string;
-}): string {
-  return `Recibimos su reclamo ${receipt.reference}. Le confirmamos que lo estamos revisando a más tardar el ${receipt.acknowledgeBy} y le respondemos por escrito a más tardar el ${receipt.answerBy}. La respuesta queda en su cuenta, en «Sus consultas».`;
+/**
+ * What the form says once the complaint is filed, the date formatted. This
+ * message, with its reference, is the acknowledgement the promise speaks of
+ * (no second one follows), so it gives only the date of the written answer.
+ */
+export function complaintFiledText(receipt: { reference: string; answerBy: string }): string {
+  return `Recibimos su reclamo ${receipt.reference}. Este mensaje es la confirmación; guarde el número de referencia. Le respondemos por escrito a más tardar el ${receipt.answerBy}, y la respuesta queda en su cuenta, en «Sus consultas».`;
 }
 
 /** A case as the shopper names it. */

@@ -77,7 +77,6 @@ export default function ComplaintScreen() {
       setResult({
         ok: complaintFiledText({
           reference: receipt.reference,
-          acknowledgeBy: formatDate(receipt.acknowledge_by),
           answerBy: formatDate(receipt.answer_by),
         }),
       });

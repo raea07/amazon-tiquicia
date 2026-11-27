@@ -35,9 +35,9 @@ export function CaseList({ cases, now }: { cases: CaseRow[]; now: number }) {
               {item.order_number ? ` · pedido ${item.order_number}` : ""} ·{" "}
               {CASE_CHANNEL[item.channel] ?? item.channel} · {formatDateTime(item.created_at)}
             </p>
-            {left && item.next_due_at ? (
+            {left ? (
               <p className={item.clock === "overdue" ? "mt-1 font-semibold text-danger" : "mt-1"}>
-                {left} (plazo: {formatDateTime(item.next_due_at)})
+                {left}
               </p>
             ) : null}
             <p className="mt-1 text-ink-muted">

@@ -72,14 +72,15 @@ describe("checkComplaint", () => {
 });
 
 describe("complaintFiledText", () => {
-  it("gives the reference and both dates", () => {
+  it("is the acknowledgement: the reference and the date of the written answer", () => {
     const text = complaintFiledText({
       reference: "0D3DE240",
-      acknowledgeBy: "lunes 30 de noviembre",
       answerBy: "lunes 7 de diciembre",
     });
     expect(text).toContain("0D3DE240");
-    expect(text).toContain("a más tardar el lunes 30 de noviembre");
+    expect(text).toContain("Este mensaje es la confirmación");
     expect(text).toContain("a más tardar el lunes 7 de diciembre");
+    // No second confirmation is promised.
+    expect(text.match(/a más tardar/g)).toHaveLength(1);
   });
 });

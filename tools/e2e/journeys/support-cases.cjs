@@ -136,8 +136,9 @@ function sql(statement) {
   const reference = /reclamo ([0-9A-F]{8})/.exec(filedText)?.[1] ?? "";
   check(reference.length === 8, `the shopper reads the reference (${reference})`);
   check(
-    (filedText.match(/a más tardar el/g) ?? []).length === 2,
-    "and the dates of the acknowledgement and of the written answer",
+    filedText.includes("Este mensaje es la confirmación") &&
+      (filedText.match(/a más tardar el/g) ?? []).length === 1,
+    "the message is the acknowledgement, with the date of the written answer",
   );
   await shopper.screenshot({ path: SHOTS + "/sc2-complaint-filed.png", fullPage: true });
   const caseId =
@@ -152,7 +153,8 @@ function sql(statement) {
   const list = await text(support.locator('[data-testid="case-list"]'));
   check(list.includes(`pedido ${orderNumber}`) && list.includes("María"), "Casos lists the case");
   check(
-    /A tiempo|Vence pronto|Atrasado/.test(list) && /Responder: (quedan|atrasado por)/.test(list),
+    /A tiempo|Vence pronto|Atrasado/.test(list) &&
+      /Responder: (quedan|atrasado por|a más tardar)/.test(list),
     "with its clock in words and the time left",
   );
   await fits(support, "Casos");

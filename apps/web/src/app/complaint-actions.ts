@@ -43,7 +43,6 @@ export async function fileComplaint(
     const receipt = await api.myComplaintReceipt(complaintId);
     return complaintFiledText({
       reference: receipt.reference,
-      acknowledgeBy: formatDate(receipt.acknowledge_by),
       answerBy: formatDate(receipt.answer_by),
     });
   }, values);

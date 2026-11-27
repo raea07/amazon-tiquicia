@@ -130,7 +130,11 @@ async function as(email) {
   log("   filed:", filed);
   const reference = /reclamo ([0-9A-F]{8})/.exec(filed)?.[1] ?? "";
   check(reference.length === 8, `the shopper reads the reference (${reference})`);
-  check((filed.match(/a más tardar el/g) ?? []).length === 2, "and both promised dates");
+  check(
+    filed.includes("Este mensaje es la confirmación") &&
+      (filed.match(/a más tardar el/g) ?? []).length === 1,
+    "the message is the acknowledgement, with the date of the written answer",
+  );
   await page.screenshot({ path: `${SHOTS}/native-complaint-2-filed.png`, fullPage: true });
 
   // ── 3. Support answers; the shopper reads it ──────────────────────────────

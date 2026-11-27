@@ -104,8 +104,14 @@ async function Report({ searchParams }: Pick<PageProps<"/casos/informe">, "searc
           <Stat label="Casos del mes" value={report.total} />
           <Stat
             label="Contactos por cada 100 pedidos"
-            value={report.orders === 0 ? "—" : ((contacts / report.orders) * 100).toFixed(1)}
-            hint={`${contacts} contactos y ${report.orders} pedidos`}
+            value={
+              report.orders === 0
+                ? "—"
+                : new Intl.NumberFormat("es-CR", { maximumFractionDigits: 1 }).format(
+                    (contacts / report.orders) * 100,
+                  )
+            }
+            hint={`${contacts} ${contacts === 1 ? "contacto" : "contactos"} y ${report.orders} ${report.orders === 1 ? "pedido" : "pedidos"}`}
           />
           <Stat
             label="Primera respuesta a tiempo"
@@ -113,13 +119,13 @@ async function Report({ searchParams }: Pick<PageProps<"/casos/informe">, "searc
             hint={`${report.first_response.on_time} de ${report.first_response.answered} respondidos; ${report.first_response.late_unanswered} sin responder y atrasados`}
           />
           <Stat
-            label="Tiempo medio de primera respuesta"
+            label="Mediana de la primera respuesta"
             value={
               report.first_response.median_minutes === null
                 ? "—"
                 : span(report.first_response.median_minutes * 60_000)
             }
-            hint="La mediana: la mitad se respondió antes"
+            hint="La mitad de los casos se respondió antes"
           />
           <Stat
             label="Reclamos respondidos en 5 días hábiles"

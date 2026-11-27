@@ -115,7 +115,7 @@ describe.skipIf(!db.enabled)("support cases contract (against a seeded database)
       "Le enviamos la factura a su correo. Damos el reclamo por resuelto.",
       true,
     );
-    expect(closed.status).toBe("closed");
+    expect(closed?.status).toBe("closed");
     expect((await staff.opsCase(row.id)).entries.map((entry) => entry.kind)).toEqual([
       "opened",
       "note",
@@ -144,6 +144,7 @@ describe.skipIf(!db.enabled)("support cases contract (against a seeded database)
       summary: "Preguntó por WhatsApp cómo pagar con SINPE Móvil.",
       userId: shopperId,
     });
+    if (!caseId) throw new Error("the contact was refused");
     const detail = await staff.opsCase(caseId);
     expect(detail.kind).toBe("contact");
     expect(detail.channel).toBe("whatsapp");
