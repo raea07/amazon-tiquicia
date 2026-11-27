@@ -527,6 +527,43 @@ How the new parts work, in short:
 
 ## How it was checked
 
+**Wave 9 joined with stage 1 of the rebuild, on a development machine on
+27 November 2026** (lane 16 of `tools/dev/stack.sh`), all run after the last
+change to code; only Markdown changed after the journeys. Not run: anything on
+the hosted project, against real Sentry, on Vercel or on a phone.
+
+- **What the join changed**: wave 9's decisions are numbered 61 to 68, after
+  the main line's 59 and 60. Wave 9's status words come from the one module
+  (`packages/core/src/status-words.ts`): a case reads «Por responder»,
+  «En revisión» once answered, «Respondido» once closed, and «Vence pronto»
+  or «Atrasado» near or past its due time (before: «A tiempo», «En curso»,
+  «Resuelto», «Cerrado»); the customer view and a case's order read the
+  staff words of an order, a return and a complaint; a stopped parcel's
+  history reads «Paquete: no salió de la bodega». The five browser journeys
+  and two native journeys of wave 9 find things through the helpers, by
+  role, name or test id. The global error page draws the website's lockup
+  and theme colour.
+- **Lint and types**: no lint errors (192 warnings and 257 notes, of kinds
+  already there); no type errors in the 20 typecheck tasks.
+- **Unit tests**: 1930 pass in 16 packages, without a database.
+- **Database tests**: 49 files pass on PostgreSQL 16 (47 migrations), with
+  the stack down.
+- **API contract tests**: 246 tests in 43 files (38 contract files) pass,
+  twice in a row on the same database.
+- **Browser journeys**: all 35 ran in one run with the tracker off; 34 passed.
+  `system-health` stopped once at its data step («the seed has a document
+  Hacienda accepted», before any screen of its own), then passed alone.
+  `node tools/e2e/selectors.mjs --check` and `node tools/e2e/check-words.cjs`
+  pass with no ceiling raised; `touch-targets.cjs`: no control under 44 px;
+  `compare.mjs`: every row has its pair.
+- **Native journeys**: all 19 pass through the web export; the native
+  guards and the test-id lists pass.
+- **Error reports with the stand-in tracker**: `error-reports` passed once with
+  `ERROR_TRACKER=standin`: 5 or 6 reports from each website and 3 from the
+  support desk pages, 27 envelopes in all, none carrying a forbidden word.
+- **Races**: not run again. The only SQL change of the join is the decision
+  number in two comments of `084700`.
+
 **Wave 9, on a development machine on 27 November 2026**, after the four
 streams were merged, their cross-stream work done and the five findings of
 an outside review of the merged whole fixed (lane 16 of
@@ -1051,6 +1088,17 @@ blocks the pilot, and "Before launch" blocks a public launch. The list of 24 Nov
 (from the strategy pack) is filed into these groups; its item "record D1 and
 D2 in the decisions and the Android release in the store documents" is done
 (decisions 56 to 58; "What needs you", item 11).
+
+- **Wave 9's pages in the Carreta look.** Casos, a case, the customer
+  view, Salud del sistema and Versiones still use today's components and
+  names (SISTEMA.md §8.2): three new `<details>` (Salud's two, an order's
+  «Registrar un contacto»), the pill navigation of Casos with a raw colour
+  and hand-written 44 px heights, and five new components in `apps/ops`
+  (`case-forms`, `case-list`, `cases-nav`, `order-cases`,
+  `store-build-form`). They move in stage 4 with the rest of the console;
+  the shop's complaint form and «Sus consultas» move in stage 2. The ratchet
+  counts of `web`, `ops` and `shop-native` were raised by what these pages
+  measure.
 
 **Decided on 24 and 27 November 2026, not built**
 
