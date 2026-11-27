@@ -1,3 +1,4 @@
+import { formatNumber } from "@yuntera/core";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
 import { EmptyState, Skeleton } from "@yuntera/ui";
@@ -42,7 +43,7 @@ async function Cases({ searchParams }: Pick<PageProps<"/casos">, "searchParams">
       />
       <p className="mb-4 text-sm text-ink-muted">
         {page.total > page.cases.length
-          ? `${page.cases.length} de ${page.total.toLocaleString("es-CR")}${closed ? ", los más recientes primero" : ", los más antiguos primero"}`
+          ? `${page.cases.length} de ${formatNumber(page.total)}${closed ? ", los más recientes primero" : ", los más antiguos primero"}`
           : `${page.total} ${closed ? (page.total === 1 ? "cerrado" : "cerrados") : page.total === 1 ? "abierto" : "abiertos"}`}
         . Para registrar un contacto que llegó por WhatsApp, teléfono o correo, abra el pedido o el
         caso del cliente y use «Registrar un contacto».

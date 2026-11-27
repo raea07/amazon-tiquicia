@@ -1,4 +1,4 @@
-import { toCostaRicaTime } from "@yuntera/core";
+import { formatNumber, toCostaRicaTime } from "@yuntera/core";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader, Stat } from "@yuntera/next-kit/shell";
 import { Skeleton, touchLinkClass } from "@yuntera/ui";
@@ -107,9 +107,7 @@ async function Report({ searchParams }: Pick<PageProps<"/casos/informe">, "searc
             value={
               report.orders === 0
                 ? "—"
-                : new Intl.NumberFormat("es-CR", { maximumFractionDigits: 1 }).format(
-                    (contacts / report.orders) * 100,
-                  )
+                : formatNumber((contacts / report.orders) * 100, { maxDecimals: 1 })
             }
             hint={`${contacts} ${contacts === 1 ? "contacto" : "contactos"} y ${report.orders} ${report.orders === 1 ? "pedido" : "pedidos"}`}
           />
