@@ -51,7 +51,7 @@ its own entry, not something that happens by drift.
 | 42  | [Brands are deleted only when nothing names them; product pages refuse what is not on sale](#42-brands-are-deleted-only-when-nothing-names-them-product-pages-refuse-what-is-not-on-sale-at-the-helper)                    | Built; applied to the preview            |
 | 43  | [Order follow-ups: the delivery fee, stopping a packed parcel, an order that never moves back](#43-order-follow-ups-the-delivery-fee-when-nobody-went-to-the-door-stopping-a-packed-parcel-an-order-that-never-moves-back) | Built; not on the preview yet            |
 | 44  | [Warehouse stock: free units, moves the shop never sees, counts only onto shelves](#44-warehouse-stock-what-is-free-moves-that-the-shop-never-sees-counts-only-onto-shelves)                                               | Built; not on the preview yet            |
-| 45  | [Android builds of the shopper app go to the internal testers without a click](#45-android-builds-of-the-shopper-app-go-to-the-internal-testers-without-a-click)                                                           | Decided; settings not changed yet        |
+| 45  | [Android builds of the shopper app go to the internal testers without a click](#45-android-builds-of-the-shopper-app-go-to-the-internal-testers-without-a-click)                                                           | Decided; in force since 24 November 2026 |
 | 46  | [Product rows written only when the summary changes; one lock order for stock, orders and shelves](#46-product-rows-written-only-when-the-summary-changes-one-lock-order-for-stock-orders-and-shelves)                     | Built; not on the preview yet            |
 | 47  | [Counting a product a location does not list is its own function](#47-counting-a-product-a-location-does-not-list-is-its-own-function)                                                                                     |
 | 48  | [Refunds booked together are announced once; "refund arrived" waits for the last](#48-refunds-booked-together-are-announced-once-refund-arrived-waits-for-the-last)                                                        |
@@ -61,6 +61,10 @@ its own entry, not something that happens by drift.
 | 52  | [Shelf rows left at 0 units stay](#52-shelf-rows-left-at-0-units-stay)                                                                                                                                                     |
 | 53  | [A cancelled order says why from the reasons the database writes; staff's note stays internal](#53-a-cancelled-order-says-why-from-the-reasons-the-database-writes-staffs-note-stays-internal)                             |
 | 54  | [Back links and short links are 44 px tall without moving the layout](#54-back-links-and-short-links-are-44-px-tall-without-moving-the-layout)                                                                             |
+| 55  | [A cart line names its product even when its offer is paused](#55-a-cart-line-names-its-product-even-when-its-offer-is-paused)                                                                                             |
+| 56  | [Support and system tools live inside the staff console](#56-support-and-system-tools-live-inside-the-staff-console)                                                                                                       | Decided; not built                       |
+| 57  | [Error and outage alerts go through the existing Sentry account, with personal data removed](#57-error-and-outage-alerts-go-through-the-existing-sentry-account-with-personal-data-removed)                                | Decided; not built                       |
+| 58  | [The look is Carreta, added beside today's names and switched app by app](#58-the-look-is-carreta-added-beside-todays-names-and-switched-app-by-app)                                                                       | Decided; not built                       |
 
 ---
 
@@ -1633,6 +1637,15 @@ settings (`apps/shop-native/eas.json`, the app configuration, identifiers,
 permissions and native modules) are not changed by this record. They change
 when the first release has been made.
 
+**Since then.** The owner made the first release on 23 November 2026. On
+24 November 2026 the production profile of `apps/shop-native/eas.json` was
+set to send Android builds as completed releases (`releaseStatus:
+completed`); nothing else changed. Not verified: whether Google accepts a
+completed release before it has reviewed the app. If it refuses with "Only
+releases with status draft may be created on draft app", the same build is
+sent again as a draft and the owner starts its rollout
+([store testing](../07-deployment/store-testing.md), Part 1, step 7).
+
 ## 46. Product rows written only when the summary changes; one lock order for stock, orders and shelves
 
 **Context.** Every stock write refreshed the product's listing summary, so
@@ -1869,3 +1882,83 @@ and the `717048f` web shop read the answer as before (suite 177 and
 
 **Consequences.** A shopper learns nothing new: the product page of a
 public product shows the same name and photo.
+
+## 56. Support and system tools live inside the staff console
+
+**Context.** The console already has a queue of returns, complaints and
+content reports, the staff order page, order search and a page of stuck
+messages, but no support desk for cases, nothing that shows the health of
+the system and nothing that shows which version runs where. The research of
+24 November 2026
+([support and system health tools](../research/support-and-system-health-tools.md))
+compared separate apps with areas in the console.
+
+**Decision.** The owner's decision of 24 November 2026 (D1 in
+[owner decisions](../00-strategy/owner-decisions.md)): no separate apps. A
+support desk for cases, and screens for system health and versions for the
+person who looks after IT and quality, are areas of the staff console
+(`apps/ops`). WhatsApp conversations stay in the WhatsApp Business app for
+now.
+
+**Consequences.** They use the console's sign-in, staff roles, second
+factor and audit, and every read and write goes through database functions
+like the rest of the console. Nothing new is deployed for them. Their
+functions, tests and screens are still to be written.
+
+**Not verified.** Nothing: decided, not built.
+
+## 57. Error and outage alerts go through the existing Sentry account, with personal data removed
+
+**Context.** No error tracking, uptime check or alert is installed: a
+failure is seen only when someone opens the page that shows it. The research
+of 24 November 2026 found free plans enough for a team of one.
+
+**Decision.** The owner's decision of 24 November 2026 (D2 and D50 in
+[owner decisions](../00-strategy/owner-decisions.md)): error and outage
+alerts go through the owner's existing Sentry account on its free plan.
+Only projects named after this product are created there. Names, phones,
+e-mails, addresses and the delivery code are removed before anything is
+sent. The apps hold only the public key (DSN); no upload token is in the
+repository. Alerts arrive by e-mail. The websites come first; the phone
+apps get it with store version 0.2.0, because it is a native module.
+
+**Consequences.** The removal of personal data is code that needs its own
+tests (an event with a name, a phone, an e-mail, an address or a delivery
+code must leave without them). Source maps are uploaded by a token kept
+outside the repository. The phone apps need a new store build before they
+report anything. The free plan's limits (5,000 errors a month, one user)
+are enough until a second developer joins; the paid plan's price is in the
+research.
+
+**Not verified.** Nothing: decided, not built. Whether the free plan's
+limits hold at pilot volume is an estimate.
+
+## 58. The look is Carreta, added beside today's names and switched app by app
+
+**Context.** The apps use the look of the first brand book. On 24 and
+27 November 2026 the owner reviewed the brand and chose a new look; the
+system was drawn for all eight apps, measured and independently checked
+([`docs/brand/system`](../brand/system/README.md)).
+
+**Decision.** The owner's decision of 24 and 27 November 2026: the direction
+"Carreta". Titles, prices and the delivery code in Epilogue; text in Fira
+Sans; no serif anywhere; the full achiote delivery strip; the Y mark
+unchanged. `docs/brand/system` is the source of truth (specification,
+tokens, fonts, logos and 46 reference pages). The migration adds first: a
+legacy layer keeps today's token names, each app switches on its own and
+counts its leftover legacy names down to 0, and the legacy layer is deleted
+last ([`SISTEMA.md`](../brand/system/SISTEMA.md) section 2.5).
+
+**Consequences.** Every screen of the eight apps changes. The phone apps
+need a new store build, because the fonts are bundled. The achiote strip
+sits near the error red and was not tested with shoppers, so status must
+keep its words and signs, never colour alone. The strip's sentence must be
+computed from the delivery promise (`packages/core/src/promise.ts`), so that
+"mañana" is never shown when it is not true. The rebuild is planned in four
+stages: the foundation; the shopper website and app with English, then
+store version 0.2.0; the seller website and app; the staff console and the
+driver and warehouse apps.
+
+**Not verified.** Decided, not built: no app uses it yet. Not checked: the
+fonts on a real phone, screen readers, real mail programs and English
+screens.
