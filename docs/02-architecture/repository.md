@@ -157,6 +157,11 @@ Run from the repository root. Requires Node 22 or later and pnpm 10.
 | `tools/dev/stack.sh native [lane]`     | Export the native apps for the web and serve them on the lane's app ports + 10–13                         |
 | `tools/dev/stack.sh native-e2e [lane]` | Run the native journeys against those exports                                                             |
 
+Every lane's ports lie inside the kernel's range of temporary ports for
+outgoing connections, so a server of the stack can find its port held for a
+moment ("listen EADDRINUSE"). `stack.sh` then starts that server again, up to
+4 more times 2 seconds apart, and prints one line saying so.
+
 Loose end: the root script `db:types` points at
 `supabase/scripts/gen-types.sh`, which does not exist. The typed client in
 `packages/db` is hand-written against the function payloads and checked by the

@@ -38,6 +38,11 @@
 # (which resets that lane's database), and leaves them alone if it is.
 # `native-e2e` runs tools/native-e2e/journeys against those exports. `down`
 # stops them with everything else.
+#
+# Every port above lies inside the kernel's range of temporary ports for
+# outgoing connections, so a server can find its port held for a moment
+# ("listen EADDRINUSE"). When a server dies before it answers, the script
+# starts it again, up to 4 more times 2 seconds apart, and says so in one line.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -122,9 +127,30 @@ export INVOICE_FUNCTIONS_URL=http://127.0.0.1:$INVOICE_FUNCTIONS_PORT
 ENV
 }
 
-wait_for() { # url, seconds
+# How each service was started, so wait_for can start it again.
+declare -A START_DIR=() START_CMD=()
+
+wait_for() { # url, seconds[, service name started with `start`]
+  local name="${3:-}" tries=0 pid reason
   for _ in $(seq 1 "$2"); do
     curl -sf -o /dev/null "$1" && return 0
+    # A server that died before answering (most often because a temporary
+    # outgoing connection held its port: "listen EADDRINUSE") is started again.
+    if [ -n "$name" ] && [ -e "$STATE/$name.pid" ]; then
+      pid="$(cat "$STATE/$name.pid")"
+      if ! kill -0 "$pid" 2>/dev/null || grep -q EADDRINUSE "$STATE/$name.log" 2>/dev/null; then
+        if [ "$tries" -lt 4 ]; then
+          tries=$((tries + 1))
+          reason="it stopped"
+          grep -q EADDRINUSE "$STATE/$name.log" 2>/dev/null && reason="its port was taken for a moment"
+          echo "lane $LANE: $name did not start ($reason); starting it again ($tries of 4)" >&2
+          kill -- "-$pid" 2>/dev/null || true
+          sleep 2
+          eval "start $(printf '%q %q' "$name" "${START_DIR[$name]}") ${START_CMD[$name]}"
+          continue
+        fi
+      fi
+    fi
     sleep 1
   done
   echo "Timed out waiting for $1" >&2
@@ -145,6 +171,7 @@ stop_all() {
 start() { # name, working dir, command…
   local name="$1" dir="$2"; shift 2
   mkdir -p "$STATE"
+  START_DIR[$name]="$dir"; START_CMD[$name]="$(printf '%q ' "$@")"
   # Detached from this script's terminal and pipes, so the script can return
   # while the service keeps running; `setsid` gives it its own process group.
   ( cd "$dir" && exec setsid nohup "$@" ) > "$STATE/$name.log" 2>&1 < /dev/null &
@@ -157,7 +184,7 @@ start_api() {
   bash "$ROOT/supabase/scripts/local-db.sh" reset > "$STATE/db.log" 2>&1 || {
     cat "$STATE/db.log" >&2; exit 1; }
   start api "$ROOT/tools/dev-api" pnpm exec tsx src/server.ts
-  wait_for "$API_URL/auth/v1/.well-known/jwks.json" 40
+  wait_for "$API_URL/auth/v1/.well-known/jwks.json" 40 api
   echo "lane $LANE: database $DB_NAME, API $API_URL"
 }
 
@@ -172,9 +199,9 @@ start_notify() {
   start fake "$ROOT/tools/dev-notify" pnpm exec tsx src/fake-providers.ts
   start fakepay "$ROOT/tools/dev-notify" pnpm exec tsx src/fake-pay.ts
   start functions "$ROOT/tools/dev-notify" pnpm exec tsx src/functions-host.ts
-  wait_for "$FAKE_PROVIDERS_URL/_fake/messages" 40
-  wait_for "$FAKE_PAY_URL/_fake/health" 40
-  wait_for "$FUNCTIONS_URL/health" 40
+  wait_for "$FAKE_PROVIDERS_URL/_fake/messages" 40 fake
+  wait_for "$FAKE_PAY_URL/_fake/health" 40 fakepay
+  wait_for "$FUNCTIONS_URL/health" 40 functions
   echo "lane $LANE: functions $FUNCTIONS_URL, fake providers $FAKE_PROVIDERS_URL, fake gateway $FAKE_PAY_URL"
 }
 
@@ -188,8 +215,8 @@ start_invoicing() {
   done
   start hacienda "$ROOT/tools/dev-hacienda" pnpm exec tsx src/fake-hacienda.ts
   start invoicing "$ROOT/tools/dev-hacienda" pnpm exec tsx src/functions-host.ts
-  wait_for "$HACIENDA_FAKE_URL/_fake/documents" 40
-  wait_for "$INVOICE_FUNCTIONS_URL/health" 40
+  wait_for "$HACIENDA_FAKE_URL/_fake/documents" 40 hacienda
+  wait_for "$INVOICE_FUNCTIONS_URL/health" 40 invoicing
   echo "lane $LANE: invoicing $INVOICE_FUNCTIONS_URL, fake Hacienda $HACIENDA_FAKE_URL"
 }
 
@@ -238,7 +265,7 @@ case "$COMMAND" in
     done
     for app in "${APPS[@]}"; do
       [ -d "$ROOT/apps/$app" ] || continue
-      wait_for "http://127.0.0.1:$(app_port "$app")/ingresar" 60
+      wait_for "http://127.0.0.1:$(app_port "$app")/ingresar" 60 "$app"
       echo "lane $LANE: $app on http://127.0.0.1:$(app_port "$app")"
     done
     start_notify
@@ -284,7 +311,7 @@ case "$COMMAND" in
       # No cipher of our own may reach a bundle (decisions.md §18).
       node "$ROOT/packages/expo-kit/scripts/scan-bundles.mjs" "$STATE/native/$app"
       start "native-$app" "$ROOT" node tools/native-e2e/serve.mjs "$STATE/native/$app" "$(native_port "$app")"
-      wait_for "http://127.0.0.1:$(native_port "$app")/" 20
+      wait_for "http://127.0.0.1:$(native_port "$app")/" 20 "native-$app"
       echo "lane $LANE: $app-native (web export) on http://127.0.0.1:$(native_port "$app")"
     done
     ;;
