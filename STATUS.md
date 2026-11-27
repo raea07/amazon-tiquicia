@@ -1668,9 +1668,9 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     same last units at the same moment, one of them can be told "nothing was
     saved, try again". The loser's change rolls back whole; nothing is
     half-written, and no round of any run ever left a wrong stock, a wrong
-    listing or wrong money. For example, a staff cancellation that meets a
-    checkout on the same products failed and needed a second try in 1 to 11
-    of 100 natural rounds. The ranges below are what was seen so far over
+    listing or wrong money. For example, when a staff cancellation meets a
+    checkout on the same products, one of the two failed and needed a second
+    try in 1 to 11 of 100 natural rounds. The ranges below are what was seen so far over
     five full runs of `tools/races` (100 natural and 100 forced rounds each,
     on a local lane of a shared machine) at the final lock order; a single
     run can fall outside them. The five runs: an outside check at

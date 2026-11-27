@@ -43,6 +43,9 @@
 # outgoing connections, so a server can find its port held for a moment
 # ("listen EADDRINUSE"). When a server dies before it answers, the script
 # starts it again, up to 4 more times 2 seconds apart, and says so in one line.
+# If a command still fails, it stops every service it had started before it
+# exits, so a failed `up` or `api` leaves nothing of the lane running, and a
+# failed `native` leaves running only what was running before it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -131,9 +134,10 @@ ENV
 declare -A START_DIR=() START_CMD=()
 
 wait_for() { # url, seconds[, service name started with `start`]
-  local name="${3:-}" tries=0 pid reason
+  local name="${3:-}" tries=0 pid reason port
+  port="${1#http://127.0.0.1:}"; port="${port%%/*}"
   for _ in $(seq 1 "$2"); do
-    curl -sf -o /dev/null "$1" && return 0
+    curl -sf -m 2 -o /dev/null "$1" && return 0
     # A server that died before answering (most often because a temporary
     # outgoing connection held its port: "listen EADDRINUSE") is started again.
     if [ -n "$name" ] && [ -e "$STATE/$name.pid" ]; then
@@ -142,7 +146,7 @@ wait_for() { # url, seconds[, service name started with `start`]
         if [ "$tries" -lt 4 ]; then
           tries=$((tries + 1))
           reason="it stopped"
-          grep -q EADDRINUSE "$STATE/$name.log" 2>/dev/null && reason="its port was taken for a moment"
+          grep -q EADDRINUSE "$STATE/$name.log" 2>/dev/null && reason="port $port was in use"
           echo "lane $LANE: $name did not start ($reason); starting it again ($tries of 4)" >&2
           kill -- "-$pid" 2>/dev/null || true
           sleep 2
@@ -153,7 +157,11 @@ wait_for() { # url, seconds[, service name started with `start`]
     fi
     sleep 1
   done
-  echo "Timed out waiting for $1" >&2
+  if [ -n "$name" ] && grep -q EADDRINUSE "$STATE/$name.log" 2>/dev/null; then
+    echo "lane $LANE: $name could not listen on port $port (still in use after 4 tries)" >&2
+  else
+    echo "lane $LANE: timed out waiting for $1" >&2
+  fi
   return 1
 }
 
@@ -168,10 +176,25 @@ stop_all() {
   done
 }
 
+# Services this run started; if the run fails, the trap below stops them.
+STARTED=()
+stop_started() {
+  local status=$?
+  [ "$status" -ne 0 ] && [ ${#STARTED[@]} -gt 0 ] || return 0
+  for name in "${STARTED[@]}"; do
+    [ -e "$STATE/$name.pid" ] || continue
+    kill -- "-$(cat "$STATE/$name.pid")" 2>/dev/null || kill "$(cat "$STATE/$name.pid")" 2>/dev/null || true
+    rm -f "$STATE/$name.pid"
+  done
+  echo "lane $LANE: failed; stopped what this run had started" >&2
+}
+trap stop_started EXIT
+
 start() { # name, working dir, command…
   local name="$1" dir="$2"; shift 2
   mkdir -p "$STATE"
   START_DIR[$name]="$dir"; START_CMD[$name]="$(printf '%q ' "$@")"
+  STARTED+=("$name")
   # Detached from this script's terminal and pipes, so the script can return
   # while the service keeps running; `setsid` gives it its own process group.
   ( cd "$dir" && exec setsid nohup "$@" ) > "$STATE/$name.log" 2>&1 < /dev/null &

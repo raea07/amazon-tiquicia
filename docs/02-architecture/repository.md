@@ -160,7 +160,11 @@ Run from the repository root. Requires Node 22 or later and pnpm 10.
 Every lane's ports lie inside the kernel's range of temporary ports for
 outgoing connections, so a server of the stack can find its port held for a
 moment ("listen EADDRINUSE"). `stack.sh` then starts that server again, up to
-4 more times 2 seconds apart, and prints one line saying so.
+4 more times 2 seconds apart, and prints one line saying so. If the port is
+still in use after that, the last line names the port. A command that fails
+stops every service it had started, so a failed `up` or `api` leaves nothing
+of the lane running, and a failed `native` leaves running only what was
+running before it.
 
 Loose end: the root script `db:types` points at
 `supabase/scripts/gen-types.sh`, which does not exist. The typed client in
