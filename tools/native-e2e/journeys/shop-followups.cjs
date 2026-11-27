@@ -499,9 +499,12 @@ async function stoppedOrder(buyer) {
       !unavailable.includes("ninguna otra tienda lo vende"),
       "the line never says nobody else sells it while that is unknown",
     );
+    // Its only line cannot be bought: the summary says what to do (change
+    // or remove it), and the bottom bar adds nothing, as on the website.
     check(
-      (await flat(visible("cart-blocked"))).startsWith("Cambie o quite"),
-      "the footer still offers to change the line",
+      (await flat(visible("cart-nothing-to-buy"))).includes("Cambie cada producto") &&
+        (await page.getByTestId("cart-blocked").count()) === 0,
+      "the summary still offers to change the line",
     );
     await noSideways("cart, alternatives unread");
     await shot("06-cart-alternatives-unread");

@@ -328,10 +328,11 @@ async function as(email) {
     `the line says the offer is no longer on sale and who else sells it at ${tecnoPrice}`,
   );
   check(/Llega (el|entre el) /.test(proposal), "and when TecnoCasa's offer would arrive");
+  // The cart's only line cannot be bought: the summary says to change or
+  // remove it, and there is no way on to the checkout.
   check(
-    (await flat(visible("cart-blocked"))).startsWith(
-      "Cambie o quite los productos que ya no están disponibles para continuar.",
-    ) && (await page.getByTestId("cart-continue").count()) === 0,
+    (await flat(visible("cart-nothing-to-buy"))).includes("Cambie cada producto") &&
+      (await page.getByTestId("cart-continue").count()) === 0,
     "the checkout waits until the line is changed or removed",
   );
   const before = await page.evaluate(() => localStorage.getItem("yt_cart"));
