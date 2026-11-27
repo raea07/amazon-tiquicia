@@ -142,19 +142,19 @@
     {
       "shot": "sl5-logo-review.png",
       "template": "T8",
-      "reference": "logotipos.html",
+      "reference": "central-catalogo.html",
       "width": 1280
     },
     {
       "shot": "sl5b-logo-review-390.png",
       "template": "T8",
-      "reference": "logotipos.html",
+      "reference": "central-catalogo.html",
       "width": 390
     },
     {
       "shot": "cc8b-mobile-logos.png",
       "template": "T8",
-      "reference": "logotipos.html",
+      "reference": "central-catalogo.html",
       "width": 390
     },
     {

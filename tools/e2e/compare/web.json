@@ -95,7 +95,7 @@
       "shot": "cr4-cart-nothing-to-buy.png",
       "template": "T4",
       "reference": "carrito.html",
-      "width": 1280
+      "width": 390
     },
     {
       "shot": "05-checkout.png",
@@ -185,7 +185,7 @@
       "shot": "l6-report-refused.png",
       "template": "T12",
       "reference": "zona.html",
-      "width": 1280
+      "width": 390
     },
     {
       "shot": "wf01-sign-in-limit.png",
@@ -197,13 +197,13 @@
       "shot": "r1-requested.png",
       "template": "T13",
       "reference": "ingresar.html",
-      "width": 1280
+      "width": 390
     },
     {
       "shot": "d2-delete.png",
       "template": "T14",
       "reference": "confirmar.html",
-      "width": 1280
+      "width": 390
     },
     {
       "shot": "sc1-not-found-mobile.png",

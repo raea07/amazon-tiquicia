@@ -107,13 +107,13 @@
       "shot": "l1-team-invited.png",
       "template": "T11",
       "reference": "vende-invitaciones.html",
-      "width": 1280
+      "width": 390
     },
     {
       "shot": "l2-invitation.png",
       "template": "T8",
       "reference": "vende-invitaciones.html",
-      "width": 1280
+      "width": 390
     },
     {
       "shot": "n08-seller-settings-phone.png",

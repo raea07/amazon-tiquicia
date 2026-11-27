@@ -13,6 +13,10 @@
 // The rows live in tools/e2e/compare/<app>.json: { shot, template, reference, width }.
 // `reference` is a page of docs/brand/system; its shot is `<page>-<width>.png`.
 // Each app's builder owns that app's json and looks at every pair.
+//
+// A journey shot whose pixel width is not the row's width is listed under
+// "width" and makes the script end with exit code 1: the row would pair it
+// with the reference drawn at the other width.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -69,6 +73,7 @@ for (const app of chosen) {
   mkdirSync(join(out, "img"), { recursive: true });
   let pairs = 0;
   const missing = [];
+  const widths = [];
   const blocks = rows.map((row) => {
     const refName = `${basename(row.reference, ".html")}-${row.width}.png`;
     const shotFile = join(shots, row.shot);
@@ -83,6 +88,10 @@ for (const app of chosen) {
       return `<td><p>${escapeHtml(name)}${size ? ` · ${size.width} × ${size.height}` : ""}</p><img src="img/${escapeHtml(`${label}-${name}`)}" alt="${escapeHtml(`${label}: ${name}`)}" loading="lazy"></td>`;
     };
     const journey = cell(shotFile, row.shot, "journey");
+    const shotSize = existsSync(shotFile) ? pngSize(shotFile) : null;
+    if (shotSize && shotSize.width !== row.width) {
+      widths.push(`${row.shot} is ${shotSize.width} px wide; its row says ${row.width}`);
+    }
     const drawn = cell(refFile, refName, "reference");
     if (existsSync(shotFile) && existsSync(refFile)) pairs += 1;
     return `<tr><th scope="row">${escapeHtml(row.template)}<br>${escapeHtml(row.reference)}<br>${row.width} px</th>${journey}${drawn}</tr>`;
@@ -101,6 +110,7 @@ td.none { color: #8a2a0a; }
 p { margin: 0 0 4px; }
 </style></head><body>
 <h1>${escapeHtml(app)}: ${pairs} of ${rows.length} pairs</h1>
+${widths.map((w) => `<p class="none">Width: ${escapeHtml(w)}</p>`).join("\n")}
 <p>Journey shots from ${escapeHtml(shots)}; reference shots from ${escapeHtml(reference)}.</p>
 <table><thead><tr><th scope="col">Template</th><th scope="col">Journey</th><th scope="col">Reference</th></tr></thead>
 <tbody>
@@ -111,4 +121,6 @@ ${blocks.join("\n")}
   writeFileSync(join(out, "index.html"), page);
   console.log(`${app}: ${pairs} of ${rows.length} pairs → ${join(out, "index.html")}`);
   for (const line of missing) console.log(`  missing ${line}`);
+  for (const line of widths) console.log(`  width: ${line}`);
+  if (widths.length > 0) process.exitCode = 1;
 }
