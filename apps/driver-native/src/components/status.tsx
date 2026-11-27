@@ -5,7 +5,7 @@ import { Alert, Button, Card, formatDateTime, PinIcon, Stack, Text } from "@yunt
 import { Platform, StyleSheet, View } from "react-native";
 import { type Tracking, useDriver } from "@/lib/driver";
 import type { ArrivePayload, FailPayload } from "@/lib/outbox";
-import { findStop, reasonTitle, STOP_LABEL, type ShownRoute } from "@/lib/route";
+import { findStop, reasonTitle, type ShownRoute, STOP_LABEL } from "@/lib/route";
 import { canOpenSettings, openSettings } from "@/lib/tracking";
 
 /** No signal: say what still works and what does not. */
