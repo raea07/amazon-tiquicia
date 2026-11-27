@@ -22,13 +22,18 @@
     "./product-image": "./src/product-image.tsx",
     "./shop-logo": "./src/shop-logo.tsx",
     "./fiscal-document": "./src/fiscal-document.tsx",
-    "./back-link": "./src/back-link.tsx"
+    "./back-link": "./src/back-link.tsx",
+    "./error-reports/client": "./src/error-reports/client.ts",
+    "./error-reports/server": "./src/error-reports/server.ts",
+    "./error-reports/pages": "./src/error-reports/pages.tsx",
+    "./error-reports/drill": "./src/error-reports/drill.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@sentry/nextjs": "11.12.0",
     "@yuntera/brand": "workspace:*",
     "@yuntera/core": "workspace:*",
     "@yuntera/db": "workspace:*",

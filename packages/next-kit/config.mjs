@@ -7,6 +7,8 @@
  * framework's compiler is running, so it cannot import TypeScript source.
  */
 
+import { execFileSync } from "node:child_process";
+
 /**
  * @typedef {object} AppSecurity
  * @property {boolean} [camera]       The app scans barcodes with the camera.
@@ -21,6 +23,83 @@
  * unless its public site key is set when the app is built.
  */
 export const CAPTCHA_ORIGIN = "https://challenges.cloudflare.com";
+
+/**
+ * Where the error tracker (Sentry) receives this app's reports, read from its
+ * public address, the DSN (`NEXT_PUBLIC_SENTRY_DSN`, set per website when it
+ * is built). The DSN is public by design: it only says where to send and
+ * holds no secret. An old-style DSN that carries a secret key, anything that
+ * is not http(s), and plain http to anything but this machine are refused, so
+ * the tracker then stays off (docs/07-deployment/error-tracking.md).
+ *
+ * Returns null when nothing usable is set: nothing is then started, loaded or
+ * sent, and the security headers do not mention the tracker.
+ *
+ * @param {string | undefined | null} dsn
+ * @returns {{ dsn: string, origin: string, projectId: string, connectSource: string } | null}
+ */
+export function errorTrackerIngest(dsn) {
+  if (!dsn || typeof dsn !== "string") return null;
+  /** @type {URL} */
+  let url;
+  try {
+    url = new URL(dsn.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const loopback = url.hostname === "127.0.0.1" || url.hostname === "localhost";
+  if (url.protocol === "http:" && !loopback) return null;
+  // The public key sits where a user name would; a password there is a secret.
+  if (!url.username || url.password) return null;
+  if (url.search || url.hash) return null;
+  const parts = url.pathname.split("/").filter(Boolean);
+  const projectId = parts.pop() ?? "";
+  if (!/^\d+$/.test(projectId)) return null;
+  const prefix = parts.length > 0 ? `/${parts.join("/")}` : "";
+  return {
+    dsn: url.href,
+    origin: url.origin,
+    projectId,
+    // The one address the browser posts reports to (the SDK adds its public
+    // key as a query, which a source expression does not look at).
+    connectSource: `${url.origin}${prefix}/api/${projectId}/envelope/`,
+  };
+}
+
+/**
+ * Which commit and which environment this build is, for the error reports
+ * (and anything else that wants to say which version is running). A commit is
+ * not a secret. On Vercel both come from the build's own settings; elsewhere
+ * the commit is asked of git, and the environment is "local" for the lanes'
+ * production builds (YUNTERA_LOCAL_RUN) or "development".
+ *
+ * @param {Record<string, string | undefined>} [env]
+ * @returns {{ commit: string, environment: string }}
+ */
+export function buildInfo(env = process.env) {
+  let commit = env.VERCEL_GIT_COMMIT_SHA || "";
+  if (!commit) {
+    try {
+      commit = execFileSync("git", ["rev-parse", "HEAD"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 5000,
+      }).trim();
+    } catch {
+      commit = "";
+    }
+  }
+  if (!/^[0-9a-f]{7,40}$/.test(commit)) commit = "unknown";
+  const vercel = env.VERCEL_ENV;
+  const environment =
+    vercel === "production" || vercel === "preview" || vercel === "development"
+      ? vercel
+      : env.YUNTERA_LOCAL_RUN === "1"
+        ? "local"
+        : "development";
+  return { commit, environment };
+}
 
 /**
  * Security headers applied to every response.
@@ -38,6 +117,10 @@ export function securityHeaders(options = {}) {
     .origin;
   const isDev = process.env.NODE_ENV !== "production";
   const captcha = process.env.NEXT_PUBLIC_AUTH_CAPTCHA_SITE_KEY ? ` ${CAPTCHA_ORIGIN}` : "";
+  // Error reports go from the browser to the tracker's one ingest address,
+  // and only when a tracker is configured for this build.
+  const tracker = errorTrackerIngest(process.env.NEXT_PUBLIC_SENTRY_DSN);
+  const reports = tracker ? ` ${tracker.connectSource}` : "";
 
   const csp = [
     "default-src 'self'",
@@ -51,7 +134,7 @@ export function securityHeaders(options = {}) {
     // one exception is the seller centre's photo upload, which sends the
     // resized files straight to storage, to a signed address only (useless
     // without the token in it). The development server adds its reload socket.
-    `connect-src 'self'${options.photoUpload ? ` ${apiOrigin}/storage/v1/object/upload/sign/` : ""}${isDev ? " ws: http://127.0.0.1:* http://localhost:*" : ""}${captcha}`,
+    `connect-src 'self'${options.photoUpload ? ` ${apiOrigin}/storage/v1/object/upload/sign/` : ""}${isDev ? " ws: http://127.0.0.1:* http://localhost:*" : ""}${captcha}${reports}`,
     `frame-src ${captcha ? CAPTCHA_ORIGIN : "'none'"}`,
     "frame-ancestors 'none'",
     "form-action 'self'",
@@ -89,9 +172,16 @@ export function securityHeaders(options = {}) {
 export function baseConfig(options) {
   const headers = securityHeaders(options);
   if (options.internal) headers.push({ key: "X-Robots-Tag", value: "noindex, nofollow" });
+  const build = buildInfo();
   return {
-    // Inlined at build time into the server code and the proxy alike.
-    env: { YUNTERA_APP: options.app },
+    // Inlined at build time into the server code, the proxy and the browser
+    // code alike. The commit and the environment name the version in error
+    // reports (src/error-reports); neither is a secret.
+    env: {
+      YUNTERA_APP: options.app,
+      YUNTERA_COMMIT: build.commit,
+      YUNTERA_ENVIRONMENT: build.environment,
+    },
     cacheComponents: true,
     partialPrefetching: true,
     typedRoutes: true,
