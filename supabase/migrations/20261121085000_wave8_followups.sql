@@ -565,3 +565,57 @@ begin
   return true;
 end;
 $$;
+
+-- ═══ 5. Orders cancelled before this migration ══════════════════════════════
+
+-- Points 2 and 3 change what the functions write from now on. Orders cancelled
+-- before 085000 still carry the old words: a shopper's own cancellation sent
+-- with a text of their own kept that text (so the shopper read the words of a
+-- staff cancellation), and an order whose parcels staff all stopped before
+-- they left kept "Los paquetes regresaron sin entregarse". This gives those
+-- orders the reason the functions above would have written, by the same
+-- rules: the cancellation whose order_status event was made by the order's
+-- own shopper becomes "Cancelado por el cliente" (unless it already holds one
+-- of the database's sentences), and a check-in cancellation whose returned
+-- parcels were all stopped by staff and never went out becomes "Los paquetes
+-- no salieron de la bodega". Nothing else of the order changes (no status,
+-- money, event or message). It can run again: a second run changes nothing.
+-- Kept as a function, owned by postgres and granted to no one, so a suite
+-- can run it on orders made in the old shape.
+create function private.reword_old_cancel_reasons() returns integer
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_shopper integer;
+  v_stopped integer;
+begin
+  update public.orders o
+  set cancel_reason = 'Cancelado por el cliente'
+  where o.status in ('cancelled', 'refunded')
+    and o.cancel_reason is not null
+    and o.cancel_reason not in ('Pago no recibido a tiempo',
+                                'Los paquetes regresaron sin entregarse',
+                                'Los paquetes no salieron de la bodega',
+                                'Cancelado por el cliente')
+    and (select e.actor_id from public.order_events e
+         where e.order_id = o.id and e.kind = 'order_status' and e.to_status = 'cancelled'
+         order by e.created_at, e.id limit 1) = o.user_id;
+  get diagnostics v_shopper = row_count;
+
+  update public.orders o
+  set cancel_reason = 'Los paquetes no salieron de la bodega'
+  where o.status in ('cancelled', 'refunded')
+    and o.cancel_reason = 'Los paquetes regresaron sin entregarse'
+    and exists (select 1 from public.shipments s
+                where s.order_id = o.id and s.status = 'returned')
+    and not exists (select 1 from public.shipments s
+                    where s.order_id = o.id and s.status = 'returned'
+                      and not (s.recalled_at is not null and private.shipment_never_left(s.id)));
+  get diagnostics v_stopped = row_count;
+
+  return v_shopper + v_stopped;
+end;
+$$;
+
+select private.reword_old_cancel_reasons();
