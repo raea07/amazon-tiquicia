@@ -12,11 +12,22 @@
  */
 
 import {
+  type CarretaColor,
   color,
   fontSize as cssFontSize,
+  motion as cssMotion,
   radius as cssRadius,
+  spacing as cssSpacing,
+  target as cssTarget,
   touchTarget as cssTouchTarget,
+  type as cssType,
+  dark,
+  light,
+  palette,
+  radii,
   semantic,
+  type TypeStep,
+  typeface,
 } from "@yuntera/brand";
 
 /** "10px" → 10. Throws on anything that is not a pixel length, so a change in the brand is noticed. */
@@ -74,20 +85,32 @@ export const space = {
 export const gutter = space[4];
 
 /**
- * Font families. Both names are the family name stored inside the font files
- * (checked for the static TTFs of @expo-google-fonts/inter 0.4.2 and
- * @expo-google-fonts/bricolage-grotesque 0.4.1), which is what iOS uses; the
- * Android config plugin and the web loader register the same names.
+ * Font families (SISTEMA.md §2.4). Each name is the typographic family
+ * (nameID 16) stored inside the Carreta font files in `../../fonts`, which is
+ * what iOS registers them by; the Android config plugin and the web loader
+ * register the same names.
+ *
+ * `text` (Fira Sans) and `title` (Epilogue) are the Carreta names. `body` and
+ * `display` are today's names and now point at the same two families, with
+ * the same weights as before (body 400–700, display 600–800), so every
+ * screen keeps its weights and only the typeface changes. They stay until
+ * step 4 of the rebuild ends.
  */
 export const fontFamily = {
-  body: "Inter",
-  display: "Bricolage Grotesque",
+  text: typeface.textFamilyNative,
+  title: typeface.titleFamilyNative,
+  /** @deprecated Use `text`. */
+  body: typeface.textFamilyNative,
+  /** @deprecated Use `title`. */
+  display: typeface.titleFamilyNative,
 } as const;
 
 /** The weights embedded per family. Anything else would fall back to a synthesised face. */
 export const fontWeights = {
-  body: [400, 500, 600, 700],
-  display: [600, 700, 800],
+  text: typeface.textWeights,
+  title: typeface.titleWeights,
+  body: typeface.textWeights,
+  display: typeface.titleWeights,
 } as const;
 
 export const colors = {
@@ -158,3 +181,116 @@ export const uiPairs: Array<[name: string, fg: string, bg: string]> = [
   // Rating stars (maíz 500) are decoration next to the rating written as text,
   // as on the web, so they are not a control and are not listed here.
 ];
+
+// ── Carreta (SISTEMA.md §2.1, §5.23) ───────────────────────────────────────
+//
+// Added beside today's names, which keep their values until step 6 of the
+// rebuild. No screen reads these yet: an app moves when its root layout is
+// wrapped in `ThemeProvider` (./provider.tsx) and its screens read `useTheme()`.
+
+/**
+ * Spacing in points, with named keys, so that no index of today's `space`
+ * can silently mean a new value (§2.5.4: 20 → loose 24, 40 → section 48).
+ */
+export const spacing = cssSpacing;
+
+/** Smallest control in points: 48 in the phone apps, 56 and 64 for the driver's actions. */
+export const target = {
+  app: cssTarget.app,
+  driverAction: cssTarget.driverAction,
+  driverPrimary: cssTarget.driverPrimary,
+} as const;
+
+/** A type step as React Native draws it, at its phone size. */
+export interface TextStep {
+  fontFamily: string;
+  fontWeight: "400" | "500" | "600" | "700" | "800";
+  fontSize: number;
+  lineHeight: number;
+  /** In points: the step's tracking in em times its size. */
+  letterSpacing: number;
+}
+
+/** "-0.01em" → -0.01; "0" → 0. Throws on anything else. */
+export function em(value: string): number {
+  if (value === "0") return 0;
+  const match = /^(-?\d+(?:\.\d+)?)em$/.exec(value.trim());
+  if (!match?.[1]) throw new Error(`Not an em length: ${value}`);
+  return Number(match[1]);
+}
+
+function textStep(step: TypeStep): TextStep {
+  return {
+    fontFamily: step.face === "title" ? fontFamily.title : fontFamily.text,
+    fontWeight: String(step.weight) as TextStep["fontWeight"],
+    fontSize: step.phone.size,
+    lineHeight: step.phone.line,
+    letterSpacing: Math.round(em(step.tracking) * step.phone.size * 100) / 100,
+  };
+}
+
+type TypeName = keyof typeof cssType;
+
+/** The type steps of §2 (Type) at their phone sizes. */
+export const type: Record<TypeName, TextStep> = mapValues(cssType, textStep);
+
+/** "100ms" → 100. */
+function ms(value: string): number {
+  const match = /^(\d+)ms$/.exec(value.trim());
+  if (!match?.[1]) throw new Error(`Not a duration in ms: ${value}`);
+  return Number(match[1]);
+}
+
+/** Durations in ms; `none` under reduced motion (AccessibilityInfo.isReduceMotionEnabled). */
+export const motion = mapValues(cssMotion, ms);
+
+/**
+ * Nothing that rests has a shadow (`rest`); overlays have the shadow of
+ * `--yt-elevation-overlay` on iOS (0 10px 30px noche at 25 %) and
+ * elevation 8 on Android.
+ */
+export const elevation = {
+  rest: { shadowOpacity: 0, elevation: 0 },
+  overlay: {
+    shadowColor: palette.noche,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 15,
+    elevation: 8,
+  },
+} as const;
+
+export type Scheme = "light" | "dark";
+
+/** Everything a screen draws with, for one appearance. */
+export interface Theme {
+  scheme: Scheme;
+  /** The Carreta semantic colours (the only colour names components use). */
+  colors: Record<CarretaColor, string>;
+  /** Values only; components never use these names. */
+  palette: typeof palette;
+  radii: typeof radii;
+  spacing: typeof spacing;
+  type: typeof type;
+  target: typeof target;
+  motion: typeof motion;
+  elevation: typeof elevation;
+  fontFamily: { text: string; title: string };
+}
+
+const shared = {
+  palette,
+  radii,
+  spacing,
+  type,
+  target,
+  motion,
+  elevation,
+  fontFamily: { text: fontFamily.text, title: fontFamily.title },
+} as const;
+
+/** The light appearance. */
+export const theme: Theme = { scheme: "light", colors: { ...light }, ...shared };
+
+/** The dark appearance (phones only; the web stays light). */
+export const themeDark: Theme = { scheme: "dark", colors: { ...dark }, ...shared };

@@ -18,7 +18,7 @@
  * Each variant has its own identifier so the three install side by side.
  */
 
-import { type AppId, apps, color, semantic } from "@yuntera/brand";
+import { type AppId, apps, light, palette, semantic } from "@yuntera/brand";
 import type { ExpoConfig } from "expo/config";
 import { type ConfigPlugin, withEntitlementsPlist, withInfoPlist } from "expo/config-plugins";
 import { fontFamily } from "./theme/tokens";
@@ -70,28 +70,37 @@ export interface AppConfigOptions {
   version?: string;
 }
 
-const FONT_FILES = {
-  body: {
-    400: "@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf",
-    500: "@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf",
-    600: "@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf",
-    700: "@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf",
+/**
+ * The Carreta font files (SISTEMA.md §2.4), copied byte for byte from
+ * docs/brand/system/fonts/ttf into this package's `fonts/` folder. Each file
+ * carries its family as nameID 16, so iOS registers "Fira Sans" and
+ * "Epilogue" with one face per weight. config.test.ts checks this list
+ * against the specification's fonts/manifest.json.
+ */
+export const FONT_FILES = {
+  text: {
+    400: "FiraSans-Regular.ttf",
+    500: "FiraSans-Medium.ttf",
+    600: "FiraSans-SemiBold.ttf",
+    700: "FiraSans-Bold.ttf",
   },
-  display: {
-    600: "@expo-google-fonts/bricolage-grotesque/600SemiBold/BricolageGrotesque_600SemiBold.ttf",
-    700: "@expo-google-fonts/bricolage-grotesque/700Bold/BricolageGrotesque_700Bold.ttf",
-    800: "@expo-google-fonts/bricolage-grotesque/800ExtraBold/BricolageGrotesque_800ExtraBold.ttf",
+  title: {
+    600: "Epilogue-SemiBold.ttf",
+    700: "Epilogue-Bold.ttf",
+    800: "Epilogue-ExtraBold.ttf",
   },
 } as const;
 
 /**
- * Embeds Inter and Bricolage Grotesque in the binary. Android gets one family
- * per typeface with a face per weight, so `fontFamily: "Inter"` plus
+ * Embeds Fira Sans and Epilogue in the binary. Android gets one family per
+ * typeface with a face per weight, so `fontFamily: "Fira Sans"` plus
  * `fontWeight: "600"` works; iOS reads the family name from the files, which
- * is the same "Inter" and "Bricolage Grotesque" (checked in the TTFs).
+ * is the same "Fira Sans" and "Epilogue". Today's names `fontFamily.body` and
+ * `fontFamily.display` are the same two families. The path is the one an
+ * app's `node_modules` gives this workspace package.
  */
 export function fontsPlugin(): PluginEntry {
-  const path = (file: string) => `./node_modules/${file}`;
+  const path = (file: string) => `./node_modules/@yuntera/expo-kit/fonts/${file}`;
   const family = (name: string, files: Record<number, string>) => ({
     fontFamily: name,
     fontDefinitions: Object.entries(files).map(([weight, file]) => ({
@@ -105,15 +114,40 @@ export function fontsPlugin(): PluginEntry {
     {
       android: {
         fonts: [
-          family(fontFamily.body, FONT_FILES.body),
-          family(fontFamily.display, FONT_FILES.display),
+          family(fontFamily.text, FONT_FILES.text),
+          family(fontFamily.title, FONT_FILES.title),
         ],
       },
       ios: {
-        fonts: [...Object.values(FONT_FILES.body), ...Object.values(FONT_FILES.display)].map(path),
+        fonts: [...Object.values(FONT_FILES.text), ...Object.values(FONT_FILES.title)].map(path),
       },
     },
   ];
+}
+
+/**
+ * Colours of each phone app's icon and splash (SISTEMA.md §15). The Android
+ * adaptive icon's background is the app colour (shop achiote, seller cacao,
+ * driver anil, warehouse arena, whose icon is an arena tile); the splash shows
+ * the wheel on the light page colour. There is no dark splash yet: the apps
+ * stay light (userInterfaceStyle), and the splash images are opaque on white,
+ * so on a dark ground they would show a white square. The browser theme
+ * colour of the web export is the app's bar colour (the shop's is the page:
+ * achiote is not a chrome colour).
+ */
+const APP_LOOK: Record<Exclude<AppId, "ops">, { iconBackground: string; webTheme: string }> = {
+  shop: { iconBackground: light.appShop, webTheme: light.page },
+  seller: { iconBackground: light.appSeller, webTheme: light.appSeller },
+  driver: { iconBackground: light.appDriver, webTheme: light.appDriver },
+  warehouse: {
+    iconBackground: palette.arena,
+    webTheme: light.appWarehouse,
+  },
+};
+
+export function appLook(app: AppId) {
+  if (app === "ops") throw new Error("The console has no phone app.");
+  return APP_LOOK[app];
 }
 
 /**
@@ -221,6 +255,7 @@ export function defineAppConfig(app: AppId, options: AppConfigOptions): ExpoConf
   const suffix = SUFFIX[variant];
   const identifier = `${identity.bundleId}${suffix.id}`;
   const development = variant === "development";
+  const look = appLook(app);
   const scheme = `${options.slug}${development ? "-dev" : variant === "preview" ? "-prueba" : ""}`;
 
   const config: ExpoConfig = {
@@ -288,7 +323,7 @@ export function defineAppConfig(app: AppId, options: AppConfigOptions): ExpoConf
       adaptiveIcon: {
         foregroundImage: "./assets/android-icon-foreground.png",
         monochromeImage: "./assets/android-icon-monochrome.png",
-        backgroundColor: color.celeste[600],
+        backgroundColor: look.iconBackground,
       },
       blockedPermissions: blockedFor(options),
       ...(options.androidPermissions ? { permissions: options.androidPermissions } : {}),
@@ -301,7 +336,7 @@ export function defineAppConfig(app: AppId, options: AppConfigOptions): ExpoConf
       favicon: "./assets/favicon.png",
       name: identity.name,
       lang: "es-CR",
-      themeColor: semantic.brand,
+      themeColor: look.webTheme,
       backgroundColor: semantic.bg,
     },
     plugins: [
@@ -310,7 +345,7 @@ export function defineAppConfig(app: AppId, options: AppConfigOptions): ExpoConf
       [
         "expo-splash-screen",
         {
-          backgroundColor: semantic.bg,
+          backgroundColor: light.page,
           image: "./assets/splash-icon.png",
           imageWidth: 96,
         },

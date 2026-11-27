@@ -1,6 +1,10 @@
-import { apps } from "@yuntera/brand";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { apps, light, palette } from "@yuntera/brand";
 import { afterEach, describe, expect, it } from "vitest";
 import { blockedFor, defineAppConfig, fontsPlugin, variantOf } from "./config";
+import { fontFamily, fontWeights } from "./theme/tokens";
 
 const original = process.env.APP_VARIANT;
 afterEach(() => {
@@ -145,15 +149,143 @@ describe("defineAppConfig", () => {
 });
 
 describe("fontsPlugin", () => {
-  it("embeds a face for every weight the text styles use", () => {
-    const [name, options] = fontsPlugin() as [string, { android: { fonts: unknown[] } }];
-    expect(name).toBe("expo-font");
-    const families = options.android.fonts as Array<{
-      fontFamily: string;
-      fontDefinitions: Array<{ weight: number }>;
+  const kitDir = `${resolve(__dirname, "../")}/`;
+  const systemFonts = `${resolve(__dirname, "../../../docs/brand/system/fonts/")}/`;
+  const manifest = JSON.parse(readFileSync(`${systemFonts}manifest.json`, "utf8")) as {
+    faces: Array<{
+      family: string;
+      weight: number;
+      outputs: Record<string, { sha256: string; bytes: number }>;
     }>;
-    expect(families.map((f) => f.fontFamily)).toEqual(["Inter", "Bricolage Grotesque"]);
-    expect(families[0]?.fontDefinitions.map((d) => d.weight)).toEqual([400, 500, 600, 700]);
-    expect(families[1]?.fontDefinitions.map((d) => d.weight)).toEqual([600, 700, 800]);
+  };
+  const phoneFaces = manifest.faces.flatMap((face) =>
+    Object.entries(face.outputs)
+      .filter(([path]) => path.startsWith("fonts/ttf/"))
+      .map(([path, record]) => ({
+        family: face.family,
+        weight: face.weight,
+        file: path.slice("fonts/ttf/".length),
+        record,
+      })),
+  );
+  const [name, options] = fontsPlugin() as [
+    string,
+    {
+      android: {
+        fonts: Array<{
+          fontFamily: string;
+          fontDefinitions: Array<{ path: string; weight: number; style: string }>;
+        }>;
+      };
+      ios: { fonts: string[] };
+    },
+  ];
+  const prefix = "./node_modules/@yuntera/expo-kit/fonts/";
+
+  it("registers exactly the families, weights and files of the specification's manifest", () => {
+    expect(name).toBe("expo-font");
+    expect(phoneFaces).toHaveLength(7);
+    const android = options.android.fonts.flatMap((family) =>
+      family.fontDefinitions.map((d) => ({
+        family: family.fontFamily,
+        weight: d.weight,
+        path: d.path,
+        style: d.style,
+      })),
+    );
+    const expected = phoneFaces.map((face) => ({
+      family: face.family,
+      weight: face.weight,
+      path: `${prefix}${face.file}`,
+      style: "normal",
+    }));
+    const order = (a: { path: string }, b: { path: string }) => a.path.localeCompare(b.path);
+    expect([...android].sort(order)).toEqual([...expected].sort(order));
+    expect([...options.ios.fonts].sort()).toEqual(expected.map((face) => face.path).sort());
+    expect(options.android.fonts.map((f) => f.fontFamily)).toEqual(["Fira Sans", "Epilogue"]);
+  });
+
+  it("embeds a face for every weight today's text styles use, under today's names too", () => {
+    const weightsOf = (family: string) =>
+      options.android.fonts
+        .find((f) => f.fontFamily === family)
+        ?.fontDefinitions.map((d) => d.weight);
+    expect(weightsOf(fontFamily.body)).toEqual([...fontWeights.body]);
+    expect(weightsOf(fontFamily.display)).toEqual([...fontWeights.display]);
+  });
+
+  it("ships each file byte for byte as the manifest records it, and no other font", () => {
+    const fontsDir = `${kitDir}fonts/`;
+    const onDisk = readdirSync(fontsDir).filter((file) => /\.(ttf|otf|woff2?)$/.test(file));
+    expect(onDisk.sort()).toEqual(phoneFaces.map((face) => face.file).sort());
+    for (const face of phoneFaces) {
+      const bytes = readFileSync(`${fontsDir}${face.file}`);
+      expect(bytes.length, face.file).toBe(face.record.bytes);
+      expect(createHash("sha256").update(bytes).digest("hex"), face.file).toBe(face.record.sha256);
+    }
+    for (const file of ["OFL-FiraSans.txt", "OFL-epilogue.txt", "MODIFICATIONS.txt"]) {
+      expect(readFileSync(`${fontsDir}${file}`, "utf8"), file).toBe(
+        readFileSync(`${systemFonts}${file}`, "utf8"),
+      );
+    }
+  });
+
+  it("loads the same files under the same names in the web export", () => {
+    const web = readFileSync(`${kitDir}src/ui/fonts.web.ts`, "utf8");
+    const required = [...web.matchAll(/require\("\.\.\/\.\.\/fonts\/([^"]+)"\)/g)].map((m) => m[1]);
+    expect(required.sort()).toEqual(phoneFaces.map((face) => face.file).sort());
+  });
+});
+
+describe("icons and splash (SISTEMA.md §15)", () => {
+  const apps4 = ["shop", "seller", "driver", "warehouse"] as const;
+
+  it("gives each adaptive icon its app colour and each splash the page colour", () => {
+    delete process.env.APP_VARIANT;
+    const background = Object.fromEntries(
+      apps4.map((app) => [
+        app,
+        defineAppConfig(app, { slug: `yuntera-${app}` }).android?.adaptiveIcon?.backgroundColor,
+      ]),
+    );
+    expect(background).toEqual({
+      shop: light.appShop,
+      seller: light.appSeller,
+      driver: light.appDriver,
+      warehouse: palette.arena,
+    });
+    for (const app of apps4) {
+      const config = defineAppConfig(app, { slug: `yuntera-${app}` });
+      const splash = (config.plugins ?? []).find(
+        (p): p is [string, Record<string, unknown>] =>
+          Array.isArray(p) && p[0] === "expo-splash-screen",
+      )?.[1] as { backgroundColor: string; image: string; dark?: unknown };
+      expect(splash.backgroundColor, app).toBe(light.page);
+      expect(splash.image, app).toBe("./assets/splash-icon.png");
+      // No dark splash while the apps stay light (see APP_LOOK in config.ts).
+      expect(splash.dark, app).toBeUndefined();
+      expect(config.icon).toBe("./assets/icon.png");
+      expect(config.web?.favicon).toBe("./assets/favicon.png");
+    }
+  });
+
+  it("uses the files of packages/brand/assets, byte for byte, in every phone app", () => {
+    const appsDir = `${resolve(__dirname, "../../../apps/")}/`;
+    const brandIcons = `${resolve(__dirname, "../../brand/assets/app-icons/")}/`;
+    const sha = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
+    for (const app of apps4) {
+      const assets = `${appsDir}${app}-native/assets/`;
+      const map: Record<string, string> = {
+        "icon.png": `icon-${app}-1024.png`,
+        "favicon.png": `icon-${app}-48.png`,
+        "android-icon-foreground.png": `icon-${app}-adaptive-foreground-432.png`,
+        "android-icon-monochrome.png": `icon-${app}-monochrome-432.png`,
+        "splash-icon.png": `icon-${app}-splash-1024.png`,
+      };
+      expect(readdirSync(assets).sort(), app).toEqual(Object.keys(map).sort());
+      for (const [file, source] of Object.entries(map)) {
+        expect(sha(`${assets}${file}`), `${app} ${file}`).toBe(sha(`${brandIcons}${source}`));
+      }
+    }
   });
 });
