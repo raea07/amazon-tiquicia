@@ -251,9 +251,14 @@ describe("redactText: long input", () => {
     ]) {
       for (const length of [4_000, 1_000_000]) {
         const text = unit.repeat(Math.ceil(length / unit.length)).slice(0, length);
-        const started = performance.now();
-        redactText(text);
-        const took = performance.now() - started;
+        // The fastest of three runs: a busy machine can stall one run, while
+        // a rule that backtracks is slow every time (seconds, not 50 ms).
+        let took = Number.POSITIVE_INFINITY;
+        for (let run = 0; run < 3; run += 1) {
+          const started = performance.now();
+          redactText(text);
+          took = Math.min(took, performance.now() - started);
+        }
         expect(took, `${JSON.stringify(unit)} × ${length}: ${took.toFixed(1)} ms`).toBeLessThan(50);
       }
     }
