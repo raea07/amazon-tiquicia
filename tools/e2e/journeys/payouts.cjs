@@ -68,7 +68,7 @@ async function rpcAs(email, fn, args = {}) {
     };
     return {
       available: amount("Disponible"),
-      pending: amount("Pendiente"),
+      pending: amount("Pendiente"), // not a status word: the label of a balance tile
       inTransit: amount("En tránsito"),
       owed,
     };
@@ -261,7 +261,10 @@ async function rpcAs(email, fn, args = {}) {
   await ops.recordPaid(staff, "TecnoCasa", BANK_REFERENCE);
   const paidText = await ops.runPayoutText(staff, "TecnoCasa");
   log("TecnoCasa after paying:", paidText.slice(0, 80), "…", paidText.slice(-150));
-  expect(paidText.includes(word("payout_status", "paid")), "the payout is marked paid");
+  expect(
+    paidText.includes(word("payouts", "paid", { viewer: "staff" })),
+    "the payout is marked paid",
+  );
   await ops.recordNotPaid(staff, "Cafetal", "El banco rechazó la cuenta: está cerrada.");
   log("Cafetal after the refusal:", (await ops.runPayoutText(staff, "Cafetal")).slice(-140));
   log("run now:", (await ops.runFigures(staff)).slice(0, 170));
@@ -289,7 +292,8 @@ async function rpcAs(email, fn, args = {}) {
   const history = await seller.payoutHistory(vendor);
   log("seller history:", history);
   expect(
-    history.includes(word("payout_status", "paid")) && history.includes(BANK_REFERENCE),
+    history.includes(word("payouts", "paid", { viewer: "seller" })) &&
+      history.includes(BANK_REFERENCE),
     "the payout is there with the bank's reference",
   );
   expect(history.includes(before.available), "for the amount that was available");

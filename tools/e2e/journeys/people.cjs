@@ -146,7 +146,10 @@ async function rpcAs(email, fn, args = {}) {
   await ops.waitForRowCount(page, driversBefore + 1);
   const sofia = () => ops.rowText(page, "Sofía Vargas Rojas");
   log("new driver:", (await sofia()).slice(0, 190));
-  expect((await sofia()).includes(word("driver_status", "pending")), "a new driver starts pending");
+  expect(
+    (await sofia()).includes(word("driver_status", "pending", { viewer: "staff" })),
+    "a new driver starts pending",
+  );
   expect((await sofia()).includes("MOT123456"), "the plate is tidied");
   await page.screenshot({ path: SHOTS + "/pe2-drivers.png", fullPage: true });
   let roles = await rpcAs("comprador3@yuntera.example", "my_roles");
@@ -167,7 +170,7 @@ async function rpcAs(email, fn, args = {}) {
   await ops.waitForRowSaying(page, "Sofía Vargas Rojas", "BRT-555");
   log("after the edit:", (await sofia()).slice(0, 190));
   expect(
-    (await sofia()).includes(word("driver_status", "active")),
+    (await sofia()).includes(word("driver_status", "active", { viewer: "staff" })),
     "editing does not change the status",
   );
   await page.screenshot({ path: SHOTS + "/pe3-driver-edit.png", fullPage: true });

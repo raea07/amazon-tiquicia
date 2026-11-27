@@ -462,18 +462,20 @@ const crDay = (days = 0) =>
   const parcel = await web.mainText(owner);
   log("shopper's order:", parcel.slice(0, 300));
   check(
-    parcel.includes(word("shipment_status", "delivery_failed", { attemptCount: 0 })) &&
+    parcel.includes(
+      word("shipment_status", "delivery_failed", { viewer: "shopper", attemptCount: 0 }),
+    ) &&
       parcel.includes("Reprogramamos la entrega") &&
       !parcel.includes("No pudimos entregarlo") &&
-      !parcel.includes(word("shipment_status", "delivery_failed")),
+      !parcel.includes(word("shipment_status", "delivery_failed", { viewer: "shopper" })),
     "the shopper is told the delivery failed after staff removed the stop",
   );
   // The order's heading agrees: its only parcel is not on its way any more.
   const heading = await web.orderHeadingBlock(owner);
   log("shopper's order heading:", heading);
   check(
-    heading.includes(word("derived", "rescheduled")) &&
-      !heading.includes(word("order_status", "shipped")),
+    heading.includes(word("order_summary", "rescheduled", { viewer: "shopper" })) &&
+      !heading.includes(word("order_status", "shipped", { viewer: "shopper" })),
     `the order's heading still says it is on its way: ${heading}`,
   );
   await owner.screenshot({ path: SHOTS + "/co10b-shopper-rescheduled.png", fullPage: true });

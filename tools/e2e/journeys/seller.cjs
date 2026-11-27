@@ -167,8 +167,7 @@ const log = (...a) => console.log(...a);
   log("blocked without declaration:", new URL(p3.url()).pathname === "/registro");
   await seller.declare(p3);
   await seller.sendShopRequest(p3);
-  await p3.waitForURL((u) => new URL(u).pathname === "/");
-  await p3.getByRole("heading", { level: 1, name: "Dulces" }).waitFor();
+  await seller.waitForShopDashboard(p3, "Dulces");
   log(
     "new shop dashboard:",
     await seller.heading(p3),

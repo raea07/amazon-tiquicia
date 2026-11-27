@@ -18,6 +18,7 @@
 const { chromium } = require("playwright");
 const web = require("../lib/web.cjs");
 const seller = require("../lib/seller.cjs");
+const { word } = require("../lib/words.cjs");
 const ops = require("../lib/ops.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
@@ -278,7 +279,9 @@ const DESCRIPTION =
   await look.context.close();
   await sendero.goto(puzzleEdit, { waitUntil: "networkidle" });
   check(
-    (await seller.editStatus(sendero)).includes("Borrador"),
+    (await seller.editStatus(sendero)).includes(
+      word("product_status", "draft", { viewer: "seller" }),
+    ),
     "the edit page does not say it is a draft",
   );
   // The page then says where it stands (the form starts afresh for a new state).

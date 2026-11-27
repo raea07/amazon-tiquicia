@@ -260,8 +260,8 @@ async function until(what, fn, seconds = 40) {
   await web.openOrder(shop, card);
   await web.cancelPaidOrder(shop);
   await fresh(shop);
-  const onItsWay = word("refund_status", "pending");
-  const completed = word("refund_status", "succeeded");
+  const onItsWay = word("shopper_refund", "pending", { viewer: "shopper" });
+  const completed = word("shopper_refund", "succeeded", { viewer: "shopper" });
   check((await web.firstRefund(shop)).includes(onItsWay), "the refund is shown on its way");
   check((await web.pageText(shop)).includes("reembolso en camino"), "and the payment says so");
   // The worker sends it; the gateway accepts it and holds it.
@@ -282,7 +282,9 @@ async function until(what, fn, seconds = 40) {
   await shop.screenshot({ path: `${SHOTS}/p09-refund-on-its-way.png`, fullPage: true });
   await ops.open(finance, "/cobros/reembolsos");
   check(
-    (await ops.refundRow(finance, card)).includes("Enviado, sin confirmar"),
+    (await ops.refundRow(finance, card)).includes(
+      word("gateway_refunds", "sent", { viewer: "staff" }),
+    ),
     "finance sees it sent, unconfirmed",
   );
   await fake.post(`${FAKE_PAY}/_fake/refunds/${sentRefund.id}/complete`, {

@@ -10,6 +10,9 @@
 const { settledText } = require("./settle.cjs");
 const kit = require("./kit.cjs");
 const { word } = require("./words.cjs");
+
+/** The staff console is read as staff (tools/e2e/lib/words.cjs). */
+const STAFF = { viewer: "staff" };
 const { text, main, field, button, link, testid, withValue, fillSignIn } = kit;
 
 const BASE = process.env.OPS_URL || "http://127.0.0.1:3002";
@@ -946,7 +949,7 @@ async function setDriverStatus(page, name, status) {
   const row = main(page).getByRole("row", { name });
   await field(row, "status").selectOption(status);
   await button(row, "Guardar").click();
-  const said = word("driver_status", status);
+  const said = word("driver_status", status, STAFF);
   // Outside the row's own select, whose options carry every status word.
   await kit.waitForShown(row, said, { what: `${name}'s row` });
   return text(row);
@@ -1066,7 +1069,7 @@ const deliveredLine = (lines, template, channel) =>
   lines.find(
     (l) =>
       l.startsWith(`${TEMPLATE[template]} ${CHANNEL[channel]} · Cliente`) &&
-      l.endsWith(word("notification_status", "delivered")),
+      l.endsWith(word("notification_deliveries", "delivered", STAFF)),
   );
 
 Object.assign(module.exports, { stuckCount, stuckText, resend, orderMessages, deliveredLine });
@@ -1170,7 +1173,7 @@ async function confirmTransfer(page, reference) {
   await page.waitForTimeout(300);
   await field(box, "bankReference").fill(reference);
   await box.locator('button[type="submit"]').click();
-  await settledText(main(page), (t) => t.includes(word("order_status", "confirmed")), {
+  await settledText(main(page), (t) => t.includes(word("order_status", "confirmed", STAFF)), {
     what: "the order page",
   });
 }
@@ -1479,7 +1482,7 @@ async function recordNotPaid(page, shop, note) {
   await testid(card, "payout-failed").click();
   await field(card, "note", "textarea").fill(note);
   await button(card, "Marcar como no pagado").click();
-  const failed = word("payout_status", "failed");
+  const failed = word("payouts", "failed", STAFF);
   await settledText(card, (t) => t.includes(failed), { what: `${shop}'s payout` });
 }
 
@@ -1587,7 +1590,7 @@ async function setDriverRowStatus(page, name, status) {
   const row = rowOf(page, name);
   await field(row, "status").selectOption(status);
   await button(row, "Guardar").click();
-  await waitForRowSaying(page, name, word("driver_status", status));
+  await waitForRowSaying(page, name, word("driver_status", status, STAFF));
 }
 
 /** Opens «Editar datos» from a driver's row; returns the form's heading and what it holds. */

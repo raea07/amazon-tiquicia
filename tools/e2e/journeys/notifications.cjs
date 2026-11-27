@@ -200,7 +200,7 @@ async function until(what, fn, seconds = 40) {
   );
   const failedText = await ops.stuckText(staff, "order_placed", "whatsapp", orderNumber);
   check(
-    failedText.includes(word("notification_status", "failed")) &&
+    failedText.includes(word("notification_deliveries", "failed", { viewer: "staff" })) &&
       /no llegó a la persona/.test(failedText),
     `failed after sending: ${failedText}`,
   );
@@ -262,7 +262,7 @@ async function until(what, fn, seconds = 40) {
   );
   const deadText = await ops.stuckText(staff, "payment_received", "email", orderNumber);
   check(
-    deadText.includes(word("notification_status", "dead")) &&
+    deadText.includes(word("notification_deliveries", "dead", { viewer: "staff" })) &&
       /el proveedor rechazó el mensaje/.test(deadText),
     `dead letter: ${deadText}`,
   );

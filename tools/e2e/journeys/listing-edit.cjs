@@ -116,7 +116,8 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
   const { state } = await seller.productRowText(vendor, oldTitle);
   log("state in the list:", state);
   check(
-    state.includes(word("product_status", "active")) && state.includes("Cambios en revisión"),
+    state.includes(word("product_status", "active", { viewer: "seller" })) &&
+      state.includes("Cambios en revisión"),
     "list: state missing",
   );
 

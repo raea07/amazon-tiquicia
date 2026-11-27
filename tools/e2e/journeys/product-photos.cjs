@@ -19,6 +19,7 @@ const { chromium } = require("playwright");
 const web = require("../lib/web.cjs");
 const seller = require("../lib/seller.cjs");
 const ops = require("../lib/ops.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
 const SELLER = seller.BASE;
@@ -455,7 +456,10 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
 
   const approvedNow = await seller.photoAt(vendor, 0);
   const approvedBefore = approvedNow.id;
-  check(approvedNow.text.includes("Aprobada"), "the approved photo state is not shown");
+  check(
+    approvedNow.text.includes(word("product_photos", "approved", { viewer: "seller" })),
+    "the approved photo state is not shown",
+  );
   await seller.choosePhotos(vendor, [
     jpeg("cafetera-botones.jpg", photo3),
     jpeg("cafetera-caja.jpg", photo4),
@@ -469,7 +473,9 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
   await seller.typeQueuedAlt(vendor, 2, ALT_4);
   await seller.uploadQueued(vendor, 2, 4);
   check(
-    (await seller.photoAt(vendor, 2)).text.includes("En revisión"),
+    (await seller.photoAt(vendor, 2)).text.includes(
+      word("product_photos", "pending", { viewer: "seller" }),
+    ),
     "a new photo of a published listing is not waiting",
   );
   // Text typed but not saved on another photo survives removing one.

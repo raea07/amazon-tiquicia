@@ -601,6 +601,12 @@ const sendShopRequest = (page) => button(main(page), "Enviar solicitud").click()
 /** Ticks the declaration. */
 const declare = (page) => field(page, "declara").check();
 
+/** Waits for a new shop's dashboard: the home page, headed by the shop's name. */
+async function waitForShopDashboard(page, shopName) {
+  await page.waitForURL((u) => new URL(u).pathname === "/");
+  await page.getByRole("heading", { level: 1, name: shopName }).waitFor();
+}
+
 /** The status messages of main, each as one line. */
 const statusMessages = async (page) =>
   (await main(page).getByRole("status").allInnerTexts()).map(kit.squash);
@@ -640,6 +646,7 @@ Object.assign(module.exports, {
   fillShopDetails,
   sendShopRequest,
   declare,
+  waitForShopDashboard,
   statusMessages,
   firstSubheading,
 });

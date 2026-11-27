@@ -47,9 +47,11 @@ const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const SHOPPER = "comprador3@yuntera.example";
 const log = (...a) => console.log(...a);
 // The status words these checks look for (tools/e2e/lib/words.cjs).
-const ON_ITS_WAY = word("order_status", "shipped");
-const CANCELLING = word("derived", "cancelling");
-const RESCHEDULED = word("derived", "rescheduled");
+const byViewer = (kind, value, viewers) =>
+  Object.fromEntries(viewers.map((viewer) => [viewer, word(kind, value, { viewer })]));
+const ON_ITS_WAY = byViewer("order_status", "shipped", ["shopper", "staff"]);
+const CANCELLING = byViewer("order_summary", "cancelling", ["shopper", "staff"]);
+const RESCHEDULED = byViewer("order_summary", "rescheduled", ["shopper"]);
 /** Colones as the apps write them (packages/core format): ₡6 450, ₡12 500,50. */
 const colones = (minor) => {
   const whole = String(Math.floor(minor / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
@@ -214,14 +216,14 @@ async function packedOrder(method = "sinpe_movil") {
   const staffHeader = await ops.orderHeader(staff);
   log("staff heading:", staffHeader);
   check(
-    staffHeader.includes(CANCELLING),
+    staffHeader.includes(CANCELLING.staff),
     `the staff heading does not say it is being cancelled: ${staffHeader}`,
   );
-  check(!staffHeader.includes(ON_ITS_WAY), "the staff heading says En camino");
+  check(!staffHeader.includes(ON_ITS_WAY.staff), "the staff heading says En camino");
   const staffParcels = await ops.orderParcels(staff);
   check(
-    staffParcels.includes(word("derived", "stoppedStaff")) &&
-      !staffParcels.includes(word("shipment_status", "delivery_failed")) &&
+    staffParcels.includes(word("order_flags", "stopped", { viewer: "staff" })) &&
+      !staffParcels.includes(word("shipment_status", "delivery_failed", { viewer: "staff" })) &&
       !/returning/.test(staffParcels),
     `the parcel is not described in plain words: ${staffParcels}`,
   );
@@ -234,7 +236,10 @@ async function packedOrder(method = "sinpe_movil") {
   await web.signIn(shop, SHOPPER);
   const row = await web.orderRow(shop, order);
   log("list row:", row);
-  check(row.includes(CANCELLING) && !row.includes(ON_ITS_WAY), `the list row is wrong: ${row}`);
+  check(
+    row.includes(CANCELLING.shopper) && !row.includes(ON_ITS_WAY.shopper),
+    `the list row is wrong: ${row}`,
+  );
   await web.openOrder(shop, order);
   const waiting = await web.mainText(shop);
   check(
@@ -242,13 +247,13 @@ async function packedOrder(method = "sinpe_movil") {
       waiting.includes(`le devolvemos ${colones(placed.total_minor)}, el envío incluido,`),
     "the shopper's page does not say the order is being cancelled and what comes back",
   );
-  check(!waiting.includes(ON_ITS_WAY), "the shopper's page says En camino");
+  check(!waiting.includes(ON_ITS_WAY.shopper), "the shopper's page says En camino");
   check(
     !waiting.includes("Su código de entrega"),
     "the delivery code is shown for an order being cancelled",
   );
   check(
-    waiting.includes(word("derived", "stoppedShopper")),
+    waiting.includes(word("order_flags", "stopped", { viewer: "shopper" })),
     "the parcel is not described as stopped",
   );
   await shop.screenshot({ path: SHOTS + "/of3-shopper-waiting.png", fullPage: true });
@@ -288,7 +293,10 @@ async function packedOrder(method = "sinpe_movil") {
       done.includes(`le devolvemos lo que pagó por él: ${colones(placed.items_total_minor)}`),
     "the history does not state the amounts",
   );
-  check(done.includes(word("order_status", "refunded")), "the order does not read Reembolsado");
+  check(
+    done.includes(word("order_status", "refunded", { viewer: "shopper" })),
+    "the order does not read Reembolsado",
+  );
   await shop.screenshot({ path: SHOTS + "/of5-shopper-refunded.png", fullPage: true });
   const refunded = await shopperApi("get_order", { p_order_number: order });
   check(
@@ -304,7 +312,7 @@ async function packedOrder(method = "sinpe_movil") {
   const offRoute = await web.orderRow(shop, stop.orderNumber);
   log("list row off the route:", offRoute);
   check(
-    offRoute.includes(RESCHEDULED) && !offRoute.includes(ON_ITS_WAY),
+    offRoute.includes(RESCHEDULED.shopper) && !offRoute.includes(ON_ITS_WAY.shopper),
     `the list says the wrong thing for a parcel off its route: ${offRoute}`,
   );
   await shop.screenshot({ path: SHOTS + "/of6-shopper-list.png", fullPage: true });
@@ -312,7 +320,8 @@ async function packedOrder(method = "sinpe_movil") {
   const offHeader = await ops.orderHeader(staff);
   log("staff heading off the route:", offHeader);
   check(
-    !offHeader.includes(ON_ITS_WAY) && offHeader.includes(word("derived", "awaitingRoute")),
+    !offHeader.includes(ON_ITS_WAY.staff) &&
+      offHeader.includes(word("order_flags", "awaiting_route", { viewer: "staff" })),
     `heading: ${offHeader}`,
   );
   await ops.open(staff, "/operacion/rutas");
@@ -320,7 +329,7 @@ async function packedOrder(method = "sinpe_movil") {
   log("route card stop:", card);
   check(
     card.includes("Paquete: quitado de esta ruta, sin intento de entrega") &&
-      !card.includes(word("shipment_status", "delivery_failed")),
+      !card.includes(word("shipment_status", "delivery_failed", { viewer: "staff" })),
     `the route card calls a removed stop a failed delivery: ${card}`,
   );
   await staff.screenshot({ path: SHOTS + "/of7-route-card.png", fullPage: true });
@@ -342,9 +351,9 @@ async function packedOrder(method = "sinpe_movil") {
   const backRow = await web.orderRow(shop, stop.orderNumber);
   log("list row sent back:", backRow);
   check(
-    backRow.includes(CANCELLING) &&
+    backRow.includes(CANCELLING.shopper) &&
       backRow.includes("le devolvemos el dinero") &&
-      !backRow.includes(ON_ITS_WAY) &&
+      !backRow.includes(ON_ITS_WAY.shopper) &&
       !backRow.includes("Llega el"),
     `the list says the wrong thing for a parcel sent back: ${backRow}`,
   );
@@ -359,7 +368,7 @@ async function packedOrder(method = "sinpe_movil") {
     "the shopper's page does not say the order comes back and what is refunded",
   );
   check(
-    !backPage.includes(ON_ITS_WAY) &&
+    !backPage.includes(ON_ITS_WAY.shopper) &&
       !backPage.includes("Llega el") &&
       !backPage.includes("Su código de entrega"),
     "the shopper's page shows En camino, a date or the delivery code for a parcel sent back",
@@ -373,7 +382,7 @@ async function packedOrder(method = "sinpe_movil") {
   const backHeader = await ops.orderHeader(staff);
   log("staff heading sent back:", backHeader);
   check(
-    backHeader.includes(CANCELLING) && !backHeader.includes(ON_ITS_WAY),
+    backHeader.includes(CANCELLING.staff) && !backHeader.includes(ON_ITS_WAY.staff),
     `the staff heading for a parcel sent back: ${backHeader}`,
   );
 
@@ -387,7 +396,7 @@ async function packedOrder(method = "sinpe_movil") {
   const codRow = await web.orderRow(shop, codOrder);
   log("list row cash order:", codRow);
   check(
-    codRow.includes(CANCELLING) &&
+    codRow.includes(CANCELLING.shopper) &&
       codRow.includes("No se le cobró nada") &&
       !codRow.includes("devolvemos"),
     `the list promises money back for a cash order: ${codRow}`,
@@ -462,9 +471,9 @@ async function packedOrder(method = "sinpe_movil") {
   const againRow = await web.orderRow(shop, againStop.orderNumber);
   log("list row planned again and removed:", againRow);
   check(
-    againRow.includes(RESCHEDULED) &&
+    againRow.includes(RESCHEDULED.shopper) &&
       againRow.includes("Le avisaremos cuando vuelva a salir hacia usted") &&
-      !againRow.includes(ON_ITS_WAY) &&
+      !againRow.includes(ON_ITS_WAY.shopper) &&
       !againRow.includes("Llega el"),
     `the list says the wrong thing for a parcel waiting to go out again: ${againRow}`,
   );
@@ -473,9 +482,9 @@ async function packedOrder(method = "sinpe_movil") {
   const againPage = againAll.slice(0, againAll.indexOf("Historial"));
   log("page planned again and removed:", againPage.slice(0, 300));
   check(
-    againPage.includes(RESCHEDULED) &&
+    againPage.includes(RESCHEDULED.shopper) &&
       againPage.includes("Reprogramamos la entrega") &&
-      !againPage.includes(ON_ITS_WAY) &&
+      !againPage.includes(ON_ITS_WAY.shopper) &&
       !againPage.includes("Llega el") &&
       !againPage.includes("Llega entre"),
     `the order page says the wrong thing for a parcel waiting to go out again: ${againPage.slice(0, 300)}`,
