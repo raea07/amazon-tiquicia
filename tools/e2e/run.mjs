@@ -49,10 +49,16 @@ for (const journey of journeys) {
   }).catch(() => undefined);
 
   console.log(`\n── ${journey} ${"─".repeat(60 - journey.length)}`);
-  const run = spawnSync(process.execPath, [`${here}journeys/${journey}.cjs`], {
-    stdio: "inherit",
-    env: { ...process.env, E2E_SHOTS: shots },
-  });
+  // lib/local-only.cjs makes the journey fail if the browser asks anything of
+  // a host that is not this machine.
+  const run = spawnSync(
+    process.execPath,
+    ["--require", `${here}lib/local-only.cjs`, `${here}journeys/${journey}.cjs`],
+    {
+      stdio: "inherit",
+      env: { ...process.env, E2E_SHOTS: shots },
+    },
+  );
   if (run.status !== 0) failed.push(journey);
 }
 

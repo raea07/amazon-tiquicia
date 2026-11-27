@@ -26,7 +26,7 @@
     "./error-reports/client": "./src/error-reports/client.ts",
     "./error-reports/server": "./src/error-reports/server.ts",
     "./error-reports/pages": "./src/error-reports/pages.tsx",
-    "./error-reports/drill": "./src/error-reports/drill.ts"
+    "./error-reports/drill-page": "./src/error-reports/drill-page.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -16,7 +16,10 @@ import { type BuildValues, type TrackerSettings, trackerSettings } from "./setti
 import { buildValues } from "./values";
 
 /** What is fetched once the page is ready: the SDK and the options it is started with. */
-export type Loaded = Pick<typeof import("./browser-sdk"), "init" | "captureException" | "sdkOptions">;
+export type Loaded = Pick<
+  typeof import("./browser-sdk"),
+  "init" | "captureException" | "sdkOptions"
+>;
 type Sdk = Pick<Loaded, "init" | "captureException">;
 
 /** One download, after the page; not part of its first load. */
