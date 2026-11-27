@@ -10,8 +10,8 @@ import type { MyOrderReturn } from "@yuntera/db";
 export const RETURN_KIND: Record<MyOrderReturn["kind"], string> = {
   withdrawal: "Devolución",
   warranty: "Garantía",
-  damaged: "Reclamo por producto dañado",
-  wrong_item: "Reclamo por producto equivocado",
+  damaged: "Devolución por producto dañado",
+  wrong_item: "Devolución por producto equivocado",
 };
 
 /** What happens next, in the shopper's words, for each step of a return. */

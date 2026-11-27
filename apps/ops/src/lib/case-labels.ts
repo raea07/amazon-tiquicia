@@ -10,7 +10,7 @@ export const CASE_KIND: Record<string, string> = {
   complaint: "Reclamo",
   return: "Devolución",
   report: "Reporte de contenido",
-  contact: "Contacto",
+  contact: "Consulta",
 };
 
 export const CASE_CHANNEL: Record<string, string> = {

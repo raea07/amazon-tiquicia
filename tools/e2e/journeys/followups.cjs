@@ -153,7 +153,7 @@ async function as(email) {
 
   // Tab A, reloaded: the claim waits for a decision and can be withdrawn.
   await a.goto(orderUrl, { waitUntil: "load" });
-  const claim = a.locator("main:visible li", { hasText: "Reclamo por producto dañado" }).first();
+  const claim = a.locator("main:visible li", { hasText: "Devolución por producto dañado" }).first();
   const opener = claim.locator("summary", { hasText: "Retirar la solicitud" });
   const box = await opener.boundingBox();
   check(box && box.height >= 44, `the withdraw opener is at least 44 px tall (${box?.height})`);
@@ -164,7 +164,7 @@ async function as(email) {
   await a.waitForSelector("main:visible >> text=/Retirada: usted retiró esta solicitud/");
   await a.goto(orderUrl, { waitUntil: "load" });
   const after = await text(
-    a.locator("main:visible li", { hasText: "Reclamo por producto dañado" }).first(),
+    a.locator("main:visible li", { hasText: "Devolución por producto dañado" }).first(),
   );
   log("after withdrawing:", after);
   check(/Retirada: usted retiró esta solicitud/.test(after), "the order says it was withdrawn");

@@ -10,7 +10,7 @@ import { CasesNav } from "@/components/cases-nav";
 import { CASE_KIND, caseTopic, span, targetText } from "@/lib/case-labels";
 import { requireStaff } from "@/lib/staff";
 
-export const metadata: Metadata = { title: "Informe de casos" };
+export const metadata: Metadata = { title: "Informe del mes" };
 
 const MONTHS = [
   "enero",
@@ -49,7 +49,7 @@ const percent = (part: number, whole: number) =>
 export default function CaseReportPage({ searchParams }: PageProps<"/casos/informe">) {
   return (
     <div className="shell py-8">
-      <PageHeader title="Informe de casos">
+      <PageHeader title="Informe del mes">
         Lo que mide Atención al cliente, mes por mes: cuántos casos llegaron y de qué tipo, cuántos
         se respondieron a tiempo, cuánto tardó la primera respuesta y cuántos se volvieron a abrir.
         Para la revisión mensual de reclamos.
