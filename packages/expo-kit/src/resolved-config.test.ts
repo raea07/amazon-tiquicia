@@ -105,8 +105,11 @@ describe.skipIf(!available)("resolved app configuration", () => {
             // added by androidx.biometric (through expo-secure-store), never used
             "android.permission.USE_BIOMETRIC",
             "android.permission.USE_FINGERPRINT",
+            // added by expo-haptics (driver, warehouse); no screen vibrates yet
+            "android.permission.VIBRATE",
           ]),
         );
+        expect(android.permissions ?? []).not.toContain("android.permission.VIBRATE");
       }, 30_000);
     }
   }
