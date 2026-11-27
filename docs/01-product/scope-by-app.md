@@ -39,6 +39,10 @@ native app follows once repeat usage justifies it.
 | Receipt by email; contact support by WhatsApp                       | Complaint form; notice-and-report on listings                                  | Gift options, business accounts with invoicing data       |
 | Account with email sign-in                                          | Phone verification; account deletion and data export                           |                                                           |
 
+Built ahead of the Launch column (wave 9): the complaint form (`/reclamo` and
+the app's "Presentar un reclamo"), which still needs an account, and "Sus
+consultas", where the shopper reads staff's answers.
+
 ## Yuntera Vende — seller centre
 
 **Purpose:** list, stock, get paid, stay healthy. **Users:** owners and staff of
@@ -127,6 +131,13 @@ sign-in with multi-factor authentication from Launch.
 | Cash reconciliation per driver per day                            | Payout runs and seller statements                    | Finance exports and ledger views           |
 | Record of every manual action                                     | Support inbox linked to orders                       | Role-based permissions beyond staff/admin  |
 | Holiday and service-day calendar                                  | Complaint register                                   | Experimentation tools                      |
+
+Built ahead of the Launch column (wave 9): Casos, a support desk where every
+complaint, return request, content report and recorded WhatsApp, phone or
+e-mail contact is a case with due times (the complaint register and its
+monthly report included); and Salud del sistema, the checks that show what
+needs attention, with the version of each app. The shared WhatsApp inbox is
+not built: WhatsApp stays in the WhatsApp Business app.
 
 ## Deliberately not in scope for any app yet
 

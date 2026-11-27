@@ -190,7 +190,7 @@ tools/dev/stack.sh native 1
 tools/dev/stack.sh native-e2e 1
 ```
 
-That runs the seventeen native journeys, each on a freshly seeded database:
+That runs the nineteen native journeys, each on a freshly seeded database:
 `shop` (including a return), `shop-parity` (the cart's other shop's offer,
 the brand filter, the category menu kept fresh, a product taken down),
 `seller` (including a price below the fees and a seller's second step),
@@ -206,7 +206,9 @@ product a location does not list), `order-followups` (a stopped parcel
 in the shopper and warehouse apps), `shop-followups` (what the shopper app
 says when a read fails or never answers, and the cart's other shop's date),
 `shop-cancel-reasons` (why an order was cancelled, a cart with nothing to
-buy) and `staff` (the right and wrong kinds of
+buy), `shop-complaint` (a complaint filed in the app and its answer in "Sus
+consultas"), `shop-stopped-order` (an order whose parcel never left the
+warehouse) and `staff` (the right and wrong kinds of
 account for the three staff apps), and the account screens of each app:
 `accounts-shop` (deletion, the password reset and change, the second step
 inside the app, reporting a listing, message channels), `accounts-seller`
