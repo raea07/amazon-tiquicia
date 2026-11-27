@@ -465,7 +465,7 @@ hosted project or on a phone.
 | Unit tests         | 1459 pass in 15 packages (native kit 342, core 342, notifications 280, shared web code 91, invoicing 73, seller app 71, shopper app 68, payments 40, drivers' app 34, warehouse app 33, API client 28, brand 21, local API 18, fake providers and gateway 10, fake of Hacienda 8); new in core: the cancellation words (with a test that the SQL writes the same reasons), the cart with nothing to buy, one full stop after a formatted time, and a check that every function of `084400` to `084600` is defined once and is the definition in force                                                                                     |
 | Database tests     | 40 files pass on PostgreSQL 16 (44 migrations), with the stack down; new: `171_stock_lock_order`, `172_count_into_location`, `173_shopper_followups`, `174_zero_unit_shelf_rows` (a 0-unit shelf row is the same as none for every reader and writer), `175_refunds_across_streams` (refunds of several orders in one transaction are never grouped; a mutation that drops the order from the grouping fails it) `176_cancel_reason_to_shopper` (staff's own note is not given to the shopper) and `177_cart_line_of_paused_offer` (a paused offer's line names its product and nothing of the offer; fails with the `082800` body)       |
 | API contract tests | 221 pass in 36 files (32 contract files), one file at a time; new: `contract.count-into-location-races` (a count against a cancellation at the same shelf; fails with the `084300` cancellation), `contract.frozen-callers` (the store build `3f251c3` and the web apps of `717048f` against the merged database, `cart_lines` included), and tests (vii), (viii) and (ix) of `contract.stock-product-races` (packing and a count against a seller switching a shared variant off, each failing without the offers-first lock; and the switch not waiting for a key-share lock on the variant, failing with the variant taken FOR UPDATE) |
-| Races              | Every family A to I at 100 natural and 100 forced rounds on a freshly reset lane 15 with the stack down, after the last change to SQL (27 November, 04:30 to 05:30 UTC): 158 rows, 0 everywhere except the documented E5, E5b, E6, E7 and E11, each with 0 wrong rounds and 0 timeouts ("Things to know", "Wave 8", which gives their ranges over four full runs); table in `/root/yuntera-audit/races-wave8/integration/table.txt`                                                                                                                                                                                                       |
+| Races              | Every family A to I at 100 natural and 100 forced rounds on a freshly reset lane 15 with the stack down, after the last change to SQL (27 November, 04:30 to 05:30 UTC): 158 rows, 0 everywhere except the documented E5, E5b, E6, E7 and E11, each with 0 wrong rounds and 0 timeouts ("Things to know", "Wave 8", which gives their ranges over five full runs); table in `/root/yuntera-audit/races-wave8/integration/table.txt`                                                                                                                                                                                                       |
 | Browser journeys   | 30 pass in Chromium in one full run, with no console or server errors; new `cancel-reasons` (the reason on a cancelled order, 44 px back links, a cart with nothing to buy whose paused line still names its product); `console-followups` now opens both removed stops' own pages. `tools/e2e/touch-targets.cjs` at 390 px over the journeys' pages: no control under 44 px outside running text                                                                                                                                                                                                                                         |
 | Native journeys    | 17 pass through the web export of the four apps at phone size (`tools/dev/stack.sh native 15` then `native-e2e 15`); the bundle scan finds no cipher. New: `shop-cancel-reasons` (why an order was cancelled, a cart with nothing to buy: no total, no date, no bottom notice, and the paused line names its product), the streams' `count-into-location` and `shop-followups`, and a check in `order-followups` that no sentence ends with two full stops                                                                                                                                                                                |
 | Lint and types     | No lint errors (230 warnings and 411 notes, of kinds already there) and no type errors in the 20 typecheck tasks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -1509,27 +1509,34 @@ Found while building or reviewing; none is fixed by pretending otherwise.
 
 - **Wave 8 (`084400`, `084500`, `084600`), merged on 24 November 2026, not
   on the hosted preview yet:**
-  - What still can deadlock (measured with `tools/races` on a local lane of
-    a shared machine, 100 natural and 100 forced rounds each). The numbers
-    move between runs, so each is a range over the four full runs at the
-    final lock order: an outside check at `ad2f363`, the fixer's at
-    `e87a3fc`, a second outside check at `8d7a1f0` and the last at `ef27fbc`
-    (27 November). This is the one place these ranges are kept; the `084400`
-    header and the sourcing document point here. The latest table is in
-    `/root/yuntera-audit/races-wave8/integration/table.txt`.
-    The loser rolls back whole and reads "nothing was saved, try again";
-    nothing is half-written. (1) Two checkouts that each take the last units
-    of two shared products in opposite order (E5: 24 to 38 in 100 natural
-    rounds, 57 to 63 forced), and a staff cancellation giving back last
-    units against such a checkout (E5b: 1 to 5 natural, 54 to 74 forced).
+  - What still can deadlock, in plain words: when two people change the
+    same last units at the same moment, one of them can be told "nothing was
+    saved, try again". The loser's change rolls back whole; nothing is
+    half-written, and no round of any run ever left a wrong stock, a wrong
+    listing or wrong money. For example, a staff cancellation that meets a
+    checkout on the same products failed and needed a second try in 1 to 11
+    of 100 natural rounds. The ranges below are what was seen so far over
+    five full runs of `tools/races` (100 natural and 100 forced rounds each,
+    on a local lane of a shared machine) at the final lock order; a single
+    run can fall outside them. The five runs: an outside check at
+    `ad2f363`, the fixer's at `e87a3fc`, a second outside check at
+    `8d7a1f0`, the integration run at `ef27fbc`, and a third outside check
+    at `4534ad3` (lane 13, freshly reset, stack down, 27 November 2026,
+    06:26 to 07:27 UTC). This is the one place these ranges are kept; the
+    `084400` header and the sourcing document point here. The tables are in
+    `/root/yuntera-audit/races-wave8/` (`integration/table.txt` and
+    `outside-round3/table.txt` are the last two).
+    (1) Two checkouts that each take the last units of two shared products
+    in opposite order (E5: 24 to 38 in 100 natural rounds, 53 to 63
+    forced), and a staff cancellation giving back last units against such a
+    checkout (E5b: 1 to 11 natural, 54 to 74 forced).
     (2) A cancellation or the sweep crossing zero on one offer of a product
-    while the seller changes another offer of it (E6: 22 to 31 natural,
+    while the seller changes another offer of it (E6: 22 to 33 natural,
     every forced round). (3) A shop suspended or reinstated against such a
     writer (E7: 0 to 4 natural, every forced round). (4) Staff merging two
     brands against a checkout crossing zero on two of their products (E11:
     0 to 18 natural for the two checkouts tried, 0 to 74 forced, depending
     on which session waits first).
-    No round of any of them left a wrong stock or summary.
   - Fixed in this wave, measured before and after: a cancellation against a
     count, a receipt or a pick of the same shelf (6 to 39 in 100 natural
     rounds, every forced round, to 0); a cancellation against a count into a
