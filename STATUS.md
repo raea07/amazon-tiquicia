@@ -2023,7 +2023,7 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     that reason is "Los paquetes no salieron de la bodega": the shopper
     reads "Cancelamos su pedido antes de que saliera de nuestra bodega",
     the parcel "No salió de la bodega" and its history "Paquete: no salió de
-    nuestra bodega", instead of "Devuelto". On the preview the shopper
+    la bodega", instead of "Devuelto a la bodega". On the preview the shopper
     still reads that the parcels came back. The staff's typed reason is
     never shown to the shopper.
   - `cart_lines` answered with the shop's name, price, stock, delivery

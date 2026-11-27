@@ -32,3 +32,9 @@ Each journey starts from a freshly seeded database. Rules for the next one
    the same change as the screen it checks.
 7. Fail on any console error, uncaught exception or 5xx, except a refusal
    the step provokes on purpose and names.
+
+Wave 9 added `shop-complaint` (the complaint form, «Sus consultas» and an
+answer on the order's screen) and `shop-stopped-order` (an order stopped
+before it left). Their steps are the last block of `lib/shop.cjs`; a word
+that depends on more than its value, such as «No salió de la bodega», comes
+from `derivedWord` in `lib/words.cjs`, which asks `packages/core` too.

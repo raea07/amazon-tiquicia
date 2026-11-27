@@ -29,3 +29,29 @@ is a 5xx, or the browser asks anything of a host that is not this machine
    `node tools/e2e/touch-targets.cjs` (after `stack.sh env 1`) measures 44 px.
 9. `node tools/e2e/compare.mjs --shots .lane/1/screenshots` puts each journey
    screenshot beside its reference page (rows in `compare/<app>.json`).
+
+## Wave 9's journeys and helpers
+
+Five journeys cover the support desk, system health, error reports and the
+follow-ups of wave 8. Their screen steps are in the same helper files as the
+others: a block at the end of `lib/ops.cjs` (Casos, a case, the customer
+view, Salud del sistema, Versiones, the staff-cancel form), of `lib/web.cjs`
+(the complaint form, «Sus consultas», the category breadcrumb) and of
+`lib/kit.cjs` (the error pages and a sign-in form typed but not yet sent,
+the same in the four websites).
+
+| Journey             | App               | What it walks through                                                                                                                                                                                                      |
+| ------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `support-cases`     | `apps/web`, `ops` | A complaint from an order; Casos with the case's stamp; a note refused for a delivery code; a saved answer; the shopper reads the answer; a WhatsApp contact; «Mostrar contacto» on Auditoría; finance sees only its cases |
+| `system-health`     | `apps/ops`        | The uptime ping; Salud del sistema in order, then a stopped message and a rejected document; Versiones and a phone build typed by hand, a typo removed; what support and catalogue staff see                               |
+| `error-reports`     | all four          | In each website an error in the browser and one on the server; the error page at 390 px; «Intentar de nuevo»; with the stand-in tracker, what reached it carries no personal data                                          |
+| `wave8-followups`   | `apps/web`, `ops` | An order stopped before it left, as the shopper reads it; the staff-cancel form's hint; the order right after a staff cancellation; two links measured at 44 px                                                            |
+| `wave9-integration` | `apps/ops`, `web` | Who sees Casos and Salud del sistema for each staff role; one count of late cases on Salud, Hoy and Casos; a customer's own delivery code masked for staff                                                                 |
+
+Two files in `lib/` are not screen helpers. `lib/local-only.cjs` is loaded
+before every journey by `run.mjs` and fails it when the browser asks anything
+of a host that is not this machine. `lib/tracker-standin.cjs` is the stand-in
+error tracker that `ERROR_TRACKER=standin tools/dev/stack.sh up <lane>` starts:
+it only records what arrives, in `.lane/<lane>/error-tracker.jsonl`, which
+`error-reports` reads. With the tracker off (every ordinary lane)
+`error-reports` checks that nothing is sent.

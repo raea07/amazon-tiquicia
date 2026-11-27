@@ -2270,12 +2270,16 @@ back, and the parcel read "Devuelto".
 de la bodega" and `get_order` says of each parcel and history line whether
 it was stopped before it ever left (`stopped_before_leaving`, new and
 optional). The shopper's pages then say "No salió de la bodega" and
-"Paquete: no salió de nuestra bodega" (`packages/core/src/parcel-words.ts`).
-The console and the drivers' and warehouse screens keep their own words.
+"Paquete: no salió de la bodega" (`packages/core/src/parcel-words.ts`).
+Since wave 9 was joined with stage 1 of the rebuild, both are derived words
+of the one status-word module (decision 59): `statusWord("shipment_status",
+…)` with `stoppedBeforeLeaving`, and "Detenido en la bodega" with
+`recalled`. The console and the drivers' and warehouse screens keep their
+own words.
 
-**Consequences.** A parcel that went out and came back keeps "Devuelto" and
-the old reason. The store build of `3f251c3` ignores the new field and
-still shows "Devuelto".
+**Consequences.** A parcel that went out and came back keeps the module's
+"Devuelto a la bodega" and the old reason. The store build of `3f251c3`
+ignores the new field and still shows its own "Devuelto".
 
 **Not verified.** Not on the hosted preview or a phone yet.
 
@@ -2331,7 +2335,8 @@ on each case.
 **Decision.** The health page's line is "Casos atrasados": the open cases
 the caller's role reads whose next due time has passed, by the desk's own
 rule (`private.case_next_due`), the rule of the "Hoy" line and of the
-"Atrasado" clock on `/casos`; it links to Casos. Past the first-response
+"Atrasado" stamp on `/casos` (a derived word of the status-word module,
+decision 59); it links to Casos. Past the first-response
 time asks for attention, past the resolution time is a problem.
 
 **Consequences.** For one database state the three pages give one number

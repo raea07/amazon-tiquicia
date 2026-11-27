@@ -228,8 +228,10 @@ return requests and content reports open one by themselves. A WhatsApp,
 phone or e-mail conversation is recorded with **Registrar un contacto** on
 the order's page (or the customer's page when no order is involved), with
 the channel, the topic and a one-line summary. The topic sets the targets
-above. The case shows when the first response and the resolution are due,
-and says "A tiempo", "Vence pronto" or "Atrasado".
+above. The case shows when the first response and the resolution are due.
+Its stamp says where it stands: "Por responder" until someone answers, then
+"En revisión", "Respondido" once closed; "Vence pronto" or "Atrasado" when
+it is near or past its due time.
 
 1. Open the oldest case first. Use **Asignarme el caso** so colleagues know
    who has it.
