@@ -536,7 +536,23 @@ redeployed from `12ec48c` (details in the
   console's "Ver en Cobros" are 17 px tall on a phone; the console's
   staff-cancel form says the shopper sees the reason, which is no longer
   true; a parcel staff stop before it leaves ends with "los paquetes
-  regresaron sin entregarse" on the shopper's page.
+  regresaron sin entregarse" on the shopper's page. Seen once: right after
+  a staff cancellation the console's order page still showed the order as
+  confirmed on its first reload, and as refunded on the next.
+- **Outside attack on the new surfaces** (27 November 2026, through the
+  public API only, as a visitor and as each demo role): the lockdown of the
+  new columns, every wrong caller of the new and redefined functions,
+  hostile input to `wms_count_into_location`, what a shopper can learn from
+  `get_order`, refunds, the private functions, the visitor function list
+  (17) and ended sessions all held. One low-severity hole was found and is
+  not fixed: `cart_lines` gives the shop's name, price, stock (up to 10),
+  delivery method and handling days of an active offer whose product is not
+  public (shown with an archived product; by the code also one awaiting
+  review or taken down) to anyone who knows the offer's id. The ids are
+  random and the behaviour is older than wave 8 (`082800`), but the header
+  of `084600` says such a line returns only its id. Not tried: races, wrong
+  passwords, staff roles other than admin, a second warehouse. It left one
+  refunded test order (YT-102002) and two deleted throwaway accounts.
 - **Not verified there**: the lock order under parallel sessions (the race
   tests never run against a hosted database), the 200-order cap through the
   scheduled job, the messages planner on real events (no worker is
@@ -1839,6 +1855,17 @@ Found while building or reviewing; none is fixed by pretending otherwise.
     los paquetes regresaron sin entregarse" (the parcel never left the
     warehouse), not the generic words of a staff cancellation. The staff's
     typed reason is never shown to the shopper.
+  - `cart_lines` answers with the shop's name, price, stock, delivery method
+    and handling days for an active offer of a product that is not public,
+    when the caller knows the offer's id. The header of `084600` says such a
+    line returns only its id. Low severity (random ids, a delisted
+    product); found by the outside attack of 27 November 2026, not fixed.
+  - A shopper who cancels through the API with a text of their own reads no
+    reason on the order afterwards, so the page uses the words of a staff
+    cancellation. The shop and the phone app always send the fixed text, so
+    no screen is affected. Reported by the same attack; not re-checked.
+  - In the simulation a refund can show `completed_at` a few milliseconds
+    before `requested_at`. Reported by the same attack; not re-checked.
 
 ## Running it
 
