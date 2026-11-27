@@ -9,6 +9,7 @@
 
 const { createHmac, randomUUID } = require("node:crypto");
 const { request } = require("playwright");
+const { overflow, shows } = require("./screen.cjs");
 
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
@@ -178,11 +179,10 @@ async function phone(browser, name, errors) {
     said: async (id) => (await on(id).innerText()).replace(/\s+/g, " ").trim(),
     shot: (file, fullPage = false) =>
       page.screenshot({ path: `${SHOTS}/native-${file}.png`, fullPage }),
+    /** Waits until an element with this testID says `words`. */
+    shows: (id, words, options) => shows(page, id, words, options),
     noSideways: async (where) =>
-      check(
-        (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-        `${where}: no sideways scrolling at 360 px`,
-      ),
+      check((await overflow(page)) <= 0, `${where}: no sideways scrolling at 360 px`),
     /** Keys the app keeps in the browser's storage (the web export's secure store and app storage). */
     stored: () => page.evaluate(() => Object.keys(localStorage)),
     expect: (pattern) => {
@@ -196,6 +196,46 @@ async function signIn(p, email, password = PASSWORD) {
   await p.on("sign-in-email").fill(email);
   await p.on("sign-in-password").fill(password);
   await p.on("sign-in-submit").click();
+}
+
+/** From the kit's sign-in screen: «Olvidé mi contraseña», an address, send. */
+async function requestReset(p, email) {
+  await p.on("forgot-password").click();
+  await p.on("reset-email").fill(email);
+  await p.on("reset-submit").click();
+}
+
+/** The kit's password change: the current password, the new one twice, send. */
+async function changePassword(p, current, next) {
+  await p.on("password-current").fill(current);
+  await p.on("password-new").fill(next);
+  await p.on("password-repeat").fill(next);
+  await p.on("password-submit").click();
+}
+
+/** Su cuenta of the seller, driver and warehouse apps, from their home screen. */
+async function openAccount(p) {
+  await p.on("open-account").scrollIntoViewIfNeeded();
+  await p.on("open-account").click();
+}
+
+/**
+ * The shop's website (apps/web), opened from the reset e-mail's link: it asks
+ * to continue, then takes the new password twice, and says it changed. These
+ * are the website's screens: when the website is rebuilt, its journey owner
+ * keeps this step working (tools/e2e/lib/web.cjs has the same screens).
+ */
+async function newPasswordOnWebsite(page, confirmUrl, password) {
+  await page.goto(confirmUrl, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await page.waitForURL(/\/recuperar\/nueva/);
+  await page.locator('input[name="password"]').fill(password);
+  await page.locator('input[name="repeat"]').fill(password);
+  await page
+    .getByRole("button", { name: /contraseña/i })
+    .last()
+    .click();
+  await page.getByText("su contraseña cambió").first().waitFor();
 }
 
 /**
@@ -227,11 +267,7 @@ async function deleteThroughScreen(p, email, label, password = PASSWORD) {
   p.expect(/status of 400.*\/auth\/v1\/token/);
   await p.on("delete-password").fill("no-es-la-clave");
   await p.on("delete-submit").click();
-  await p.page
-    .getByTestId("delete-message")
-    .filter({ visible: true, hasText: "La contraseña no coincide" })
-    .first()
-    .waitFor();
+  await p.shows("delete-message", "La contraseña no coincide");
   check(
     (await http("POST", "/auth/v1/token?grant_type=password", { data: { email, password } }))
       .status === 200,
@@ -264,6 +300,7 @@ module.exports = {
   KEY,
   PASSWORD,
   SHOTS,
+  changePassword,
   check,
   codeAt,
   deleteThroughScreen,
@@ -272,7 +309,10 @@ module.exports = {
   http,
   log,
   mail,
+  newPasswordOnWebsite,
+  openAccount,
   phone,
+  requestReset,
   rpcAs,
   signIn,
   throwaway,

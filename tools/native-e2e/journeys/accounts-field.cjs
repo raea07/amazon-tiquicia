@@ -19,7 +19,9 @@ const {
   deleteThroughScreen,
   log,
   mail,
+  openAccount,
   phone,
+  requestReset,
   signIn,
   throwaway,
 } = require("../lib/accounts.cjs");
@@ -50,9 +52,7 @@ const APPS = [
     // 1. The reset request from the sign-in screen
     const r = await phone(browser, `${app.name}-reset`, errors);
     await r.page.goto(`${app.url}/`, { waitUntil: "networkidle" });
-    await r.on("forgot-password").click();
-    await r.on("reset-email").fill(app.member);
-    await r.on("reset-submit").click();
+    await requestReset(r, app.member);
     await r.on("reset-sent").waitFor();
     check(
       /Si esa dirección tiene una cuenta/.test(await r.said("reset-sent")) &&
@@ -67,8 +67,7 @@ const APPS = [
     // 2. The demo member: Su cuenta, and why the account cannot go yet
     await signIn(r, app.member);
     await r.on(app.home).waitFor();
-    await r.on("open-account").scrollIntoViewIfNeeded();
-    await r.on("open-account").click();
+    await openAccount(r);
     await r.on("account-email").waitFor();
     check(
       (await r.said("account-email")) === app.member &&

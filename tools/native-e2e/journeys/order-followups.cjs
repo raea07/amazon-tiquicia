@@ -18,7 +18,10 @@
 
 const { chromium, request } = require("playwright");
 const { ownRoute } = require("../../e2e/lib/own-route.cjs");
-const { settledText } = require("../../e2e/lib/settle.cjs");
+const { overflow, screenText, settledText } = require("../lib/screen.cjs");
+const shopApp = require("../lib/shop.cjs");
+const warehouseApp = require("../lib/warehouse.cjs");
+const { word } = require("../lib/words.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const SHOP = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
@@ -131,23 +134,20 @@ async function packedOrder(buyer, method) {
     return page;
   };
   const noSideways = async (page, where) =>
-    check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-      `no sideways scrolling at 390 px: ${where}`,
-    );
+    check((await overflow(page)) <= 0, `no sideways scrolling at 390 px: ${where}`);
+  const ON_ITS_WAY = word("order_status", "shipped", "shopper");
+  const CANCELLING = word("order_stopping", "cancels", "shopper");
 
   // ── 2. The shopper app while the parcel waits ──
   const shop = await phone();
   const shopId = (id) => shop.getByTestId(id).filter({ visible: true }).first();
   await shop.goto(`${SHOP}/ingresar?siguiente=%2Fpedidos`, { waitUntil: "networkidle" });
-  await shopId("sign-in-email").fill(SHOPPER);
-  await shopId("sign-in-password").fill(PASSWORD);
-  await shopId("sign-in-submit").click();
+  await shopApp.signIn(shop, SHOPPER, PASSWORD);
   await shopId(`order-${order.order_number}`).waitFor();
   const row = squash(await shopId(`order-${order.order_number}`).innerText());
   log("   ", row);
   check(
-    row.includes("Se está cancelando") && !row.includes("En camino"),
+    row.includes(CANCELLING) && !row.includes(ON_ITS_WAY),
     "the list says it is being cancelled",
   );
   await noSideways(shop, "order list");
@@ -166,7 +166,7 @@ async function packedOrder(buyer, method) {
     (await shop.getByTestId("delivery-pin").count()) === 0,
     "no delivery code for an order being cancelled",
   );
-  check(!squash(await shop.locator("body").innerText()).includes("En camino"), "never En camino");
+  check(!(await screenText(shop)).includes(ON_ITS_WAY), "never En camino");
   await noSideways(shop, "order page");
   await shop.screenshot({ path: `${SHOTS}/native-order-followups-02-order.png`, fullPage: true });
 
@@ -174,14 +174,9 @@ async function packedOrder(buyer, method) {
   const floor = await phone();
   const floorId = (id) => floor.getByTestId(id).filter({ visible: true }).first();
   await floor.goto(`${WAREHOUSE}/`, { waitUntil: "networkidle" });
-  await floorId("sign-in-email").fill("bodega@yuntera.example");
-  await floorId("sign-in-password").fill(PASSWORD);
-  await floorId("sign-in-submit").click();
+  await warehouseApp.signIn(floor, "bodega@yuntera.example", PASSWORD);
   await floorId("warehouse-board").waitFor();
-  const parcelRow = floor
-    .getByTestId("returned-row")
-    .filter({ hasText: shipment.tracking_code })
-    .first();
+  const parcelRow = warehouseApp.returnedRow(floor, shipment.tracking_code);
   await parcelRow.waitFor();
   const parcelText = squash(await parcelRow.innerText());
   log("   ", parcelText);
@@ -254,7 +249,7 @@ async function packedOrder(buyer, method) {
   const cashRow = squash(await shopId(`order-${cash.placed.order_number}`).innerText());
   log("   ", cashRow);
   check(
-    cashRow.includes("Se está cancelando") &&
+    cashRow.includes(CANCELLING) &&
       cashRow.includes("No se le cobró nada") &&
       !cashRow.includes("devolvemos"),
     "the list promises no money back for a cash order",
@@ -262,9 +257,9 @@ async function packedOrder(buyer, method) {
   const sentRow = squash(await shopId(`order-${sent.orderNumber}`).innerText());
   log("   ", sentRow);
   check(
-    sentRow.includes("Se está cancelando") &&
+    sentRow.includes(CANCELLING) &&
       sentRow.includes("le devolvemos el dinero") &&
-      !sentRow.includes("En camino") &&
+      !sentRow.includes(ON_ITS_WAY) &&
       !sentRow.includes("Llega el"),
     "the list says a parcel sent back is being cancelled",
   );
@@ -277,12 +272,12 @@ async function packedOrder(buyer, method) {
   log("   ", cashPage);
   check(
     cashPage.includes("No se le cobró nada, así que no hay nada que devolver.") &&
-      !/le devolvemos/i.test(squash(await shop.locator("body").innerText())),
+      !/le devolvemos/i.test(await screenText(shop)),
     "the page promises no money back for a cash order",
   );
   await shop.goto(`${SHOP}/pedidos`, { waitUntil: "networkidle" });
   await shopId(`order-${sent.orderNumber}`).click();
-  await shop.getByText(`Pedido ${sent.orderNumber}`).first().waitFor();
+  await shopApp.orderOpen(shop, sent.orderNumber);
   await shopId("order-stopping").waitFor();
   const sentPage = await settledText(
     shopId("order-stopping"),
@@ -294,10 +289,10 @@ async function packedOrder(buyer, method) {
   log("   ", sentPage);
   check(true, "the page says a parcel sent back comes back and what is refunded");
   // The history below may say "En camino": it was, before it came back.
-  const sentAll = squash(await shop.locator("body").innerText());
+  const sentAll = await screenText(shop);
   const sentBody = sentAll.slice(0, sentAll.indexOf("Historial"));
   check(
-    !sentBody.includes("En camino") && !sentBody.includes("Llega el"),
+    !sentBody.includes(ON_ITS_WAY) && !sentBody.includes("Llega el"),
     "never En camino or a date for a parcel sent back",
   );
   check(
@@ -326,7 +321,7 @@ async function packedOrder(buyer, method) {
   const feeLine = `El envío (${colones(triedOrder.shipping_minor)}) no se devuelve porque fuimos a entregarlo a su dirección.`;
   await shop.goto(`${SHOP}/pedidos`, { waitUntil: "networkidle" });
   await shopId(`order-${tried.orderNumber}`).click();
-  await shop.getByText(`Pedido ${tried.orderNumber}`).first().waitFor();
+  await shopApp.orderOpen(shop, tried.orderNumber);
   await shopId("order-stopping").waitFor();
   // Wait for the amount (said once the payment has answered), then check the fee line.
   const triedPage = await settledText(
@@ -364,7 +359,7 @@ async function packedOrder(buyer, method) {
   );
   check((await shop.getByTestId("fee-kept").count()) === 0, "the fee line is not repeated");
   // A time already ends with "a. m." or "p. m.": no sentence ends with two stops.
-  const keptPage = await shop.locator("body").innerText();
+  const keptPage = await screenText(shop);
   check(!/[^.]\.\.(\s|$)/.test(keptPage), "no sentence on the order page ends with two full stops");
   await noSideways(shop, "order page, fee kept");
   await shop.screenshot({

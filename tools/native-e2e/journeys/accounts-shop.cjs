@@ -31,11 +31,15 @@ const {
   http,
   log,
   mail,
+  changePassword,
+  newPasswordOnWebsite,
   phone,
+  requestReset,
   rpcAs,
   signIn,
   throwaway,
 } = require("../lib/accounts.cjs");
+const shop = require("../lib/shop.cjs");
 
 const BASE = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
 const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
@@ -91,10 +95,8 @@ async function webIsUp() {
   await a.noSideways("reset sent");
   await a.shot("accounts-shop-01-reset-sent");
   await a.on("reset-back").click();
-  await a.on("forgot-password").click();
   const stranger = `nadie-${Date.now()}@prueba.example`;
-  await a.on("reset-email").fill(stranger);
-  await a.on("reset-submit").click();
+  await requestReset(a, stranger);
   await a.on("reset-sent").waitFor();
   check(
     (await a.said("reset-sent")) === answer,
@@ -114,16 +116,7 @@ async function webIsUp() {
   const NEW_PASSWORD = "nueva-clave-del-sitio";
   if (await webIsUp()) {
     const web = await phone(browser, "shop-website", errors);
-    await web.page.goto(`${WEB}/auth/confirm${link.search}`, { waitUntil: "networkidle" });
-    await web.page.getByRole("button", { name: "Continuar" }).click();
-    await web.page.waitForURL(/\/recuperar\/nueva/);
-    await web.page.locator('input[name="password"]').fill(NEW_PASSWORD);
-    await web.page.locator('input[name="repeat"]').fill(NEW_PASSWORD);
-    await web.page
-      .getByRole("button", { name: /contraseña/i })
-      .last()
-      .click();
-    await web.page.getByText("su contraseña cambió").first().waitFor();
+    await newPasswordOnWebsite(web.page, `${WEB}/auth/confirm${link.search}`, NEW_PASSWORD);
     await web.shot("accounts-shop-02-website-new-password");
     check(true, "the link, opened on the shop's website, sets the new password there");
     await web.context.close();
@@ -150,37 +143,16 @@ async function webIsUp() {
   await a.page.goto(`${BASE}/cuenta/contrasena`, { waitUntil: "networkidle" });
   await a.on("password-current").waitFor();
   a.expect(/status of 400.*\/auth\/v1\/token/);
-  await a.on("password-current").fill("no-es-esta");
-  await a.on("password-new").fill("otra-clave-nueva");
-  await a.on("password-repeat").fill("otra-clave-nueva");
-  await a.on("password-submit").click();
-  await a.page
-    .getByTestId("password-message")
-    .filter({ visible: true, hasText: "La contraseña actual no coincide." })
-    .first()
-    .waitFor();
+  await changePassword(a, "no-es-esta", "otra-clave-nueva");
+  await a.shows("password-message", "La contraseña actual no coincide.");
   a.expect(null);
   check(true, "a wrong current password is refused");
-  await a.on("password-current").fill(NEW_PASSWORD);
-  await a.on("password-new").fill("corta");
-  await a.on("password-repeat").fill("corta");
-  await a.on("password-submit").click();
-  await a.page
-    .getByTestId("password-message")
-    .filter({ visible: true, hasText: "al menos 8 caracteres" })
-    .first()
-    .waitFor();
+  await changePassword(a, NEW_PASSWORD, "corta");
+  await a.shows("password-message", "al menos 8 caracteres");
   check(true, "a short new password is refused with the rule");
   const LAST_PASSWORD = "clave-cambiada-en-la-app";
-  await a.on("password-current").fill(NEW_PASSWORD);
-  await a.on("password-new").fill(LAST_PASSWORD);
-  await a.on("password-repeat").fill(LAST_PASSWORD);
-  await a.on("password-submit").click();
-  await a.page
-    .getByTestId("password-message")
-    .filter({ visible: true, hasText: "su contraseña cambió" })
-    .first()
-    .waitFor();
+  await changePassword(a, NEW_PASSWORD, LAST_PASSWORD);
+  await a.shows("password-message", "su contraseña cambió");
   await a.noSideways("password change");
   await a.shot("accounts-shop-03-password-changed", true);
   const withNew = await http("POST", "/auth/v1/token?grant_type=password", {
@@ -223,7 +195,7 @@ async function webIsUp() {
   // token would be refused for anything but the second step (any refused
   // call would fail this journey).
   await b.page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  await b.page.locator('[data-testid^="home-product"]').first().waitFor();
+  await shop.homeProducts(b.page).first().waitFor();
   check(true, "halfway through the second step, the shop's home shows its products");
   // Halfway through, a screen for signed-in shoppers (here the orders, as
   // from a notification) leads to the code instead of waiting forever.
@@ -237,7 +209,7 @@ async function webIsUp() {
   // Halfway through, the account tab asks for nothing the database would
   // refuse (any refused call would fail this journey) and leads back here.
   await b.page.goto(`${BASE}/cuenta`, { waitUntil: "networkidle" });
-  await b.page.getByText("Falta un paso").first().waitFor();
+  await b.shows("account-second-step", "Falta un paso");
   await b.on("account-sign-in").click();
   await b.on("second-step").waitFor();
   check(true, "the account tab says a step is missing and leads back to the code");
@@ -280,11 +252,7 @@ async function webIsUp() {
   await c.noSideways("report form");
   await c.shot("accounts-shop-06-report-form", true);
   await c.on("report-submit").click();
-  await c.page
-    .getByTestId("report-message")
-    .filter({ visible: true, hasText: "Recibimos su reporte" })
-    .first()
-    .waitFor();
+  await c.shows("report-message", "Recibimos su reporte");
   await c.shot("accounts-shop-07-report-sent");
   const after = await rpcAs(STAFF, "ops_care_queues");
   check(
@@ -320,11 +288,7 @@ async function webIsUp() {
   await d.on("notify-phone").fill("8888 1234");
   await d.on("notify-commercial").click();
   await d.on("notify-save").click();
-  await d.page
-    .getByTestId("notify-message")
-    .filter({ visible: true, hasText: "Guardamos sus preferencias" })
-    .first()
-    .waitFor();
+  await d.shows("notify-message", "Guardamos sus preferencias");
   await d.noSideways("channel settings");
   await d.shot("accounts-shop-08-channels-saved", true);
   const saved = await rpcAs(SHOPPER, "my_notification_settings");
@@ -368,11 +332,7 @@ async function webIsUp() {
   await d.on("notify-sms").click();
   d.expect(/status of 4\d\d/);
   await d.on("notify-save").click();
-  await d.page
-    .getByTestId("notify-message")
-    .filter({ visible: true, hasText: "cambiaron en otro teléfono o en el sitio web" })
-    .first()
-    .waitFor();
+  await d.shows("notify-message", "cambiaron en otro teléfono o en el sitio web");
   d.expect(null);
   const refusal = await d.said("notify-message");
   check(
@@ -385,11 +345,7 @@ async function webIsUp() {
     "and the screen now shows what is stored (push off), not what it was opened with",
   );
   await d.on("notify-save").click();
-  await d.page
-    .getByTestId("notify-message")
-    .filter({ visible: true, hasText: "Guardamos sus preferencias" })
-    .first()
-    .waitFor();
+  await d.shows("notify-message", "Guardamos sus preferencias");
   check(
     (await rpcAs(SHOPPER, "my_notification_settings")).push_enabled === false,
     "saving again works and keeps what was stored",

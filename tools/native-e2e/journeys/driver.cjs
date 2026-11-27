@@ -34,7 +34,8 @@
 // when the phone sleeps or the app is killed.
 
 const { chromium, request } = require("playwright");
-const { settledText } = require("../../e2e/lib/settle.cjs");
+const driverApp = require("../lib/driver.cjs");
+const { overflow, screenText, settledText } = require("../lib/screen.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const URL_ = process.env.NATIVE_DRIVER_URL || "http://127.0.0.1:3012";
@@ -218,20 +219,17 @@ async function newRoute() {
     Boolean(await settledText(byId(id), wanted, { what: `the text of ${id}` }));
   const shot = (name) =>
     page.screenshot({ path: `${SHOTS}/native-driver-${name}.png`, fullPage: true });
-  const noSideways = async () =>
-    (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0;
+  const noSideways = async () => (await overflow(page)) <= 0;
   const goHome = async () => {
     await byId("driver-route").waitFor();
   };
 
   // ── 1. Sign in and see the day ──
   await page.goto(`${URL_}/`, { waitUntil: "networkidle" });
-  await byId("sign-in-email").fill(DRIVER);
-  await byId("sign-in-password").fill(PASSWORD);
-  await byId("sign-in-submit").click();
+  await driverApp.signIn(page, DRIVER, PASSWORD);
   await goHome();
   await byId(`stop-${B}-3`).waitFor();
-  const home = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+  const home = await screenText(page);
   check(/Hola, Carlos/.test(home), "the driver is greeted by name");
   check(
     home.includes("Ruta R-1003") && home.includes(`Ruta ${B}`),
@@ -250,7 +248,7 @@ async function newRoute() {
   // ── 2. Start the new route: explanation first, then the prompt, then sharing ──
   await byId(`start-route-${B}`).click();
   await byId("location-continue").waitFor();
-  const explain = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+  const explain = await screenText(page);
   check(
     /Antes de salir: su ubicación/.test(explain),
     "an explanation comes before the location prompt",
@@ -299,7 +297,7 @@ async function newRoute() {
   await byId("stop-arrived").waitFor();
   check(/Llegada registrada/.test(await textOf("stop-arrived")), "arrival is recorded");
 
-  const tracking1 = /paquete (YT\d+)/.exec(await page.locator("body").innerText())[1];
+  const tracking1 = /paquete (YT\d+)/.exec(await screenText(page))[1];
   const pin1 = await pinFor("comprador@yuntera.example", tracking1);
   check(/^\d{4}$/.test(pin1 ?? ""), "the shopper's order has a 4-digit code");
   await byId("deliver-cash").fill("1000000");
@@ -365,7 +363,7 @@ async function newRoute() {
   check(await says("offline-banner", /Sin conexión/), "the screen says there is no connection");
   check(await says("outbox", /^1 acción por enviar/), "the queue shows 1 action to send");
 
-  const tracking2 = /paquete (YT\d+)/.exec(await page.locator("body").innerText())[1];
+  const tracking2 = /paquete (YT\d+)/.exec(await screenText(page))[1];
   await byId("deliver-name").fill("Quien recibe");
   await byId("deliver-pin").fill("4821");
   await byId("deliver-submit").click();
@@ -520,7 +518,7 @@ async function newRoute() {
   await page.waitForTimeout(16_000);
   await context.setGeolocation({ latitude: 9.935, longitude: -84.049 });
   await byId("no-access").waitFor({ timeout: 75_000 });
-  const suspendedText = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+  const suspendedText = await screenText(page);
   check(
     /Su cuenta de repartidor está suspendida/.test(suspendedText),
     "a driver suspended mid-route is told the account is suspended, without leaving the app",
@@ -556,10 +554,10 @@ async function newRoute() {
   await central0("ops_set_driver_status", { p_driver_id: carlosId, p_status: "active" });
   await central0("ops_assign_route", { p_route_id: released.route_id, p_driver_id: carlosId });
   await central0.dispose();
-  await page.getByRole("button", { name: "Ya me dieron acceso: revisar de nuevo" }).click();
+  await driverApp.checkAccessAgain(page);
   await byId(`start-route-${C}`).waitFor({ timeout: 30_000 });
   suspended = false;
-  const back = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+  const back = await screenText(page);
   check(
     back.includes(`Ruta ${C}`) && (await byId(`route-done-${B}`).count()) === 1,
     "once active again, the driver has the new route and the old one reads as finished",
@@ -578,7 +576,7 @@ async function newRoute() {
   await byId("stop-arrive").click();
   await byId("stop-arrived").waitFor();
   check(
-    (await page.locator("body").innerText()).includes(tracking2),
+    (await screenText(page)).includes(tracking2),
     "the stop left for later is the first of the new route",
   );
   const order2 = await orderForAnyone(tracking2);
@@ -588,14 +586,10 @@ async function newRoute() {
   for (const left of [4, 3, 2, 1]) {
     await byId("deliver-pin").fill(wrong);
     await byId("deliver-submit").click();
-    await page
-      .getByTestId("deliver-message")
-      .filter({
-        visible: true,
-        hasText: left === 1 ? "Queda 1 intento" : `Quedan ${left} intentos`,
-      })
-      .first()
-      .waitFor();
+    await driverApp.deliveryAnswer(
+      page,
+      left === 1 ? "Queda 1 intento" : `Quedan ${left} intentos`,
+    );
   }
   check(true, "four wrong codes are refused, each with the attempts left on the order");
   check(

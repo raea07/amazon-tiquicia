@@ -34,10 +34,12 @@ const {
   deleteThroughScreen,
   log,
   phone,
+  requestReset,
   rpcAs,
   signIn,
   throwaway,
 } = require("../lib/accounts.cjs");
+const seller = require("../lib/seller.cjs");
 
 const BASE = process.env.NATIVE_SELLER_URL || "http://127.0.0.1:3011";
 const OWNER = "vendedor@yuntera.example";
@@ -65,8 +67,7 @@ const OWNER = "vendedor@yuntera.example";
     /\(usted\)/.test(await o.said("team-members")) && /Dueño/.test(await o.said("team-members")),
     "the team lists the owner, marked as the person using the app",
   );
-  await o.on("invite-email").fill("mario@correo");
-  await o.on("invite-submit").click();
+  await seller.invite(o.page, "mario@correo");
   check(
     (await o.said("invite-message")) === "Escriba el correo con que la persona ingresa a Yuntera.",
     "a wrong address is refused before anything is sent",
@@ -74,34 +75,18 @@ const OWNER = "vendedor@yuntera.example";
   await o.on("invite-email").fill(member.toUpperCase());
   await o.on("invite-role-staff").click();
   await o.on("invite-submit").click();
-  await o.page
-    .getByTestId("invite-message")
-    .filter({ visible: true, hasText: "Invitación enviada" })
-    .first()
-    .waitFor();
+  await o.shows("invite-message", "Invitación enviada");
   check(
     (await o.said("invite-message")).includes(member) &&
       /Vence en 14 días/.test(await o.said("invite-message")),
     "the invitation is sent, in the seller centre's words",
   );
-  await o.on("invite-email").fill(other);
-  await o.on("invite-submit").click();
-  await o.page
-    .getByTestId("team-invitation")
-    .filter({ visible: true, hasText: other })
-    .first()
-    .waitFor();
+  await seller.invite(o.page, other);
+  await seller.invitationRow(o.page, other).first().waitFor();
   await o.noSideways("team");
   await o.shot("accounts-seller-01-team-invited", true);
-  await o.page
-    .getByTestId("team-invitation")
-    .filter({ visible: true, hasText: other })
-    .getByTestId("invitation-revoke")
-    .click();
-  await o.page
-    .getByTestId("team-invitation")
-    .filter({ visible: true, hasText: other })
-    .waitFor({ state: "detached" });
+  await seller.invitationRow(o.page, other).getByTestId("invitation-revoke").click();
+  await seller.invitationRow(o.page, other).waitFor({ state: "detached" });
   check(
     (await o.said("team-notice")) === "Invitación retirada.",
     "a second invitation is withdrawn, leaves the list, and the list says so",
@@ -135,11 +120,11 @@ const OWNER = "vendedor@yuntera.example";
 
   // ── 3. The owner changes the member's role ─────────────────────────────
   await o.page.reload({ waitUntil: "networkidle" });
-  const row = o.page.getByTestId("team-member").filter({ visible: true, hasText: member });
+  const row = seller.memberRow(o.page, member);
   await row.waitFor();
   await row.getByTestId("member-role-admin").click();
   await row.getByTestId("member-role-save").click();
-  await row.getByText("Rol actualizado.").waitFor();
+  await seller.rowMessage(row, "Rol actualizado.");
   const team = await rpcAs(OWNER, "seller_team", { p_seller_id: shop.id });
   check(
     team.members.find((person) => person.email === member)?.role === "admin",
@@ -148,11 +133,11 @@ const OWNER = "vendedor@yuntera.example";
 
   // ── 4. The member leaves, then deletes the account ─────────────────────
   await m.page.goto(`${BASE}/equipo`, { waitUntil: "networkidle" });
-  const mine = m.page.getByTestId("team-member").filter({ visible: true, hasText: "(usted)" });
+  const mine = seller.memberRow(m.page, "(usted)");
   await mine.waitFor();
   check((await mine.innerText()).includes("Administración"), "the member sees the new role");
   await mine.getByTestId("member-leave").click();
-  await mine.getByText("Marque la casilla").waitFor();
+  await seller.rowMessage(mine, "Marque la casilla");
   check(true, "leaving needs the box ticked");
   await m.shot("accounts-seller-04-leave", true);
   await mine.getByTestId("member-leave-confirm").click();
@@ -181,20 +166,15 @@ const OWNER = "vendedor@yuntera.example";
 
   // ── 4b. The owner removes a member; another invitation is declined ─────
   await o.page.goto(`${BASE}/equipo`, { waitUntil: "networkidle" });
-  await o.on("invite-email").fill(other);
-  await o.on("invite-submit").click();
-  await o.page
-    .getByTestId("team-invitation")
-    .filter({ visible: true, hasText: other })
-    .first()
-    .waitFor();
+  await seller.invite(o.page, other);
+  await seller.invitationRow(o.page, other).first().waitFor();
   const offered = (await rpcAs(other, "my_invitations")).find((i) => i.shop.id === shop.id);
   await rpcAs(other, "seller_answer_invitation", {
     p_invitation_id: offered.id,
     p_accept: true,
   });
   await o.page.reload({ waitUntil: "networkidle" });
-  const otherRow = o.page.getByTestId("team-member").filter({ visible: true, hasText: other });
+  const otherRow = seller.memberRow(o.page, other);
   await otherRow.waitFor();
 
   // Offline: nothing waits to be sent later.
@@ -202,17 +182,9 @@ const OWNER = "vendedor@yuntera.example";
   await o.context.setOffline(true);
   o.expect(/ERR_INTERNET_DISCONNECTED|Failed to fetch/);
   await otherRow.getByTestId("member-remove").click();
-  await otherRow
-    .getByTestId("member-message")
-    .filter({ hasText: "No pudimos conectarnos" })
-    .waitFor({ timeout: 10_000 });
-  await o.on("invite-email").fill(unsent);
-  await o.on("invite-submit").click();
-  await o.page
-    .getByTestId("invite-message")
-    .filter({ visible: true, hasText: "No pudimos conectarnos" })
-    .first()
-    .waitFor({ timeout: 10_000 });
+  await seller.rowMessage(otherRow, "No pudimos conectarnos", { timeout: 10_000 });
+  await seller.invite(o.page, unsent);
+  await o.shows("invite-message", "No pudimos conectarnos", { timeout: 10_000 });
   await o.shot("accounts-seller-04c-offline", true);
   await o.context.setOffline(false);
   await o.page.waitForTimeout(3000);
@@ -238,23 +210,14 @@ const OWNER = "vendedor@yuntera.example";
   );
 
   const declines = await throwaway("rechaza", "Rita Rechaza");
-  await o.on("invite-email").fill(declines);
-  await o.on("invite-submit").click();
-  await o.page
-    .getByTestId("team-invitation")
-    .filter({ visible: true, hasText: declines })
-    .first()
-    .waitFor();
+  await seller.invite(o.page, declines);
+  await seller.invitationRow(o.page, declines).first().waitFor();
   const d = await phone(browser, "seller-declines", errors);
   await d.page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await signIn(d, declines);
   await d.on("invitation").waitFor();
   await d.on("invitation-decline").click();
-  await d.page
-    .getByTestId("invitation-message")
-    .filter({ visible: true, hasText: "Rechazó la invitación" })
-    .first()
-    .waitFor();
+  await d.shows("invitation-message", "Rechazó la invitación");
   await d.noSideways("invitation declined");
   await d.shot("accounts-seller-05b-declined");
   const after = await rpcAs(OWNER, "seller_team", { p_seller_id: shop.id });
@@ -280,11 +243,7 @@ const OWNER = "vendedor@yuntera.example";
   o.expect(/ERR_INTERNET_DISCONNECTED|Failed to fetch/);
   await o.on("shop-name-new").fill(newName);
   await o.on("shop-name-submit").click();
-  await o.page
-    .getByTestId("shop-name-message")
-    .filter({ visible: true, hasText: "No pudimos conectarnos" })
-    .first()
-    .waitFor({ timeout: 10_000 });
+  await o.shows("shop-name-message", "No pudimos conectarnos", { timeout: 10_000 });
   await o.context.setOffline(false);
   await o.page.waitForTimeout(3000);
   o.expect(null);
@@ -356,11 +315,7 @@ const OWNER = "vendedor@yuntera.example";
     await o.on("notify-commercial").click();
   }
   await o.on("notify-save").click();
-  await o.page
-    .getByTestId("notify-message")
-    .filter({ visible: true, hasText: "Guardamos las preferencias de su tienda." })
-    .first()
-    .waitFor();
+  await o.shows("notify-message", "Guardamos las preferencias de su tienda.");
   const settings = await rpcAs(OWNER, "seller_notification_settings", { p_seller_id: shop.id });
   check(
     settings.whatsapp_enabled === true && settings.phone === "+50687770101",
@@ -379,22 +334,14 @@ const OWNER = "vendedor@yuntera.example";
   });
   o.expect(/status of 4\d\d/);
   await o.on("notify-save").click();
-  await o.page
-    .getByTestId("notify-message")
-    .filter({ visible: true, hasText: "cambiaron en otro teléfono o en el sitio web" })
-    .first()
-    .waitFor();
+  await o.shows("notify-message", "cambiaron en otro teléfono o en el sitio web");
   o.expect(null);
   check(
     (await o.on("notify-push").getAttribute("aria-checked")) === String(!settings.push_enabled),
     "a save after a change elsewhere is refused, and the screen shows what is stored now",
   );
   await o.on("notify-save").click();
-  await o.page
-    .getByTestId("notify-message")
-    .filter({ visible: true, hasText: "Guardamos las preferencias de su tienda." })
-    .first()
-    .waitFor();
+  await o.shows("notify-message", "Guardamos las preferencias de su tienda.");
   check(true, "saving again works");
   await o.noSideways("shop notifications");
   await o.shot("accounts-seller-07-shop-notifications", true);
@@ -413,9 +360,7 @@ const OWNER = "vendedor@yuntera.example";
 
   const r = await phone(browser, "seller-reset", errors);
   await r.page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  await r.on("forgot-password").click();
-  await r.on("reset-email").fill(OWNER);
-  await r.on("reset-submit").click();
+  await requestReset(r, OWNER);
   await r.on("reset-sent").waitFor();
   check(true, "the seller app's sign-in screen sends the reset e-mail too");
   await r.context.close();
