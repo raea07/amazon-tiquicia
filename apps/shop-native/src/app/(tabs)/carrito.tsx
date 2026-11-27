@@ -174,7 +174,9 @@ export default function CartScreen() {
       refreshing={pulling}
       onRefresh={readAgain}
       footer={
-        hasUnavailable ? (
+        // Nothing can be bought: the summary already says what to do, and
+        // there is no total to change (the web cart shows no notice either).
+        cartHasNothingToBuy(lines.data) ? undefined : hasUnavailable ? (
           <Alert tone="warning" testID="cart-blocked">
             {unavailableFooter(alternativeOf.size > 0 || lookup !== "done")}
           </Alert>

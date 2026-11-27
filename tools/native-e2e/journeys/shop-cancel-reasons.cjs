@@ -138,6 +138,13 @@ async function as(email) {
       "the summary shows no total to pay and no date",
     );
     check(summary.includes("quítelo"), "the summary says what to do");
+    const screen = squash(await page.locator("body").innerText());
+    check(
+      !screen.includes("El total cambia") &&
+        !screen.includes("Continuar con la compra") &&
+        (await page.getByTestId("cart-blocked").count()) === 0,
+      "the bottom bar says nothing more: no total and no second instruction",
+    );
     await noSideways("the cart with nothing to buy");
     await page.screenshot({ path: `${SHOTS}/native-cancel-reasons-2-cart.png`, fullPage: true });
   } finally {
