@@ -18,6 +18,7 @@
 // Needs `tools/dev/stack.sh up <lane>`. Fails on any browser error or 5xx.
 
 const { execFileSync, spawnSync } = require("node:child_process");
+const { readFileSync } = require("node:fs");
 const { chromium, request } = require("playwright");
 
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
@@ -171,7 +172,18 @@ function sql(statement) {
     ),
     "and the page says there is no history, not that they ran on time",
   );
-  const head = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim().slice(0, 7);
+  // The commit the lane's apps were built from (tools/dev/stack.sh writes it), else this checkout's.
+  const built = (() => {
+    try {
+      const env = readFileSync(`${__dirname}/../../../apps/ops/.env.local`, "utf8");
+      return /^YUNTERA_BUILD_COMMIT=([0-9a-f]{7,40})$/m.exec(env)?.[1];
+    } catch {
+      return undefined;
+    }
+  })();
+  const head = (
+    built || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim()
+  ).slice(0, 7);
   for (const app of ["ops", "web", "seller", "field"]) {
     const row = await text(admin.locator(`[data-version="${app}"]`));
     check(row.includes(`versión ${head}`), `${app} runs ${head}: "${row}"`);

@@ -1,3 +1,4 @@
+import { endSentence } from "@yuntera/core";
 import type { StoreBuild, SystemHealth } from "@yuntera/db";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
@@ -59,11 +60,13 @@ async function Health() {
             tone="danger"
             title={`${plural(needing.length, "comprobación necesita", "comprobaciones necesitan")} atención`}
           >
-            Están primero en la lista, con el lugar donde se arreglan.
+            {needing.length === 1
+              ? "Aparece primero en la lista, con el lugar donde se arregla."
+              : "Aparecen primero en la lista, con el lugar donde se arreglan."}
           </Alert>
         )}
         <p className="text-sm text-ink-muted">
-          Comprobado el {formatDateTime(health.checked_at)}.{" "}
+          Comprobado el {endSentence(formatDateTime(health.checked_at))}{" "}
           <Link href="/salud" className={touchLinkClass()}>
             Comprobar de nuevo
           </Link>

@@ -117,7 +117,16 @@ export function healthSentence(line: HealthLine): HealthSentence {
         title: "Avisos detenidos",
         text: ok
           ? "Ninguno: todo lo que se planeó enviar salió o se descartó por una buena razón."
-          : `${plural(line.count, "aviso no llegó", "avisos no llegaron")} a la persona: ${part(line, "dead")} no se pudieron enviar y ${part(line, "failed")} el proveedor informó que no se entregaron. Revise el motivo y vuelva a enviarlos.`,
+          : `${plural(line.count, "aviso no llegó", "avisos no llegaron")} a la persona (${[
+              part(line, "dead") > 0
+                ? `${part(line, "dead")} no se ${part(line, "dead") === 1 ? "pudo" : "pudieron"} enviar`
+                : null,
+              part(line, "failed") > 0
+                ? `de ${part(line, "failed")} el proveedor informó que no se ${part(line, "failed") === 1 ? "entregó" : "entregaron"}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join("; ")}). Revise el motivo y vuelva a enviarlos.`,
         href: ok ? null : "/mensajes",
         linkLabel: ok ? null : "Ver los mensajes detenidos",
         orders: [],
