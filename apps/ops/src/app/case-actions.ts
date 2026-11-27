@@ -8,7 +8,7 @@
  * decides who may do what. A case is addressed by its own id only.
  */
 
-import { CONTACT_TOPICS } from "@yuntera/db";
+import { ApiError, CONTACT_TOPICS } from "@yuntera/db";
 import {
   type ActionState,
   attempt,
@@ -37,6 +37,12 @@ async function caseAction(
 }
 
 const caseId = z.uuid();
+
+/** The database answers null when a text held the delivery code (and keeps the refusal on the trail). */
+function refusedForCode<T>(result: T | null): T {
+  if (result === null) throw new ApiError("note_contains_code");
+  return result;
+}
 const casePath = (id: string) => `/casos/${id}`;
 
 export async function addCaseNote(_previous: ActionState, formData: FormData) {
@@ -48,7 +54,7 @@ export async function addCaseNote(_previous: ActionState, formData: FormData) {
   return caseAction(
     casePath(id.data),
     async (api) => {
-      await api.opsAddCaseNote(id.data, body.data);
+      refusedForCode(await api.opsAddCaseNote(id.data, body.data));
       return "Nota guardada. El cliente no la ve.";
     },
     values,
@@ -67,7 +73,7 @@ export async function answerCase(_previous: ActionState, formData: FormData) {
   return caseAction(
     casePath(id.data),
     async (api) => {
-      await api.opsAnswerCase(id.data, body.data, close);
+      refusedForCode(await api.opsAnswerCase(id.data, body.data, close));
       return close
         ? "Respuesta enviada y caso cerrado. El cliente la lee en su cuenta."
         : "Respuesta enviada. El cliente la lee en su cuenta; el caso sigue abierto.";
@@ -129,13 +135,15 @@ export async function recordContact(_previous: ActionState, formData: FormData) 
   return caseAction(
     returnTo,
     async (api) => {
-      await api.opsRecordContact({
-        channel: parsed.data.channel,
-        topic: parsed.data.topic,
-        summary: parsed.data.summary,
-        orderNumber: orderNumber || null,
-        userId: orderNumber ? null : userId || null,
-      });
+      refusedForCode(
+        await api.opsRecordContact({
+          channel: parsed.data.channel,
+          topic: parsed.data.topic,
+          summary: parsed.data.summary,
+          orderNumber: orderNumber || null,
+          userId: orderNumber ? null : userId || null,
+        }),
+      );
       return "Contacto registrado como caso. Lo encuentra en Casos.";
     },
     values,

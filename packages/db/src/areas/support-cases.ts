@@ -134,6 +134,8 @@ export const caseDetail = caseRow.extend({
   can: z.object({
     note: z.boolean(),
     answer: z.boolean(),
+    /** False while a return or a report still waits for its decision in Atención. */
+    close: z.boolean(),
     assign: z.boolean(),
     reopen: z.boolean(),
     customer: z.boolean(),
@@ -300,8 +302,23 @@ export const supportCasesErrors = {
   },
   note_contains_code: {
     "es-CR":
-      "El texto tiene el código de entrega del cliente. Quítelo: ese código solo lo ve el cliente.",
-    en: "The text contains the customer's delivery code. Remove it: only the customer may see that code.",
+      "El texto tiene el código de entrega del cliente. Quítelo: ese código solo lo ve el cliente. Quedó registrado en Auditoría.",
+    en: "The text contains the customer's delivery code. Remove it: only the customer may see that code. This was recorded in the audit log.",
+  },
+  too_many_numbers: {
+    "es-CR":
+      "El texto tiene más de cinco números de cuatro cifras. Deje solo los necesarios; escriba los montos con ₡ y punto (₡4.500).",
+    en: "The text has more than five four-digit numbers. Keep only the ones needed; write amounts with ₡ and a point (₡4,500).",
+  },
+  too_many_refusals: {
+    "es-CR":
+      "Por una hora no puede escribir notas ni respuestas: tres textos suyos tenían un código de entrega. Si necesita responder ya, pídaselo a un compañero.",
+    en: "For an hour you cannot write notes or answers: three of your texts held a delivery code. If an answer cannot wait, ask a colleague.",
+  },
+  case_source_open: {
+    "es-CR":
+      "Esta devolución o este reporte se decide en Atención. Responda sin cerrar: el caso se cierra solo cuando se decida.",
+    en: "This return or report is decided in Atención. Answer without closing: the case closes by itself once it is decided.",
   },
   invalid_contact: {
     "es-CR":
@@ -338,17 +355,36 @@ export const supportCasesApi = ({ call, run }: Caller) => ({
   /** The "Hoy" line: open cases, those due before the end of today and those late. */
   opsCasesDue: () => call("ops_cases_due", {}, casesDue),
   opsCase: (caseId: string) => call("ops_case", { p_case_id: id.parse(caseId) }, caseDetail),
-  /** An internal note: the customer never sees it. */
+  /**
+   * An internal note: the customer never sees it. Null when the text held the
+   * customer's delivery code: nothing was written, and the refusal is on the
+   * audit trail (show `note_contains_code`).
+   */
   opsAddCaseNote: (caseId: string, body: string) =>
-    call("ops_add_case_note", { p_case_id: id.parse(caseId), p_body: body }, z.number().int()),
-  /** The answer the customer reads; `close` also closes the case. Support and admin. */
+    call(
+      "ops_add_case_note",
+      { p_case_id: id.parse(caseId), p_body: body },
+      z.number().int().nullable(),
+    ),
+  /**
+   * The answer the customer reads; `close` also closes the case. Support and
+   * admin. Null when the text held the delivery code (as `opsAddCaseNote`).
+   */
   opsAnswerCase: (caseId: string, body: string, close: boolean) =>
-    call("ops_answer_case", { p_case_id: id.parse(caseId), p_body: body, p_close: close }, caseRow),
+    call(
+      "ops_answer_case",
+      { p_case_id: id.parse(caseId), p_body: body, p_close: close },
+      caseRow.nullable(),
+    ),
   opsAssignCase: (caseId: string) =>
     call("ops_assign_case", { p_case_id: id.parse(caseId) }, caseRow),
   opsReopenCase: (caseId: string) =>
     call("ops_reopen_case", { p_case_id: id.parse(caseId) }, caseRow),
-  /** "Registrar un contacto" against an order (by number) or an account. Returns the case id. */
+  /**
+   * "Registrar un contacto" against an order (by number) or a customer's
+   * account. Returns the case id, or null when the summary held the delivery
+   * code (as `opsAddCaseNote`).
+   */
   opsRecordContact: (input: {
     channel: Exclude<CaseChannel, "shop">;
     topic: ContactTopic;
@@ -365,7 +401,7 @@ export const supportCasesApi = ({ call, run }: Caller) => ({
         p_order_number: input.orderNumber ?? undefined,
         p_user_id: input.userId ? id.parse(input.userId) : undefined,
       },
-      id,
+      id.nullable(),
     ),
   opsOrderCases: (orderNumber: string) =>
     call("ops_order_cases", { p_order_number: orderNumber }, orderCases),

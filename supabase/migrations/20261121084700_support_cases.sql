@@ -31,8 +31,9 @@
 
 -- One row per kind of case and topic ('*' = any other topic of that kind).
 -- first_response: the first human answer; resolution: the case closed.
--- Units: minutes; working_hours (from the moment the case opens, or from
--- 08:00 of the next working day when it opens outside one); working_days
+-- Units: minutes; working_hours (counted between 08:00 and 17:00 of working
+-- days, from the moment the case opens; what is left at 17:00 carries to the
+-- next working day); working_days
 -- and calendar_days (to the end of that day, Costa Rica time); same_day (the
 -- end of the day it opens).
 create table private.case_targets (
@@ -97,20 +98,37 @@ as $$
 declare
   v_local timestamp := private.cr_local(p_from);
   v_day date := v_local::date;
-  -- When people start answering on a working day. customer-service.md says
-  -- the hours are published but does not give them: an assumption to confirm.
+  v_left interval;
+  v_free interval;
+  -- When people start and stop answering on a working day. customer-service.md
+  -- says the hours are published but does not give them: both are
+  -- assumptions to confirm.
   c_opens constant time := time '08:00';
+  c_closes constant time := time '17:00';
 begin
   case p_unit
     when 'minutes' then
       return p_from + make_interval(mins => p_amount);
     when 'working_hours' then
-      if private.add_business_days(v_day - 1, 1) <> v_day then
+      -- Counted only inside working hours: what is left at closing time
+      -- carries to the opening of the next working day.
+      v_left := make_interval(hours => p_amount);
+      loop
+        v_day := v_local::date;
+        if private.add_business_days(v_day - 1, 1) <> v_day or v_local::time >= c_closes then
+          v_local := private.add_business_days(v_day, 1) + c_opens;
+          continue;
+        end if;
+        if v_local::time < c_opens then
+          v_local := v_day + c_opens;
+        end if;
+        v_free := (v_day + c_closes) - v_local;
+        if v_left <= v_free then
+          return private.cr_instant(v_local + v_left);
+        end if;
+        v_left := v_left - v_free;
         v_local := private.add_business_days(v_day, 1) + c_opens;
-      elsif v_local::time < c_opens then
-        v_local := v_day + c_opens;
-      end if;
-      return private.cr_instant(v_local + make_interval(hours => p_amount));
+      end loop;
     when 'working_days' then
       return private.cr_instant((private.add_business_days(v_day, p_amount) + 1)::timestamp);
     when 'calendar_days' then
@@ -288,6 +306,19 @@ as $$
   select nullif(split_part(trim(p.full_name), ' ', 1), '') from public.profiles p where p.id = p_user_id;
 $$;
 
+-- Whether an account is a customer: it ordered, complained or asked for a
+-- return. Only customers have a customer view, a revealable contact or a
+-- recorded contact against their account (a seller or a driver account
+-- that never bought anything is not one).
+create or replace function private.is_customer(p_user_id uuid) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select exists (select 1 from public.orders o where o.user_id = p_user_id)
+      or exists (select 1 from public.complaints c where c.user_id = p_user_id)
+      or exists (select 1 from public.return_requests r where r.user_id = p_user_id);
+$$;
+
 -- Opens a case with its due times and its first entry.
 create or replace function private.open_case(
   p_kind text, p_topic text, p_order_id uuid, p_user_id uuid, p_channel text,
@@ -318,35 +349,149 @@ $$;
 
 -- ═══ 3. The delivery code stays out of notes and answers ═══════════════════
 -- The code (private.delivery_codes, four digits) is shown to nobody but the
--- shopper. A note or an answer is refused when one of the numbers in it is
--- the real code of the case's order or of another order of the same
--- customer. A number is a run of digits that may carry separators between
--- groups (8888-1234, 8888 1234, 1.234, YT-100123's 100123): only a number
--- that IS the code is refused, so order numbers, phone numbers and amounts
--- pass. Nothing about the code is returned, only that the text has it.
+-- shopper. A note, an answer or a contact summary is refused when it holds
+-- the real code of the case's order, or of another order of the same
+-- customer that is still to be delivered.
+--
+-- What counts as "holding" it, after the text is brought to plain digits
+-- (NFKC, the decimal digits of other scripts mapped to 0-9, invisible format
+-- characters and combining marks removed):
+--   * a run of digits that is the code ('4821', 'x4821x', '4821 8888');
+--   * consecutive runs joined by spaces, dots, commas or dashes whose digits
+--     together are the code ('48-21', '4 8 2 1', '48.21').
+-- Three shapes are read whole and never split, so they pass: an order number
+-- (YT-100123), a Costa Rica phone written 8888-1234 or +506 8888 1234, and
+-- an amount with a colón or dollar sign and thousands separators (₡4.821).
+-- A text with more than five different four-digit numbers is refused as
+-- such, whatever the code, so one note cannot test many guesses.
+--
+-- The guard must not become a way to find the code by trying numbers: every
+-- refusal from a staff function is written on the audit trail (who and which
+-- case, never the text or the code), and a staff member with three refusals
+-- in the last hour cannot write notes, answers or contacts until the hour
+-- has passed. To keep that row, the staff functions do not raise on a
+-- refusal: they answer null, and the client shows note_contains_code.
 
-create or replace function private.text_has_delivery_code(p_order_id uuid, p_user_id uuid, p_text text)
-returns boolean
-language sql stable security definer
+-- Decimal digits of other scripts, '0' to '9' of each (NFKC already turns
+-- full-width, mathematical, circled and superscript digits into 0-9).
+create or replace function private.foreign_digits() returns text
+language sql immutable
 set search_path = ''
 as $$
-  select exists (
+  select string_agg(chr(z + d), '' order by z, d)
+  from unnest(array[
+    x'0660'::int, x'06F0'::int, x'07C0'::int, x'0966'::int, x'09E6'::int, x'0A66'::int,
+    x'0AE6'::int, x'0B66'::int, x'0BE6'::int, x'0C66'::int, x'0CE6'::int, x'0D66'::int,
+    x'0DE6'::int, x'0E50'::int, x'0ED0'::int, x'0F20'::int, x'1040'::int, x'1090'::int,
+    x'17E0'::int, x'1810'::int, x'1946'::int, x'19D0'::int, x'1A80'::int, x'1A90'::int,
+    x'1B50'::int, x'1BB0'::int, x'1C40'::int, x'1C50'::int, x'A620'::int, x'A8D0'::int,
+    x'A900'::int, x'A9D0'::int, x'A9F0'::int, x'AA50'::int, x'ABF0'::int, x'FF10'::int,
+    x'104A0'::int]) z
+  cross join generate_series(0, 9) d;
+$$;
+
+-- The four-digit numbers a text holds, as the guard reads them (see above).
+create or replace function private.case_text_numbers(p_text text) returns text[]
+language plpgsql immutable
+set search_path = ''
+as $$
+declare
+  v text := coalesce(p_text, '');
+  v_group text;
+  v_runs text[];
+  v_found text[] := '{}';
+  v_join text;
+begin
+  v := normalize(v, NFKC);
+  v := translate(v, private.foreign_digits(), repeat('0123456789', 37));
+  -- Invisible characters (soft hyphen, zero-width, direction marks, word
+  -- joiners, variation selectors, byte-order mark) and combining marks.
+  v := regexp_replace(v,
+    '[­͏؜ᅟᅠ឴឵᠋-᠏​-‏‪-‮⁠-⁯ㅤ︀-️﻿ﾠ̀-ͯ᪰-᫿⃐-⃿]',
+    '', 'g');
+  -- The shapes read whole.
+  v := regexp_replace(v, '[Yy][Tt]-?[0-9]+', ' ', 'g');
+  v := regexp_replace(v, '\+ ?506[ .-]?[0-9]{4}[ .-]?[0-9]{4}(?![0-9])', ' ', 'g');
+  v := regexp_replace(v, '(?<![0-9][ .,-]?)[245678][0-9]{3}-[0-9]{4}(?![0-9]|[ .,-][0-9])', ' ', 'g');
+  v := regexp_replace(v, '[₡$] ?[0-9]{1,3}(?:[.,][0-9]{3})+(?:,[0-9]{1,2})?(?![0-9])', ' ', 'g');
+
+  for v_group in
+    select m[1] from regexp_matches(v, '([0-9]+(?:[ .,-]{1,2}[0-9]+)*)', 'g') m
+  loop
+    v_runs := regexp_split_to_array(regexp_replace(v_group, '[^0-9]+', ' ', 'g'), ' ');
+    for i in 1 .. cardinality(v_runs) loop
+      v_join := '';
+      for j in i .. cardinality(v_runs) loop
+        v_join := v_join || v_runs[j];
+        exit when char_length(v_join) > 4;
+        if char_length(v_join) = 4 and not v_join = any (v_found) then
+          v_found := v_found || v_join;
+        end if;
+      end loop;
+    end loop;
+  end loop;
+  return v_found;
+end;
+$$;
+
+-- Refusals in the last hour that lock a staff member out of writing.
+create or replace function private.case_text_max_refusals() returns integer
+language sql immutable
+set search_path = ''
+as $$ select 3 $$;
+
+-- Checks a text staff want to write on a case (or as a new contact's
+-- summary) against the customer's delivery codes. Raises when the writer is
+-- locked out (too_many_refusals) or the text holds too many four-digit
+-- numbers (too_many_numbers). When it holds a code, it writes the refusal on
+-- the audit trail and answers false, without raising, so the row stays; the
+-- caller then answers null. p_row_key names the case (or the order for a new
+-- contact) on the trail.
+create or replace function private.case_text_allowed(
+  p_order_id uuid, p_user_id uuid, p_text text, p_function text, p_row_key text
+) returns boolean
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_numbers text[];
+begin
+  if (select count(*) from private.audit_log a
+      where a.actor_id = (select auth.uid()) and a.action = 'REFUSED_CODE'
+        and a.at > now() - interval '1 hour') >= private.case_text_max_refusals() then
+    perform private.fail('too_many_refusals');
+  end if;
+  v_numbers := private.case_text_numbers(p_text);
+  if cardinality(v_numbers) > 5 then
+    perform private.fail('too_many_numbers');
+  end if;
+  if cardinality(v_numbers) = 0 or not exists (
     select 1
     from private.delivery_codes c
     join public.orders o on o.id = c.order_id
-    where (o.id = p_order_id or o.user_id = p_user_id)
-      and c.code in (
-        select m[1] from regexp_matches(coalesce(p_text, ''), '([0-9]+(?:[ .,-][0-9]+)*)', 'g') as m
-      )
-  );
+    where c.code = any (v_numbers)
+      and (o.id = p_order_id
+           or (o.user_id = p_user_id
+               and o.status not in ('delivered', 'completed', 'cancelled', 'refunded')))) then
+    return true;
+  end if;
+  insert into private.audit_log (actor_id, action, table_name, row_key, old_row, new_row)
+  values ((select auth.uid()), 'REFUSED_CODE', 'cases', p_row_key, null,
+          jsonb_build_object('function', p_function));
+  return false;
+end;
 $$;
 
-create or replace function private.guard_case_text(c private.cases, p_text text) returns void
-language plpgsql stable security definer
+-- The same check for texts that reach a case through Atención (a complaint's
+-- answer, the note on a return decision): those functions run the trigger
+-- inside their own step, so a refusal there raises note_contains_code.
+create or replace function private.guard_case_text(c private.cases, p_text text, p_function text)
+returns void
+language plpgsql security definer
 set search_path = ''
 as $$
 begin
-  if private.text_has_delivery_code(c.order_id, c.user_id, p_text) then
+  if not private.case_text_allowed(c.order_id, c.user_id, p_text, p_function, c.id::text) then
     perform private.fail('note_contains_code');
   end if;
 end;
@@ -376,7 +521,7 @@ begin
   end if;
   -- Answered from /atencion (ops_resolve_complaint): the answer goes on the timeline.
   if new.resolution is not null and new.resolution is distinct from old.resolution then
-    perform private.guard_case_text(c, new.resolution);
+    perform private.guard_case_text(c, new.resolution, 'ops_resolve_complaint');
     insert into private.case_entries (case_id, kind, author_id, body)
     values (c.id, 'answer', (select auth.uid()), new.resolution);
     update private.cases set first_response_at = coalesce(first_response_at, now()) where id = c.id;
@@ -418,7 +563,7 @@ begin
   end if;
   -- The note staff write when they decide is the customer's to read.
   if new.resolution_note is not null and new.resolution_note is distinct from old.resolution_note then
-    perform private.guard_case_text(c, new.resolution_note);
+    perform private.guard_case_text(c, new.resolution_note, 'return_decision');
     insert into private.case_entries (case_id, kind, author_id, body)
     values (c.id, 'answer', (select auth.uid()), new.resolution_note);
   end if;
@@ -733,12 +878,29 @@ begin
     'can', jsonb_build_object(
       'note', v_role in ('admin', 'support', 'ops', 'finance'),
       'answer', v_role in ('admin', 'support') and c.status = 'open',
+      'close', v_role in ('admin', 'support') and c.status = 'open' and not private.case_source_open(c),
       'assign', v_role in ('admin', 'support') and c.status = 'open'
                 and c.assignee_id is distinct from (select auth.uid()),
       'reopen', v_role in ('admin', 'support') and c.status = 'closed',
-      'customer', c.user_id is not null and v_role in ('admin', 'support', 'ops', 'finance'))
+      'customer', c.user_id is not null and v_role in ('admin', 'support', 'ops', 'finance')
+                  and private.is_customer(c.user_id))
   );
 end;
+$$;
+
+-- Whether a case's source row (a return request or a content report) is
+-- still waiting for its decision in Atención.
+create or replace function private.case_source_open(c private.cases) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select case c.kind
+    when 'return' then exists (select 1 from public.return_requests r
+                               where r.id = c.return_id and r.status not in ('rejected', 'refunded'))
+    when 'report' then exists (select 1 from public.content_reports r
+                               where r.id = c.report_id and r.status in ('open', 'in_review'))
+    else false
+  end;
 $$;
 
 -- Locks a case the caller may work on, or fails as if it did not exist.
@@ -758,7 +920,8 @@ begin
 end;
 $$;
 
--- An internal note: staff only, never shown to the customer.
+-- An internal note: staff only, never shown to the customer. Answers the
+-- new entry's id, or null when the text holds the delivery code (section 3).
 create or replace function public.ops_add_case_note(p_case_id uuid, p_body text) returns bigint
 language plpgsql security definer
 set search_path = ''
@@ -776,7 +939,9 @@ begin
   if char_length(v_body) not between 1 and 2000 then
     perform private.fail('invalid_note');
   end if;
-  perform private.guard_case_text(c, v_body);
+  if not private.case_text_allowed(c.order_id, c.user_id, v_body, 'ops_add_case_note', c.id::text) then
+    return null;
+  end if;
   insert into private.case_entries (case_id, kind, author_id, body)
   values (c.id, 'note', (select auth.uid()), v_body)
   returning id into v_id;
@@ -786,6 +951,10 @@ $$;
 
 -- The answer the customer reads, in their account and on the order's page,
 -- and a message that says there is one (through the notification planner).
+-- Answers the case as a list row, or null when the text holds the delivery
+-- code (section 3). A return or a report is decided in Atención, so its case
+-- cannot be closed here while that is still open (case_source_open): the
+-- case closes by itself when Atención decides.
 create or replace function public.ops_answer_case(
   p_case_id uuid,
   p_body text,
@@ -804,6 +973,11 @@ begin
   if v_role is null or v_role not in ('admin', 'support') then
     perform private.fail('forbidden');
   end if;
+  -- A complaint's row before its case, in the order ops_resolve_complaint
+  -- (and the trigger behind it) takes them, so the two never wait on each other.
+  perform 1 from public.complaints x
+  where x.id = (select k.complaint_id from private.cases k where k.id = p_case_id)
+  for update;
   c := private.case_for_work(p_case_id, v_role);
   if c.status = 'closed' then
     perform private.fail('case_closed');
@@ -811,7 +985,12 @@ begin
   if char_length(v_body) not between 10 and 4000 then
     perform private.fail('reason_required');
   end if;
-  perform private.guard_case_text(c, v_body);
+  if v_close and private.case_source_open(c) then
+    perform private.fail('case_source_open');
+  end if;
+  if not private.case_text_allowed(c.order_id, c.user_id, v_body, 'ops_answer_case', c.id::text) then
+    return null;
+  end if;
 
   insert into private.case_entries (case_id, kind, author_id, body)
   values (c.id, 'answer', (select auth.uid()), v_body);
@@ -891,6 +1070,10 @@ begin
   if v_role is null or v_role not in ('admin', 'support') then
     perform private.fail('forbidden');
   end if;
+  -- The complaint first, as in ops_answer_case.
+  perform 1 from public.complaints x
+  where x.id = (select k.complaint_id from private.cases k where k.id = p_case_id)
+  for update;
   c := private.case_for_work(p_case_id, v_role);
   if c.status = 'open' then
     perform private.fail('case_open');
@@ -912,7 +1095,9 @@ end;
 $$;
 
 -- "Registrar un contacto": a WhatsApp, phone or e-mail conversation recorded
--- as a case against an order (by its number) or an account, with a summary.
+-- as a case against an order (by its number) or a customer's account, with
+-- a summary. Answers the new case's id, or null when the summary holds the
+-- delivery code (section 3).
 create or replace function public.ops_record_contact(
   p_channel text,
   p_topic text,
@@ -947,15 +1132,18 @@ begin
       perform private.fail('order_not_found');
     end if;
   else
+    -- A customer: someone who ordered, complained or asked for a return, and
+    -- not a staff member. A seller or a driver account is not one.
     select u.id into v_user from auth.users u
-    where u.id = p_user_id and u.deleted_at is null
+    where u.id = p_user_id and u.deleted_at is null and private.is_customer(u.id)
       and not exists (select 1 from public.staff_members s where s.user_id = u.id);
     if v_user is null then
       perform private.fail('customer_not_found');
     end if;
   end if;
-  if private.text_has_delivery_code(v_order, v_user, v_summary) then
-    perform private.fail('note_contains_code');
+  if not private.case_text_allowed(v_order, v_user, v_summary, 'ops_record_contact',
+                                   coalesce(v_order, v_user)::text) then
+    return null;
   end if;
   v_id := private.open_case('contact', p_topic, v_order, v_user, p_channel, null, v_summary,
     (select auth.uid()), now());
@@ -1184,10 +1372,8 @@ begin
   if v_role is null or v_role not in ('admin', 'support', 'ops', 'finance') then
     perform private.fail('forbidden');
   end if;
-  if p_user_id is null or not exists (
-    select 1 from auth.users u where u.id = p_user_id
-      and (exists (select 1 from public.orders o where o.user_id = u.id)
-           or exists (select 1 from private.cases c where c.user_id = u.id))) then
+  if p_user_id is null or not exists (select 1 from auth.users u where u.id = p_user_id)
+     or not private.is_customer(p_user_id) then
     perform private.fail('customer_not_found');
   end if;
   return jsonb_build_object(
@@ -1210,12 +1396,14 @@ begin
       from public.return_requests r
       join public.order_items i on i.id = r.order_item_id
       join public.orders o on o.id = i.order_id
-      where r.user_id = p_user_id), '[]'::jsonb),
+      join private.cases k on k.return_id = r.id
+      where r.user_id = p_user_id and private.case_visible(v_role, k.area, k.order_id)), '[]'::jsonb),
     'complaints', coalesce((
       select jsonb_agg(jsonb_build_object('id', c.id, 'category', c.category, 'status', c.status,
                'order_number', o.order_number, 'created_at', c.created_at) order by c.created_at desc)
       from public.complaints c left join public.orders o on o.id = c.order_id
-      where c.user_id = p_user_id), '[]'::jsonb),
+      join private.cases k on k.complaint_id = c.id
+      where c.user_id = p_user_id and private.case_visible(v_role, k.area, k.order_id)), '[]'::jsonb),
     'cases', coalesce((
       select jsonb_agg(private.case_row(c) order by c.created_at desc)
       from private.cases c
@@ -1250,9 +1438,7 @@ begin
                    order by a.is_default desc, a.created_at desc limit 1))
   into v_email, v_phone
   from auth.users u left join public.profiles p on p.id = u.id
-  where u.id = p_user_id
-    and (exists (select 1 from public.orders o where o.user_id = u.id)
-         or exists (select 1 from private.cases c where c.user_id = u.id));
+  where u.id = p_user_id and private.is_customer(u.id);
   if not found then
     perform private.fail('customer_not_found');
   end if;
@@ -1388,8 +1574,13 @@ revoke all on function private.case_reference(private.cases) from public, anon, 
 revoke all on function private.first_name_of(uuid) from public, anon, authenticated;
 revoke all on function private.open_case(text, text, uuid, uuid, text, uuid, text, uuid, timestamptz)
   from public, anon, authenticated;
-revoke all on function private.text_has_delivery_code(uuid, uuid, text) from public, anon, authenticated;
-revoke all on function private.guard_case_text(private.cases, text) from public, anon, authenticated;
+revoke all on function private.foreign_digits() from public, anon, authenticated;
+revoke all on function private.case_text_numbers(text) from public, anon, authenticated;
+revoke all on function private.case_text_max_refusals() from public, anon, authenticated;
+revoke all on function private.case_text_allowed(uuid, uuid, text, text, text) from public, anon, authenticated;
+revoke all on function private.guard_case_text(private.cases, text, text) from public, anon, authenticated;
+revoke all on function private.is_customer(uuid) from public, anon, authenticated;
+revoke all on function private.case_source_open(private.cases) from public, anon, authenticated;
 revoke all on function private.case_follow_complaint() from public, anon, authenticated;
 revoke all on function private.case_follow_return() from public, anon, authenticated;
 revoke all on function private.case_follow_report() from public, anon, authenticated;

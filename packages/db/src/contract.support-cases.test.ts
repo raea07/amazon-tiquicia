@@ -11,8 +11,11 @@
  * What it leaves: a throwaway shopper of this run with one complaint (no
  * order) answered and closed, one recorded contact answered and closed, one
  * "Vio el contacto de un cliente" row on the audit trail, and a saved answer
- * created and deleted (three audit rows). The seed's own rows are only read,
- * so it passes on a used database and twice in a row.
+ * created and deleted (three audit rows); and a throwaway support member of
+ * this run with one recorded contact on the demo order and two refused
+ * texts on the trail (a fresh member each run, so the lock-out after three
+ * refusals in an hour never reaches the seed's staff). The seed's own rows
+ * are only read, so it passes on a used database and twice in a row.
  */
 
 import pg from "pg";
@@ -26,11 +29,13 @@ const STAFF = "central@yuntera.example";
 const SELLER = "vendedor@yuntera.example";
 const DEMO_SHOPPER = "comprador@yuntera.example";
 const SHOPPER = `casos-${Date.now()}@yuntera.example`;
+const GUARD_STAFF = `casos-soporte-${Date.now()}@yuntera.example`;
 
 describe.skipIf(!db.enabled)("support cases contract (against a seeded database)", () => {
   let shopperId = "";
   let demoOrder = "";
   let complaintRef = "";
+  let demoCode = "";
 
   beforeAll(async () => {
     const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
@@ -47,11 +52,24 @@ describe.skipIf(!db.enabled)("support cases contract (against a seeded database)
         [DEMO_SHOPPER],
       );
       demoOrder = order.rows[0]?.order_number ?? "";
+      const code = await pool.query<{ code: string }>(
+        `select c.code from private.delivery_codes c join public.orders o on o.id = c.order_id
+         where o.order_number = $1`,
+        [demoOrder],
+      );
+      demoCode = code.rows[0]?.code ?? "";
+      await pool.query(
+        `with u as (
+           insert into auth.users (id, email, raw_user_meta_data)
+           values (gen_random_uuid(), $1, '{"full_name": "Sara Soporte Contrato"}') returning id)
+         insert into public.staff_members (user_id, role) select id, 'support' from u`,
+        [GUARD_STAFF],
+      );
     } finally {
       await pool.end();
     }
     await db.connect();
-    if (!shopperId || !demoOrder)
+    if (!shopperId || !demoOrder || !demoCode)
       throw new Error("database is not seeded — run pnpm db:local:reset");
   });
   afterAll(db.close);
@@ -150,6 +168,36 @@ describe.skipIf(!db.enabled)("support cases contract (against a seeded database)
     expect(report.total).toBeGreaterThanOrEqual(2);
     expect(report.reopened).toBeGreaterThanOrEqual(1);
     expect(report.first_response.answered).toBeGreaterThanOrEqual(2);
+  });
+
+  it("a text with the delivery code is refused as null; can.close follows Atención", async () => {
+    const staff = db.as(GUARD_STAFF, "aal2");
+    const caseId = await staff.opsRecordContact({
+      channel: "phone",
+      topic: "delivery_problem",
+      summary: "Llamó porque el repartidor no encontró la casa.",
+      orderNumber: demoOrder,
+    });
+    expect(caseId).toMatch(/^[0-9a-f-]{36}$/);
+    if (!caseId) return;
+    expect(
+      await staff.opsRecordContact({
+        channel: "phone",
+        topic: "other",
+        summary: `Dijo que su código es ${demoCode.split("").join(" ")}.`,
+        orderNumber: demoOrder,
+      }),
+    ).toBeNull();
+    expect(await staff.opsAddCaseNote(caseId, `El código es ${demoCode}.`)).toBeNull();
+    expect(
+      await staff.opsAnswerCase(caseId, "Le llamamos hoy por la tarde para coordinar.", false),
+    ).toMatchObject({ status: "open" });
+    const detail = await staff.opsCase(caseId);
+    expect(detail.can.close).toBe(true);
+    expect(JSON.stringify(detail)).not.toContain(`es ${demoCode}`);
+    await expect(
+      staff.opsAddCaseNote(caseId, "1000 1001 1002 1003 1004 1005"),
+    ).rejects.toMatchObject({ code: "too_many_numbers" });
   });
 
   it("the customer view and the contact reveal parse; contact details only when revealed", async () => {

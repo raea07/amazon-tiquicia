@@ -179,7 +179,7 @@ async function Case({ params }: Pick<PageProps<"/casos/[id]">, "params">) {
               Responder al cliente
             </h2>
             <div className="mt-3 rounded-lg border border-border bg-surface p-5">
-              <CaseAnswerForm caseId={item.id} replies={replies} />
+              <CaseAnswerForm caseId={item.id} replies={replies} canClose={item.can.close} />
             </div>
           </section>
         ) : null}

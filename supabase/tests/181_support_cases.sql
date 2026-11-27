@@ -13,8 +13,10 @@
 --                 case it does not read is "not found", a shopper reads no
 --                 other shopper's case and never a note, a seller nothing;
 --   code guard:   a note, an answer or a contact summary holding the real
---                 delivery code is refused; order numbers, phone numbers,
---                 amounts and other numbers pass;
+--                 delivery code is refused, however it is disguised; order
+--                 numbers, phone numbers, amounts and other numbers pass;
+--                 every refusal is on the audit trail, three in an hour lock
+--                 the writer out, and one text cannot test many guesses;
 --   left behind:  entries are append-only, the tables are out of reach of
 --                 the API roles, a contact reveal and saved-answer changes
 --                 are on the audit trail, an answer plans one message that
@@ -51,10 +53,23 @@ update private.delivery_codes set code = '4821' where order_id = current_setting
 update private.delivery_codes set code = '1357' where order_id = current_setting('t.order_b')::uuid;
 -- Delivered, so a withdrawal can be asked for (the code is kept after delivery).
 select pg_temp.deliver(current_setting('t.order_a')::uuid);
+-- A second order of the same customer, still to be delivered.
+select pg_temp.remember('order_a2', pg_temp.place('casos181a@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'casos-181-a2')::text);
+select pg_temp.pay(current_setting('t.order_a2')::uuid);
+update private.delivery_codes set code = '2468' where order_id = current_setting('t.order_a2')::uuid;
+select pg_temp.remember('number_a2', (select order_number from public.orders where id = current_setting('t.order_a2')::uuid));
 select pg_temp.remember('number_a', (select order_number from public.orders where id = current_setting('t.order_a')::uuid));
 select pg_temp.remember('number_b', (select order_number from public.orders where id = current_setting('t.order_b')::uuid));
 select pg_temp.remember('user_a', (select id::text from auth.users where email = 'casos181a@yuntera.example'));
 select pg_temp.remember('user_c', (select id::text from auth.users where email = 'casos181c@yuntera.example'));
+-- Carla never ordered, but she complained: she is a customer.
+do $$
+begin
+  perform pg_temp.act('casos181c@yuntera.example');
+  perform public.file_complaint('other', 'No puedo cambiar el correo de mi cuenta.', null);
+  perform pg_temp.logout();
+end $$;
 
 -- ── Targets ────────────────────────────────────────────────────────────────
 
@@ -72,6 +87,19 @@ begin
   -- before 08:00 CR: from 08:00.
   assert private.case_due('2031-03-04 12:00+00', 2, 'working_hours') = '2031-03-04 16:00+00',
     'working hours, before opening';
+  -- Up to closing time (17:00 CR) the same day.
+  assert private.case_due('2031-03-04 21:00+00', 2, 'working_hours') = '2031-03-04 23:00+00',
+    'working hours, up to closing';
+  -- Friday 28 Feb 16:30 CR: half an hour that day, the rest from 08:00 of the
+  -- next working day (Tuesday 4, after the weekend and the holiday).
+  assert private.case_due('2031-02-28 22:30+00', 2, 'working_hours') = '2031-03-04 15:30+00',
+    format('working hours across closing: %s', private.case_due('2031-02-28 22:30+00', 2, 'working_hours'));
+  -- Friday 22:00 CR, after closing: from Tuesday 08:00.
+  assert private.case_due('2031-03-01 04:00+00', 2, 'working_hours') = '2031-03-04 16:00+00',
+    format('working hours, after closing: %s', private.case_due('2031-03-01 04:00+00', 2, 'working_hours'));
+  -- More hours than a working day holds: 10 hours from Tuesday 08:00 is Wednesday 09:00.
+  assert private.case_due('2031-03-04 14:00+00', 10, 'working_hours') = '2031-03-05 15:00+00',
+    format('working hours over two days: %s', private.case_due('2031-03-04 14:00+00', 10, 'working_hours'));
   -- Saturday 1 Mar: Monday 3 is the holiday, so from Tuesday 4 at 08:00.
   assert private.case_due('2031-03-01 16:00+00', 2, 'working_hours') = '2031-03-04 16:00+00',
     format('working hours over a weekend and a holiday: %s',
@@ -229,14 +257,42 @@ end $$;
 
 -- ── Notes, and the delivery code guard ─────────────────────────────────────
 
+-- How the guard reads numbers: the code however it is disguised, and the
+-- numbers that are not it.
+do $$
+declare
+  v_text text;
+begin
+  foreach v_text in array array[
+    '4821', 'Su código es 4821.', 'código: 4821, ya se lo dije', '(4821)', 'x4821x', '4821a',
+    -- followed or preceded by another number
+    '4821 8888', 'el 4821 2 veces', '4821,1234', '1234, 4821', '1 4821',
+    -- split by separators
+    '4 8 2 1', '48-21', '48.21', '4 821', '₡4821',
+    -- other digits and invisible characters
+    '４８２１', '٤٨٢١', '۴۸۲۱', '४८२१', E'48​21', E'4‍8⁠21', E'4821​',
+    E'­4821', E'4́8́21', '⁴⁸²¹', '𝟒𝟖𝟐𝟏'] loop
+    assert '4821' = any (private.case_text_numbers(v_text)), format('the code in %L', v_text);
+  end loop;
+  foreach v_text in array array[
+    'Llamar al 8888-4821 en la tarde.', 'Llamar al +506 8888 4821.', 'Teléfono +5068888-4821.',
+    'Pedido YT-104821 revisado.', 'Se devuelven ₡4.821 del envío.', 'Son $4,821.50 en total.',
+    'Referencia 482100 del banco.', 'Son 48 210 colones.', '84821', 'El 27/11 a las 10:30.',
+    'Sin números.'] loop
+    assert not '4821' = any (private.case_text_numbers(v_text)), format('not the code: %L', v_text);
+  end loop;
+end $$;
+
 do $$
 declare
   v_case uuid := current_setting('t.case_complaint')::uuid;
+  v_ops uuid := (select id from auth.users where email = 'ops181@yuntera.example');
   v_text text;
+  v_audit integer := (select count(*) from private.audit_log where action = 'REFUSED_CODE');
 begin
   perform pg_temp.act('ops181@yuntera.example');
   perform public.ops_add_case_note(v_case, 'Nota interna 181: revisar el empaque en bodega.');
-  -- Numbers that are not the code pass.
+  -- Numbers that are not a live code pass.
   foreach v_text in array array[
     'Llamar al 8888-4821 en la tarde.',
     'Llamar al +506 8888 4821.',
@@ -244,14 +300,33 @@ begin
     'Se devuelven ₡4.821 del envío.',
     'Referencia 482100 del banco.',
     'Son 48 210 colones.'] loop
-    perform public.ops_add_case_note(v_case, v_text);
-  end loop;
-  -- The code itself, however it is written around, does not.
-  foreach v_text in array array['4821', 'Su código es 4821.', 'código: 4821, ya se lo dije', '(4821)'] loop
-    perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)', v_case, v_text), 'note_contains_code');
+    assert public.ops_add_case_note(v_case, v_text) is not null, format('passes: %L', v_text);
   end loop;
   perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)', v_case, ''), 'invalid_note');
   perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)', v_case, repeat('x', 2001)), 'invalid_note');
+
+  -- One note cannot test many guesses: more than five four-digit numbers are
+  -- refused whatever the code, and without counting as a refusal.
+  perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)', v_case,
+    'Revisar 1000, 1001, 1002, 1003, 1004 y 1005.'), 'too_many_numbers');
+  perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)', v_case,
+    (select string_agg(lpad(n::text, 4, '0'), ';') from generate_series(7400, 7799) n)), 'too_many_numbers');
+  assert public.ops_add_case_note(v_case, 'Revisar 1000, 1001, 1002, 1003 y 1004.') is not null, 'five pass';
+
+  -- The code of the case's order: refused, answered null, written on the trail.
+  assert public.ops_add_case_note(v_case, 'Su código es 4 8 2 1.') is null, 'the code is refused';
+  assert (select count(*) from private.audit_log where action = 'REFUSED_CODE') = v_audit + 1, 'one refusal row';
+  assert (select (actor_id, table_name, row_key, new_row) from private.audit_log
+          where action = 'REFUSED_CODE' order by id desc limit 1)
+         = (v_ops, 'cases'::text, v_case::text, '{"function": "ops_add_case_note"}'::jsonb),
+    'the refusal row: who, which case and where, never the text or the code';
+  -- The code of another order of the same customer, still to be delivered.
+  assert public.ops_add_case_note(v_case, 'El otro pedido tiene 2468.') is null, 'another live order''s code';
+  assert public.ops_add_case_note(v_case, E'Disfrazado: ٤٨​٢١') is null, 'a disguised code';
+  -- Three refusals in the hour: this person writes nothing more for now.
+  perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)', v_case, 'Una nota sin números.'),
+    'too_many_refusals');
+  assert (select count(*) from private.audit_log where action = 'REFUSED_CODE') = v_audit + 3, 'three refusal rows';
 
   perform pg_temp.act('catalogo181@yuntera.example');
   perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)', current_setting('t.case_report'),
@@ -263,11 +338,23 @@ begin
   perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)', v_case, 'Nota del cliente'), 'forbidden');
   perform pg_temp.logout();
 
-  -- Left behind: seven notes, the code in none.
-  assert (select count(*) from private.case_entries where case_id = v_case and kind = 'note') = 7, 'seven notes';
+  -- Left behind: eight notes, the code in none.
+  assert (select count(*) from private.case_entries where case_id = v_case and kind = 'note') = 8, 'eight notes';
   assert not exists (select 1 from private.case_entries where case_id = v_case
-                     and body in ('4821', 'Su código es 4821.', 'código: 4821, ya se lo dije', '(4821)')),
+                     and body in ('Su código es 4 8 2 1.', 'El otro pedido tiene 2468.')),
     'no refused note was written';
+  -- The lock-out is the writer's own: support still writes.
+  perform pg_temp.act('soporte181@yuntera.example');
+  assert public.ops_add_case_note(v_case, 'Nota de soporte: el cliente espera respuesta.') is not null,
+    'another staff member is not locked out';
+  perform pg_temp.logout();
+  -- The hour passes for ops (the rows are moved back an hour; the trail is otherwise immutable).
+  alter table private.audit_log disable trigger audit_log_immutable;
+  update private.audit_log set at = at - interval '61 minutes' where action = 'REFUSED_CODE' and actor_id = v_ops;
+  alter table private.audit_log enable trigger audit_log_immutable;
+  perform pg_temp.act('ops181@yuntera.example');
+  assert public.ops_add_case_note(v_case, 'Nota de operaciones, una hora después.') is not null, 'after the hour';
+  perform pg_temp.logout();
 end $$;
 
 -- ── Answers: support writes, the shopper reads ─────────────────────────────
@@ -285,8 +372,8 @@ begin
   perform pg_temp.refused(format('select public.ops_answer_case(%L, %L)', v_case,
     'Respuesta de operaciones al cliente.'), 'forbidden');
   perform pg_temp.act('soporte181@yuntera.example');
-  perform pg_temp.refused(format('select public.ops_answer_case(%L, %L)', v_case,
-    'Su código de entrega es 4821, désele al repartidor.'), 'note_contains_code');
+  assert public.ops_answer_case(v_case, 'Su código de entrega es 4821, désele al repartidor.') is null,
+    'an answer with the code is refused';
   perform pg_temp.refused(format('select public.ops_answer_case(%L, %L)', v_case, 'Corto'), 'reason_required');
   r := public.ops_answer_case(v_case, 'Lamentamos lo de la caja. Le enviamos uno nuevo el lunes.', false);
   assert r ->> 'status' = 'open' and r ->> 'first_response_at' is not null, format('answered, open: %s', r);
@@ -353,7 +440,10 @@ begin
   v_complaint := public.file_complaint('payment', 'Me cobraron dos veces el mismo pedido.', null);
   perform pg_temp.act('central@yuntera.example');
   perform pg_temp.refused(format('select public.ops_resolve_complaint(%L, %L, true)', v_complaint,
-    'El código 4821 no sirve para esto.'), 'note_contains_code');
+    'El código 2468 no sirve para esto.'), 'note_contains_code');
+  -- Many numbers are refused here too, whatever the code.
+  perform pg_temp.refused(format('select public.ops_resolve_complaint(%L, %L, true)', v_complaint,
+    (select string_agg(lpad(n::text, 4, '0'), ' ') from generate_series(1000, 1005) n)), 'too_many_numbers');
   perform public.ops_resolve_complaint(v_complaint, 'Revisamos el cobro y devolvimos el segundo.', true);
   perform pg_temp.logout();
   select * into strict c from private.cases where complaint_id = v_complaint;
@@ -416,11 +506,22 @@ begin
   perform pg_temp.refused(format('select public.ops_record_contact(%L, %L, %L, null, %L)', 'phone', 'other',
     'Una consulta cualquiera.', (select id from auth.users where email = 'central@yuntera.example')),
     'customer_not_found');
-  perform pg_temp.refused(format('select public.ops_record_contact(%L, %L, %L, %L)', 'whatsapp', 'other',
-    'Me dio su código 4821 por WhatsApp.', current_setting('t.number_a')), 'note_contains_code');
+  -- A seller or a driver account that never bought anything is not a customer.
+  perform pg_temp.refused(format('select public.ops_record_contact(%L, %L, %L, null, %L)', 'whatsapp', 'other',
+    'Hablamos por WhatsApp con el vendedor.', (select id from auth.users where email = 'vendedor@yuntera.example')),
+    'customer_not_found');
+  perform pg_temp.refused(format('select public.ops_record_contact(%L, %L, %L, null, %L)', 'phone', 'other',
+    'Hablamos con el repartidor por teléfono.', (select id from auth.users where email = 'repartidor@yuntera.example')),
+    'customer_not_found');
+  assert public.ops_record_contact('whatsapp', 'other', 'Me dio su código 4821 por WhatsApp.',
+    current_setting('t.number_a')) is null, 'a summary with the code is refused';
+  assert not exists (select 1 from private.cases where summary like '%4821 por%'), 'and no case was opened';
   -- Another customer's code is not this one's: the guard is about this customer.
   perform public.ops_record_contact('email', 'other', 'Escribió el número 4821 de una factura.',
     current_setting('t.number_b'));
+  -- Nor is the code of a delivered order other than the contact's own.
+  assert public.ops_record_contact('email', 'other', 'Citó el pedido anterior, código 4821, ya entregado.',
+    current_setting('t.number_a2')) is not null, 'a spent code of another order passes';
 
   perform pg_temp.act('ops181@yuntera.example');
   perform pg_temp.refused(format('select public.ops_record_contact(%L, %L, %L, %L)', 'phone', 'other',
@@ -491,6 +592,28 @@ begin
   perform pg_temp.logout();
 end $$;
 
+-- ── A return is decided in Atención, so its case is not closed in Casos ───
+
+do $$
+declare
+  v_case uuid := current_setting('t.case_return')::uuid;
+  r jsonb;
+begin
+  perform pg_temp.act('soporte181@yuntera.example');
+  assert not (public.ops_case(v_case) -> 'can' ->> 'close')::boolean
+         and (public.ops_case(v_case) -> 'can' ->> 'answer')::boolean, 'answer, but not close';
+  perform pg_temp.refused(format('select public.ops_answer_case(%L, %L, true)', v_case,
+    'Recibimos su solicitud y la revisamos hoy.'), 'case_source_open');
+  r := public.ops_answer_case(v_case, 'Recibimos su solicitud y la revisamos hoy.', false);
+  assert r ->> 'status' = 'open', 'answered and still open';
+  assert (select status from public.return_requests where id = current_setting('t.return')::uuid) = 'approved',
+    'the return is untouched';
+  -- A complaint closes in Casos.
+  assert (public.ops_case(current_setting('t.case_complaint')::uuid) -> 'can' ->> 'close')::boolean,
+    'a complaint can be closed';
+  perform pg_temp.logout();
+end $$;
+
 -- ── The customer view and "Mostrar contacto" ───────────────────────────────
 
 do $$
@@ -501,9 +624,9 @@ declare
 begin
   perform pg_temp.act('ops181@yuntera.example');
   r := public.ops_customer(v_user);
-  assert r ->> 'first_name' = 'Ana' and r ->> 'district' is not null and (r ->> 'order_count')::integer = 1
-         and jsonb_array_length(r -> 'orders') = 1 and jsonb_array_length(r -> 'returns') = 1
-         and jsonb_array_length(r -> 'complaints') = 2 and jsonb_array_length(r -> 'cases') >= 3
+  assert r ->> 'first_name' = 'Ana' and r ->> 'district' is not null and (r ->> 'order_count')::integer = 2
+         and jsonb_array_length(r -> 'orders') = 2 and jsonb_array_length(r -> 'returns') = 1
+         and jsonb_array_length(r -> 'complaints') = 1 and jsonb_array_length(r -> 'cases') >= 3
          and not (r ->> 'can_reveal_contact')::boolean,
     format('customer view: %s', r);
   assert r::text not like '%casos181a@%' and r::text not like '%Prueba Casos%' and r::text not like '%+506%',
@@ -511,6 +634,26 @@ begin
   perform pg_temp.refused(format('select public.ops_customer_contact(%L, %L)', v_user,
     'Necesito llamar al cliente por su pedido.'), 'forbidden');
   perform pg_temp.refused(format('select public.ops_customer(%L)', gen_random_uuid()), 'customer_not_found');
+  -- What ops reads follows table 4.1: the cases and complaints tied to an order.
+  assert not exists (select 1 from jsonb_array_elements(r -> 'cases') x where x ->> 'order_number' is null),
+    'ops: no case without an order';
+  -- Finance: only the payment cases, and the complaints and returns behind them.
+  perform pg_temp.act('finanzas181@yuntera.example');
+  r := public.ops_customer(v_user);
+  assert jsonb_array_length(r -> 'cases') >= 2
+         and not exists (select 1 from jsonb_array_elements(r -> 'cases') x
+                         join private.cases k on k.id = (x ->> 'id')::uuid where k.area <> 'payment'),
+    format('finance: payment cases only: %s', r -> 'cases');
+  assert (select array_agg(x ->> 'category') from jsonb_array_elements(r -> 'complaints') x) = array['payment']
+         and jsonb_array_length(r -> 'returns') = 1,
+    format('finance: the payment complaint and the return: %s', r);
+  -- A seller or a driver is not a customer: no view, no contact.
+  perform pg_temp.act('soporte181@yuntera.example');
+  perform pg_temp.refused(format('select public.ops_customer(%L)',
+    (select id from auth.users where email = 'vendedor@yuntera.example')), 'customer_not_found');
+  perform pg_temp.refused(format('select public.ops_customer_contact(%L, %L)',
+    (select id from auth.users where email = 'repartidor@yuntera.example'), 'Necesito el correo del repartidor.'),
+    'customer_not_found');
   perform pg_temp.act('catalogo181@yuntera.example');
   perform pg_temp.refused(format('select public.ops_customer(%L)', v_user), 'forbidden');
   perform pg_temp.act('casos181b@yuntera.example');
@@ -651,6 +794,9 @@ declare
 begin
   perform pg_temp.act('soporte181@yuntera.example');
   perform public.ops_add_case_note(v_case, 'Carla quiere el correo nuevo carla@example.com.');
+  -- An open complaint holds a deletion back: answer Carla's first.
+  perform public.ops_resolve_complaint((select id from public.complaints where user_id = current_setting('t.user_c')::uuid),
+    'Le cambiamos el correo de la cuenta.', true);
   perform pg_temp.act('casos181c@yuntera.example');
   perform public.delete_my_account();
   perform pg_temp.logout();

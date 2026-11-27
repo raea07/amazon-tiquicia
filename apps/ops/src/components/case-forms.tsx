@@ -39,7 +39,16 @@ export function CaseNoteForm({ caseId }: { caseId: string }) {
  * "Usar una respuesta guardada" puts a saved answer's text in the field, to
  * adjust before sending.
  */
-export function CaseAnswerForm({ caseId, replies }: { caseId: string; replies: SavedReply[] }) {
+export function CaseAnswerForm({
+  caseId,
+  replies,
+  canClose,
+}: {
+  caseId: string;
+  replies: SavedReply[];
+  /** False while a return or a report still waits for its decision in Atención. */
+  canClose: boolean;
+}) {
   const [state, action] = useActionState(answerCase, initial);
   const [text, setText] = useState(state.values?.answer ?? "");
   const [chosen, setChosen] = useState("");
@@ -87,10 +96,17 @@ export function CaseAnswerForm({ caseId, replies }: { caseId: string; replies: S
         <SubmitButton name="close" value="no" pendingLabel="Enviando…">
           Responder
         </SubmitButton>
-        <SubmitButton name="close" value="yes" variant="secondary" pendingLabel="Enviando…">
-          Responder y cerrar
-        </SubmitButton>
+        {canClose ? (
+          <SubmitButton name="close" value="yes" variant="secondary" pendingLabel="Enviando…">
+            Responder y cerrar
+          </SubmitButton>
+        ) : null}
       </div>
+      {canClose ? null : (
+        <p className="text-sm text-ink-muted">
+          Este caso se cierra solo cuando se decida en Atención.
+        </p>
+      )}
     </form>
   );
 }
