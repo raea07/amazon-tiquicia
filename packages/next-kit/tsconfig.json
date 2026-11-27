@@ -6,5 +6,5 @@
     "allowJs": true,
     "checkJs": true
   },
-  "include": ["src", "config.mjs"]
+  "include": ["src", "config.mjs", "error-tracker.mjs"]
 }

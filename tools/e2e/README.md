@@ -21,8 +21,20 @@ mailbox (`GET /dev/mail`) and switching Auth settings for their own database
 | `account-deletion`    | `apps/web` | Sign-up with confirmation on, resend limit, sign-in before confirming, code, deletion (wrong password first); another device's token and page stop working at once; same address signs up again, a shopper with an order refused                                                                                                                                                                                                                                                                                 |
 | `web-followups`       | all four   | The sign-in limit (wrong passwords until the limit, the message and the wait, the same answer for an unknown address, the owner's own browser let in, one visitor guessing many accounts stopped), sign-up with an existing address looking like a new one, an idle console session sent to sign in and back, the order search keeping names out of URLs, every console section at 1280 and 390 px, the delivery zone's pending state. Says who the visitor is in `X-Forwarded-For`, which the lane's apps trust |
 
+`error-reports` (all four websites) checks the error reports
+([error tracking](../../docs/07-deployment/error-tracking.md)): in each
+website it signs in, opens the page with the most personal data, makes an
+error happen in the browser and opens `/prueba-de-errores`, which fails on the
+server and shows the error page at 390 px. In an ordinary lane it checks that
+nothing is sent; in a lane started with `ERROR_TRACKER=standin` it reads what
+reached the stand-in tracker and checks that each website's reports name the
+website, environment and commit and carry none of the personal data typed,
+shown or sent.
+
 A journey fails if a step does not arrive where it should, if the browser logs
-an error, or if any response is a 5xx. They are deliberately few and long: they
+an error, if any response is a 5xx, or if the browser asks anything of a host
+that is not this machine (`lib/local-only.cjs`, loaded before every journey by
+`run.mjs`). They are deliberately few and long: they
 exist to prove the apps, the API and the database work together, not to cover
 every branch (the database and unit tests do that).
 

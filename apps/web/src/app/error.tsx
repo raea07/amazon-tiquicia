@@ -1,23 +1,21 @@
 "use client";
 
-import { Button, EmptyState } from "@yuntera/ui";
+import { ErrorScreen, useReportError } from "@yuntera/next-kit/error-reports/pages";
 
 /** Shown when a page fails to render. The technical detail goes to the logs, not to the shopper. */
 export default function ErrorPage({
-  reset,
+  error,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
+  const told = useReportError(error);
   return (
-    <div className="shell py-16">
-      <EmptyState
-        title="Algo salió mal de nuestro lado"
-        action={<Button onClick={reset}>Intentar de nuevo</Button>}
-      >
-        No es culpa suya. Si estaba pagando, revise “Sus pedidos” antes de intentarlo otra vez: no
-        le cobraremos dos veces.
-      </EmptyState>
-    </div>
+    <ErrorScreen
+      onRetry={retry}
+      told={told}
+      advice="Si estaba pagando, revise “Sus pedidos” antes de intentarlo otra vez: no le cobraremos dos veces."
+    />
   );
 }
