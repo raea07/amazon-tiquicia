@@ -1209,7 +1209,12 @@ begin
     'seller_id', (select id from public.sellers where trade_name = 'TecnoCasa'),
     'payout_id', (select id from public.payouts limit 1)));
   v_text := v::text;
-  assert v_text not like '%' || pg_temp.code(current_setting('t.ret')::uuid) || '%'
+  -- The code as a value or a number of its own, not four digits inside an
+  -- id, a time or a route code (a random code would match those by chance).
+  assert regexp_replace(v_text,
+             '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9:.]+([+-][0-9:]+|Z)?)?|R-[0-9]+',
+             ' ', 'gi')
+           !~ ('(?<![0-9A-Za-z])' || pg_temp.code(current_setting('t.ret')::uuid) || '(?![0-9A-Za-z])')
      and v_text not like '%' || (select ship_senas from public.orders where id = current_setting('t.ret')::uuid) || '%'
      and not (v ? 'delivery_pin' or v ? 'ship_senas' or v ? 'account_number' or v ? 'iban'
               or v ? 'bank_reference' or v ? 'id_number' or v ? 'sinpe_reference'),

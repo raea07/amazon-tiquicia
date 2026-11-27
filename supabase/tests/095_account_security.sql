@@ -1530,7 +1530,12 @@ begin
       -- and answers); who recorded a contact, was assigned a case, wrote an
       -- entry or a saved answer is staff, kept as a bare id
       'private.cases.user_id', 'private.cases.created_by', 'private.cases.assignee_id',
-      'private.case_entries.author_id', 'private.saved_replies.updated_by');
+      'private.case_entries.author_id', 'private.saved_replies.updated_by',
+      -- how many four-digit numbers a staff member wrote in an hour (084700):
+      -- a bare id and a count, dropped after a day
+      'private.case_number_checks.actor_id',
+      -- who recorded a phone build (084800): staff, kept as a bare id
+      'private.store_builds.recorded_by');
   assert v_unhandled is null, format('not handled by account deletion: %s', v_unhandled);
 end
 $$;

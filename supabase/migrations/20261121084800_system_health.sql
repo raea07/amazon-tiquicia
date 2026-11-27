@@ -15,8 +15,8 @@
 --
 --      Who sees which line (research table 4.1; admin sees every line):
 --        support  messages stopped, messages late (and channels paused),
---                 events that produced no message, complaints not answered
---                 within their target;
+--                 events that produced no message, cases late against their
+--                 targets;
 --        finance  invoices (rejected, waiting too long, unsent, events with
 --                 no document, transmission paused), the signing
 --                 certificate, gateway refunds that failed, payments that
@@ -49,14 +49,17 @@
 --          were not cancelled: what a stopped expire-unpaid-orders looks
 --          like, and their stock stays held meanwhile. It holds on a
 --          database with no scheduler too (local work), where it is true.
---      The complaints line is research table 4.1's "complaint part" for
---      support: a complaint with no written answer one working day after it
---      was filed asks for attention (customer-service.md: acknowledged in 1
---      working day), and five working days after is a problem (a written
---      answer within 5). Working days are private.add_business_days, the
---      same the order deadlines use (Monday to Friday, without holidays).
---      The job history alone cannot say any of this on a database without
---      a scheduler; these symptoms can.
+--      The cases line is research table 4.1's "complaint part" for support,
+--      widened to every case support reads (complaints, returns, reports
+--      and recorded contacts): it counts the open cases past their next due
+--      time, read from the support desk's own due times (private.cases,
+--      filled from private.case_targets in 084700) with the same rule the
+--      desk's clock and the "Hoy" line use (private.case_next_due), so for
+--      one database state Salud del sistema, Hoy and Casos say the same
+--      number. A case past its first-response time asks for attention; one
+--      past its resolution time is a problem. The job history alone cannot
+--      say any of this on a database without a scheduler; these symptoms
+--      can.
 --
 --   3. THE SCHEDULED JOBS' HISTORY. The seven pg_cron jobs (081300 ×2,
 --      082600 ×2, 083300, 083400, 083500) record their runs in
@@ -138,7 +141,7 @@ create table private.store_builds (
   released_on date not null,
   -- internal: testers only (TestFlight, Play internal testing); public: in the store.
   track text not null check (track in ('internal', 'public')),
-  recorded_by uuid,
+  recorded_by uuid references auth.users (id),
   recorded_at timestamptz not null default now(),
   unique (app, platform, version, build_number)
 );
@@ -334,26 +337,25 @@ begin
     v_lines := v_lines || private.health_line('events_failed',
       case when n1 > 0 then 'problem' else 'ok' end, n1);
 
-    -- Complaints with no written answer yet (status 'open': answering sets
-    -- 'in_progress' or 'resolved'), against their targets in working days.
-    -- complaints_open_idx holds only the unresolved ones.
-    select count(*) filter (where x.ack_by < v_today),
-           count(*) filter (where x.answer_by < v_today),
-           min(x.created_at) filter (where x.ack_by < v_today),
-           coalesce((array_agg(x.order_number order by x.created_at)
-                       filter (where x.ack_by < v_today and x.order_number is not null))[1:10], '{}')
+    -- Cases past their next due time: the support desk's own rule
+    -- (private.case_next_due and case_visible, 084700), the count of "Hoy"
+    -- (ops_cases_due) and of the cases /casos marks "Atrasado". The case row
+    -- names no one: only the order numbers go back.
+    select count(*),
+           count(*) filter (where c.due_at < now()),
+           min(private.case_next_due(c)),
+           coalesce((array_agg(o.order_number order by private.case_next_due(c), c.id)
+                       filter (where o.order_number is not null))[1:10], '{}')
     into n1, n2, t1, v_refs
-    from (select c.created_at, o.order_number,
-                 private.add_business_days(private.cr_local(c.created_at)::date, 1) as ack_by,
-                 private.add_business_days(private.cr_local(c.created_at)::date, 5) as answer_by
-          from public.complaints c
-          left join public.orders o on o.id = c.order_id
-          -- The first condition is complaints_open_idx's own, so its few rows are read.
-          where c.status <> 'resolved' and c.status = 'open') x;
-    v_lines := v_lines || private.health_line('complaints_late',
+    from private.cases c
+    left join public.orders o on o.id = c.order_id
+    -- The first condition is cases_open_idx's own, so only open cases are read.
+    where c.status = 'open' and private.case_next_due(c) < now()
+      and private.case_visible(private.case_reader_role(), c.area, c.order_id);
+    v_lines := v_lines || private.health_line('cases_late',
       case when n2 > 0 then 'problem' when n1 > 0 then 'attention' else 'ok' end, n1,
       p_since => t1, p_refs => v_refs,
-      p_parts => jsonb_build_object('past_answer', n2, 'acknowledge_days', 1, 'answer_days', 5));
+      p_parts => jsonb_build_object('past_resolution', n2, 'past_first_response', n1 - n2));
   end if;
 
   -- ── Money and documents (finance) ────────────────────────────────────────

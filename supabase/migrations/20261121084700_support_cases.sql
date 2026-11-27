@@ -371,6 +371,14 @@ $$;
 -- in the last hour cannot write notes, answers or contacts until the hour
 -- has passed. To keep that row, the staff functions do not raise on a
 -- refusal: they answer null, and the client shows note_contains_code.
+-- Every four-digit number a writer writes also counts against an hourly
+-- allowance (case_text_max_numbers), so accepted texts cannot test guesses
+-- without end either.
+--
+-- The other direction: a customer may type their own live code into a
+-- complaint, a return's reason or a report. What the staff functions answer
+-- of those words masks it (mask_shopper_codes); the customer still reads
+-- their own words as written.
 
 -- Decimal digits of other scripts, '0' to '9' of each (NFKC already turns
 -- full-width, mathematical, circled and superscript digits into 0-9).
@@ -390,25 +398,37 @@ as $$
   cross join generate_series(0, 9) d;
 $$;
 
+-- A text brought to plain digits, as the guard reads it: NFKC, the decimal
+-- digits of other scripts mapped to 0-9, invisible characters (soft hyphen,
+-- zero-width, direction marks, word joiners, variation selectors, byte-order
+-- mark) and combining marks removed.
+create or replace function private.case_text_plain(p_text text) returns text
+language plpgsql immutable
+set search_path = ''
+as $$
+declare
+  v text := coalesce(p_text, '');
+begin
+  v := normalize(v, NFKC);
+  v := translate(v, private.foreign_digits(), repeat('0123456789', 37));
+  return regexp_replace(v,
+    '[­͏؜ᅟᅠ឴឵᠋-᠏​-‏‪-‮⁠-⁯ㅤ︀-️﻿ﾠ̀-ͯ᪰-᫿⃐-⃿]',
+    '', 'g');
+end;
+$$;
+
 -- The four-digit numbers a text holds, as the guard reads them (see above).
 create or replace function private.case_text_numbers(p_text text) returns text[]
 language plpgsql immutable
 set search_path = ''
 as $$
 declare
-  v text := coalesce(p_text, '');
+  v text := private.case_text_plain(p_text);
   v_group text;
   v_runs text[];
   v_found text[] := '{}';
   v_join text;
 begin
-  v := normalize(v, NFKC);
-  v := translate(v, private.foreign_digits(), repeat('0123456789', 37));
-  -- Invisible characters (soft hyphen, zero-width, direction marks, word
-  -- joiners, variation selectors, byte-order mark) and combining marks.
-  v := regexp_replace(v,
-    '[­͏؜ᅟᅠ឴឵᠋-᠏​-‏‪-‮⁠-⁯ㅤ︀-️﻿ﾠ̀-ͯ᪰-᫿⃐-⃿]',
-    '', 'g');
   -- The shapes read whole.
   v := regexp_replace(v, '[Yy][Tt]-?[0-9]+', ' ', 'g');
   v := regexp_replace(v, '\+ ?506[ .-]?[0-9]{4}[ .-]?[0-9]{4}(?![0-9])', ' ', 'g');
@@ -440,6 +460,76 @@ language sql immutable
 set search_path = ''
 as $$ select 3 $$;
 
+-- Four-digit numbers a staff member may write in an hour, in notes, answers,
+-- contact summaries, complaint answers and return notes together. A year or
+-- an amount written now and then stays far below it.
+create or replace function private.case_text_max_numbers() returns integer
+language sql immutable
+set search_path = ''
+as $$ select 20 $$;
+
+-- How many four-digit numbers each staff member wrote, and when (never the
+-- numbers themselves). Rows older than a day are dropped as new ones come.
+create table private.case_number_checks (
+  id bigint generated always as identity primary key,
+  actor_id uuid not null references auth.users (id),
+  at timestamptz not null default now(),
+  numbers integer not null check (numbers between 1 and 5)
+);
+
+create index case_number_checks_actor_idx on private.case_number_checks (actor_id, at);
+alter table private.case_number_checks enable row level security;
+revoke all on private.case_number_checks from public, anon, authenticated;
+
+-- The delivery codes a text about a case may not hold: the code of the
+-- case's own order, and those of the customer's orders still to be
+-- delivered (a delivered order's code is spent).
+create or replace function private.case_live_codes(p_order_id uuid, p_user_id uuid) returns text[]
+language sql stable security definer
+set search_path = ''
+as $$
+  select coalesce(array_agg(distinct c.code), '{}')
+  from private.delivery_codes c
+  join public.orders o on o.id = c.order_id
+  where o.id = p_order_id
+     or (o.user_id = p_user_id and o.status not in ('delivered', 'completed', 'cancelled', 'refunded'));
+$$;
+
+-- What staff read of a customer's own words (a complaint, a return's reason,
+-- a report's details): the customer may type their own live delivery code,
+-- and staff must never read it, so each such number is shown as '••••'. The
+-- customer still reads their words as they wrote them (my_cases and the
+-- order's page read the rows themselves). A text that holds no live code
+-- comes back exactly as written; one that does comes back in plain digits
+-- (case_text_plain) with the code masked wherever it stands, also inside a
+-- longer shape such as a phone (decision 59).
+create or replace function private.mask_shopper_codes(p_text text, p_order_id uuid, p_user_id uuid)
+returns text
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  v_plain text;
+  v text;
+  v_code text;
+begin
+  if p_text is null then
+    return null;
+  end if;
+  v_plain := private.case_text_plain(p_text);
+  v := v_plain;
+  -- Every way the guard reads a code (its digits alone, or split by up to two
+  -- spaces, dots, commas or dashes), and also inside a phone or an amount.
+  foreach v_code in array private.case_live_codes(p_order_id, p_user_id) loop
+    v := regexp_replace(v,
+      '(?<![0-9])' || substr(v_code, 1, 1) || '[ .,-]{0,2}' || substr(v_code, 2, 1) || '[ .,-]{0,2}'
+        || substr(v_code, 3, 1) || '[ .,-]{0,2}' || substr(v_code, 4, 1) || '(?![0-9])',
+      '••••', 'g');
+  end loop;
+  return case when v = v_plain then p_text else v end;
+end;
+$$;
+
 -- Checks a text staff want to write on a case (or as a new contact's
 -- summary) against the customer's delivery codes. Raises when the writer is
 -- locked out (too_many_refusals) or the text holds too many four-digit
@@ -465,14 +555,23 @@ begin
   if cardinality(v_numbers) > 5 then
     perform private.fail('too_many_numbers');
   end if;
-  if cardinality(v_numbers) = 0 or not exists (
-    select 1
-    from private.delivery_codes c
-    join public.orders o on o.id = c.order_id
-    where c.code = any (v_numbers)
-      and (o.id = p_order_id
-           or (o.user_id = p_user_id
-               and o.status not in ('delivered', 'completed', 'cancelled', 'refunded')))) then
+  -- Every four-digit number a writer puts in a text counts against an hourly
+  -- allowance, written or refused, from all the entry points together (the
+  -- case functions and, through the triggers, Atención). Without it the
+  -- lock-out bounds only the refusals, and a writer could test five guesses
+  -- in each of any number of accepted texts (decision 59).
+  if cardinality(v_numbers) > 0 and (select auth.uid()) is not null then
+    if coalesce((select sum(k.numbers) from private.case_number_checks k
+                 where k.actor_id = (select auth.uid()) and k.at > now() - interval '1 hour'), 0)
+       + cardinality(v_numbers) > private.case_text_max_numbers() then
+      perform private.fail('too_many_numbers_hour');
+    end if;
+    delete from private.case_number_checks k
+    where k.actor_id = (select auth.uid()) and k.at < now() - interval '1 day';
+    insert into private.case_number_checks (actor_id, numbers)
+    values ((select auth.uid()), cardinality(v_numbers));
+  end if;
+  if cardinality(v_numbers) = 0 or not (v_numbers && private.case_live_codes(p_order_id, p_user_id)) then
     return true;
   end if;
   insert into private.audit_log (actor_id, action, table_name, row_key, old_row, new_row)
@@ -840,15 +939,18 @@ begin
 
   v_request := case c.kind
     when 'complaint' then (
-      select jsonb_build_object('text', x.description, 'category', x.category, 'status', x.status)
+      select jsonb_build_object('text', private.mask_shopper_codes(x.description, c.order_id, c.user_id),
+               'category', x.category, 'status', x.status)
       from public.complaints x where x.id = c.complaint_id)
     when 'return' then (
-      select jsonb_build_object('text', x.reason, 'return_kind', x.kind, 'status', x.status,
+      select jsonb_build_object('text', private.mask_shopper_codes(x.reason, c.order_id, c.user_id),
+               'return_kind', x.kind, 'status', x.status,
                'quantity', x.quantity, 'title', i.title, 'refund_due_on', x.refund_due_on)
       from public.return_requests x join public.order_items i on i.id = x.order_item_id
       where x.id = c.return_id)
     when 'report' then (
-      select jsonb_build_object('text', x.details, 'reason', x.reason, 'status', x.status,
+      select jsonb_build_object('text', private.mask_shopper_codes(x.details, c.order_id, c.user_id),
+               'reason', x.reason, 'status', x.status,
                'target_type', x.target_type, 'target_id', x.target_id)
       from public.content_reports x where x.id = c.report_id)
     else jsonb_build_object('text', c.summary)
@@ -872,16 +974,20 @@ begin
     end,
     'entries', coalesce((
       select jsonb_agg(jsonb_build_object(
-               'id', e.id, 'kind', e.kind, 'body', e.body, 'created_at', e.created_at,
+               'id', e.id, 'kind', e.kind,
+               -- Staff texts pass the guard when written; answers kept from
+               -- before this migration did not, so they are masked too.
+               'body', private.mask_shopper_codes(e.body, c.order_id, c.user_id), 'created_at', e.created_at,
                'author', private.first_name_of(e.author_id)) order by e.id)
       from private.case_entries e where e.case_id = c.id), '[]'::jsonb),
     'can', jsonb_build_object(
-      'note', v_role in ('admin', 'support', 'ops', 'finance'),
-      'answer', v_role in ('admin', 'support') and c.status = 'open',
-      'close', v_role in ('admin', 'support') and c.status = 'open' and not private.case_source_open(c),
+      'note', v_role in ('admin', 'support', 'ops', 'finance') and not private.case_account_deleted(c),
+      'answer', v_role in ('admin', 'support') and c.status = 'open' and not private.case_account_deleted(c),
+      'close', v_role in ('admin', 'support') and c.status = 'open' and not private.case_source_open(c)
+               and not private.case_account_deleted(c),
       'assign', v_role in ('admin', 'support') and c.status = 'open'
                 and c.assignee_id is distinct from (select auth.uid()),
-      'reopen', v_role in ('admin', 'support') and c.status = 'closed',
+      'reopen', v_role in ('admin', 'support') and c.status = 'closed' and not private.case_account_deleted(c),
       'customer', c.user_id is not null and v_role in ('admin', 'support', 'ops', 'finance')
                   and private.is_customer(c.user_id))
   );
@@ -920,6 +1026,14 @@ begin
 end;
 $$;
 
+-- Whether the account a case belongs to was deleted.
+create or replace function private.case_account_deleted(c private.cases) returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select exists (select 1 from auth.users u where u.id = c.user_id and u.deleted_at is not null);
+$$;
+
 -- An internal note: staff only, never shown to the customer. Answers the
 -- new entry's id, or null when the text holds the delivery code (section 3).
 create or replace function public.ops_add_case_note(p_case_id uuid, p_body text) returns bigint
@@ -936,6 +1050,12 @@ begin
     perform private.fail('forbidden');
   end if;
   c := private.case_for_work(p_case_id, v_role);
+  -- The text of a deleted account's cases went with it (section 8); nothing
+  -- new is written there. The case row is locked, so a deletion that started
+  -- meanwhile waits and then erases this note too.
+  if private.case_account_deleted(c) then
+    perform private.fail('case_account_deleted');
+  end if;
   if char_length(v_body) not between 1 and 2000 then
     perform private.fail('invalid_note');
   end if;
@@ -973,14 +1093,23 @@ begin
   if v_role is null or v_role not in ('admin', 'support') then
     perform private.fail('forbidden');
   end if;
-  -- A complaint's row before its case, in the order ops_resolve_complaint
-  -- (and the trigger behind it) takes them, so the two never wait on each other.
+  -- The customer's account row first, as delete_my_account takes it before
+  -- the rows of their complaints and cases: the answer plans a message to
+  -- them (a row that points at that account), so the two wait for each other
+  -- in one order, never in a circle. Then a complaint's row before its case,
+  -- in the order ops_resolve_complaint (and the trigger behind it) takes them.
+  perform 1 from auth.users u
+  where u.id = (select k.user_id from private.cases k where k.id = p_case_id)
+  for key share;
   perform 1 from public.complaints x
   where x.id = (select k.complaint_id from private.cases k where k.id = p_case_id)
   for update;
   c := private.case_for_work(p_case_id, v_role);
   if c.status = 'closed' then
     perform private.fail('case_closed');
+  end if;
+  if private.case_account_deleted(c) then
+    perform private.fail('case_account_deleted');
   end if;
   if char_length(v_body) not between 10 and 4000 then
     perform private.fail('reason_required');
@@ -1078,6 +1207,9 @@ begin
   if c.status = 'open' then
     perform private.fail('case_open');
   end if;
+  if private.case_account_deleted(c) then
+    perform private.fail('case_account_deleted');
+  end if;
   t := private.case_target(c.kind, c.topic);
   update private.cases
   set status = 'open', resolved_at = null, reopened_count = reopened_count + 1,
@@ -1130,6 +1262,9 @@ begin
     select o.id, o.user_id into v_order, v_user from public.orders o where o.order_number = trim(p_order_number);
     if v_order is null or (p_user_id is not null and p_user_id <> v_user) then
       perform private.fail('order_not_found');
+    end if;
+    if exists (select 1 from auth.users u where u.id = v_user and u.deleted_at is not null) then
+      perform private.fail('case_account_deleted');
     end if;
   else
     -- A customer: someone who ordered, complained or asked for a return, and
@@ -1536,6 +1671,8 @@ $$;
 -- delete_my_account marks the sign-in record deleted; the text of the
 -- person's cases (a contact's summary, notes and answers, which may name
 -- them) goes with it. The cases stay, as the complaints do, for the register.
+-- An open recorded contact closes; no note, answer or reopening is accepted
+-- on a deleted account's case afterwards (case_account_deleted).
 
 create or replace function private.erase_case_text() returns trigger
 language plpgsql security definer
@@ -1545,20 +1682,112 @@ begin
   if new.deleted_at is null or old.deleted_at is not null then
     return null;
   end if;
+  -- The person's cases first, in one order: a note or an answer being
+  -- written now holds its case, so this waits for it and erases it too, and
+  -- none is written after (they refuse a deleted account's case).
+  perform 1 from private.cases c where c.user_id = new.id order by c.id for update;
   perform set_config('yuntera.erasing_cases', 'on', true);
+  -- Notes and answers (a status entry holds only a status name).
   update private.case_entries e set body = private.erased_case_text()
   from private.cases c
-  where c.id = e.case_id and c.user_id = new.id and e.body is not null
+  where c.id = e.case_id and c.user_id = new.id and e.kind in ('note', 'answer') and e.body is not null
     and e.body <> private.erased_case_text();
   perform set_config('yuntera.erasing_cases', '', true);
   update private.cases c set summary = private.erased_case_text()
   where c.user_id = new.id and c.summary is not null;
+  -- A recorded contact still open has nobody left to answer: it closes.
+  -- (Complaints and returns cannot be open here: delete_my_account refuses
+  -- then. A report's case stays open until Atención decides the report.)
+  insert into private.case_entries (case_id, kind)
+  select c.id, 'closed' from private.cases c
+  where c.user_id = new.id and c.kind = 'contact' and c.status = 'open';
+  update private.cases c set status = 'closed', resolved_at = now()
+  where c.user_id = new.id and c.kind = 'contact' and c.status = 'open';
   return null;
 end;
 $$;
 
 create trigger auth_users_erase_case_text after update of deleted_at on auth.users
   for each row execute function private.erase_case_text();
+
+-- ═══ 9. What Atención reads of a customer's own words ═════════════════════
+-- public.ops_care_queues (083000) gave staff a complaint's description, a
+-- return's reason and a report's details as the customer typed them, so a
+-- customer's own live delivery code typed there reached staff. A faithful
+-- copy of 083000's definition except those three values, which pass through
+-- private.mask_shopper_codes (section 3), as public.ops_case's do. Same
+-- arguments and columns: owner, security definer, search path and grants
+-- stay as they were, and the console of 12ec48c reads the same shape.
+
+create or replace function public.ops_care_queues() returns jsonb
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  c_page constant integer := 100;
+begin
+  if not private.has_staff_role('support', 'ops', 'finance', 'catalog') then
+    perform private.fail('forbidden');
+  end if;
+  return jsonb_build_object(
+    'complaints', coalesce((
+      select jsonb_agg(x.item order by x.created_at, x.id)
+      from (
+        select c.created_at, c.id, jsonb_build_object(
+          'id', c.id, 'category', c.category, 'description', private.mask_shopper_codes(c.description, c.order_id, c.user_id), 'status', c.status,
+          'created_at', c.created_at, 'order_number', o.order_number, 'customer', pr.full_name
+        ) as item
+        from public.complaints c
+        left join public.orders o on o.id = c.order_id
+        left join public.profiles pr on pr.id = c.user_id
+        where c.status <> 'resolved'
+        order by c.created_at, c.id
+        limit c_page
+      ) x), '[]'::jsonb),
+    'returns', coalesce((
+      select jsonb_agg(x.item order by x.refund_due_on nulls last, x.created_at, x.id)
+      from (
+        select r.refund_due_on, r.created_at, r.id, jsonb_build_object(
+          'id', r.id, 'kind', r.kind, 'quantity', r.quantity, 'reason', private.mask_shopper_codes(r.reason, o.id, r.user_id),
+          'status', r.status, 'refund_due_on', r.refund_due_on, 'created_at', r.created_at,
+          'title', i.title, 'order_number', o.order_number, 'seller_name', s.trade_name,
+          'customer', pr.full_name, 'amount_minor', i.unit_price_minor * r.quantity
+        ) as item
+        from public.return_requests r
+        join public.order_items i on i.id = r.order_item_id
+        join public.orders o on o.id = i.order_id
+        left join public.sellers s on s.id = i.seller_id
+        left join public.profiles pr on pr.id = r.user_id
+        where r.status in ('requested', 'approved', 'received')
+        order by r.refund_due_on nulls last, r.created_at, r.id
+        limit c_page
+      ) x), '[]'::jsonb),
+    'reports', coalesce((
+      select jsonb_agg(x.item order by x.created_at, x.id)
+      from (
+        select cr.created_at, cr.id, jsonb_build_object(
+          'id', cr.id, 'target_type', cr.target_type, 'target_id', cr.target_id,
+          'reason', cr.reason, 'details', private.mask_shopper_codes(cr.details, null, cr.reporter_id), 'status', cr.status,
+          'created_at', cr.created_at,
+          'target_label', case cr.target_type
+            when 'product' then (select p.title from public.products p where p.id = cr.target_id)
+            when 'seller' then (select s.trade_name from public.sellers s where s.id = cr.target_id)
+            when 'review' then (select left(rv.body, 120) from public.reviews rv where rv.id = cr.target_id)
+          end
+        ) as item
+        from public.content_reports cr where cr.status in ('open', 'in_review')
+        order by cr.created_at, cr.id
+        limit c_page
+      ) x), '[]'::jsonb),
+    'totals', jsonb_build_object(
+      'complaints', (select count(*) from public.complaints c where c.status <> 'resolved'),
+      'returns', (select count(*) from public.return_requests r
+                  where r.status in ('requested', 'approved', 'received')),
+      'reports', (select count(*) from public.content_reports cr
+                  where cr.status in ('open', 'in_review')))
+  );
+end;
+$$;
 
 -- ═══ Grants ════════════════════════════════════════════════════════════════
 
@@ -1577,6 +1806,10 @@ revoke all on function private.open_case(text, text, uuid, uuid, text, uuid, tex
 revoke all on function private.foreign_digits() from public, anon, authenticated;
 revoke all on function private.case_text_numbers(text) from public, anon, authenticated;
 revoke all on function private.case_text_max_refusals() from public, anon, authenticated;
+revoke all on function private.case_text_max_numbers() from public, anon, authenticated;
+revoke all on function private.case_text_plain(text) from public, anon, authenticated;
+revoke all on function private.case_live_codes(uuid, uuid) from public, anon, authenticated;
+revoke all on function private.mask_shopper_codes(text, uuid, uuid) from public, anon, authenticated;
 revoke all on function private.case_text_allowed(uuid, uuid, text, text, text) from public, anon, authenticated;
 revoke all on function private.guard_case_text(private.cases, text, text) from public, anon, authenticated;
 revoke all on function private.is_customer(uuid) from public, anon, authenticated;
@@ -1588,6 +1821,7 @@ revoke all on function private.case_next_due(private.cases) from public, anon, a
 revoke all on function private.case_clock(private.cases) from public, anon, authenticated;
 revoke all on function private.case_row(private.cases) from public, anon, authenticated;
 revoke all on function private.case_for_work(uuid, public.staff_role) from public, anon, authenticated;
+revoke all on function private.case_account_deleted(private.cases) from public, anon, authenticated;
 revoke all on function private.my_case_row(private.cases) from public, anon, authenticated;
 revoke all on function private.erase_case_text() from public, anon, authenticated;
 revoke all on function private.cases_backfill() from public, anon, authenticated;

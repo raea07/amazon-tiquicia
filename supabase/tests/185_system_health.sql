@@ -3,7 +3,7 @@
 -- public.ops_set_store_build.
 --
 --   right caller: each staff role reads exactly its own lines (support the
---                 messages and complaints, finance money and documents, ops the jobs,
+--                 messages and cases, finance money and documents, ops the jobs,
 --                 orders and routes, admin all of them and the sign-ins);
 --                 an administrator reads the versions and records a build;
 --                 a visitor's ping answers {"ok": true} and nothing else;
@@ -139,6 +139,9 @@ begin
                         where rs.route_id = r.id and rs.status in ('pending', 'arrived')));
   update public.complaints set status = 'resolved', resolved_at = now(), resolution = 'Prueba 185 resuelta'
   where status = 'open';
+  -- Open cases (the seed's backfilled complaints, returns and reports among
+  -- them) set aside, so the cases line reads good.
+  update private.cases set status = 'closed', resolved_at = now() where status = 'open';
   delete from private.auth_attempts where action = 'sign_in';
   perform set_config('session_replication_role', 'origin', true);
 end;
@@ -221,7 +224,7 @@ declare
   v jsonb;
 begin
   v := pg_temp.health('central@yuntera.example');
-  assert pg_temp.keys(v) = 'complaints_late,events_failed,invoice_certificate,invoices,jobs,messages_late,'
+  assert pg_temp.keys(v) = 'cases_late,events_failed,invoice_certificate,invoices,jobs,messages_late,'
     'messages_stopped,orders_not_released,orders_unpaid_overdue,payments_failed,payments_worker,'
     'refunds_failed,routes_open,sign_ins_failed', format('admin lines: %s', pg_temp.keys(v));
   assert v -> 'jobs' ? 'items' and jsonb_array_length(v -> 'jobs' -> 'items') = 7, 'admin: the seven jobs';
@@ -231,7 +234,7 @@ begin
   assert pg_temp.state(v, 'invoice_certificate') = 'ok', 'certificate ok a year ahead';
 
   v := pg_temp.health('soporte185@yuntera.example');
-  assert pg_temp.keys(v) = 'complaints_late,events_failed,messages_late,messages_stopped',
+  assert pg_temp.keys(v) = 'cases_late,events_failed,messages_late,messages_stopped',
     format('support lines: %s', pg_temp.keys(v));
   assert v -> 'jobs' = 'null'::jsonb, 'support: no jobs';
 
@@ -386,55 +389,57 @@ begin
 end $$;
 rollback to savepoint s;
 
--- Complaints with no written answer: within one working day ok, after it
--- attention, after five working days a problem; answered ones never count.
+-- Cases against their targets (the support desk's due times, 084700): a new
+-- case is ok; past its first-response time attention; past its resolution
+-- time a problem; answered and closed ones never count. The line counts what
+-- the desk's own "Hoy" line counts (ops_cases_due), and never the case text.
 savepoint s;
 do $$
 declare
   v jsonb;
   c uuid;
+  k uuid;
   o uuid := pg_temp.paid_order('salud-185-reclamo');
   n text := (select order_number from public.orders where id = o);
-  v_today date := private.cr_today();
-  d date := v_today;
 begin
   perform set_config('request.jwt.claims', '', true);
   insert into public.complaints (user_id, order_id, category, description)
   select o2.user_id, o2.id, 'delivery', 'Prueba 185: el paquete no llegó a tiempo.'
   from public.orders o2 where o2.id = o
   returning id into c;
+  select id into k from private.cases where complaint_id = c;
   v := pg_temp.health('soporte185@yuntera.example');
-  assert pg_temp.state(v, 'complaints_late') = 'ok', format('complaints: just filed, %s', pg_temp.line(v, 'complaints_late'));
+  assert pg_temp.state(v, 'cases_late') = 'ok', format('cases: just filed, %s', pg_temp.line(v, 'cases_late'));
   perform pg_temp.others_ok(v, 'none');
 
-  -- The newest filing day whose one working day has passed, but not five.
-  loop
-    d := d - 1;
-    exit when private.add_business_days(d, 1) < v_today;
-  end loop;
-  assert private.add_business_days(d, 5) >= v_today, 'complaints: the test day is within five working days';
-  update public.complaints set created_at = (d::timestamp + interval '10 hours') at time zone 'America/Costa_Rica'
-  where id = c;
+  -- Past its first-response time, not its resolution time.
+  update private.cases set first_response_due_at = now() - interval '1 minute' where id = k;
   v := pg_temp.health('soporte185@yuntera.example');
-  assert pg_temp.state(v, 'complaints_late') = 'attention'
-     and (pg_temp.line(v, 'complaints_late') -> 'count')::int = 1
-     and (pg_temp.line(v, 'complaints_late') -> 'parts' ->> 'past_answer')::int = 0
-     and pg_temp.line(v, 'complaints_late') -> 'refs' = jsonb_build_array(n),
-    format('complaints: past one working day, %s', pg_temp.line(v, 'complaints_late'));
-  perform pg_temp.others_ok(v, 'complaints_late');
+  assert pg_temp.state(v, 'cases_late') = 'attention'
+     and (pg_temp.line(v, 'cases_late') -> 'count')::int = 1
+     and (pg_temp.line(v, 'cases_late') -> 'parts' ->> 'past_resolution')::int = 0
+     and (pg_temp.line(v, 'cases_late') -> 'parts' ->> 'past_first_response')::int = 1
+     and pg_temp.line(v, 'cases_late') -> 'refs' = jsonb_build_array(n),
+    format('cases: past the first response, %s', pg_temp.line(v, 'cases_late'));
+  perform pg_temp.others_ok(v, 'cases_late');
 
-  -- Five working days gone.
-  update public.complaints set created_at = now() - interval '20 days' where id = c;
+  -- Past its resolution time too.
+  update private.cases set due_at = now() - interval '1 minute' where id = k;
   v := pg_temp.health('soporte185@yuntera.example');
-  assert pg_temp.state(v, 'complaints_late') = 'problem'
-     and (pg_temp.line(v, 'complaints_late') -> 'parts' ->> 'past_answer')::int = 1,
-    format('complaints: past five working days, %s', pg_temp.line(v, 'complaints_late'));
+  assert pg_temp.state(v, 'cases_late') = 'problem'
+     and (pg_temp.line(v, 'cases_late') -> 'parts' ->> 'past_resolution')::int = 1,
+    format('cases: past the resolution, %s', pg_temp.line(v, 'cases_late'));
 
-  -- Answered and kept open, or closed: no longer waiting for an answer.
-  update public.complaints set status = 'in_progress', resolution = 'Le respondimos por escrito.' where id = c;
+  -- Answered (the first response given) and still within its resolution time.
+  update private.cases set due_at = now() + interval '1 day', first_response_at = now() where id = k;
   v := pg_temp.health('soporte185@yuntera.example');
-  assert pg_temp.state(v, 'complaints_late') = 'ok', 'complaints: answered';
-  assert v::text not like '%paquete no llegó%', 'complaints: the complaint''s text is never shown';
+  assert pg_temp.state(v, 'cases_late') = 'ok', 'cases: answered in time';
+  -- Closed.
+  update private.cases set due_at = now() - interval '1 minute', status = 'closed', resolved_at = now()
+  where id = k;
+  v := pg_temp.health('soporte185@yuntera.example');
+  assert pg_temp.state(v, 'cases_late') = 'ok', 'cases: closed';
+  assert v::text not like '%paquete no llegó%', 'cases: the complaint''s text is never shown';
 end $$;
 rollback to savepoint s;
 

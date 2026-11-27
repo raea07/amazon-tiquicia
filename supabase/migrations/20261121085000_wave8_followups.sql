@@ -50,6 +50,12 @@
 --      staff only. The new sentence is one of the reasons the database
 --      writes itself: packages/core/src/cancellation.ts (CANCEL_REASON,
 --      with a parity test) and the list public.get_order gives the shopper.
+--      The parcel itself said "Devuelto" and its history "Paquete: devuelto"
+--      on the shopper's pages: public.get_order now says, for each parcel and
+--      each of its history lines, whether staff stopped it before it ever
+--      left (`stopped_before_leaving`, a new optional field the store build
+--      of 3f251c3 ignores), and the shopper's pages use the words of
+--      packages/core/src/parcel-words.ts for it.
 --
 --   3. A SHOPPER'S OWN CANCELLATION ALWAYS READS AS THEIRS.
 --      public.cancel_order stored whatever text the caller sent as the
@@ -323,9 +329,13 @@ begin
 end;
 $$;
 
--- Replaces the version in 20261121084600_shopper_followups.sql. One change:
+-- Replaces the version in 20261121084600_shopper_followups.sql. Two changes:
 -- the shopper is given the new reason too (header, point 2); the list is the
--- one packages/core/src/cancellation.ts keeps (CANCEL_REASON).
+-- one packages/core/src/cancellation.ts keeps (CANCEL_REASON). And each parcel
+-- and each of its history lines says whether staff stopped it before it ever
+-- left (`stopped_before_leaving`, new and optional: the store build of
+-- 3f251c3 ignores it), so the shopper's pages do not call it "Devuelto"
+-- (packages/core/src/parcel-words.ts).
 create or replace function public.get_order(p_order_number text) returns jsonb
 language plpgsql stable security definer
 set search_path = ''
@@ -437,6 +447,7 @@ begin
           where rs.shipment_id = s.id and r.status = 'in_progress' and s.status = 'out_for_delivery'
           limit 1),
         'recalled', s.recalled_at is not null,
+        'stopped_before_leaving', s.recalled_at is not null and private.shipment_never_left(s.id),
         -- What ops_recall_shipment accepts: packed or ready in a Yuntera
         -- warehouse, and not on a route being driven.
         'can_recall', v_is_ops and s.status in ('packed', 'ready_for_dispatch')
@@ -449,7 +460,11 @@ begin
     'timeline', coalesce((
       select jsonb_agg(jsonb_build_object(
         'at', e.created_at, 'kind', e.kind, 'from_status', e.from_status,
-        'to_status', e.to_status, 'note', e.note) order by e.created_at, e.id)
+        'to_status', e.to_status, 'note', e.note,
+        'stopped_before_leaving', e.kind = 'shipment_status' and exists (
+          select 1 from public.shipments s
+          where s.id = e.shipment_id and s.recalled_at is not null and private.shipment_never_left(s.id)))
+        order by e.created_at, e.id)
       from public.order_events e
       where e.order_id = o.id and (e.visible_to_customer or v_is_staff)), '[]'::jsonb)
   );

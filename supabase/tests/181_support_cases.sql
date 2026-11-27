@@ -803,7 +803,12 @@ begin
   assert (select summary from private.cases where id = v_case) = private.erased_case_text(), 'summary erased';
   assert not exists (select 1 from private.case_entries where case_id = v_case
                      and body is not null and body <> private.erased_case_text()), 'entries erased';
-  assert (select count(*) from private.case_entries where case_id = v_case) = 2, 'the entries themselves stay';
+  assert (select count(*) from private.case_entries where case_id = v_case and kind <> 'closed') = 2,
+    'the entries themselves stay';
+  -- The open contact has nobody left to answer: it closes (integration, wave 9).
+  assert (select status from private.cases where id = v_case) = 'closed'
+         and (select kind from private.case_entries where case_id = v_case order by id desc limit 1) = 'closed',
+    'the open contact closes';
   -- Outside the deletion, entries stay immutable.
   begin
     update private.case_entries set body = private.erased_case_text()
