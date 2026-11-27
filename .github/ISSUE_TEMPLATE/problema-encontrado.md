@@ -1,4 +1,5 @@
 ---
+
 name: Problema encontrado
 about: Algo no funciona como debería en una aplicación o un sitio de Yuntera.
 title: "Problema: "
