@@ -29,6 +29,14 @@ const { ownRoute } = require("../lib/own-route.cjs");
 const ops = require("../lib/ops.cjs");
 const field = require("../lib/field.cjs");
 const { word } = require("../lib/words.cjs");
+
+/**
+ * The history line the staff order page writes for a stop taken off a route
+ * (timelineWords in apps/ops/src/app/pedidos/[numero]/page.tsx). It is a
+ * sentence of the history, not a status word: the parcel's badge reads the
+ * core word (removedWord below).
+ */
+const REMOVED_FROM_ROUTE = "Quitado de una ruta, sin intento de entrega";
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
