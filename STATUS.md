@@ -1509,19 +1509,25 @@ Found while building or reviewing; none is fixed by pretending otherwise.
 - **Wave 8 (`084400`, `084500`, `084600`), merged on 24 November 2026, not
   on the hosted preview yet:**
   - What still can deadlock (measured with `tools/races` on a local lane of
-    a shared machine, 100 natural and 100 forced rounds each, in full runs
-    after the last change to SQL; the numbers move between runs, so they are
-    ranges over the two full runs at the final SQL; the table is in
-    `/root/yuntera-audit/races-wave8/integration/table.txt`).
+    a shared machine, 100 natural and 100 forced rounds each). The numbers
+    move between runs, so each is a range over the four full runs at the
+    final lock order: an outside check at `ad2f363`, the fixer's at
+    `e87a3fc`, a second outside check at `8d7a1f0` and the last at `ef27fbc`
+    (27 November). This is the one place these ranges are kept; the `084400`
+    header and the sourcing document point here. The latest table is in
+    `/root/yuntera-audit/races-wave8/integration/table.txt`.
     The loser rolls back whole and reads "nothing was saved, try again";
     nothing is half-written. (1) Two checkouts that each take the last units
-    of two shared products in opposite order (E5: 24 to 29 in 100 natural rounds, 57 to 58 in 100 forced), and a staff
-    cancellation giving back last units against such a checkout (E5b:
-    2 to 5 natural, 68 to 74 forced). (2) A cancellation or the sweep crossing zero on one offer of
-    a product while the seller changes another offer of it (E6: 22 to 23 in 100 natural, every forced round).
-    (3) A shop suspended or reinstated against such a writer (E7: 0 to 4 in 100 natural, every forced round).
-    (4) Staff merging two brands against a checkout crossing zero on two of
-    their products (E11: 0 to 18 in 100 natural rounds for the two checkouts tried, up to 74 in 100 forced, depending on which session waits first).
+    of two shared products in opposite order (E5: 24 to 38 in 100 natural
+    rounds, 57 to 63 forced), and a staff cancellation giving back last
+    units against such a checkout (E5b: 1 to 5 natural, 54 to 74 forced).
+    (2) A cancellation or the sweep crossing zero on one offer of a product
+    while the seller changes another offer of it (E6: 22 to 31 natural,
+    every forced round). (3) A shop suspended or reinstated against such a
+    writer (E7: 0 to 4 natural, every forced round). (4) Staff merging two
+    brands against a checkout crossing zero on two of their products (E11:
+    0 to 18 natural for the two checkouts tried, 0 to 74 forced, depending
+    on which session waits first).
     No round of any of them left a wrong stock or summary.
   - Fixed in this wave, measured before and after: a cancellation against a
     count, a receipt or a pick of the same shelf (6 to 39 in 100 natural
