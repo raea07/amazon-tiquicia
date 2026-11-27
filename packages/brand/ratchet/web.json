@@ -1,0 +1,15 @@
+{
+  "app": "web",
+  "measuredAt": "a0ad69a",
+  "counts": {
+    "raw ramp classes": 19,
+    "legacy-only semantic classes": 72,
+    "brand outside the delivery components": 18,
+    "warning used as text": 7,
+    "hand-written targets and arbitrary values": 30,
+    "fonts and borders set by hand in the phone apps": 0,
+    "legacy theme in the phone apps": 0,
+    "a bare formatPrice in JSX": 8,
+    "module-level StyleSheet reading colours (rg -U, multiline)": 0
+  }
+}
