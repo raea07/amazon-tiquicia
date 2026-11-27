@@ -17,6 +17,7 @@ export const HEALTH_LINE_KEYS = [
   "messages_stopped",
   "messages_late",
   "events_failed",
+  "complaints_late",
   "invoices",
   "invoice_certificate",
   "refunds_failed",
@@ -33,10 +34,22 @@ export type HealthLineKey = (typeof HEALTH_LINE_KEYS)[number];
 export const HEALTH_STATES = ["ok", "attention", "problem", "unknown"] as const;
 export type HealthState = (typeof HEALTH_STATES)[number];
 
-/** One check. Counts and order numbers or route codes only: never a person. */
+/**
+ * A state this client does not know (a later migration may add one) reads as
+ * "unknown": never as good, and never an error that hides the other lines.
+ */
+const state = z.enum(HEALTH_STATES).catch("unknown");
+
+/**
+ * One check. Counts and order numbers or route codes only: never a person.
+ * `key` is any string, not only HEALTH_LINE_KEYS: the database may be one
+ * migration ahead of the console (the release checklist applies migrations
+ * first), and a line the console does not know yet is shown in general
+ * words rather than breaking the page.
+ */
 export const healthLine = z.object({
-  key: z.enum(HEALTH_LINE_KEYS),
-  state: z.enum(HEALTH_STATES),
+  key: z.string(),
+  state,
   count,
   /** The oldest thing the line counts, when it has a time. */
   since: instant,
@@ -56,19 +69,21 @@ export const healthJob = z.object({
   every_seconds: z.number().int().positive(),
   late_after_seconds: z.number().int().positive(),
   last_run_at: instant,
-  last_status: z.enum(["succeeded", "failed", "running"]).nullable(),
-  state: z.enum(HEALTH_STATES),
-  reason: z.enum([
-    "no_history",
-    "not_scheduled",
-    "inactive",
-    "failed",
-    "never_ran",
-    "late",
-    "on_time",
-  ]),
+  last_status: z.enum(["succeeded", "failed", "running"]).nullable().catch(null),
+  state,
+  /** HEALTH_JOB_REASONS, or a newer one this console does not know. */
+  reason: z.string(),
 });
 export type HealthJob = z.infer<typeof healthJob>;
+export const HEALTH_JOB_REASONS = [
+  "no_history",
+  "not_scheduled",
+  "inactive",
+  "failed",
+  "never_ran",
+  "late",
+  "on_time",
+] as const;
 
 export const systemHealth = z.object({
   checked_at: z.string(),
@@ -76,8 +91,9 @@ export const systemHealth = z.object({
   /** Operations staff and administrators only. */
   jobs: z
     .object({
-      history: z.enum(["available", "unavailable"]),
-      reason: z.enum(["not_installed", "not_logged", "no_access"]).nullable(),
+      history: z.enum(["available", "unavailable"]).catch("unavailable"),
+      /** "not_installed", "not_logged", "no_access", or a newer reason. */
+      reason: z.string().nullable(),
       items: z.array(healthJob),
     })
     .nullable(),
@@ -137,6 +153,11 @@ export const systemHealthErrors = {
       "No se guardó la versión: revise la aplicación, la plataforma, la versión (como 1.2.0), el número de compilación (un número entero desde 1), la fecha (desde 2026 y no después de hoy) y dónde está.",
     en: "The build was not saved: check the app, the platform, the version (such as 1.2.0), the build number (a whole number from 1), the date (from 2026 and not after today) and where it is.",
   },
+  store_build_not_found: {
+    "es-CR":
+      "Esa versión ya no está registrada. Vuelva a cargar la página para ver la lista actual.",
+    en: "That build is no longer recorded. Reload the page to see the current list.",
+  },
 } as const satisfies Messages;
 
 export const systemHealthApi = ({ call }: Caller) => ({
@@ -160,4 +181,6 @@ export const systemHealthApi = ({ call }: Caller) => ({
       },
       storeBuild,
     ),
+  /** Administrators: removes a build recorded by mistake; the audit trail keeps it. */
+  opsRemoveStoreBuild: (id: string) => call("ops_remove_store_build", { p_id: id }, storeBuild),
 });

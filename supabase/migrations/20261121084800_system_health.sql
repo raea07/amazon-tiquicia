@@ -15,7 +15,8 @@
 --
 --      Who sees which line (research table 4.1; admin sees every line):
 --        support  messages stopped, messages late (and channels paused),
---                 events that produced no message;
+--                 events that produced no message, complaints not answered
+--                 within their target;
 --        finance  invoices (rejected, waiting too long, unsent, events with
 --                 no document, transmission paused), the signing
 --                 certificate, gateway refunds that failed, payments that
@@ -23,7 +24,8 @@
 --                 pick up;
 --        ops      the scheduled jobs, unpaid orders past their expiry,
 --                 orders paid but never handed to the warehouse, routes
---                 started more than a day ago and not finished;
+--                 that cannot finish (the same rule as Rutas detenidas,
+--                 public.ops_open_routes in 084200);
 --        admin    also failed sign-ins in the last hour.
 --      Catalogue staff get no line. A line a role does not see is not
 --      computed at all for that role.
@@ -47,6 +49,12 @@
 --          were not cancelled: what a stopped expire-unpaid-orders looks
 --          like, and their stock stays held meanwhile. It holds on a
 --          database with no scheduler too (local work), where it is true.
+--      The complaints line is research table 4.1's "complaint part" for
+--      support: a complaint with no written answer one working day after it
+--      was filed asks for attention (customer-service.md: acknowledged in 1
+--      working day), and five working days after is a problem (a written
+--      answer within 5). Working days are private.add_business_days, the
+--      same the order deadlines use (Monday to Friday, without holidays).
 --      The job history alone cannot say any of this on a database without
 --      a scheduler; these symptoms can.
 --
@@ -76,7 +84,9 @@
 --      entered by hand with public.ops_set_store_build(): app, platform,
 --      version, build number, the day it went out and where it is (internal
 --      test or public). Entering the same build again updates its day and
---      where it is. Each entry is in the audit trail. The web apps' commits
+--      where it is. A build typed wrong is removed with
+--      public.ops_remove_store_build(), so it never stays on the panel as
+--      the current one. Each entry and removal is in the audit trail. The web apps' commits
 --      are not in the database: the console asks each app (apps/*/src/app/
 --      api/version).
 --
@@ -86,9 +96,12 @@
 -- ═══ 1. Indexes the checks read ═════════════════════════════════════════════
 
 -- Messages the provider reported as not delivered (the dead ones have
--- notification_dead_idx since 082600).
+-- notification_dead_idx since 082600), and sends whose lease ran out
+-- (notification_due_idx is by available_at, so it cannot bound those).
 create index notification_failed_idx on private.notification_deliveries (created_at desc)
   where status = 'failed';
+create index notification_sending_idx on private.notification_deliveries (locked_until)
+  where status = 'sending';
 -- Events a consumer gave up on.
 create index outbox_jobs_dead_idx on private.outbox_jobs (consumer) where status = 'dead';
 -- Documents rejected and not replaced, sent and waiting, and not sent yet.
@@ -110,8 +123,9 @@ create index payment_attempts_error_idx on private.payment_attempts (updated_at)
 -- the declined ones, which pile up, so it would be read through them.
 create index payment_attempts_worker_due_idx on private.payment_attempts (work_after)
   where status in ('creating', 'cancel_requested');
--- Routes being driven.
-create index routes_in_progress_idx on public.routes (started_at) where status = 'in_progress';
+-- Routes not finished yet (few: a day's routes and the stuck ones).
+create index routes_unfinished_idx on public.routes (service_date)
+  where status in ('draft', 'assigned', 'in_progress');
 
 -- ═══ 2. Phone builds ════════════════════════════════════════════════════════
 
@@ -269,6 +283,7 @@ declare
   v_refs text[];
   v_window interval;
   v_minutes integer;
+  v_today date := private.cr_today();
   h private.invoice_worker_health%rowtype;
 begin
   if not private.is_staff() then
@@ -291,10 +306,16 @@ begin
 
     -- Late: due and not sent, a send whose lease ran out long ago, events
     -- not planned yet, and channels the provider paused.
+    -- Two reads, each a range of its own partial index: one OR across
+    -- both made the planner read every planned message.
     select count(*), min(d.available_at) into n1, t1
     from private.notification_deliveries d
-    where (d.status = 'pending' and d.available_at < now() - v_late)
-       or (d.status = 'sending' and d.locked_until < now() - v_late);
+    where d.status = 'pending' and d.available_at < now() - v_late;
+    select count(*), min(d.available_at) into n3, t2
+    from private.notification_deliveries d
+    where d.status = 'sending' and d.locked_until < now() - v_late;
+    n1 := n1 + n3;
+    t1 := least(t1, t2);
     -- Pending planner jobs are few (outbox_jobs_pending_idx holds only them).
     select count(*), min(j.created_at) into n2, t2 from private.outbox_jobs j
     where j.consumer = 'notify' and j.status = 'pending' and j.created_at < now() - v_late;
@@ -312,6 +333,27 @@ begin
     select count(*) into n1 from private.outbox_jobs where consumer = 'notify' and status = 'dead';
     v_lines := v_lines || private.health_line('events_failed',
       case when n1 > 0 then 'problem' else 'ok' end, n1);
+
+    -- Complaints with no written answer yet (status 'open': answering sets
+    -- 'in_progress' or 'resolved'), against their targets in working days.
+    -- complaints_open_idx holds only the unresolved ones.
+    select count(*) filter (where x.ack_by < v_today),
+           count(*) filter (where x.answer_by < v_today),
+           min(x.created_at) filter (where x.ack_by < v_today),
+           coalesce((array_agg(x.order_number order by x.created_at)
+                       filter (where x.ack_by < v_today and x.order_number is not null))[1:10], '{}')
+    into n1, n2, t1, v_refs
+    from (select c.created_at, o.order_number,
+                 private.add_business_days(private.cr_local(c.created_at)::date, 1) as ack_by,
+                 private.add_business_days(private.cr_local(c.created_at)::date, 5) as answer_by
+          from public.complaints c
+          left join public.orders o on o.id = c.order_id
+          -- The first condition is complaints_open_idx's own, so its few rows are read.
+          where c.status <> 'resolved' and c.status = 'open') x;
+    v_lines := v_lines || private.health_line('complaints_late',
+      case when n2 > 0 then 'problem' when n1 > 0 then 'attention' else 'ok' end, n1,
+      p_since => t1, p_refs => v_refs,
+      p_parts => jsonb_build_object('past_answer', n2, 'acknowledge_days', 1, 'answer_days', 5));
   end if;
 
   -- ── Money and documents (finance) ────────────────────────────────────────
@@ -415,14 +457,28 @@ begin
       case when n1 > 0 then 'problem' else 'ok' end, n1, p_since => t1, p_refs => v_refs,
       p_minutes => 30);
 
-    -- Routes started more than a day ago and still open.
-    select count(*), min(x.started_at), coalesce((array_agg(x.code order by x.started_at))[1:10], '{}')
-    into n1, t1, v_refs
-    from (select r.code, r.started_at from public.routes r
-          where r.status = 'in_progress' and r.started_at < now() - interval '24 hours') x;
+    -- Routes that cannot finish: exactly what Rutas detenidas
+    -- (public.ops_open_routes, 084200) lists as stuck, so the two pages
+    -- agree. An unfinished route whose day has passed, that carries a parcel
+    -- cancelled or sent back, or that has no stop left to visit.
+    select count(*), count(*) filter (where x.past), count(*) filter (where x.cancelled),
+           count(*) filter (where x.no_open), min(x.started_at),
+           coalesce((array_agg(x.code order by x.service_date, x.code))[1:10], '{}')
+    into n1, n2, n3, n4, t1, v_refs
+    from (select r.code, r.service_date, r.started_at,
+                 r.service_date < v_today as past,
+                 exists (select 1 from public.route_stops rs
+                         join public.shipments sh on sh.id = rs.shipment_id
+                         where rs.route_id = r.id and rs.status in ('pending', 'arrived')
+                           and sh.status in ('cancelled', 'returning', 'returned')) as cancelled,
+                 not exists (select 1 from public.route_stops rs
+                             where rs.route_id = r.id and rs.status in ('pending', 'arrived')) as no_open
+          from public.routes r
+          where r.status in ('draft', 'assigned', 'in_progress')) x
+    where x.past or x.cancelled or x.no_open;
     v_lines := v_lines || private.health_line('routes_open',
       case when n1 > 0 then 'problem' else 'ok' end, n1, p_since => t1, p_refs => v_refs,
-      p_minutes => 1440);
+      p_parts => jsonb_build_object('past_date', n2, 'cancelled_parcel', n3, 'no_open_stops', n4));
   end if;
 
   -- ── Sign-in (administrators) ─────────────────────────────────────────────
@@ -547,6 +603,28 @@ begin
 end;
 $$;
 
+-- Removes a build recorded by mistake (a typo in its version or number), so
+-- it no longer shows as an app's current build. The audit trail keeps it.
+create or replace function public.ops_remove_store_build(p_id uuid) returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  b private.store_builds;
+begin
+  if not private.has_staff_role('admin') then
+    perform private.fail('forbidden');
+  end if;
+  delete from private.store_builds where id = p_id returning * into b;
+  if b.id is null then
+    perform private.fail('store_build_not_found');
+  end if;
+  insert into private.audit_log (actor_id, action, table_name, row_key, old_row, new_row)
+  values ((select auth.uid()), 'DELETE', 'store_builds', b.id::text, private.store_build_json(b), null);
+  return private.store_build_json(b);
+end;
+$$;
+
 -- ═══ 7. Grants ══════════════════════════════════════════════════════════════
 
 revoke all on function private.health_line(text, text, bigint, timestamptz, timestamptz, text[], jsonb, integer),
@@ -554,9 +632,10 @@ revoke all on function private.health_line(text, text, bigint, timestamptz, time
 from public, anon, authenticated;
 
 revoke all on function public.ops_system_health(), public.health_ping(), public.ops_versions(),
-  public.ops_set_store_build(text, text, text, integer, date, text)
+  public.ops_set_store_build(text, text, text, integer, date, text), public.ops_remove_store_build(uuid)
 from public, anon, authenticated;
 grant execute on function public.ops_system_health(), public.ops_versions(),
-  public.ops_set_store_build(text, text, text, integer, date, text) to authenticated;
+  public.ops_set_store_build(text, text, text, integer, date, text), public.ops_remove_store_build(uuid)
+  to authenticated;
 -- The uptime robot has only the publishable key: a visitor.
 grant execute on function public.health_ping() to anon, authenticated;

@@ -3,7 +3,7 @@
 -- public.ops_set_store_build.
 --
 --   right caller: each staff role reads exactly its own lines (support the
---                 messages, finance money and documents, ops the jobs,
+--                 messages and complaints, finance money and documents, ops the jobs,
 --                 orders and routes, admin all of them and the sign-ins);
 --                 an administrator reads the versions and records a build;
 --                 a visitor's ping answers {"ok": true} and nothing else;
@@ -20,7 +20,7 @@
 --                 logged, is "unavailable" too;
 --   left behind:  reading the page writes nothing; recording a build writes
 --                 one row and one audit entry, and the same build again
---                 updates it;
+--                 updates it; removing one deletes the row and audits it;
 --   privacy:      no name, e-mail, phone or address in any answer.
 
 begin;
@@ -128,8 +128,17 @@ begin
     and s.status = 'pending' and o.status in ('confirmed', 'processing', 'partially_shipped')
     and o.placed_at < now() - interval '30 minutes'
     and not exists (select 1 from public.pick_tasks t where t.shipment_id = s.id);
-  update public.routes set status = 'completed', completed_at = now()
-  where status = 'in_progress' and started_at < now() - interval '24 hours';
+  -- Routes the console calls stuck (ops_open_routes): set aside.
+  update public.routes r set status = 'cancelled'
+  where r.status in ('draft', 'assigned', 'in_progress')
+    and (r.service_date < private.cr_today()
+         or exists (select 1 from public.route_stops rs join public.shipments sh on sh.id = rs.shipment_id
+                    where rs.route_id = r.id and rs.status in ('pending', 'arrived')
+                      and sh.status in ('cancelled', 'returning', 'returned'))
+         or not exists (select 1 from public.route_stops rs
+                        where rs.route_id = r.id and rs.status in ('pending', 'arrived')));
+  update public.complaints set status = 'resolved', resolved_at = now(), resolution = 'Prueba 185 resuelta'
+  where status = 'open';
   delete from private.auth_attempts where action = 'sign_in';
   perform set_config('session_replication_role', 'origin', true);
 end;
@@ -191,12 +200,13 @@ end;
 $$;
 
 -- A gateway refund in a state.
-create function pg_temp.gateway_refund(p_status text, p_work_after timestamptz default now()) returns void
+create function pg_temp.gateway_refund(p_status text, p_work_after timestamptz default now(),
+                                       p_channel text default 'gateway') returns void
 language plpgsql as $$
 begin
   perform set_config('session_replication_role', 'replica', true);
   insert into private.gateway_refunds (refund_id, channel, amount_minor, status, failed_at, work_after)
-  values (gen_random_uuid(), 'gateway', 50000, p_status,
+  values (gen_random_uuid(), p_channel, 50000, p_status,
           case when p_status = 'failed' then now() - interval '2 hours' end, p_work_after);
   perform set_config('session_replication_role', 'origin', true);
 end;
@@ -211,9 +221,9 @@ declare
   v jsonb;
 begin
   v := pg_temp.health('central@yuntera.example');
-  assert pg_temp.keys(v) = 'events_failed,invoice_certificate,invoices,jobs,messages_late,messages_stopped,'
-    'orders_not_released,orders_unpaid_overdue,payments_failed,payments_worker,refunds_failed,'
-    'routes_open,sign_ins_failed', format('admin lines: %s', pg_temp.keys(v));
+  assert pg_temp.keys(v) = 'complaints_late,events_failed,invoice_certificate,invoices,jobs,messages_late,'
+    'messages_stopped,orders_not_released,orders_unpaid_overdue,payments_failed,payments_worker,'
+    'refunds_failed,routes_open,sign_ins_failed', format('admin lines: %s', pg_temp.keys(v));
   assert v -> 'jobs' ? 'items' and jsonb_array_length(v -> 'jobs' -> 'items') = 7, 'admin: the seven jobs';
   assert v ->> 'checked_at' is not null, 'admin: checked_at';
   -- The good state reads as good.
@@ -221,7 +231,7 @@ begin
   assert pg_temp.state(v, 'invoice_certificate') = 'ok', 'certificate ok a year ahead';
 
   v := pg_temp.health('soporte185@yuntera.example');
-  assert pg_temp.keys(v) = 'events_failed,messages_late,messages_stopped',
+  assert pg_temp.keys(v) = 'complaints_late,events_failed,messages_late,messages_stopped',
     format('support lines: %s', pg_temp.keys(v));
   assert v -> 'jobs' = 'null'::jsonb, 'support: no jobs';
 
@@ -275,6 +285,25 @@ begin
   perform pg_temp.others_ok(v, 'messages_stopped');
   -- A message sent is not stopped.
   perform pg_temp.delivery('sent', now() - interval '1 day');
+end $$;
+rollback to savepoint s;
+
+-- Each kind alone turns the line: one the provider reported undelivered, and
+-- one the worker gave up on.
+savepoint s;
+do $$
+declare
+  v jsonb;
+  d uuid;
+begin
+  d := pg_temp.delivery('failed', now() - interval '1 day');
+  v := pg_temp.health('soporte185@yuntera.example');
+  assert pg_temp.state(v, 'messages_stopped') = 'problem'
+     and pg_temp.line(v, 'messages_stopped') -> 'parts' = '{"dead": 0, "failed": 1}', 'stopped: undelivered alone';
+  update private.notification_deliveries set status = 'dead' where id = d;
+  v := pg_temp.health('soporte185@yuntera.example');
+  assert pg_temp.state(v, 'messages_stopped') = 'problem'
+     and pg_temp.line(v, 'messages_stopped') -> 'parts' = '{"dead": 1, "failed": 0}', 'stopped: dead alone';
 end $$;
 rollback to savepoint s;
 
@@ -354,6 +383,58 @@ begin
   assert pg_temp.state(v, 'events_failed') = 'problem'
      and (pg_temp.line(v, 'events_failed') -> 'count')::int = 1, 'events: one dead';
   perform pg_temp.others_ok(v, 'events_failed');
+end $$;
+rollback to savepoint s;
+
+-- Complaints with no written answer: within one working day ok, after it
+-- attention, after five working days a problem; answered ones never count.
+savepoint s;
+do $$
+declare
+  v jsonb;
+  c uuid;
+  o uuid := pg_temp.paid_order('salud-185-reclamo');
+  n text := (select order_number from public.orders where id = o);
+  v_today date := private.cr_today();
+  d date := v_today;
+begin
+  perform set_config('request.jwt.claims', '', true);
+  insert into public.complaints (user_id, order_id, category, description)
+  select o2.user_id, o2.id, 'delivery', 'Prueba 185: el paquete no llegó a tiempo.'
+  from public.orders o2 where o2.id = o
+  returning id into c;
+  v := pg_temp.health('soporte185@yuntera.example');
+  assert pg_temp.state(v, 'complaints_late') = 'ok', format('complaints: just filed, %s', pg_temp.line(v, 'complaints_late'));
+  perform pg_temp.others_ok(v, 'none');
+
+  -- The newest filing day whose one working day has passed, but not five.
+  loop
+    d := d - 1;
+    exit when private.add_business_days(d, 1) < v_today;
+  end loop;
+  assert private.add_business_days(d, 5) >= v_today, 'complaints: the test day is within five working days';
+  update public.complaints set created_at = (d::timestamp + interval '10 hours') at time zone 'America/Costa_Rica'
+  where id = c;
+  v := pg_temp.health('soporte185@yuntera.example');
+  assert pg_temp.state(v, 'complaints_late') = 'attention'
+     and (pg_temp.line(v, 'complaints_late') -> 'count')::int = 1
+     and (pg_temp.line(v, 'complaints_late') -> 'parts' ->> 'past_answer')::int = 0
+     and pg_temp.line(v, 'complaints_late') -> 'refs' = jsonb_build_array(n),
+    format('complaints: past one working day, %s', pg_temp.line(v, 'complaints_late'));
+  perform pg_temp.others_ok(v, 'complaints_late');
+
+  -- Five working days gone.
+  update public.complaints set created_at = now() - interval '20 days' where id = c;
+  v := pg_temp.health('soporte185@yuntera.example');
+  assert pg_temp.state(v, 'complaints_late') = 'problem'
+     and (pg_temp.line(v, 'complaints_late') -> 'parts' ->> 'past_answer')::int = 1,
+    format('complaints: past five working days, %s', pg_temp.line(v, 'complaints_late'));
+
+  -- Answered and kept open, or closed: no longer waiting for an answer.
+  update public.complaints set status = 'in_progress', resolution = 'Le respondimos por escrito.' where id = c;
+  v := pg_temp.health('soporte185@yuntera.example');
+  assert pg_temp.state(v, 'complaints_late') = 'ok', 'complaints: answered';
+  assert v::text not like '%paquete no llegó%', 'complaints: the complaint''s text is never shown';
 end $$;
 rollback to savepoint s;
 
@@ -438,6 +519,12 @@ do $$
 declare
   v jsonb;
 begin
+  update private.invoice_worker_health set certificate_not_after = now() + interval '31 days';
+  v := pg_temp.health('finanzas185@yuntera.example');
+  assert pg_temp.state(v, 'invoice_certificate') = 'ok', 'certificate: 31 days left is fine';
+  update private.invoice_worker_health set certificate_not_after = now() + interval '29 days';
+  v := pg_temp.health('finanzas185@yuntera.example');
+  assert pg_temp.state(v, 'invoice_certificate') = 'attention', 'certificate: 29 days left';
   update private.invoice_worker_health set certificate_not_after = now() + interval '10 days';
   v := pg_temp.health('finanzas185@yuntera.example');
   assert pg_temp.state(v, 'invoice_certificate') = 'attention', 'certificate: 10 days left';
@@ -467,6 +554,10 @@ begin
   perform pg_temp.gateway_refund('succeeded');
   v := pg_temp.health('finanzas185@yuntera.example');
   assert pg_temp.state(v, 'refunds_failed') = 'ok', 'refunds: one that succeeded';
+  -- A transfer that failed is finance's own work on /cobros/reembolsos, not the gateway's.
+  perform pg_temp.gateway_refund('failed', now(), 'transfer');
+  v := pg_temp.health('finanzas185@yuntera.example');
+  assert pg_temp.state(v, 'refunds_failed') = 'ok', 'refunds: a failed transfer is not a gateway refund';
   perform pg_temp.gateway_refund('failed');
   v := pg_temp.health('finanzas185@yuntera.example');
   assert pg_temp.state(v, 'refunds_failed') = 'problem'
@@ -588,26 +679,93 @@ begin
 end $$;
 rollback to savepoint s;
 
--- A route started more than a day ago.
+-- Routes that cannot finish: the same three reasons Rutas detenidas
+-- (ops_open_routes) gives, each alone, and the two pages agree.
 savepoint s;
 do $$
 declare
   v jsonb;
   r public.routes;
+  v_today date := private.cr_today();
+  v_depot uuid := (select id from public.warehouses where kind = 'platform' order by created_at limit 1);
+  v_stuck text[];
 begin
+  -- An open route of today with stops to visit, started 23 hours ago, is
+  -- not stuck (the old rule looked at the start time only).
   select * into r from public.routes where driver_id is not null order by created_at limit 1;
   perform set_config('session_replication_role', 'replica', true);
-  update public.routes set status = 'in_progress', started_at = now() - interval '23 hours' where id = r.id;
+  update public.routes set status = 'in_progress', started_at = now() - interval '23 hours',
+                           service_date = v_today, completed_at = null where id = r.id;
+  update public.route_stops set status = 'pending' where route_id = r.id;
+  update public.shipments set status = 'out_for_delivery'
+  where id in (select shipment_id from public.route_stops where route_id = r.id);
   perform set_config('session_replication_role', 'origin', true);
   v := pg_temp.health('operaciones185@yuntera.example');
-  assert pg_temp.state(v, 'routes_open') = 'ok', 'routes: 23 hours';
+  assert pg_temp.state(v, 'routes_open') = 'ok', format('routes: today, open stops, %s', pg_temp.line(v, 'routes_open'));
+  perform pg_temp.others_ok(v, 'none');
+
+  -- Its day passed.
   perform set_config('session_replication_role', 'replica', true);
-  update public.routes set started_at = now() - interval '25 hours' where id = r.id;
+  update public.routes set service_date = v_today - 1 where id = r.id;
   perform set_config('session_replication_role', 'origin', true);
   v := pg_temp.health('operaciones185@yuntera.example');
   assert pg_temp.state(v, 'routes_open') = 'problem'
-     and pg_temp.line(v, 'routes_open') -> 'refs' = jsonb_build_array(r.code), 'routes: open after a day';
+     and pg_temp.line(v, 'routes_open') -> 'refs' = jsonb_build_array(r.code)
+     and pg_temp.line(v, 'routes_open') -> 'parts' = '{"past_date": 1, "cancelled_parcel": 0, "no_open_stops": 0}',
+    format('routes: past date, %s', pg_temp.line(v, 'routes_open'));
   perform pg_temp.others_ok(v, 'routes_open');
+
+  -- A parcel on it was cancelled.
+  perform set_config('session_replication_role', 'replica', true);
+  update public.routes set service_date = v_today where id = r.id;
+  update public.shipments set status = 'cancelled'
+  where id = (select shipment_id from public.route_stops where route_id = r.id order by sequence limit 1);
+  perform set_config('session_replication_role', 'origin', true);
+  v := pg_temp.health('operaciones185@yuntera.example');
+  assert pg_temp.state(v, 'routes_open') = 'problem'
+     and pg_temp.line(v, 'routes_open') -> 'parts' = '{"past_date": 0, "cancelled_parcel": 1, "no_open_stops": 0}',
+    format('routes: cancelled parcel, %s', pg_temp.line(v, 'routes_open'));
+
+  -- Every stop visited and the route still open (it should have closed by itself).
+  perform set_config('session_replication_role', 'replica', true);
+  update public.shipments set status = 'delivered'
+  where id in (select shipment_id from public.route_stops where route_id = r.id);
+  update public.route_stops set status = 'delivered' where route_id = r.id;
+  perform set_config('session_replication_role', 'origin', true);
+  v := pg_temp.health('operaciones185@yuntera.example');
+  assert pg_temp.state(v, 'routes_open') = 'problem'
+     and pg_temp.line(v, 'routes_open') -> 'parts' = '{"past_date": 0, "cancelled_parcel": 0, "no_open_stops": 1}',
+    format('routes: no stop left, %s', pg_temp.line(v, 'routes_open'));
+
+  -- A draft of today with no stop at all, and one assigned yesterday and never started.
+  perform set_config('session_replication_role', 'replica', true);
+  update public.route_stops set status = 'pending' where route_id = r.id;
+  update public.shipments set status = 'out_for_delivery'
+  where id in (select shipment_id from public.route_stops where route_id = r.id);
+  insert into public.routes (code, service_date, depot_warehouse_id, status)
+  values ('R-T185A', v_today, v_depot, 'draft');
+  perform set_config('session_replication_role', 'origin', true);
+  v := pg_temp.health('operaciones185@yuntera.example');
+  assert pg_temp.state(v, 'routes_open') = 'problem'
+     and pg_temp.line(v, 'routes_open') -> 'refs' = '["R-T185A"]'
+     and pg_temp.line(v, 'routes_open') -> 'parts' = '{"past_date": 0, "cancelled_parcel": 0, "no_open_stops": 1}',
+    format('routes: no stops, %s', pg_temp.line(v, 'routes_open'));
+  perform set_config('session_replication_role', 'replica', true);
+  delete from public.routes where code = 'R-T185A';
+  update public.routes set status = 'assigned', started_at = null, service_date = v_today - 1 where id = r.id;
+  perform set_config('session_replication_role', 'origin', true);
+  v := pg_temp.health('operaciones185@yuntera.example');
+  assert pg_temp.state(v, 'routes_open') = 'problem'
+     and pg_temp.line(v, 'routes_open') -> 'refs' = jsonb_build_array(r.code), 'routes: assigned yesterday, never started';
+
+  -- What the health line names is exactly what Rutas detenidas calls stuck.
+  perform pg_temp.login('operaciones185@yuntera.example');
+  select coalesce(array_agg(x ->> 'code' order by x ->> 'code'), '{}') into v_stuck
+  from jsonb_array_elements(public.ops_open_routes()) x where (x ->> 'stuck')::boolean;
+  execute 'reset role';
+  perform set_config('request.jwt.claims', '', true);
+  assert v_stuck = array(select jsonb_array_elements_text(pg_temp.line(v, 'routes_open') -> 'refs') order by 1),
+    format('routes: the same as Rutas detenidas, %s and %s', v_stuck, pg_temp.line(v, 'routes_open') -> 'refs');
 end $$;
 rollback to savepoint s;
 
@@ -844,6 +1002,11 @@ end $$;
 
 -- ═══ Versions and phone builds ═══════════════════════════════════════════════
 
+-- A build no store will ever hold, so a database that recorded the real ones
+-- (shop 0.1.0 (4), as the release checklist asks) runs this suite the same.
+-- Whatever this suite left there before is set aside first, inside the suite.
+delete from private.store_builds where app = 'warehouse' and platform = 'ios' and version = '999.999.998';
+
 do $$
 declare
   v jsonb;
@@ -861,11 +1024,11 @@ begin
 
   -- Records a build.
   perform pg_temp.login('central@yuntera.example');
-  b := public.ops_set_store_build('shop', 'android', '0.1.0', 4, date '2026-11-23', 'internal');
+  b := public.ops_set_store_build('warehouse', 'ios', '999.999.998', 999999999, date '2026-11-23', 'internal');
   execute 'reset role';
-  assert b ->> 'app' = 'shop' and b ->> 'platform' = 'android' and b ->> 'version' = '0.1.0'
-     and (b ->> 'build_number')::int = 4 and b ->> 'released_on' = '2026-11-23' and b ->> 'track' = 'internal',
-    format('recorded: %s', b);
+  assert b ->> 'app' = 'warehouse' and b ->> 'platform' = 'ios' and b ->> 'version' = '999.999.998'
+     and (b ->> 'build_number')::int = 999999999 and b ->> 'released_on' = '2026-11-23'
+     and b ->> 'track' = 'internal', format('recorded: %s', b);
   assert (select count(*) from private.store_builds) = v_rows + 1, 'one row';
   assert (select count(*) from private.audit_log where table_name = 'store_builds' and action = 'INSERT'
             and actor_id = (select id from auth.users where email = 'central@yuntera.example')) = v_audit + 1,
@@ -873,15 +1036,54 @@ begin
 
   -- The same build again: updated, not doubled.
   perform pg_temp.login('central@yuntera.example');
-  b := public.ops_set_store_build('shop', 'android', '0.1.0', 4, date '2026-11-25', 'public');
+  b := public.ops_set_store_build('warehouse', 'ios', '999.999.998', 999999999, date '2026-11-25', 'public');
   v := public.ops_versions();
   execute 'reset role';
   assert (select count(*) from private.store_builds) = v_rows + 1, 'still one row';
   assert b ->> 'track' = 'public' and b ->> 'released_on' = '2026-11-25', 'updated';
   assert (select count(*) from private.audit_log where table_name = 'store_builds' and action = 'UPDATE'
-            and old_row ->> 'track' = 'internal' and new_row ->> 'track' = 'public') >= 1, 'update audited';
+            and row_key = b ->> 'id' and old_row ->> 'track' = 'internal' and new_row ->> 'track' = 'public') = 1,
+    'update audited';
+  assert (select count(*) from private.audit_log where table_name = 'store_builds' and row_key = b ->> 'id') = 2,
+    'one audit entry per call';
   assert exists (select 1 from jsonb_array_elements(v -> 'store_builds') x
-                 where x ->> 'app' = 'shop' and x ->> 'track' = 'public'), 'listed';
+                 where x ->> 'id' = b ->> 'id' and x ->> 'track' = 'public'), 'listed';
+end $$;
+
+-- A build typed wrong is removed, and stops showing; the audit keeps it.
+do $$
+declare
+  v jsonb;
+  wrong jsonb;
+  b jsonb;
+  v_rows bigint;
+begin
+  perform pg_temp.login('central@yuntera.example');
+  b := public.ops_set_store_build('warehouse', 'ios', '999.999.998', 4, date '2026-11-23', 'internal');
+  wrong := public.ops_set_store_build('warehouse', 'ios', '999.999.998', 40, date '2026-11-23', 'internal');
+  execute 'reset role';
+  v_rows := (select count(*) from private.store_builds);
+  perform pg_temp.login('central@yuntera.example');
+  b := public.ops_remove_store_build((wrong ->> 'id')::uuid);
+  v := public.ops_versions();
+  execute 'reset role';
+  assert b = wrong, format('removed: %s, recorded %s', b, wrong);
+  assert (select count(*) from private.store_builds) = v_rows - 1, 'one row less';
+  assert not exists (select 1 from jsonb_array_elements(v -> 'store_builds') x where x ->> 'id' = wrong ->> 'id'),
+    'no longer listed';
+  assert exists (select 1 from jsonb_array_elements(v -> 'store_builds') x
+                 where x ->> 'version' = '999.999.998' and (x ->> 'build_number')::int = 4), 'the right one stays';
+  assert (select count(*) from private.audit_log where table_name = 'store_builds' and action = 'DELETE'
+            and row_key = wrong ->> 'id' and old_row ->> 'build_number' = '40' and new_row is null
+            and actor_id = (select id from auth.users where email = 'central@yuntera.example')) = 1,
+    'removal audited, with what was removed';
+  -- Twice: it is gone.
+  perform pg_temp.refused_as('central@yuntera.example',
+    format('select public.ops_remove_store_build(%L)', wrong ->> 'id'), 'store_build_not_found');
+  perform pg_temp.refused_as('central@yuntera.example',
+    format('select public.ops_remove_store_build(%L)', gen_random_uuid()), 'store_build_not_found');
+  perform pg_temp.refused_as('central@yuntera.example', 'select public.ops_remove_store_build(null)',
+    'store_build_not_found');
 end $$;
 
 -- Invalid builds are refused, and nothing is kept.
@@ -917,10 +1119,15 @@ begin
     perform pg_temp.refused_as(who, 'select public.ops_versions()', 'forbidden');
     perform pg_temp.refused_as(who,
       $s$select public.ops_set_store_build('shop', 'ios', '1.0.0', 1, current_date, 'internal')$s$, 'forbidden');
+    perform pg_temp.refused_as(who,
+      format('select public.ops_remove_store_build(%L)', (select id from private.store_builds limit 1)), 'forbidden');
   end loop;
+  assert exists (select 1 from private.store_builds), 'wrong callers removed nothing';
   perform pg_temp.refused_as(null, 'select public.ops_versions()', 'forbidden');
   perform pg_temp.refused_as(null,
     $s$select public.ops_set_store_build('shop', 'ios', '1.0.0', 1, current_date, 'internal')$s$, 'forbidden');
+  perform pg_temp.refused_as(null, format('select public.ops_remove_store_build(%L)', gen_random_uuid()),
+    'forbidden');
 end $$;
 
 -- Where the migrations are not recorded, the panel says so.

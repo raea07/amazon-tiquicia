@@ -11,8 +11,11 @@
 //      the worker and the fake would leave them): both lines turn, say so in
 //      words, and lead to the pages where they are fixed;
 //   4. the administrator records a phone build by hand, after a wrong
-//      version is refused with what was typed kept;
-//   5. a support person sees only the message lines, and no Versiones;
+//      version is refused with what was typed kept; then records one with a
+//      typo in its number, sees it shown as the current build, removes it,
+//      and the right one is shown;
+//   5. a support person sees only the message and complaint lines, and no
+//      Versiones;
 //   6. screenshots at 1280 and 390 px, without sideways scrolling.
 //
 // Needs `tools/dev/stack.sh up <lane>`. Fails on any browser error or 5xx.
@@ -87,7 +90,9 @@ function sql(statement) {
     await page.fill('main input[name="email"]', email);
     await page.fill('main input[name="password"]', PASSWORD);
     await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname === path, { timeout: 30000 });
+    await page.waitForURL((u) => new URL(u).pathname === path, {
+      timeout: 30000,
+    });
     return page;
   }
   const states = (page) =>
@@ -150,7 +155,7 @@ function sql(statement) {
   await admin.waitForSelector("[data-health]");
   let seen = await states(admin);
   log("lines:", JSON.stringify(seen));
-  check(Object.keys(seen).length === 13, "an administrator sees every line (13)");
+  check(Object.keys(seen).length === 14, "an administrator sees every line (14)");
   check(
     Object.values(seen).every((state) => state === "ok" || state === "unknown"),
     "nothing asks for attention",
@@ -194,7 +199,10 @@ function sql(statement) {
     `the newest migration: "${database}"`,
   );
   check(!(await text(admin.locator("main"))).includes("@"), "no e-mail on the page");
-  await admin.screenshot({ path: `${SHOTS}/h01-health-good.png`, fullPage: true });
+  await admin.screenshot({
+    path: `${SHOTS}/h01-health-good.png`,
+    fullPage: true,
+  });
 
   // ── 3. A stopped message and a rejected document ──────────────────────────
   const delivery = sql(
@@ -240,7 +248,10 @@ function sql(statement) {
     (await admin.locator("[data-health]").first().getAttribute("data-state")) === "problem",
     "problems come first",
   );
-  await admin.screenshot({ path: `${SHOTS}/h02-health-problems.png`, fullPage: true });
+  await admin.screenshot({
+    path: `${SHOTS}/h02-health-problems.png`,
+    fullPage: true,
+  });
   await admin.click('[data-health="messages_stopped"] a:has-text("Ver los mensajes detenidos")');
   await admin.waitForURL((u) => new URL(u).pathname === "/mensajes");
   await admin.waitForSelector("text=1 mensaje detenido");
@@ -288,13 +299,60 @@ function sql(statement) {
     sql("select count(*) from private.audit_log where table_name = 'store_builds'") === "1",
     "in the audit trail",
   );
-  await admin.screenshot({ path: `${SHOTS}/h03-health-versions.png`, fullPage: true });
+
+  // A typo in the build number (40 for 4) on a later day: it shows as the
+  // current build until it is removed.
+  await form.locator('select[name="app"]').selectOption("shop");
+  await form.locator('select[name="platform"]').selectOption("android");
+  await form.locator('input[name="version"]').fill("0.1.0");
+  await form.locator('input[name="buildNumber"]').fill("40");
+  await form.locator('input[name="releasedOn"]').fill("2026-11-24");
+  await form.locator('select[name="track"]').selectOption("internal");
+  await form.locator('button:has-text("Guardar la versión")').click();
+  await admin.waitForSelector("text=Guardamos Yuntera 0.1.0 (40) para Android");
+  const typo = await until("the typo to be listed", async () => {
+    const row = await text(admin.locator('[data-store-build="shop/android"]'));
+    return row.includes("(40)") ? row : null;
+  });
+  check(typo.includes("versión 0.1.0 (40)"), `the typo shows as the current build: "${typo}"`);
+  const current = admin.locator('[data-store-build="shop/android"]');
+  await current.locator('summary:has-text("Quitar esta versión")').click();
+  await current.locator('button:has-text("Quitar 0.1.0 (40)")').click();
+  await admin.waitForSelector("text=Quitamos Yuntera 0.1.0 (40) para Android");
+  const fixed = await until("the right build to be current again", async () => {
+    const row = await text(admin.locator('[data-store-build="shop/android"]'));
+    return row.includes("(4),") ? row : null;
+  });
+  check(
+    fixed.includes("versión 0.1.0 (4), prueba interna desde el 23 de noviembre de 2026"),
+    `after removing the typo, the right build is current: "${fixed}"`,
+  );
+  check(
+    (await admin
+      .locator("[data-store-build], [data-store-build-old]")
+      .filter({ hasText: "(40)" })
+      .count()) === 0,
+    "the typo is no longer listed",
+  );
+  check(
+    sql(
+      "select string_agg(action, ',' order by id) from private.audit_log where table_name = 'store_builds'",
+    ) === "INSERT,INSERT,DELETE",
+    "both entries and the removal are in the audit trail",
+  );
+  await admin.screenshot({
+    path: `${SHOTS}/h03-health-versions.png`,
+    fullPage: true,
+  });
 
   // At phone width.
   const small = await signIn(ADMIN, "/salud", phone);
   await small.waitForSelector("[data-health]");
   check((await overflow(small)) <= 0, "390 px: no sideways scrolling");
-  await small.screenshot({ path: `${SHOTS}/h04-health-phone.png`, fullPage: true });
+  await small.screenshot({
+    path: `${SHOTS}/h04-health-phone.png`,
+    fullPage: true,
+  });
 
   // ── 5. A support person ───────────────────────────────────────────────────
   sql(
@@ -306,14 +364,18 @@ function sql(statement) {
   await support.waitForSelector("[data-health]");
   seen = await states(support);
   check(
-    Object.keys(seen).sort().join(",") === "events_failed,messages_late,messages_stopped",
-    `support sees only the message lines: ${Object.keys(seen).join(",")}`,
+    Object.keys(seen).sort().join(",") ===
+      "complaints_late,events_failed,messages_late,messages_stopped",
+    `support sees only the message and complaint lines: ${Object.keys(seen).join(",")}`,
   );
   check(seen.messages_stopped === "problem", "including the stopped message");
   check((await support.locator("#versiones").count()) === 0, "and no Versiones");
   check((await support.locator("#tareas").count()) === 0, "and no jobs");
   check((await overflow(support)) <= 0, "390 px: no sideways scrolling");
-  await support.screenshot({ path: `${SHOTS}/h05-health-support.png`, fullPage: true });
+  await support.screenshot({
+    path: `${SHOTS}/h05-health-support.png`,
+    fullPage: true,
+  });
 
   // Catalogue staff have no lines: the section is not in their console.
   sql(

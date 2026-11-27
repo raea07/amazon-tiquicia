@@ -51,10 +51,12 @@ const CHANNEL: Record<string, string> = {
   push: "Las notificaciones de las aplicaciones",
 };
 
+// Not the same words as the lines above them ("Envío de avisos", "Procesador
+// de pagos"): a job and the check of what it moves are different things.
 export const JOB_LABEL: Record<string, string> = {
-  "notify-sweep": "Envío de avisos",
-  "invoice-sweep": "Envío de comprobantes",
-  "payments-sweep": "Procesador de pagos",
+  "notify-sweep": "Revisión periódica de avisos",
+  "invoice-sweep": "Revisión periódica de comprobantes",
+  "payments-sweep": "Revisión periódica de pagos",
   "expire-unpaid-orders": "Vencimiento de pedidos sin pagar",
   "auth-attempts-cleanup": "Limpieza de intentos de ingreso",
   "refresh-product-signals": "Ventas recientes de los productos",
@@ -91,6 +93,8 @@ export function jobSentence(job: HealthJob): string {
       return `${name}: todavía no ha corrido.`;
     case "no_history":
       return `${name}: sin historial en esta base de datos.`;
+    default:
+      return `${name}: esta consola no sabe leer su estado. Actualice la consola.`;
   }
 }
 
@@ -102,8 +106,10 @@ export function noHistory(jobs: NonNullable<SystemHealth["jobs"]>): string | nul
       return "Esta base de datos no tiene el programador de tareas, así que no guarda cuándo corrió cada una (es lo normal en una copia local). Eso no quiere decir que corrieran a tiempo.";
     case "not_logged":
       return "El programador de tareas no está guardando el historial de corridas. Sin él no se puede saber si corrieron a tiempo.";
-    default:
+    case "no_access":
       return "La base de datos no permite leer el historial de tareas. Sin él no se puede saber si corrieron a tiempo.";
+    default:
+      return "No se pudo leer el historial de tareas. Sin él no se puede saber si corrieron a tiempo.";
   }
 }
 
@@ -126,7 +132,9 @@ export function healthSentence(line: HealthLine): HealthSentence {
                 : null,
             ]
               .filter(Boolean)
-              .join("; ")}). Revise el motivo y vuelva a enviarlos.`,
+              .join(
+                "; ",
+              )}). Revise el motivo y ${line.count === 1 ? "vuelva a enviarlo" : "vuelva a enviarlos"}.`,
         href: ok ? null : "/mensajes",
         linkLabel: ok ? null : "Ver los mensajes detenidos",
         orders: [],
@@ -172,6 +180,32 @@ export function healthSentence(line: HealthLine): HealthSentence {
           : `${plural(line.count, "evento no produjo", "eventos no produjeron")} avisos después de varios intentos: alguien no fue avisado. Avise a quien mantiene el sistema.`,
         ...none,
       };
+    case "complaints_late": {
+      const title = "Reclamos sin respuesta";
+      if (ok) {
+        return {
+          title,
+          text: `Ninguno espera respuesta más de ${plural(part(line, "acknowledge_days"), "día hábil", "días hábiles")}.`,
+          ...none,
+        };
+      }
+      const late = part(line, "past_answer");
+      return {
+        title,
+        text: [
+          `${plural(line.count, "reclamo sigue", "reclamos siguen")} sin respuesta después de ${plural(part(line, "acknowledge_days"), "día hábil", "días hábiles")}.`,
+          late > 0
+            ? `${late === 1 ? "De ellos, 1 pasó" : `De ellos, ${late} pasaron`} el plazo de ${part(line, "answer_days")} días hábiles para la respuesta escrita.`
+            : null,
+          line.count === 1 ? "Respóndalo en Atención." : "Respóndalos en Atención.",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        href: "/atencion",
+        linkLabel: "Ver los reclamos",
+        orders: line.refs,
+      };
+    }
     case "invoices": {
       if (ok) {
         return {
@@ -245,7 +279,11 @@ export function healthSentence(line: HealthLine): HealthSentence {
           ...link,
         };
       }
-      return { title, text: `El certificado de firma vence el ${day(line.until)}.`, ...none };
+      return {
+        title,
+        text: `El certificado de firma vence el ${day(line.until)}.`,
+        ...none,
+      };
     }
     case "refunds_failed":
       return {
@@ -261,7 +299,9 @@ export function healthSentence(line: HealthLine): HealthSentence {
       const declined = part(line, "declined");
       const errors = part(line, "errors");
       const said = [
-        `${plural(declined, "pago rechazado", "pagos rechazados")} por el banco o la tarjeta en la última hora.`,
+        declined === 0
+          ? "Ningún pago rechazado por el banco o la tarjeta en la última hora."
+          : `${plural(declined, "pago rechazado", "pagos rechazados")} por el banco o la tarjeta en la última hora.`,
       ];
       if (line.state === "attention") {
         said.push(
@@ -286,7 +326,16 @@ export function healthSentence(line: HealthLine): HealthSentence {
         title: "Procesador de pagos",
         text: ok
           ? `Al día: nada espera más de ${line.minutes} minutos.`
-          : `${plural(part(line, "attempts"), "cobro", "cobros")} y ${plural(part(line, "refunds"), "reembolso", "reembolsos")} esperan al procesador de pagos desde el ${at(line.since)}. Revise que el servicio de pagos esté funcionando.`,
+          : `${[
+              part(line, "attempts") > 0 ? plural(part(line, "attempts"), "cobro", "cobros") : null,
+              part(line, "refunds") > 0
+                ? plural(part(line, "refunds"), "reembolso", "reembolsos")
+                : null,
+            ]
+              .filter(Boolean)
+              .join(
+                " y ",
+              )} ${line.count === 1 ? "espera" : "esperan"} al procesador de pagos desde el ${at(line.since)}. Revise que el servicio de pagos esté funcionando.`,
         href: ok ? null : "/cobros",
         linkLabel: ok ? null : "Ver los cobros",
         orders: [],
@@ -321,23 +370,42 @@ export function healthSentence(line: HealthLine): HealthSentence {
         ...none,
         orders: line.refs,
       };
-    case "routes_open":
+    case "routes_open": {
+      // The same rule and words as Rutas detenidas (STUCK_REASON).
+      const why = [
+        part(line, "past_date") > 0 ? `${part(line, "past_date")}: su día ya pasó` : null,
+        part(line, "cancelled_parcel") > 0
+          ? `${part(line, "cancelled_parcel")}: lleva un paquete cancelado o devuelto`
+          : null,
+        part(line, "no_open_stops") > 0
+          ? `${part(line, "no_open_stops")}: no le quedan paradas pendientes`
+          : null,
+      ].filter(Boolean);
       return {
-        title: "Rutas sin cerrar",
+        title: "Rutas detenidas",
         text: ok
-          ? "Ninguna ruta empezada hace más de un día sigue abierta."
-          : `${plural(line.count, "ruta empezó", "rutas empezaron")} hace más de un día y no se cerró: ${line.refs.join(", ")}.`,
+          ? "Ninguna ruta está detenida."
+          : `${plural(line.count, "ruta no puede", "rutas no pueden")} terminar: ${line.refs.join(", ")}${why.length > 0 ? ` (${why.join("; ")})` : ""}. Ciérrelas o arregle sus paradas.`,
         href: ok ? null : "/operacion/rutas",
-        linkLabel: ok ? null : "Cerrar las rutas",
+        linkLabel: ok ? null : "Ver las rutas detenidas",
         orders: [],
       };
+    }
     case "sign_ins_failed":
+      // Only the websites count attempts (packages/next-kit's sign-in guard);
+      // the phone apps sign in without it, so they are not in this number.
       return {
-        title: "Intentos de ingreso fallidos",
+        title: "Intentos de ingreso fallidos en los sitios web",
         text:
           line.state === "attention"
-            ? `${line.count} en la última hora. Son muchos: puede ser alguien probando contraseñas. El límite por persona y por dirección ya los frena.`
-            : `${line.count} en la última hora.`,
+            ? `${line.count} en la última hora. Son muchos: puede ser alguien probando contraseñas. El límite por persona y por dirección ya los frena. No incluye las aplicaciones de teléfono.`
+            : `${line.count} en la última hora. No incluye las aplicaciones de teléfono.`,
+        ...none,
+      };
+    default:
+      return {
+        title: "Comprobación nueva",
+        text: "La base de datos tiene una comprobación que esta versión de la consola no sabe mostrar. Actualice la consola para verla en palabras.",
         ...none,
       };
   }

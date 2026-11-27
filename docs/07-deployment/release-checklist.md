@@ -60,6 +60,7 @@ release goes there only.
    phone. If one fails, report it with the "Problema encontrado" form and
    stop: the build does not go further.
 7. In the console, open **Salud del sistema → Versiones** and record the build:
-   app, platform, version, build number, day, "Prueba interna".
+   app, platform, version, build number, day, "Prueba interna". If you typed
+   one wrong, remove it with "Quitar esta versión" and record it again.
 8. When the build goes public, record it again with "Pública en la tienda".
 9. Check that Salud del sistema shows no problem.
