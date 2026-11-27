@@ -439,7 +439,7 @@ export default function LocationScreen() {
           Ya no se guarda mercadería aquí. Mueva lo que queda a un estante activo.
         </Alert>
       )}
-      <Text variant="caption" tint="muted">
+      <Text variant="caption" tint="muted" testID="location-signal-note">
         Mover y corregir necesitan señal: se guardan en el servidor al momento. Sin señal no se
         guarda nada y la pantalla se lo dice.
       </Text>

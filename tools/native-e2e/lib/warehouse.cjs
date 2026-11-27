@@ -5,7 +5,7 @@
 // (testids/warehouse.json and expo-kit.json) or by role and accessible name;
 // the names are the words the screens show today.
 
-const { on, shows } = require("./screen.cjs");
+const { allText, heading, on, shows } = require("./screen.cjs");
 
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 
@@ -40,11 +40,56 @@ async function openCountIn(page) {
 const returnedRow = (page, tracking) =>
   page.getByTestId("returned-row").filter({ hasText: tracking }).first();
 
+/** The board's title: the name of the warehouse chosen. */
+const boardTitle = (page, name) => page.getByRole("heading", { name, exact: true }).first();
+
+/** Waits until the row of location `code` in Ubicaciones says `words` («3 unidades · 1 producto»). */
+const locationRowSays = (page, code, words) =>
+  page.getByTestId(`location-${code}`).filter({ hasText: words }).first().waitFor();
+
+/** The board of a warehouse with no parcel on the floor says so. */
+const noShipments = (page) => shows(page, "board-no-shipments", "No hay pedidos en el piso ahora.");
+/** The board's list of announced stock, with how many are announced. */
+const inboundHeading = (page, count) =>
+  heading(page, new RegExp(`Mercadería por recibir \\(${count}\\)`));
+
+/** True when nothing on the page speaks of a camera (the web export has none). */
+const speaksOfCamera = async (page) => /linterna|Permitir la cámara/.test(await allText(page));
+
+/** Waits until a scanner's answer (testID `<scanner>-feedback`) says `words`. */
+const scannerSays = (page, scanner, words, options) =>
+  shows(page, `${scanner}-feedback`, words, options);
+
+/** Waits until a line of a receipt says `words` («esperadas 12 · recibidas 10 …»). */
+const receiveLineSays = (page, words) =>
+  page
+    .getByTestId(/^receive-line/)
+    .filter({ hasText: words })
+    .first()
+    .waitFor();
+
+/** A location says that moves and counts need signal. */
+const signalNote = (page) =>
+  page.getByTestId("location-signal-note").filter({ hasText: /necesitan señal/ });
+
+/** Waits until the form `id` (move-error, count-error, count-difference) of a card says `words`. */
+const cardSays = (card, id, words) =>
+  card.getByTestId(id).filter({ hasText: words }).first().waitFor();
+
 /** On a location: what the last move or count says («Se movió…», «ahora hay…»). */
 const stockResult = (page, words, options) => shows(page, "stock-result", words, options);
 
 module.exports = {
+  boardTitle,
+  cardSays,
+  inboundHeading,
   locationOpen,
+  locationRowSays,
+  noShipments,
+  receiveLineSays,
+  scannerSays,
+  signalNote,
+  speaksOfCamera,
   openCountIn,
   openLocation,
   returnedRow,

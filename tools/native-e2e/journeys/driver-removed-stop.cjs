@@ -24,6 +24,7 @@
 const { chromium, request } = require("playwright");
 const { ownRoute } = require("../../e2e/lib/own-route.cjs");
 const driverApp = require("../lib/driver.cjs");
+const { word } = require("../lib/words.cjs");
 const { overflow, screenText } = require("../lib/screen.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
@@ -121,7 +122,7 @@ async function as(email) {
   const removedStop = (await byId("stop-R-1003-1").innerText()).replace(/\s+/g, " ");
   log("removed stop:", removedStop);
   check(
-    removedStop.includes("Omitida") &&
+    removedStop.includes(word("stop_status", "skipped", "driver")) &&
       removedStop.includes(
         "Central quitó esta parada de la ruta. Si lleva el paquete, devuélvalo a la bodega.",
       ),
@@ -148,7 +149,7 @@ async function as(email) {
   const earlyText = await flat(earlyStop);
   log("removed stop (assigned):", earlyText);
   check(
-    earlyText.includes("Omitida") &&
+    earlyText.includes(word("stop_status", "skipped", "driver")) &&
       earlyText.includes(
         "Central quitó esta parada de la ruta. No recoja este paquete: volvió a Despacho.",
       ) &&

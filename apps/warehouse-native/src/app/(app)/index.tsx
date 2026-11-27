@@ -100,7 +100,9 @@ export default function BoardScreen() {
               Pedidos ({board.data.shipments.filter(isToDo).length} por hacer)
             </Text>
             {board.data.shipments.length === 0 ? (
-              <Text tint="muted">No hay pedidos en el piso ahora.</Text>
+              <Text tint="muted" testID="board-no-shipments">
+                No hay pedidos en el piso ahora.
+              </Text>
             ) : (
               <View style={styles.list}>
                 {sortBoard(board.data.shipments).map((shipment) => {

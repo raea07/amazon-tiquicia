@@ -33,9 +33,23 @@ const TODAY = {
       held: "Detenido en la bodega",
     },
   },
+  // The warehouse board's words for a parcel (apps/warehouse-native labels).
+  shipment_status: {
+    warehouse: {
+      pending: "Por alistar",
+      packed: "Empacado",
+    },
+  },
   stop_status: {
     driver: {
       arrived: "En la puerta",
+      skipped: "Omitida",
+    },
+  },
+  // Not a database value: an action the drivers' app keeps until it has signal.
+  queued_action: {
+    driver: {
+      pending: "Por enviar",
     },
   },
   offer_status: {
@@ -46,6 +60,13 @@ const TODAY = {
   product_status: {
     seller: {
       draft: "Borrador",
+      active: "Publicado y a la venta",
+    },
+  },
+  // A variant (size, colour) of a product the seller stopped offering.
+  variant_status: {
+    seller: {
+      retired: "Retirada",
     },
   },
   // A change to a published product, waiting for staff (seller_listing_edits).

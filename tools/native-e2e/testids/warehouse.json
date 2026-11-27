@@ -7,6 +7,10 @@
       "files": ["apps/warehouse-native/src/app/(app)/cuenta.tsx"]
     },
     {
+      "id": "board-no-shipments",
+      "files": ["apps/warehouse-native/src/app/(app)/index.tsx"]
+    },
+    {
       "id": "count-difference",
       "files": ["apps/warehouse-native/src/app/(app)/ubicacion/[codigo].tsx"]
     },
@@ -105,6 +109,10 @@
     {
       "id": "location-scan",
       "files": ["apps/warehouse-native/src/app/(app)/ubicaciones.tsx"]
+    },
+    {
+      "id": "location-signal-note",
+      "files": ["apps/warehouse-native/src/app/(app)/ubicacion/[codigo].tsx"]
     },
     {
       "id": "location-summary",

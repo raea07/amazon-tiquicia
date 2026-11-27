@@ -24,6 +24,9 @@
 
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
+const { overflow } = require("../lib/screen.cjs");
+const warehouseApp = require("../lib/warehouse.cjs");
+const { word } = require("../lib/words.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const BASE = process.env.NATIVE_WAREHOUSE_URL || "http://127.0.0.1:3013";
@@ -166,10 +169,7 @@ async function rpcAs(email, calls) {
   const byId = (id) => page.getByTestId(id).first();
   const textOf = async (id) => squash(await byId(id).innerText());
   const noSideways = async (where) =>
-    check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-      `no sideways scrolling at 390 px: ${where}`,
-    );
+    check((await overflow(page)) <= 0, `no sideways scrolling at 390 px: ${where}`);
   const focusedId = () =>
     page.evaluate(() => document.activeElement?.getAttribute("data-testid") ?? null);
   const shot = (name) =>
@@ -177,21 +177,19 @@ async function rpcAs(email, calls) {
 
   // ── Sign in and the board ──
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  await byId("sign-in-email").fill("bodega@yuntera.example");
-  await byId("sign-in-password").fill(PASSWORD);
-  await byId("sign-in-submit").click();
+  await warehouseApp.signIn(page, "bodega@yuntera.example", PASSWORD);
   await byId("warehouse-board").waitFor();
 
   // ── Choosing the warehouse ──
   // Assigned to two: the lead chooses, and the choice outlasts a reload.
-  const title = (name) => page.getByRole("heading", { name, exact: true }).first();
+  const title = (name) => warehouseApp.boardTitle(page, name);
   check(
     await byId("warehouse-choice").isVisible(),
     "assigned to two warehouses: a choice is offered",
   );
   await byId(`warehouse-choice-${liberia}`).click();
   await title("Centro de distribución Liberia").waitFor();
-  await page.getByText("No hay pedidos en el piso ahora.").first().waitFor();
+  await warehouseApp.noShipments(page);
   check(true, "choosing the other warehouse shows its board");
   await shot("01-other-warehouse");
   await page.reload({ waitUntil: "networkidle" });
@@ -209,10 +207,7 @@ async function rpcAs(email, calls) {
     await title("Centro de distribución Curridabat").isVisible(),
     "and so does choosing Curridabat again",
   );
-  await page
-    .getByText(/Mercadería por recibir \(1\)/)
-    .first()
-    .waitFor();
+  await warehouseApp.inboundHeading(page, 1).waitFor();
   const board = await textOf("warehouse-board");
   log("   ", board.slice(0, 200));
   check(
@@ -220,7 +215,10 @@ async function rpcAs(email, calls) {
     "back in Curridabat, the board counts the parcels to do",
   );
   check(/Mercadería por recibir \(1\)/.test(board), "and lists the stock a seller announced");
-  check(/Por alistar/.test(board), "a parcel waits to be picked, its state in words");
+  check(
+    board.includes(word("shipment_status", "pending", "warehouse")),
+    "a parcel waits to be picked, its state in words",
+  );
   await noSideways("board");
   await shot("02-board");
 
@@ -240,9 +238,8 @@ async function rpcAs(email, calls) {
   check(/^[A-Z0-9-]+$/.test(tracking), `the parcel opens: ${tracking}`);
   const noCamera = async (prefix) =>
     (await page.getByTestId(`${prefix}-camera`).count()) +
-      (await page.getByTestId(`${prefix}-camera-ask`).count()) +
-      (await page.getByText(/linterna|Permitir la cámara/).count()) ===
-    0;
+      (await page.getByTestId(`${prefix}-camera-ask`).count()) ===
+      0 && !(await warehouseApp.speaksOfCamera(page));
   await byId("start-picking").click();
   await byId("pick-current").waitFor();
   check(await noCamera("pick"), "the web export shows no camera, nor asks for one");
@@ -260,7 +257,7 @@ async function rpcAs(email, calls) {
   // A wrong product is refused, and nothing is confirmed.
   await byId("pick-input").fill("YT-NOPE0000");
   await byId("pick-submit").click();
-  await page.getByText("Ese código no es el de este producto").first().waitFor();
+  await warehouseApp.scannerSays(page, "pick", "Ese código no es el de este producto");
   log("    wrong code:", await textOf("pick-feedback"));
   check(
     /Código leído: YT-NOPE0000/.test(await textOf("pick-feedback")),
@@ -278,7 +275,7 @@ async function rpcAs(email, calls) {
   await page.setViewportSize({ width: 375, height: 667 });
   await byId("pick-input").fill("YT-OTRO0000");
   await page.keyboard.press("Enter");
-  await page.getByText("Código leído: YT-OTRO0000").first().waitFor();
+  await warehouseApp.scannerSays(page, "pick", "Código leído: YT-OTRO0000");
   const small = await byId("pick-feedback").boundingBox();
   const footer = await byId("pick-progress").boundingBox();
   check(
@@ -307,7 +304,7 @@ async function rpcAs(email, calls) {
       await byId("pick-quantity").fill("999");
       await byId("pick-input").fill(sku.toLowerCase());
       await byId("pick-submit").click();
-      await page.getByText("Escriba cuántas unidades tomó.").first().waitFor();
+      await warehouseApp.scannerSays(page, "pick", "Escriba cuántas unidades tomó.");
       check(
         (await byId("pick-input").inputValue()) === sku &&
           (await textOf("pick-progress")).startsWith("0 de"),
@@ -374,7 +371,9 @@ async function rpcAs(email, calls) {
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await byId("warehouse-board").waitFor();
   check(
-    new RegExp(`${tracking}.*Empacado`).test(await textOf("warehouse-board")),
+    new RegExp(`${tracking}.*${word("shipment_status", "packed", "warehouse")}`).test(
+      await textOf("warehouse-board"),
+    ),
     "the board shows the parcel as packed",
   );
   await byId("inbound-row").click();
@@ -386,7 +385,7 @@ async function rpcAs(email, calls) {
   await byId("receive-scan-input").click();
   await page.keyboard.type(`0${UPC_A}`, { delay: 5 });
   await page.keyboard.press("Enter");
-  await page.getByText("12 unidades por recibir").first().waitFor();
+  await warehouseApp.scannerSays(page, "receive-scan", "12 unidades por recibir");
   check(true, "scanning the product's UPC-A as an iPhone reports it finds its line");
   // A slip at the dock: 120 for 12. The database takes no more than the
   // seller announced, so the app says so and sends nothing.
@@ -427,7 +426,7 @@ async function rpcAs(email, calls) {
   check(receiveCalls === 1, "and only that count was sent");
   page.off("request", countReceive);
   const bin = /guardadas en (\S+)\./.exec(received)[1];
-  await page.getByText("esperadas 12 · recibidas 10 · dañadas 1").first().waitFor();
+  await warehouseApp.receiveLineSays(page, "esperadas 12 · recibidas 10 · dañadas 1");
   check(true, "the line now reads 10 received and 1 damaged");
   await shot("09-received");
 
@@ -536,28 +535,23 @@ async function rpcAs(email, calls) {
   await shot("10-lookup");
   await byId("lookup-input").fill("NOEXISTE");
   await page.keyboard.press("Enter");
-  await page
-    .getByText("No hay ningún producto con el código “NOEXISTE” en esta bodega.")
-    .first()
-    .waitFor();
+  await warehouseApp.scannerSays(
+    page,
+    "lookup",
+    "No hay ningún producto con el código “NOEXISTE” en esta bodega.",
+  );
   check(true, "an unknown code is answered plainly");
   check((await focusedId()) === "lookup-input", "and the field is ready for the next scan");
   await byId("lookup-input").fill("4006381333932");
   await page.keyboard.press("Enter");
-  await page
-    .getByText(/se haya leído o escrito mal/)
-    .first()
-    .waitFor();
+  await warehouseApp.scannerSays(page, "lookup", /se haya leído o escrito mal/);
   check(true, "a barcode with a wrong check digit is refused before it is sent");
   await shot("11-lookup-unknown");
 
   // A junk read is answered without repeating all of it.
   await byId("lookup-input").fill("X".repeat(300));
   await page.keyboard.press("Enter");
-  await page
-    .getByText(/demasiado largo/)
-    .first()
-    .waitFor();
+  await warehouseApp.scannerSays(page, "lookup", /demasiado largo/);
   const echo = /Código leído: (\S+)/.exec(await textOf("lookup-feedback"))[1];
   check([...echo].length <= 40, `a too-long read is echoed cut short (${[...echo].length} chars)`);
 
@@ -576,12 +570,9 @@ async function rpcAs(email, calls) {
   await page.waitForTimeout(100);
   await page.keyboard.type(inboundSku, { delay: 5 });
   await page.keyboard.press("Enter");
-  await page
-    .getByText(/Este va después/)
-    .first()
-    .waitFor();
+  await warehouseApp.scannerSays(page, "lookup", /Este va después/);
   check(true, "a scan sent during the check is told to wait, not dropped");
-  await page.getByText(`Código leído: ${inboundSku}`).first().waitFor();
+  await warehouseApp.scannerSays(page, "lookup", `Código leído: ${inboundSku}`);
   await byId("lookup-result").waitFor();
   check(
     asked.includes("YT-NOEXISTE1") && asked.includes(inboundSku),

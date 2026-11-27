@@ -22,7 +22,8 @@
 // Fails on any browser console error, uncaught exception or 5xx response.
 
 const { chromium, request } = require("playwright");
-const { settledText } = require("../../e2e/lib/settle.cjs");
+const { overflow: overflowOf, screenText, settledText } = require("../lib/screen.cjs");
+const shopApp = require("../lib/shop.cjs");
 
 const BASE = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -84,9 +85,8 @@ async function as(email) {
   const visible = (testId) => page.getByTestId(testId).filter({ visible: true }).first();
   const flat = async (locator) => (await locator.innerText()).replace(/\s+/g, " ").trim();
   const shot = (name) => page.screenshot({ path: `${SHOTS}/native-shop-parity-${name}.png` });
-  const overflow = () =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  const cards = () => page.locator('[data-testid^="product-"]').filter({ visible: true });
+  const overflow = () => overflowOf(page);
+  const cards = () => shopApp.productCards(page);
   const visitor = await as(null);
 
   // ── 1. The brand filter ────────────────────────────────────────────────────
@@ -188,22 +188,14 @@ async function as(email) {
   await page.unroute("**/rest/v1/rpc/search_products");
   await visible("brand-clear").click();
   await page.waitForURL((url) => !new URL(url).searchParams.has("marca"));
-  await page.getByText("Todos los productos").filter({ visible: true }).first().waitFor();
+  await shopApp.allProducts(page);
   check((await page.getByTestId("brand-summary").count()) === 0, "the brand filter comes off");
 
   await page.goto(`${BASE}/c/mascotas?marca=nimbo`, { waitUntil: "networkidle" });
-  await page
-    .getByText("No hay productos de esa marca aquí")
-    .filter({ visible: true })
-    .first()
-    .waitFor();
+  await shopApp.brandEmpty(page).waitFor();
   check(true, "a category with none of the brand says so");
   await shot("02-brand-empty");
-  await page
-    .getByRole("button", { name: "Quitar el filtro de marca" })
-    .filter({ visible: true })
-    .first()
-    .click();
+  await shopApp.clearBrand(page).click();
   await cards().first().waitFor();
   check(!page.url().includes("marca="), "the filter is taken off from the empty result");
 
@@ -215,15 +207,9 @@ async function as(email) {
   const mascotas = (await central("ops_catalog_categories")).find((c) => c.slug === "mascotas");
   await central("ops_set_category_active", { p_category_id: mascotas.id, p_active: false });
   // Moving between screens costs no request: the menu read a moment ago stays.
-  await page
-    .getByRole("tab", { name: /^Buscar/ })
-    .first()
-    .click();
+  await shopApp.tabs.search(page).click();
   await page.waitForURL(/\/buscar/);
-  await page
-    .getByRole("tab", { name: /^Categorías/ })
-    .first()
-    .click();
+  await shopApp.tabs.categories(page).click();
   await page.waitForURL(/\/categorias/);
   await page.waitForTimeout(1_000);
   check(
@@ -250,7 +236,7 @@ async function as(email) {
   );
   await shot("03-menu-after-hiding");
   await page.goto(`${BASE}/c/mascotas`, { waitUntil: "networkidle" });
-  await page.getByText("No encontramos esa categoría").filter({ visible: true }).first().waitFor();
+  await shopApp.categoryNotFound(page).waitFor();
   check(true, "the hidden category's address says it is not there");
 
   // ── 3. A product taken down; a district we do not serve ────────────────────
@@ -263,8 +249,8 @@ async function as(email) {
     p_reason: "Fotos de otra marca.",
   });
   await page.goto(`${BASE}/p/${hammock.slug}`, { waitUntil: "networkidle" });
-  await page.getByText("No encontramos esa página").filter({ visible: true }).first().waitFor();
-  const gone = await flat(page.locator("body"));
+  await shopApp.pageNotFound(page).waitFor();
+  const gone = await screenText(page);
   check(
     gone.includes(
       "Puede que el enlace esté mal escrito o que el producto ya no esté a la venta.",
@@ -375,9 +361,7 @@ async function as(email) {
 
   await visible("cart-continue").click();
   await page.waitForURL(/\/ingresar/);
-  await visible("sign-in-email").fill(SHOPPER);
-  await visible("sign-in-password").fill(PASSWORD);
-  await visible("sign-in-submit").click();
+  await shopApp.signIn(page, SHOPPER, PASSWORD);
   await page.waitForURL((url) => new URL(url).pathname === "/pagar");
   await visible("checkout-summary").waitFor();
   const checkout = (await flat(visible("checkout-summary"))).replace(/\s/g, " ");

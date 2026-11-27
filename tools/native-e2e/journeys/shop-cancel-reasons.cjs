@@ -11,6 +11,8 @@
 
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
+const { overflow, screenText } = require("../lib/screen.cjs");
+const shopApp = require("../lib/shop.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const SHOP = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
@@ -80,10 +82,7 @@ async function as(email) {
   });
   const visible = (testId) => page.getByTestId(testId).filter({ visible: true }).first();
   const noSideways = async (where) =>
-    check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-      `no sideways scrolling at 390 px: ${where}`,
-    );
+    check((await overflow(page)) <= 0, `no sideways scrolling at 390 px: ${where}`);
 
   // ── 1. An order the sweep cancelled ────────────────────────────────────────
   const buyer = await as(SHOPPER);
@@ -100,9 +99,7 @@ async function as(email) {
   sql(`select private.cancel_order_internal('${placed.order_id}', 'Pago no recibido a tiempo')`);
 
   await page.goto(`${SHOP}/ingresar?siguiente=%2Fpedidos`, { waitUntil: "networkidle" });
-  await visible("sign-in-email").fill(SHOPPER);
-  await visible("sign-in-password").fill(PASSWORD);
-  await visible("sign-in-submit").click();
+  await shopApp.signIn(page, SHOPPER, PASSWORD);
   await visible(`order-${placed.order_number}`).waitFor();
   await page.goto(`${SHOP}/pedidos/${placed.order_number}`, { waitUntil: "networkidle" });
   const why = squash(await visible("order-cancel-reason").innerText());
@@ -114,9 +111,7 @@ async function as(email) {
     "the order page says why it was cancelled, that nothing was charged, and to order again",
   );
   check(
-    squash(await page.locator("body").innerText()).includes(
-      "Cancelado: no recibimos el pago a tiempo",
-    ),
+    (await screenText(page)).includes("Cancelado: no recibimos el pago a tiempo"),
     "the history says why",
   );
   await noSideways("the cancelled order");
@@ -138,7 +133,7 @@ async function as(email) {
       "the summary shows no total to pay and no date",
     );
     check(summary.includes("quítelo"), "the summary says what to do");
-    const screen = squash(await page.locator("body").innerText());
+    const screen = await screenText(page);
     check(
       !screen.includes("El total cambia") &&
         !screen.includes("Continuar con la compra") &&

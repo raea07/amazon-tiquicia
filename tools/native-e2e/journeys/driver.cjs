@@ -35,6 +35,7 @@
 
 const { chromium, request } = require("playwright");
 const driverApp = require("../lib/driver.cjs");
+const { word } = require("../lib/words.cjs");
 const { overflow, screenText, settledText } = require("../lib/screen.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
@@ -404,8 +405,8 @@ async function newRoute() {
   );
   check(await says("outbox", /^2 acciones por enviar/), "the queue survived the reload");
   check(
-    /En la puerta/.test(await textOf(`stop-${B}-1`)) &&
-      /Por enviar/.test(await textOf(`stop-${B}-1`)),
+    (await textOf(`stop-${B}-1`)).includes(word("stop_status", "arrived", "driver")) &&
+      (await textOf(`stop-${B}-1`)).includes(word("queued_action", "pending", "driver")),
     "a queued arrival reads as done, 'Por enviar'",
   );
   check(/No entregado/.test(await textOf(`stop-${B}-2`)), "a queued failure reads as done");
