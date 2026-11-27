@@ -24,6 +24,7 @@
       "!packages/brand/styles/carreta-base.css",
       "!packages/brand/assets/app-icons",
       "!packages/brand/assets/lockups",
+      "!apps/*/public/icon.svg",
       "!supabase/seed/geo-cr.json",
       "!pnpm-lock.yaml",
       "!**/dist-web",
