@@ -152,6 +152,10 @@ Primary documents cited repeatedly:
 - Published gateway fees (third-party comparison, 20 Oct 2026): **ONVO** cards
   3.9% + US$0.35, SINPE Móvil 1.5%, US$3 per payout; **Tilopay** cards
   4.25% + US$0.35, SINPE Móvil 2% + US$0.35. (nmsoftwarelab · low–medium)
+  Tilopay's own page confirmed its prices on 24 Nov 2026 (tilopay.com/tarifas ·
+  high). The dollar was at ₡450–₡452 (banks' selling rate, 18 Nov 2026 ·
+  press), so US$0.35 is about ₡157.50, not the ₡180 the code assumes at ₡515.
+  ([market research](market-and-costs-2026-11.md) §6.4 and §6.5)
 - Marketplace support: ONVO "Marketplaces" offers connected seller accounts with
   hosted onboarding, charges on behalf of the seller and a percentage platform
   fee (SINPE Móvil support in that flow not stated). Tilopay has a
@@ -182,7 +186,16 @@ Primary documents cited repeatedly:
 
 - Correos de Costa Rica Pymexpress, before IVA: small ₡2,300 / medium ₡3,250 /
   large ₡4,550 / extra large ₡7,250 within the GAM, rising to ₡3,450–₡9,050
-  outside it. (correos.go.cr · medium)
+  outside it. (correos.go.cr · medium) **Correction, read 24 Nov 2026:** these
+  are the self-service locker prices. The Pymexpress volume tariff inside the
+  GAM is lower, by monthly volume, for the first kilo before IVA: ₡2,005.53
+  (5–24 parcels), ₡1,962.17 (25–200), ₡1,853.76 (201–450), ₡1,756.19 (451 or
+  more), for parcels the sender drops off. Every tier needs prior authorisation
+  from Correos' Dirección de Pymes. If Correos collects, the client pays a
+  collection fee of ₡1,500 (1–3 parcels) to ₡2,000 (11 or more) plus a
+  per-parcel rate for collection clients: ₡1,890 small, ₡3,080 medium, ₡4,180
+  large inside the GAM, before IVA.
+  (correos.go.cr/tarifas · high; [market research](market-and-costs-2026-11.md) §3.4)
 - Moovin (2–4 hour express, 24–48 hour routes, fulfilment), Boxful (aggregator
   launched Dec 2025, warehouse in Guachipelín) and Uber Direct operate locally;
   none publishes prices. (press and vendor pages · medium)
@@ -193,7 +206,15 @@ Primary documents cited repeatedly:
   contractor model) is also unvoted. (Redalyc; Delfino · medium–high)
 - If drivers are employees, 2026 social charges are 26.83% employer and 10.83%
   worker. INS work-risk insurance is mandatory for employers and sold to
-  independents. (La Nación; Delfino · medium)
+  independents. (La Nación; Delfino · medium) The 26.83% includes INS work-risk
+  at a 1% reference rate that varies by activity, and employers with fewer than
+  5 permanent non-farm workers do not pay the 1.5% INA charge. (Alegra, updated
+  7 Oct 2026, read 24 Nov 2026 · third party)
+- 2026 legal minimums: light-vehicle driver ₡13,523.69 a day; warehouse lead,
+  office clerk or telephonist ₡405,710.70 a month; warehouse labourer or
+  messenger ₡373,092.30; sales agent ₡419,755.80. All rise 1.70% on
+  1 Jan 2027. (MTSS list, Decreto 45303-MTSS, and communiqué CP-022-2026, read
+  24 Nov 2026 · high; [market research](market-and-costs-2026-11.md) §6.1)
 
 ## 8. Market context
 
@@ -201,10 +222,16 @@ Primary documents cited repeatedly:
   in 2027. Other trackers give far lower figures on narrower definitions.
   (PCMI · medium; ECDB · low)
 - Mobile is 74% of volume; domestic merchants take 55%; about 80% of adults buy
-  online. (PCMI · medium)
+  online. (PCMI · medium) **Checked 24 Nov 2026:** two other sources disagree:
+  48.5% bought through an electronic medium (UCR survey, La República,
+  12 Sep 2022 · press) and 18% bought and paid online (World Bank figure,
+  Forbes Centroamérica, 18 Sep 2025 · low). The PCMI page returned empty and
+  could not be re-read. Treat 80% as an industry estimate.
+  ([market research](market-and-costs-2026-11.md) §2.2)
 - Cross-border competition: Amazon ships free on eligible orders of US$35+;
   **Amazon Bazaar** launched 7 Nov 2025 (most items under ₡5,000, delivery in two
-  weeks or less, cards only); Temu delivers in about 15 days; Shein opened a
+  weeks or less, cards only; free shipping from ₡10,000 per El Financiero,
+  9 Nov 2025, read 24 Nov 2026, terms may have changed); Temu delivers in about 15 days; Shein opened a
   direct route in Sept 2025 taking about a month. (Delfino; El Financiero · medium–high)
 - Courier import declarations reached 12.9 million lines in Jan–Jul 2025, about
   four times all of 2024. (Teletica · medium)

@@ -1,0 +1,91 @@
+/* ================= 5. phone apps (shop-, seller-, driver-, warehouse-native) =================
+   Drawn at 390 × 844 pt. Safe areas: 47 pt on top (status bar), 34 pt at the
+   bottom (home indicator); Android uses its own insets the same way.
+   Body text 17, nothing under 13 (tab labels). Targets 48 pt. */
+.phones{display:flex;flex-wrap:wrap;gap:var(--yt-space-6) var(--yt-space-5);justify-content:center;padding:var(--yt-space-5) 0 var(--yt-space-7);background:#D9D0C3}
+.phone-col{width:390px;max-width:100%;display:flex;flex-direction:column}
+.phone{width:100%;min-height:844px;background:var(--yt-page);color:var(--yt-ink);display:flex;flex-direction:column;position:relative;font-size:17px;line-height:24px;overflow:hidden}
+.phone .status{height:47px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 var(--yt-space-6) var(--yt-space-2);font:600 15px/1 var(--yt-font-text);color:var(--yt-ink);flex:none}
+.phone .status.on-app{color:var(--yt-on-app)}
+.phone .body{flex:1;padding:var(--yt-space-2) var(--yt-space-4) var(--yt-space-5);display:flex;flex-direction:column;gap:var(--yt-space-3);min-width:0}
+.phone .home-ind{height:34px;flex:none;display:grid;place-items:center}
+.phone .home-ind::after{content:"";width:134px;height:5px;border-radius:3px;background:var(--yt-ink);opacity:.85}
+/* stack header: back with a word, the title, one action with a word */
+.nav-h{display:flex;align-items:center;gap:var(--yt-space-1);min-height:52px;padding:0 var(--yt-space-2);border-bottom:1px solid var(--yt-rule);flex:none}
+.nav-h .back{display:inline-flex;align-items:center;gap:var(--yt-space-1);min-height:48px;min-width:48px;padding:0 var(--yt-space-2);color:var(--yt-link);text-decoration:none;font-size:17px}
+.nav-h h1{font:600 17px/24px var(--yt-font-text);flex:1;text-align:center;min-width:0;overflow-wrap:break-word}
+.nav-h .act{min-width:64px;text-align:right}
+.nav-h .act a{display:inline-flex;align-items:center;justify-content:center;min-height:48px;min-width:48px;padding:0 var(--yt-space-2);color:var(--yt-link)}
+/* app bars that carry identity (vende cacao, ruta añil, bodega cal + rule) */
+.app-top{display:flex;flex-direction:column;flex:none}
+.app-top.vende{background:var(--yt-app-seller);color:var(--yt-on-app)}
+.app-top.ruta{background:var(--yt-app-driver);color:var(--yt-on-app)}
+.app-top.bodega{background:var(--yt-app-warehouse);color:var(--yt-ink);border-bottom:3px solid var(--yt-ink)}
+.app-top .inner{display:flex;align-items:center;gap:var(--yt-space-2);min-height:56px;padding:0 var(--yt-space-2) 0 var(--yt-space-4);flex-wrap:wrap}
+.app-top .inner .lockup{color:inherit}
+.app-top .inner .end{margin-left:auto;display:flex;gap:var(--yt-space-1)}
+.app-top .inner .end a{color:inherit;display:inline-flex;align-items:center;gap:var(--yt-space-1);min-height:48px;padding:0 var(--yt-space-2)}
+.app-top .lockup img{width:22px;height:22px}.app-top .wordmark{font-size:21px}
+.app-top h1{font:600 18px/24px var(--yt-font-text);padding:var(--yt-space-2) 0;min-width:0}
+/* bottom tab bar: 3–5 tabs, icon + one word, current = ink + 3 px top bar + bold */
+.tabbar{display:grid;grid-template-columns:repeat(var(--tabs,5),minmax(0,1fr));border-top:1px solid var(--yt-rule);background:var(--yt-page);flex:none}
+.tabbar a{display:flex;flex-direction:column;align-items:center;gap:var(--yt-space-1);text-align:center;min-height:56px;padding:var(--yt-space-2) 0 var(--yt-space-2);font:500 13px/18px var(--yt-font-text);color:var(--yt-ink-muted);text-decoration:none;position:relative;border-top:3px solid transparent;white-space:nowrap;overflow-wrap:normal;min-width:0}
+/* the label stays on one line and never breaks inside a word; with large text it grows
+   until it fills the tab, then shrinks to fit (RN: numberOfLines 1, adjustsFontSizeToFit,
+   maxFontSizeMultiplier 1.6, minimumFontScale so it never goes under 13) */
+.tabbar .tl{display:block;max-width:100%}
+.tabbar .ic{position:relative;display:block}
+.tabbar a .ico{width:24px;height:24px}
+.tabbar a[aria-current]{color:var(--yt-ink);font-weight:700;border-top-color:var(--yt-ink)}
+/* the badge sits on the icon's top right corner, never over the word */
+.tabbar .badge{position:absolute;top:-6px;left:16px;background:var(--yt-primary);color:var(--yt-on-primary);font:700 13px/18px var(--yt-font-text);padding:0 4px;border-radius:var(--yt-radius-tag)}
+/* phone list rows (grouped rows, the pattern that already works) */
+.rowlist{list-style:none;margin:0;padding:0;border-top:1px solid var(--yt-rule)}
+.rowlist a,.rowlist .r{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--yt-space-1) var(--yt-space-3);align-items:center;min-height:56px;padding:var(--yt-space-3) 0;border-bottom:1px solid var(--yt-rule);color:var(--yt-ink);text-decoration:none}
+.rowlist small{grid-column:1;font-size:15px;line-height:20px;color:var(--yt-ink-muted)}
+.rowlist .ico{grid-row:1/span 2;grid-column:2}
+.phone .card .name{font-size:16px}
+.phone .btn{min-height:52px;font-size:17px;line-height:22px}
+.phone .btn-sm{min-height:48px}
+.phone .btn-lg,.phone .acts4 .btn{min-height:var(--yt-target-driver)}
+.phone .btn-xl{min-height:var(--yt-target-driver-fixed);font-size:20px;line-height:24px}
+/* every stand-alone control in a phone app is at least 48 pt */
+.phone a:not(.btn):not(.back),.phone details.more summary,.phone .link-btn,.phone .lockup{min-height:var(--yt-target-app)}
+.phone .tabs-row a,.phone .link44,.phone .hdr-link,.phone .seller-link,.phone .depts a,.phone .sec-head a,.phone .crumbs a{min-height:var(--yt-target-app);display:inline-flex;align-items:center}
+.phone .depts a{display:flex}
+.phone .input,.phone .select{min-height:52px;font-size:17px}
+.phone .check{min-height:48px;font-size:17px}
+.phone .t-small{font-size:15px;line-height:20px}
+.search-app{display:flex;gap:var(--yt-space-2)}
+.search-app .input{flex:1}
+.camera{background:#1E1A16;color:#fff;aspect-ratio:4/3;display:grid;place-items:center;position:relative;border-radius:var(--yt-radius-control)}
+.camera .frame{width:70%;height:42%;border:3px solid #fff;border-radius:var(--yt-radius-control)}
+.camera p{position:absolute;bottom:10px;left:12px;right:12px;font-size:15px;line-height:20px}
+.phone .stage-cap{padding:var(--yt-space-2) var(--yt-space-4)}
+/* A phone frame is always a phone: the reference sheet may be viewed wide,
+   so the phone sizes are restated here (the apps themselves have no wide layout). */
+.phone .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--yt-space-5) var(--yt-space-3)}
+.phone .desk-only{display:none}
+.phone .card .stars svg{display:none}
+.phone .strip p{font-size:14px;line-height:20px}.phone .strip a{font-size:14px;line-height:20px}
+.phone .t-display{font-size:30px;line-height:34px}.phone .t-title{font-size:26px;line-height:30px}.phone .t-section{font-size:21px;line-height:26px}
+.phone .t-price-xl{font-size:32px;line-height:36px}.phone .t-price{font-size:20px;line-height:23px}.phone .t-code{font-size:60px;line-height:69px}
+.phone .dept-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.phone .buy{padding:var(--yt-space-4) var(--yt-space-4);gap:var(--yt-space-3)}
+/* Android frame: time on the left, back arrow without a word, title on the left,
+   gesture bar inset at the bottom (no home indicator) */
+.phone .status.android{justify-content:space-between;padding:0 var(--yt-space-4) var(--yt-space-2);height:40px}
+.app-top .inner.android-bar{padding-left:var(--yt-space-1);gap:var(--yt-space-1)}
+.app-top .inner.android-bar h1{flex:1}
+.phone .gesture-ind{height:24px;flex:none;display:grid;place-items:center}
+.phone .gesture-ind::after{content:"";width:108px;height:4px;border-radius:2px;background:var(--yt-ink);opacity:.85}
+/* A2: the product at 200 % text, as the phone draws it (body 34 pt) */
+.phone.x2{font-size:34px;line-height:48px}
+.phone.x2 .nav-h h1,.phone.x2 .nav-h .back{font-size:34px;line-height:44px}
+.phone.x2 .t-small{font-size:30px;line-height:40px}
+.phone.x2 .t-title{font-size:52px;line-height:60px}
+.phone.x2 .t-price-xl{font-size:64px;line-height:72px}
+.phone.x2 .when{font-size:36px;line-height:48px}
+.phone.x2 .btn{font-size:34px;line-height:44px;padding:var(--yt-space-2) var(--yt-space-4)}
+.phone.x2 .tabbar a{font-size:15px;line-height:20px} /* capped, then shrunk to fit: never under 13 */
+@media (max-width:359px){.phones .phone .dept-grid{grid-template-columns:minmax(0,1fr)}}

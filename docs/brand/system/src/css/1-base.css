@@ -1,0 +1,46 @@
+/* ================= 1. base ================= */
+*{box-sizing:border-box}
+html{scroll-padding-top:var(--yt-header-h);scroll-padding-bottom:var(--bar-h,0px);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--yt-page);color:var(--yt-ink);font:400 16px/24px var(--yt-font-text);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+img{display:block;max-width:100%}
+h1,h2,h3,h4,p,figure{margin:0}
+ul.plain,ol.plain{list-style:none;margin:0;padding:0}
+a{color:var(--yt-link);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
+a:hover{text-decoration-thickness:2px}
+/* Focus. One rule for the whole system: a 3 px ring, 2 px off the control,
+   in --yt-ring. --yt-ring is añil on page and band; every coloured or dark
+   band (.banda, .banda-marca, .banda-peligro) sets it to the band's own text colour, so the ring always has the
+   contrast the band's text has (5.49:1 on achiote, 8.32 on añil, 12.81 on
+   cacao, 17.29 on noche, 7.75 on rojo). Never remove it. */
+:focus-visible{outline:3px solid var(--yt-ring);outline-offset:2px}
+/* Inside a bar, a side bar, a list that clips, or a table frame, the ring is drawn
+   inside the control (inset 4 px) so no side falls outside the coloured surface or
+   gets clipped. Measured on all four sides by src/audit.js. */
+.side a:focus-visible,.side .btn:focus-visible,.mtop a:focus-visible,.bar a:focus-visible,.bar button:focus-visible,.app-top a:focus-visible,.tbl-wrap :focus-visible,.sug a:focus-visible,.tabbar a:focus-visible,.nav-h a:focus-visible,.depts a:focus-visible,.rowlist a:focus-visible,.hub a:focus-visible,.hdr a:focus-visible,.strip a:focus-visible,.search .input:focus-visible,.tabs-row a:focus-visible,.dept-bar a:focus-visible,.crumbs a:focus-visible{outline-offset:-6px}
+/* side-bar rows carry a 4 px left bar when current: their ring sits just inside it */
+.side nav a:focus-visible{outline-offset:-7px}
+.side .lockup,.mtop .lockup,.app-top .lockup,.bar .lockup{padding:0 var(--yt-space-2)}
+.banda{--yt-ring:var(--yt-on-app)}
+.banda-marca{--yt-ring:var(--yt-on-brand)}
+.banda-peligro{--yt-ring:var(--yt-on-danger)}
+/* the type steps (.t-display … .t-code-entry) are generated from src/tokens.py TYPE, above */
+.muted{color:var(--yt-ink-muted)}
+h1,h2,h3,.t-display,.t-title,.t-section{overflow-wrap:break-word}
+.t-display,.t-title{overflow-wrap:anywhere}
+.wrap{max-width:1312px;margin:0 auto;padding:0 var(--yt-space-4)}
+@media (min-width:900px){.wrap{padding:0 var(--yt-space-6)}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ico{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round}
+.ico .dot{fill:currentColor;stroke:none}
+.stack{display:flex;flex-direction:column;gap:var(--g,var(--yt-space-3))}
+.row{display:flex;flex-wrap:wrap;gap:var(--g,var(--yt-space-3));align-items:center}
+.rule-top{border-top:1px solid var(--yt-rule)}
+.desk-only{display:none}
+@media (min-width:900px){.desk-only{display:revert}.mob-only{display:none!important}}
+main > *,.frames > *{min-width:0}
+/* a "frame" caption that sits outside the drawn screen */
+.frame-cap{font:600 14px/20px var(--yt-font-text);background:#E9E3DA;color:#1E1A16;padding:var(--yt-space-2) var(--yt-space-4);border-top:3px solid #1E1A16}
+.frame-cap span{font-weight:400}
+
+.nowrap{white-space:nowrap}

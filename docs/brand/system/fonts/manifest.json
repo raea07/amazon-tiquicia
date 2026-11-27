@@ -1,0 +1,345 @@
+{
+ "script": "src/fonts.py",
+ "stamp": "Yuntera build 2026-11-27: tabular figures default, U+202F added, subset",
+ "licence": "SIL Open Font License 1.1, no Reserved Font Name: fonts/OFL-epilogue.txt, fonts/OFL-FiraSans.txt; changes listed in fonts/MODIFICATIONS.txt",
+ "sources": {
+  "epilogue": {
+   "package": "@expo-google-fonts/epilogue",
+   "version": "0.4.2",
+   "url": "https://registry.npmjs.org/@expo-google-fonts/epilogue/-/epilogue-0.4.2.tgz",
+   "integrity": "sha512-69gLWq6t92cfULCQ6lhbdC6zTa04sXJXlXF8BeTV4G8/wYf9PuEaBoPQUy7Wr8TJSaxgKHyOxpoJTXJbaIljTA==",
+   "sha256": "88a12946e3168c4592b091802fe28750dcbef83ad1542f7758e0a8225acfbbe8"
+  },
+  "fira": {
+   "package": "@expo-google-fonts/fira-sans",
+   "version": "0.4.1",
+   "url": "https://registry.npmjs.org/@expo-google-fonts/fira-sans/-/fira-sans-0.4.1.tgz",
+   "integrity": "sha512-zQVs67baYyBVEScaCGKG3MBtGe2hPNc7R3Axmj7JmWs310kOem4poL1mB+O52rwfFqiigzxV876BHFZBxoie1Q==",
+   "sha256": "89eaf2db7774f47fb5854c8193386ca5cccd591454555443439e49553d44a710"
+  }
+ },
+ "faces": [
+  {
+   "family": "Epilogue",
+   "weight": 600,
+   "source": "@expo-google-fonts/epilogue@0.4.2:package/600SemiBold/Epilogue_600SemiBold.ttf",
+   "source_sha256": "0f73aec697ec8f7526ca5c9cd0543d3ccfe16e7e4cc68e0e653a6451f1af36a4",
+   "digits_remapped": 10,
+   "nnbsp": "added, advance 400/2000 em",
+   "outputs": {
+    "fonts/ttf/Epilogue-SemiBold.ttf": {
+     "sha256": "86b52e58a2c16a834c0f9f833ac5697d816e532801f0862267b1b42b7cbf5d51",
+     "bytes": 60484,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 400,
+      "name1": "Epilogue SemiBold",
+      "name2": "Regular",
+      "name6": "Epilogue-SemiBold",
+      "name16": "Epilogue",
+      "name17": "SemiBold",
+      "weightClass": 600,
+      "kern": true,
+      "codepoints": 370,
+      "ok": true
+     }
+    },
+    "fonts/web/epilogue-600.woff2": {
+     "sha256": "617c687d3a05b0fdbb99781fed1873a7f8d538ceab523843926647d806b737fa",
+     "bytes": 24404,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 400,
+      "name1": "Epilogue SemiBold",
+      "name2": "Regular",
+      "name6": "Epilogue-SemiBold",
+      "name16": "Epilogue",
+      "name17": "SemiBold",
+      "weightClass": 600,
+      "kern": true,
+      "codepoints": 370,
+      "ok": true
+     }
+    }
+   }
+  },
+  {
+   "family": "Epilogue",
+   "weight": 700,
+   "source": "@expo-google-fonts/epilogue@0.4.2:package/700Bold/Epilogue_700Bold.ttf",
+   "source_sha256": "9e2c1e35f69667f84d2c3c35de4de95c7d4bb397bd30e7ac27918e67e5dc200c",
+   "digits_remapped": 10,
+   "nnbsp": "added, advance 400/2000 em",
+   "outputs": {
+    "fonts/ttf/Epilogue-Bold.ttf": {
+     "sha256": "c889659b06bef190e7d11ee24fef14a9b8c97390b0d341804f902e33ff83d8c6",
+     "bytes": 60488,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 400,
+      "name1": "Epilogue",
+      "name2": "Bold",
+      "name6": "Epilogue-Bold",
+      "name16": "Epilogue",
+      "name17": "Bold",
+      "weightClass": 700,
+      "kern": true,
+      "codepoints": 370,
+      "ok": true
+     }
+    },
+    "fonts/web/epilogue-700.woff2": {
+     "sha256": "4f5b14e0fa672a3331dda940f06969234357faaa5f2440da41464c11a18c86f0",
+     "bytes": 24400,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 400,
+      "name1": "Epilogue",
+      "name2": "Bold",
+      "name6": "Epilogue-Bold",
+      "name16": "Epilogue",
+      "name17": "Bold",
+      "weightClass": 700,
+      "kern": true,
+      "codepoints": 370,
+      "ok": true
+     }
+    }
+   }
+  },
+  {
+   "family": "Epilogue",
+   "weight": 800,
+   "source": "@expo-google-fonts/epilogue@0.4.2:package/800ExtraBold/Epilogue_800ExtraBold.ttf",
+   "source_sha256": "b5f1766a92a0370e6ad90524c9586b4acddd86d49521945a47c838a1465d77cc",
+   "digits_remapped": 10,
+   "nnbsp": "added, advance 400/2000 em",
+   "outputs": {
+    "fonts/ttf/Epilogue-ExtraBold.ttf": {
+     "sha256": "3dbb0e7c3fedf2598fad4e301bc09ec9d384f178ac4f7dc0d45d465e6cd099d2",
+     "bytes": 60700,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 400,
+      "name1": "Epilogue ExtraBold",
+      "name2": "Regular",
+      "name6": "Epilogue-ExtraBold",
+      "name16": "Epilogue",
+      "name17": "ExtraBold",
+      "weightClass": 800,
+      "kern": true,
+      "codepoints": 370,
+      "ok": true
+     }
+    },
+    "fonts/web/epilogue-800.woff2": {
+     "sha256": "f837371872d1c2fa2ff8cd3149953920e39825a3ed03899ec438fd4ba3619ae1",
+     "bytes": 24296,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 400,
+      "name1": "Epilogue ExtraBold",
+      "name2": "Regular",
+      "name6": "Epilogue-ExtraBold",
+      "name16": "Epilogue",
+      "name17": "ExtraBold",
+      "weightClass": 800,
+      "kern": true,
+      "codepoints": 370,
+      "ok": true
+     }
+    }
+   }
+  },
+  {
+   "family": "Fira Sans",
+   "weight": 400,
+   "source": "@expo-google-fonts/fira-sans@0.4.1:package/400Regular/FiraSans_400Regular.ttf",
+   "source_sha256": "3dabf3d48bf4599f95cffd92f99ea426a014d5311f52a5eb5ec3af265e97cd97",
+   "digits_remapped": 10,
+   "nnbsp": "added, advance 200/1000 em",
+   "outputs": {
+    "fonts/ttf/FiraSans-Regular.ttf": {
+     "sha256": "14c2b3bf04eb51de47f61258518c9eea7f57013bff909a01f70e7e0422c8edc1",
+     "bytes": 129428,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 200,
+      "name1": "Fira Sans",
+      "name2": "Regular",
+      "name6": "FiraSans-Regular",
+      "name16": "Fira Sans",
+      "name17": "Regular",
+      "weightClass": 400,
+      "kern": true,
+      "codepoints": 386,
+      "ok": true
+     }
+    },
+    "fonts/web/fira-sans-400.woff2": {
+     "sha256": "d000e425dca40725074fe3b8691aab553356cb16d2b141ee33290cfed5f1d091",
+     "bytes": 42556,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 200,
+      "name1": "Fira Sans",
+      "name2": "Regular",
+      "name6": "FiraSans-Regular",
+      "name16": "Fira Sans",
+      "name17": "Regular",
+      "weightClass": 400,
+      "kern": true,
+      "codepoints": 386,
+      "ok": true
+     }
+    }
+   }
+  },
+  {
+   "family": "Fira Sans",
+   "weight": 500,
+   "source": "@expo-google-fonts/fira-sans@0.4.1:package/500Medium/FiraSans_500Medium.ttf",
+   "source_sha256": "7c2d4961dd4a2dbe3ec9c6a2fc60d7ee21f44dfa7c5c71256b28d15e8af89535",
+   "digits_remapped": 10,
+   "nnbsp": "added, advance 200/1000 em",
+   "outputs": {
+    "fonts/ttf/FiraSans-Medium.ttf": {
+     "sha256": "bd0c19c8f37df05ea663709272ee9a1ea28714c5702c92bba4d65d3aa289f3c0",
+     "bytes": 128608,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 200,
+      "name1": "Fira Sans Medium",
+      "name2": "Regular",
+      "name6": "FiraSans-Medium",
+      "name16": "Fira Sans",
+      "name17": "Medium",
+      "weightClass": 500,
+      "kern": true,
+      "codepoints": 386,
+      "ok": true
+     }
+    },
+    "fonts/web/fira-sans-500.woff2": {
+     "sha256": "d3b4eea8ade4ed74791c10561ce2aa70dcae8f581fcaf12f765b4a132306f3ac",
+     "bytes": 43348,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 200,
+      "name1": "Fira Sans Medium",
+      "name2": "Regular",
+      "name6": "FiraSans-Medium",
+      "name16": "Fira Sans",
+      "name17": "Medium",
+      "weightClass": 500,
+      "kern": true,
+      "codepoints": 386,
+      "ok": true
+     }
+    }
+   }
+  },
+  {
+   "family": "Fira Sans",
+   "weight": 600,
+   "source": "@expo-google-fonts/fira-sans@0.4.1:package/600SemiBold/FiraSans_600SemiBold.ttf",
+   "source_sha256": "1352f54dafec54419303fd4e55bc4d2aad4379f5105122f78034ddb48499e1d1",
+   "digits_remapped": 10,
+   "nnbsp": "added, advance 200/1000 em",
+   "outputs": {
+    "fonts/ttf/FiraSans-SemiBold.ttf": {
+     "sha256": "2b8a04e7125cb969806bf9476ed3aa968e0df5189e14f1ab84d859936fa04de9",
+     "bytes": 138472,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 200,
+      "name1": "Fira Sans SemiBold",
+      "name2": "Regular",
+      "name6": "FiraSans-SemiBold",
+      "name16": "Fira Sans",
+      "name17": "SemiBold",
+      "weightClass": 600,
+      "kern": true,
+      "codepoints": 386,
+      "ok": true
+     }
+    },
+    "fonts/web/fira-sans-600.woff2": {
+     "sha256": "1408e1d78d79f012ba2301d0fbae6532a411e83d131a50bd4842092bcbbafe50",
+     "bytes": 45172,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 200,
+      "name1": "Fira Sans SemiBold",
+      "name2": "Regular",
+      "name6": "FiraSans-SemiBold",
+      "name16": "Fira Sans",
+      "name17": "SemiBold",
+      "weightClass": 600,
+      "kern": true,
+      "codepoints": 386,
+      "ok": true
+     }
+    }
+   }
+  },
+  {
+   "family": "Fira Sans",
+   "weight": 700,
+   "source": "@expo-google-fonts/fira-sans@0.4.1:package/700Bold/FiraSans_700Bold.ttf",
+   "source_sha256": "74b477a3e2b7c745e6dac8c01764c8fd82e53763b47ef1eccd24dce36d2ff71f",
+   "digits_remapped": 10,
+   "nnbsp": "added, advance 200/1000 em",
+   "outputs": {
+    "fonts/ttf/FiraSans-Bold.ttf": {
+     "sha256": "5af852f4c1efcd6461588a087d0b52124e5984111d2efb59ea4188c9ea5bee43",
+     "bytes": 138492,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 200,
+      "name1": "Fira Sans",
+      "name2": "Bold",
+      "name6": "FiraSans-Bold",
+      "name16": "Fira Sans",
+      "name17": "Bold",
+      "weightClass": 700,
+      "kern": true,
+      "codepoints": 386,
+      "ok": true
+     }
+    },
+    "fonts/web/fira-sans-700.woff2": {
+     "sha256": "f300cb87e37b34fb600b5515bb49a138abf13faf047ff903a9b049afd40e58f6",
+     "bytes": 45236,
+     "check": {
+      "missing": [],
+      "digits_tabular": true,
+      "nnbsp_advance": 200,
+      "name1": "Fira Sans",
+      "name2": "Bold",
+      "name6": "FiraSans-Bold",
+      "name16": "Fira Sans",
+      "name17": "Bold",
+      "weightClass": 700,
+      "kern": true,
+      "codepoints": 386,
+      "ok": true
+     }
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,28 @@
+Modifications to the font software (SIL Open Font License 1.1, section 2 and
+the FAQ's advice to document changes). Neither licence names a Reserved Font
+Name, so the modified files keep the names "Epilogue" and "Fira Sans".
+
+Files: fonts/ttf/*.ttf (phone apps) and fonts/web/*.woff2 (web apps).
+Made by: src/fonts.py, on 27 November 2026. Repeat with `python3 -I src/fonts.py`.
+
+Sources, unmodified upstream files, checked by sha512 and sha256 before use:
+  Epilogue 2.112, from npm @expo-google-fonts/epilogue 0.4.2
+    (Copyright 2020 The Epilogue Project Authors, licence: fonts/OFL-epilogue.txt)
+  Fira Sans 4.203, from npm @expo-google-fonts/fira-sans 0.4.1
+    (Copyright 2012-2015 The Mozilla Foundation and Telefonica S.A., licence: fonts/OFL-FiraSans.txt)
+
+Changes, the same in every file:
+  1. The digits 0-9 are mapped to the font's own tabular lining figures
+     (the glyphs its tnum feature already selects).
+  2. U+202F NARROW NO-BREAK SPACE added as an empty glyph (Epilogue 400/2000 em,
+     the width of its thin space; Fira Sans 200/1000 em).
+  3. Name table: typographic family and subfamily (IDs 16, 17) on every weight;
+     legacy family and style (IDs 1, 2) by the RIBBI rule; version string (ID 5)
+     carries "Yuntera build 2026-11-27: tabular figures default, U+202F added, subset".
+  4. Subset to Latin, Latin-1, Latin Extended-A, general punctuation, currency
+     signs and a few symbols (list in src/fonts.py), every layout feature kept.
+  5. Web files are the same fonts compressed as WOFF2.
+
+fonts/f2/ holds the files of the first pass (fontsource woff2 split by subset
+and their licence notes). They are kept only because src/logo.py drew the
+lockup outlines from them; nothing loads them.

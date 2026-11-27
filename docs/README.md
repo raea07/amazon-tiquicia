@@ -37,6 +37,12 @@ specified only, or planned.
 | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | [`00-strategy/market-and-wedge.md`](00-strategy/market-and-wedge.md)         | The Costa Rican e-commerce landscape, shopper complaints, Yuntera's wedge and its limits               |
 | [`00-strategy/business-model.md`](00-strategy/business-model.md)             | Revenue lines, unit economics per order, break-even logic, the three numbers that decide the model     |
+| [`00-strategy/go-to-market.md`](00-strategy/go-to-market.md)                 | First sellers and shoppers, channels, the numbers that say it works, launch sequence, budget, risks    |
+| [`00-strategy/rollout-plan.md`](00-strategy/rollout-plan.md)                 | Phases from today to the open launch, each with entry, exit test and what is switched on; zone rule    |
+| [`00-strategy/team-structure.md`](00-strategy/team-structure.md)             | Roles, product access, cost at the legal minimum, headcount by level, hiring order and triggers        |
+| [`00-strategy/pricing-strategy.md`](00-strategy/pricing-strategy.md)         | Proposed seller fees and shopper offers, benchmarks, unit economics, the month at four volumes         |
+| [`00-strategy/owner-decisions.md`](00-strategy/owner-decisions.md)           | Every question for the owner, each asked once, grouped by when the answer is needed                    |
+| [`../marketing/README.md`](../marketing/README.md)                           | Marketing and sales pieces in Spanish and English: message house, seller pitch, briefs, flyers, posts  |
 | [`01-product/personas-and-journeys.md`](01-product/personas-and-journeys.md) | The five people the platform serves, the order journey across the apps, failure cases                  |
 | [`01-product/scope-by-app.md`](01-product/scope-by-app.md)                   | Feature scope for each audience, split into Pilot, Launch and Later; what the mobile web app cannot do |
 | [`01-product/pricing-and-fees.md`](01-product/pricing-and-fees.md)           | Proposed seller fees and shopper shipping policy; how ranking rules are disclosed                      |
@@ -96,11 +102,15 @@ measure before changing it.
 
 ### Reference
 
-| Document                                                                 | What it covers                                                                                                            |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| [`08-open-questions.md`](08-open-questions.md)                           | Owner decisions, unverified facts, and the assumptions written into the software, each with the default currently assumed |
-| [`brand/naming.md`](brand/naming.md)                                     | How the name Yuntera was chosen and what was verified                                                                     |
-| [`research/costa-rica-fact-sheet.md`](research/costa-rica-fact-sheet.md) | Cited facts on tax, invoicing, consumer law, data protection, payments, logistics and the market                          |
+| Document                                                                                     | What it covers                                                                                                            |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| [`08-open-questions.md`](08-open-questions.md)                                               | Owner decisions, unverified facts, and the assumptions written into the software, each with the default currently assumed |
+| [`brand/naming.md`](brand/naming.md)                                                         | How the name Yuntera was chosen and what was verified                                                                     |
+| [`brand/system/README.md`](brand/system/README.md)                                           | The Carreta design system: rules, tokens, components, 46 reference pages, fonts, logos, icons and the build order         |
+| [`research/costa-rica-fact-sheet.md`](research/costa-rica-fact-sheet.md)                     | Cited facts on tax, invoicing, consumer law, data protection, payments, logistics and the market                          |
+| [`research/market-and-costs-2026-11.md`](research/market-and-costs-2026-11.md)               | Demand, competitors, seller costs, pricing benchmarks, wages, couriers and marketing rules, read 24 November 2026         |
+| [`research/support-and-system-health-tools.md`](research/support-and-system-health-tools.md) | Support desk, system health and testing: what exists, the standard, build or buy, and a build specification               |
+| [`research/english-translation-plan.md`](research/english-translation-plan.md)               | What adding English to every screen and message takes, and the recommended plan                                           |
 
 ## Conventions used in these documents
 

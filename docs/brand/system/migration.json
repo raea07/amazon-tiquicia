@@ -1,0 +1,1258 @@
+{
+ "semantic": [
+  {
+   "today": "bg",
+   "carreta": "page",
+   "kind": "renamed",
+   "note": "bg-bg → bg-page"
+  },
+  {
+   "today": "surface",
+   "carreta": "page",
+   "kind": "renamed",
+   "note": "Carreta has one page colour; a raised white card on a tinted page does not exist."
+  },
+  {
+   "today": "surfaceMuted",
+   "carreta": "band",
+   "kind": "renamed",
+   "note": "bg-surface-muted → bg-band"
+  },
+  {
+   "today": "border",
+   "carreta": "rule",
+   "kind": "renamed",
+   "note": "Decorative rules only. A control edge is never `rule`."
+  },
+  {
+   "today": "borderStrong",
+   "carreta": "edge",
+   "kind": "renamed",
+   "note": "Control edges (fields, outline buttons, checkboxes): 4.90:1."
+  },
+  {
+   "today": "ink",
+   "carreta": "ink",
+   "kind": "same",
+   "note": "añil 900 → noche"
+  },
+  {
+   "today": "inkMuted",
+   "carreta": "inkMuted",
+   "kind": "same",
+   "note": "añil 600 → humo"
+  },
+  {
+   "today": "brand",
+   "carreta": "primary (as a fill or a selection) / brand (only our delivery)",
+   "kind": "meaning",
+   "note": "Today brand (celeste) fills primary buttons, selected options and checkbox accents. In Carreta brand is achiote and may only mark our own delivery (§4.2). Every bg-brand, border-brand, accent-(--color-brand) and colors.brand becomes primary; only the strip, the arrival date, the code block and the wheel use brand."
+  },
+  {
+   "today": "onBrand",
+   "carreta": "onPrimary (on buttons) / onBrand (on the strip and code block)",
+   "kind": "meaning",
+   "note": "Follows brand."
+  },
+  {
+   "today": "brandHover",
+   "carreta": "primary (pressed state is the 1 px move + inner shade, §5.1)",
+   "kind": "gone",
+   "note": "No hover colour."
+  },
+  {
+   "today": "brandSoft",
+   "carreta": "band",
+   "kind": "gone",
+   "note": "No pastel tints."
+  },
+  {
+   "today": "link",
+   "carreta": "link",
+   "kind": "same",
+   "note": "celeste 700 → añil, always underlined"
+  },
+  {
+   "today": "focus",
+   "carreta": "focus",
+   "kind": "same",
+   "note": "celeste 500 → añil; the ring rules of §2.3"
+  },
+  {
+   "today": "promo",
+   "carreta": "— (none)",
+   "kind": "gone",
+   "note": "No sale colour. A discount is a plain stamp with the number («−18 %»)."
+  },
+  {
+   "today": "rating",
+   "carreta": "ink",
+   "kind": "gone",
+   "note": "Stars are decorative in ink; the number is written."
+  },
+  {
+   "today": "success",
+   "carreta": "success",
+   "kind": "same",
+   "note": "selva 600 → selva #1F6B3A"
+  },
+  {
+   "today": "danger",
+   "carreta": "danger",
+   "kind": "same",
+   "note": "achiote 600 → rojo #A4161A. Achiote stops meaning error."
+  },
+  {
+   "today": "warning",
+   "carreta": "warning (a FILL with onWarning text)",
+   "kind": "meaning",
+   "note": "Today warning (maíz 700) is a TEXT colour (text-warning, 22 uses). Carreta warning is maíz #F2B705, a fill under noche text; as text on the page it is 1.9:1. Every text-warning becomes a Notice kind=\"warn\" or a Tag warn."
+  }
+ ],
+ "newOnly": [
+  "photo",
+  "onSuccess",
+  "onDanger",
+  "onWarning",
+  "appShop",
+  "appSeller",
+  "appDriver",
+  "appWarehouse",
+  "appOps",
+  "onApp",
+  "inkFixed",
+  "wheelRim"
+ ],
+ "ramps": [
+  {
+   "ramp": "celeste",
+   "steps": "50–200",
+   "background": "band",
+   "text": "ink-muted",
+   "border": "rule"
+  },
+  {
+   "ramp": "celeste",
+   "steps": "300–500",
+   "background": "band",
+   "text": "link",
+   "border": "edge (focus ring: focus)"
+  },
+  {
+   "ramp": "celeste",
+   "steps": "600–700",
+   "background": "primary",
+   "text": "link",
+   "border": "edge"
+  },
+  {
+   "ramp": "celeste",
+   "steps": "800–950",
+   "background": "primary",
+   "text": "ink",
+   "border": "edge"
+  },
+  {
+   "ramp": "anil",
+   "steps": "50–200",
+   "background": "band",
+   "text": "ink-muted",
+   "border": "rule"
+  },
+  {
+   "ramp": "anil",
+   "steps": "300–500",
+   "background": "band",
+   "text": "ink-muted",
+   "border": "edge"
+  },
+  {
+   "ramp": "anil",
+   "steps": "600–950",
+   "background": "primary",
+   "text": "ink (600–700: ink-muted)",
+   "border": "edge"
+  },
+  {
+   "ramp": "guaria",
+   "steps": "all",
+   "background": "band (seller identity: app-seller)",
+   "text": "ink",
+   "border": "rule"
+  },
+  {
+   "ramp": "maiz",
+   "steps": "50–300",
+   "background": "band",
+   "text": "ink",
+   "border": "rule"
+  },
+  {
+   "ramp": "maiz",
+   "steps": "400–900",
+   "background": "warning (fill only; stars: ink)",
+   "text": "ink (never maíz text)",
+   "border": "edge"
+  },
+  {
+   "ramp": "selva",
+   "steps": "50–300",
+   "background": "band",
+   "text": "success",
+   "border": "rule"
+  },
+  {
+   "ramp": "selva",
+   "steps": "400–900",
+   "background": "success",
+   "text": "success",
+   "border": "success"
+  },
+  {
+   "ramp": "achiote",
+   "steps": "50–300",
+   "background": "band",
+   "text": "danger",
+   "border": "danger"
+  },
+  {
+   "ramp": "achiote",
+   "steps": "400–900",
+   "background": "danger",
+   "text": "danger",
+   "border": "danger"
+  },
+  {
+   "ramp": "arena",
+   "steps": "50",
+   "background": "page",
+   "text": "ink-muted",
+   "border": "rule"
+  },
+  {
+   "ramp": "arena",
+   "steps": "100",
+   "background": "band",
+   "text": "ink-muted",
+   "border": "rule"
+  },
+  {
+   "ramp": "arena",
+   "steps": "200–300",
+   "background": "band",
+   "text": "ink-muted",
+   "border": "rule"
+  },
+  {
+   "ramp": "arena",
+   "steps": "400",
+   "background": "band",
+   "text": "ink-muted",
+   "border": "edge"
+  },
+  {
+   "ramp": "white",
+   "steps": "—",
+   "background": "page",
+   "text": "on-primary / on-app",
+   "border": "rule"
+  }
+ ],
+ "webOther": [
+  {
+   "today": "font-sans (Inter)",
+   "carreta": "font-text (Fira Sans)",
+   "note": "next-kit fonts.ts binds --font-sans to Fira Sans in step 1, so `font-sans` keeps working."
+  },
+  {
+   "today": "font-display (Bricolage)",
+   "carreta": "font-title (Epilogue)",
+   "note": "--font-display is bound to Epilogue in step 1; the class name stays until step 6."
+  },
+  {
+   "today": "text-xs (12 px)",
+   "carreta": "t-fine (13/18)",
+   "note": "12 px is under the minimum; no text step is smaller than 13."
+  },
+  {
+   "today": "text-sm (14)",
+   "carreta": "t-small (14/20) or t-table",
+   "note": ""
+  },
+  {
+   "today": "text-base (16)",
+   "carreta": "t-body (16/24)",
+   "note": ""
+  },
+  {
+   "today": "text-lg (18)",
+   "carreta": "t-h3 (18/24)",
+   "note": ""
+  },
+  {
+   "today": "text-xl, text-2xl (20, 24)",
+   "carreta": "t-section (21/26 phone, 24/28 desktop)",
+   "note": ""
+  },
+  {
+   "today": "text-3xl (30)",
+   "carreta": "t-title (26/30, 30/34)",
+   "note": ""
+  },
+  {
+   "today": "text-4xl, text-5xl (40, 52)",
+   "carreta": "t-display (30/34, 40/44)",
+   "note": "One per screen at most."
+  },
+  {
+   "today": "radius sm / md (6, 10)",
+   "carreta": "radius-control (4)",
+   "note": "Buttons, fields, chips."
+  },
+  {
+   "today": "radius lg / xl (16, 24)",
+   "carreta": "radius-overlay (10)",
+   "note": "Menus, sheets, dialogs only; cards have no radius (photos 0)."
+  },
+  {
+   "today": "radius full",
+   "carreta": "radius-round",
+   "note": "Only the wheel, radio dots, stations, the status glyph. No pills."
+  },
+  {
+   "today": "shadow sm / md / lg",
+   "carreta": "elevation-rest (none) / elevation-overlay",
+   "note": "Nothing that rests has a shadow."
+  },
+  {
+   "today": "min-h-11 written by hand",
+   "carreta": "the component (Button, Field, RowList) sets the target",
+   "note": "Ratchet counts it."
+  },
+  {
+   "today": "uppercase tracking-wide (DataTable head and others)",
+   "carreta": "nothing",
+   "note": "§3.3: no capitals."
+  }
+ ],
+ "phone": [
+  {
+   "today": "colors.<semantic>",
+   "carreta": "theme.colors.<carreta name> (useTheme())",
+   "note": "Same table as the web (1). `colors` stays exported, unchanged, until step 6."
+  },
+  {
+   "today": "colors.palette.<ramp>[step]",
+   "carreta": "nothing (components never use palette names)",
+   "note": "As the ramps above."
+  },
+  {
+   "today": "colors.fieldBorder (añil 400)",
+   "carreta": "theme.colors.edge",
+   "note": ""
+  },
+  {
+   "today": "tone.<neutral|info|success|warning|danger|promo>",
+   "carreta": "Tag sign from the status table (§4.3), Notice kind",
+   "note": "A tone is chosen by the state, not by the screen: the word, the sign and the colour come from packages/core status words."
+  },
+  {
+   "today": "fontFamily.body",
+   "carreta": "fontFamily.text = \"Fira Sans\"",
+   "note": "body stays an alias of text until step 4 ends."
+  },
+  {
+   "today": "fontFamily.display",
+   "carreta": "fontFamily.title = \"Epilogue\"",
+   "note": "display stays an alias of title until step 4 ends."
+  },
+  {
+   "today": "fontSize.<xs..5xl>, lineHeight.<..>",
+   "carreta": "type.<step>.phone {size, line}",
+   "note": "Through Text variants only."
+  },
+  {
+   "today": "radius.<sm|md|lg|xl|full>",
+   "carreta": "theme.radii.control | tag | overlay | photo | round",
+   "note": "A new object beside the old one; `radius` goes in step 6."
+  },
+  {
+   "today": "touchTarget (44)",
+   "carreta": "target.app (48), target.driverAction (56), target.driverPrimary (64)",
+   "note": ""
+  },
+  {
+   "today": "gutter (16)",
+   "carreta": "spacing.base (16)",
+   "note": ""
+  }
+ ],
+ "spacing": [
+  {
+   "today": "space[0]",
+   "px": 0,
+   "carreta": "spacing.none",
+   "carretaPx": 0
+  },
+  {
+   "today": "space[1]",
+   "px": 4,
+   "carreta": "spacing.hair",
+   "carretaPx": 4
+  },
+  {
+   "today": "space[2]",
+   "px": 8,
+   "carreta": "spacing.tight",
+   "carretaPx": 8
+  },
+  {
+   "today": "space[3]",
+   "px": 12,
+   "carreta": "spacing.snug",
+   "carretaPx": 12
+  },
+  {
+   "today": "space[4]",
+   "px": 16,
+   "carreta": "spacing.base",
+   "carretaPx": 16
+  },
+  {
+   "today": "space[5]",
+   "px": 20,
+   "carreta": "spacing.loose",
+   "carretaPx": 24
+  },
+  {
+   "today": "space[6]",
+   "px": 24,
+   "carreta": "spacing.loose",
+   "carretaPx": 24
+  },
+  {
+   "today": "space[8]",
+   "px": 32,
+   "carreta": "spacing.wide",
+   "carretaPx": 32
+  },
+  {
+   "today": "space[10]",
+   "px": 40,
+   "carreta": "spacing.section",
+   "carretaPx": 48
+  },
+  {
+   "today": "space[12]",
+   "px": 48,
+   "carreta": "spacing.section",
+   "carretaPx": 48
+  },
+  {
+   "today": "—",
+   "px": null,
+   "carreta": "spacing.page",
+   "carretaPx": 64
+  }
+ ],
+ "textVariants": {
+  "display": "display",
+  "title": "title",
+  "heading": "section",
+  "subheading": "h3",
+  "body": "bodyApp",
+  "bodyStrong": "bodyApp at weight 600",
+  "small": "small",
+  "smallStrong": "small at weight 600 (label where it names a field)",
+  "caption (12 px)": "fine (13/18)",
+  "figure": "price for an amount, count for a count"
+ },
+ "buttons": {
+  "web variant primary": "primary",
+  "web variant secondary": "outline",
+  "web variant ghost": "link-button",
+  "web variant danger": "danger (inside the danger zone only)",
+  "web size sm (36 px with a mouse)": "btn-sm, 44 everywhere",
+  "web size md": "default, 48",
+  "web size lg": "default, 48 (no larger web button)",
+  "phone variant primary / secondary / ghost / danger": "primary / outline / link-button / danger",
+  "phone size md": "default, 52",
+  "phone size sm": "sm, 48",
+  "phone size lg": "lg, 56",
+  "phone: driver actions (new)": "size=\"driver\", 56",
+  "phone: the driver's fixed action (new)": "size=\"driverFixed\", 64",
+  "on a coloured bar (new)": "onBand / ghostBand"
+ },
+ "adapters": [
+  {
+   "today": "ui Badge({tone})",
+   "carreta": "Tag({sign, children})",
+   "mapping": "tone → sign: neutral ○, info ◐, success ✓ ok, warning ! warn, danger ! err, promo plain. Only a fallback: states use StatusTag (below)."
+  },
+  {
+   "today": "ui OrderStatusBadge / ShipmentStatusBadge / InvoiceStatusBadge",
+   "carreta": "StatusTag({kind, value, viewer})",
+   "mapping": "Reads sign and word from packages/core status words."
+  },
+  {
+   "today": "ui Alert({tone, title})",
+   "carreta": "Notice({kind, title})",
+   "mapping": "tone → kind: success ok, info info, warning warn, danger err."
+  },
+  {
+   "today": "ui buttonClass({variant, size}) / Button",
+   "carreta": "Button({kind, size})",
+   "mapping": "Old prop values accepted and mapped (table above) until step 4 ends."
+  },
+  {
+   "today": "next-kit PageHeader",
+   "carreta": "PageHead",
+   "mapping": "Same props; drops the eyebrow (no caps)."
+  },
+  {
+   "today": "next-kit Stat",
+   "carreta": "Task / KeyValue (§5.17)",
+   "mapping": "Stat({label, value}) renders a KeyValue row."
+  },
+  {
+   "today": "next-kit DataTable({caption, head, children})",
+   "carreta": "DataTable<Row>({caption, columns, rows, …}) (§5.13)",
+   "mapping": "The old signature renders T7a cards with the head as labels, without sorting, until the 17 callers move."
+  },
+  {
+   "today": "next-kit FormMessage",
+   "carreta": "Notice at the top of the form (§5.26)",
+   "mapping": ""
+  },
+  {
+   "today": "expo-kit Badge, Alert, Button, Card, ListRow, InfoRow",
+   "carreta": "Tag, Notice, Button, RowList",
+   "mapping": "Same mapping as the web."
+  }
+ ],
+ "ratchet": {
+  "raw ramp classes": "\\b(bg|text|border|ring|accent|fill|stroke|outline|from|to)-(celeste|anil|guaria|maiz|selva|achiote|arena)-\\d+",
+  "legacy-only semantic classes": "\\b(bg|text|border)-(bg|surface|surface-muted|border|border-strong|brand-hover|brand-soft|promo|rating)\\b",
+  "brand outside the delivery components": "\\b(bg|text|border|accent)-brand\\b|--color-brand|colors\\.brand|semantic\\.brand",
+  "warning used as text": "\\btext-warning\\b|tint=\"warning\"|color: *colors\\.warning",
+  "hand-written targets and arbitrary values": "\\bmin-h-(9|10|11|12)\\b|\\[[0-9.]+(px|rem)\\]",
+  "fonts and borders set by hand in the phone apps": "fontFamily|borderWidth|fontSize: *\\d",
+  "legacy theme in the phone apps": "\\b(colors|tone|space|fontSize|lineHeight)(\\.[A-Za-z]|\\[)",
+  "a bare formatPrice in JSX": ">\\{formatPrice\\(",
+  "module-level StyleSheet reading colours (rg -U, multiline)": "StyleSheet\\.create\\(\\{(?s:.)*?colors\\."
+ },
+ "statusWords": {
+  "order_status (shopper)": [
+   {
+    "value": "pending_payment",
+    "sign": "! warn",
+    "es": "Esperando el pago",
+    "en": "Awaiting payment"
+   },
+   {
+    "value": "payment_review",
+    "sign": "◐",
+    "es": "Verificando el pago",
+    "en": "Checking your payment"
+   },
+   {
+    "value": "confirmed",
+    "sign": "✓ done",
+    "es": "Pedido confirmado",
+    "en": "Order confirmed"
+   },
+   {
+    "value": "processing",
+    "sign": "◐",
+    "es": "Preparando su pedido",
+    "en": "Preparing your order"
+   },
+   {
+    "value": "partially_shipped",
+    "sign": "◐",
+    "es": "Parte del pedido va en camino",
+    "en": "Part of your order is on its way"
+   },
+   {
+    "value": "shipped",
+    "sign": "◐",
+    "es": "En camino",
+    "en": "On its way"
+   },
+   {
+    "value": "delivered",
+    "sign": "✓ ok",
+    "es": "Entregado",
+    "en": "Delivered"
+   },
+   {
+    "value": "completed",
+    "sign": "✓ ok",
+    "es": "Entregado",
+    "en": "Delivered"
+   },
+   {
+    "value": "cancelled",
+    "sign": "–",
+    "es": "Cancelado",
+    "en": "Cancelled"
+   },
+   {
+    "value": "refunded",
+    "sign": "–",
+    "es": "Reembolsado",
+    "en": "Refunded"
+   }
+  ],
+  "order_status (seller, staff)": [
+   {
+    "value": "pending_payment",
+    "sign": "! warn",
+    "es": "Esperando el pago",
+    "en": "Awaiting payment"
+   },
+   {
+    "value": "payment_review",
+    "sign": "◐",
+    "es": "Verificando el pago",
+    "en": "Checking payment"
+   },
+   {
+    "value": "confirmed",
+    "sign": "○",
+    "es": "Por preparar",
+    "en": "To prepare"
+   },
+   {
+    "value": "processing",
+    "sign": "◐",
+    "es": "Preparando",
+    "en": "Preparing"
+   },
+   {
+    "value": "partially_shipped",
+    "sign": "◐",
+    "es": "Parte en camino",
+    "en": "Partly on its way"
+   },
+   {
+    "value": "shipped",
+    "sign": "◐",
+    "es": "En camino",
+    "en": "On its way"
+   },
+   {
+    "value": "delivered",
+    "sign": "✓ ok",
+    "es": "Entregado",
+    "en": "Delivered"
+   },
+   {
+    "value": "completed",
+    "sign": "✓ ok",
+    "es": "Completado",
+    "en": "Completed"
+   },
+   {
+    "value": "cancelled",
+    "sign": "–",
+    "es": "Cancelado",
+    "en": "Cancelled"
+   },
+   {
+    "value": "refunded",
+    "sign": "–",
+    "es": "Reembolsado",
+    "en": "Refunded"
+   }
+  ],
+  "shipment_status (seller, staff, driver; shopper where it differs)": [
+   {
+    "value": "pending",
+    "sign": "○",
+    "es": "Por preparar",
+    "en": "To prepare"
+   },
+   {
+    "value": "picking",
+    "sign": "◐",
+    "es": "Preparando",
+    "en": "Preparing"
+   },
+   {
+    "value": "packed",
+    "sign": "◐",
+    "es": "Empacado (shopper: Preparando)",
+    "en": "Packed (shopper: Preparing)"
+   },
+   {
+    "value": "ready_for_dispatch",
+    "sign": "◐",
+    "es": "Listo para salir (shopper: Preparando)",
+    "en": "Ready to leave (shopper: Preparing)"
+   },
+   {
+    "value": "out_for_delivery",
+    "sign": "◐",
+    "es": "En camino",
+    "en": "On its way"
+   },
+   {
+    "value": "delivered",
+    "sign": "✓ ok",
+    "es": "Entregado",
+    "en": "Delivered"
+   },
+   {
+    "value": "delivery_failed",
+    "sign": "! warn",
+    "es": "No se pudo entregar; with attempt_count 0 (taken off a route): Reprogramado (◐)",
+    "en": "Not delivered; attempt 0: Rescheduled"
+   },
+   {
+    "value": "returning",
+    "sign": "! warn",
+    "es": "Vuelve a la bodega",
+    "en": "Returning to the warehouse"
+   },
+   {
+    "value": "returned",
+    "sign": "–",
+    "es": "Devuelto a la bodega",
+    "en": "Back at the warehouse"
+   },
+   {
+    "value": "cancelled",
+    "sign": "–",
+    "es": "Cancelado",
+    "en": "Cancelled"
+   }
+  ],
+  "derived order flags (packages/core lifecycle.ts; staff only)": [
+   {
+    "value": "isStoppedOrder",
+    "sign": "! warn",
+    "es": "Detenido",
+    "en": "Stopped"
+   },
+   {
+    "value": "waitsForNewAttempt / awaiting another route",
+    "sign": "! warn",
+    "es": "Espera otra ruta",
+    "en": "Waiting for another route"
+   },
+   {
+    "value": "needs a person (any of the above, or unpaid at the cut-off)",
+    "sign": "! warn",
+    "es": "Por atender",
+    "en": "Needs attention"
+   }
+  ],
+  "payment_status": [
+   {
+    "value": "pending (cash on delivery)",
+    "sign": "○",
+    "es": "Se paga al recibir",
+    "en": "Pay on delivery"
+   },
+   {
+    "value": "pending (SINPE, transfer)",
+    "sign": "! warn",
+    "es": "Esperando el pago",
+    "en": "Awaiting payment"
+   },
+   {
+    "value": "authorized",
+    "sign": "◐",
+    "es": "Autorizado",
+    "en": "Authorised"
+   },
+   {
+    "value": "captured",
+    "sign": "✓ ok",
+    "es": "Pagado",
+    "en": "Paid"
+   },
+   {
+    "value": "failed",
+    "sign": "! err",
+    "es": "Pago rechazado",
+    "en": "Payment declined"
+   },
+   {
+    "value": "cancelled",
+    "sign": "–",
+    "es": "Anulado",
+    "en": "Voided"
+   },
+   {
+    "value": "refunded",
+    "sign": "–",
+    "es": "Devuelto",
+    "en": "Refunded"
+   },
+   {
+    "value": "partially_refunded",
+    "sign": "–",
+    "es": "Devuelto en parte",
+    "en": "Partly refunded"
+   }
+  ],
+  "return_requests.status": [
+   {
+    "value": "requested",
+    "sign": "○",
+    "es": "Por decidir",
+    "en": "To decide"
+   },
+   {
+    "value": "approved",
+    "sign": "◐",
+    "es": "Aprobada: por recibir",
+    "en": "Approved: to receive"
+   },
+   {
+    "value": "received",
+    "sign": "◐",
+    "es": "Recibida: por devolver el dinero",
+    "en": "Received: refund pending"
+   },
+   {
+    "value": "refunded",
+    "sign": "✓ ok",
+    "es": "Dinero devuelto",
+    "en": "Refunded"
+   },
+   {
+    "value": "rejected",
+    "sign": "–",
+    "es": "Rechazada",
+    "en": "Declined"
+   }
+  ],
+  "complaints.status": [
+   {
+    "value": "open",
+    "sign": "○",
+    "es": "Por responder",
+    "en": "To answer"
+   },
+   {
+    "value": "in_progress",
+    "sign": "◐",
+    "es": "En revisión",
+    "en": "In review"
+   },
+   {
+    "value": "resolved",
+    "sign": "✓ ok",
+    "es": "Respondido",
+    "en": "Answered"
+   }
+  ],
+  "payouts.status": [
+   {
+    "value": "scheduled",
+    "sign": "○",
+    "es": "Programado",
+    "en": "Scheduled"
+   },
+   {
+    "value": "paid",
+    "sign": "✓ ok",
+    "es": "Transferido",
+    "en": "Transferred"
+   },
+   {
+    "value": "failed",
+    "sign": "! err",
+    "es": "No se pudo transferir",
+    "en": "Transfer failed"
+   }
+  ],
+  "product_status": [
+   {
+    "value": "draft",
+    "sign": "○",
+    "es": "Borrador",
+    "en": "Draft"
+   },
+   {
+    "value": "pending_review",
+    "sign": "◐",
+    "es": "En revisión",
+    "en": "In review"
+   },
+   {
+    "value": "active",
+    "sign": "✓ ok",
+    "es": "Publicado",
+    "en": "Published"
+   },
+   {
+    "value": "rejected",
+    "sign": "! err",
+    "es": "Rechazado",
+    "en": "Rejected"
+   },
+   {
+    "value": "archived",
+    "sign": "–",
+    "es": "Archivado",
+    "en": "Archived"
+   }
+  ],
+  "offer_status (+ derived stock)": [
+   {
+    "value": "active",
+    "sign": "✓ ok",
+    "es": "A la venta",
+    "en": "On sale"
+   },
+   {
+    "value": "active with stock 0",
+    "sign": "! warn",
+    "es": "Sin existencias",
+    "en": "Out of stock"
+   },
+   {
+    "value": "paused",
+    "sign": "–",
+    "es": "En pausa",
+    "en": "Paused"
+   },
+   {
+    "value": "archived",
+    "sign": "–",
+    "es": "Archivada",
+    "en": "Archived"
+   }
+  ],
+  "product_photos.state": [
+   {
+    "value": "uploading",
+    "sign": "◐",
+    "es": "Subiendo",
+    "en": "Uploading"
+   },
+   {
+    "value": "pending",
+    "sign": "◐",
+    "es": "En revisión",
+    "en": "In review"
+   },
+   {
+    "value": "approved",
+    "sign": "✓ ok",
+    "es": "Publicada",
+    "en": "Published"
+   },
+   {
+    "value": "rejected",
+    "sign": "! err",
+    "es": "Rechazada (the reason follows in a sentence)",
+    "en": "Rejected"
+   },
+   {
+    "value": "removed",
+    "sign": "–",
+    "es": "Quitada",
+    "en": "Removed"
+   }
+  ],
+  "invoice_status (Hacienda)": [
+   {
+    "value": "pending",
+    "sign": "○",
+    "es": "Por enviar",
+    "en": "To send"
+   },
+   {
+    "value": "sent",
+    "sign": "◐",
+    "es": "Enviada",
+    "en": "Sent"
+   },
+   {
+    "value": "accepted",
+    "sign": "✓ ok",
+    "es": "Aceptada",
+    "en": "Accepted"
+   },
+   {
+    "value": "rejected",
+    "sign": "! err",
+    "es": "Rechazada",
+    "en": "Rejected"
+   },
+   {
+    "value": "voided",
+    "sign": "–",
+    "es": "Anulada",
+    "en": "Voided"
+   }
+  ],
+  "inbound_status (+ derived)": [
+   {
+    "value": "draft",
+    "sign": "○",
+    "es": "Por enviar",
+    "en": "To send"
+   },
+   {
+    "value": "in_transit",
+    "sign": "◐",
+    "es": "En camino",
+    "en": "On its way"
+   },
+   {
+    "value": "receiving",
+    "sign": "◐",
+    "es": "Recibiendo",
+    "en": "Receiving"
+   },
+   {
+    "value": "received",
+    "sign": "✓ ok",
+    "es": "Recibido",
+    "en": "Received"
+   },
+   {
+    "value": "received with a difference",
+    "sign": "! warn",
+    "es": "Con diferencias",
+    "en": "With differences"
+   },
+   {
+    "value": "closed",
+    "sign": "–",
+    "es": "Cerrado",
+    "en": "Closed"
+   },
+   {
+    "value": "cancelled",
+    "sign": "–",
+    "es": "Cancelado",
+    "en": "Cancelled"
+   }
+  ],
+  "review_status": [
+   {
+    "value": "pending",
+    "sign": "○",
+    "es": "Por revisar",
+    "en": "To review"
+   },
+   {
+    "value": "published",
+    "sign": "✓ ok",
+    "es": "Publicada",
+    "en": "Published"
+   },
+   {
+    "value": "rejected",
+    "sign": "–",
+    "es": "No publicada",
+    "en": "Not published"
+   }
+  ],
+  "stop_status (driver)": [
+   {
+    "value": "pending",
+    "sign": "○",
+    "es": "Por entregar",
+    "en": "To deliver"
+   },
+   {
+    "value": "arrived",
+    "sign": "◐",
+    "es": "En la puerta",
+    "en": "At the door"
+   },
+   {
+    "value": "delivered",
+    "sign": "✓ ok",
+    "es": "Entregado",
+    "en": "Delivered"
+   },
+   {
+    "value": "failed",
+    "sign": "! warn",
+    "es": "No se pudo entregar",
+    "en": "Not delivered"
+   },
+   {
+    "value": "skipped",
+    "sign": "–",
+    "es": "Quitada por Central",
+    "en": "Removed by Central"
+   },
+   {
+    "value": "code locked (pin_attempts_left 0)",
+    "sign": "! err",
+    "es": "Código bloqueado",
+    "en": "Code locked"
+   }
+  ],
+  "route_status": [
+   {
+    "value": "draft",
+    "sign": "○",
+    "es": "Borrador",
+    "en": "Draft"
+   },
+   {
+    "value": "assigned",
+    "sign": "○",
+    "es": "Asignada",
+    "en": "Assigned"
+   },
+   {
+    "value": "in_progress",
+    "sign": "◐",
+    "es": "En ruta",
+    "en": "On the road"
+   },
+   {
+    "value": "completed",
+    "sign": "✓ ok",
+    "es": "Terminada",
+    "en": "Finished"
+   },
+   {
+    "value": "cancelled",
+    "sign": "–",
+    "es": "Cancelada",
+    "en": "Cancelled"
+   }
+  ],
+  "seller_invitations.status": [
+   {
+    "value": "pending",
+    "sign": "○",
+    "es": "Pendiente",
+    "en": "Pending"
+   },
+   {
+    "value": "pending past expires_at",
+    "sign": "–",
+    "es": "Vencida",
+    "en": "Expired"
+   },
+   {
+    "value": "accepted",
+    "sign": "✓ ok",
+    "es": "Aceptada",
+    "en": "Accepted"
+   },
+   {
+    "value": "declined",
+    "sign": "–",
+    "es": "Rechazada",
+    "en": "Declined"
+   },
+   {
+    "value": "revoked",
+    "sign": "–",
+    "es": "Retirada",
+    "en": "Withdrawn"
+   }
+  ],
+  "shop change requests (pending, approved, rejected, withdrawn, replaced)": [
+   {
+    "value": "pending",
+    "sign": "◐",
+    "es": "En revisión",
+    "en": "In review"
+   },
+   {
+    "value": "approved",
+    "sign": "✓ ok",
+    "es": "Aprobado",
+    "en": "Approved"
+   },
+   {
+    "value": "rejected",
+    "sign": "! err",
+    "es": "Rechazado",
+    "en": "Rejected"
+   },
+   {
+    "value": "withdrawn",
+    "sign": "–",
+    "es": "Retirado",
+    "en": "Withdrawn"
+   },
+   {
+    "value": "replaced",
+    "sign": "–",
+    "es": "Reemplazado",
+    "en": "Replaced"
+   }
+  ],
+  "messages (notification outbox; staff only)": [
+   {
+    "value": "pending, sending",
+    "sign": "◐",
+    "es": "Enviando",
+    "en": "Sending"
+   },
+   {
+    "value": "sent",
+    "sign": "◐",
+    "es": "Enviado",
+    "en": "Sent"
+   },
+   {
+    "value": "delivered",
+    "sign": "✓ ok",
+    "es": "Entregado",
+    "en": "Delivered"
+   },
+   {
+    "value": "failed",
+    "sign": "! warn",
+    "es": "Falló: se reintenta",
+    "en": "Failed: retrying"
+   },
+   {
+    "value": "dead",
+    "sign": "! err",
+    "es": "Detenido",
+    "en": "Stopped"
+   },
+   {
+    "value": "skipped, expired",
+    "sign": "–",
+    "es": "No se envió",
+    "en": "Not sent"
+   }
+  ],
+  "content_reports.status": [
+   {
+    "value": "open",
+    "sign": "○",
+    "es": "Por revisar",
+    "en": "To review"
+   },
+   {
+    "value": "in_review",
+    "sign": "◐",
+    "es": "En revisión",
+    "en": "In review"
+   },
+   {
+    "value": "actioned",
+    "sign": "✓ ok",
+    "es": "Atendido",
+    "en": "Acted on"
+   },
+   {
+    "value": "dismissed",
+    "sign": "–",
+    "es": "Descartado",
+    "en": "Dismissed"
+   }
+  ]
+ }
+}

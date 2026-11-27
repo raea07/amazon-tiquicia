@@ -68,3 +68,6 @@ apps/*-native/android/
 
 # Race harness output (tools/races/run-all.sh)
 tools/races/results/
+
+# screenshots of the design system reference pages (regenerate with node docs/brand/system/src/shots.js)
+docs/brand/system/shots
