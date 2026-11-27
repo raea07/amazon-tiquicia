@@ -13,10 +13,12 @@ Each journey starts from a freshly seeded database. Rules for the next one
    (`lib/screen.cjs`). Never by a CSS class, a tag or its place on the page,
    and never by a bare text match: `getByText` and `hasText` appear only in
    the helpers, on an element already found by testID or role.
-3. Words on screen are checked, not used to find things. Read them from an
-   element found by rule 2, or with `screenText()` for "the screen never
-   says X".
-4. Status words come from `lib/words.cjs` (later from `packages/core`).
+3. Words on screen are checked, never used to find what to tap or fill in.
+   Prefer the text of an element found by rule 2. `screenText()` (or a wait
+   on the page's text) may check what the whole screen says or never says,
+   or read a value from a sentence, such as a parcel number.
+4. Status words come from `lib/words.cjs` (later from `packages/core`;
+   `lib/words.test.cjs` keeps the switch safe).
 5. Every testID in the apps and in expo-kit is listed in `testids/<app>.json`.
    `node tools/native-e2e/testids/check.mjs` (run before every journey)
    fails when a listed id is gone. Add ids freely; drop or rename one only in

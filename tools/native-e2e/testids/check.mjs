@@ -8,17 +8,22 @@
 //   node tools/native-e2e/testids/check.mjs            check (the runner calls this)
 //   node tools/native-e2e/testids/check.mjs --write    rewrite the lists from the source
 //
+// `--root <dir>` reads the packages under another checkout and `--lists <dir>`
+// reads the lists from another folder (check.test.mjs uses both). It exits 1
+// when a listed id is missing.
+//
 // An id is the literal text of a value given to `testID` or `testIDPrefix`:
 // a string ("sign-out") or a template as written (`product-${slug}`). A value
 // that only passes another variable on (`testID={testID}`) names no id.
+// Comments are not read, so an id kept only in a comment counts as gone.
 // Test files (*.test.ts, *.test.tsx) are not read.
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = fileURLToPath(new URL("../../../", import.meta.url));
-const here = fileURLToPath(new URL(".", import.meta.url));
+const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+const HERE = fileURLToPath(new URL(".", import.meta.url));
 
 export const PACKAGES = {
   shop: "apps/shop-native/src",
@@ -87,8 +92,40 @@ function literalsIn(expression) {
   return out;
 }
 
-/** The ids written in one source text. */
-export function idsIn(text) {
+/**
+ * The text with every line comment and block comment blanked out (strings and templates
+ * kept), so line numbers and positions stay the same.
+ */
+export function withoutComments(text) {
+  let out = "";
+  let j = 0;
+  while (j < text.length) {
+    const c = text[j];
+    if (c === '"' || c === "'" || c === "`") {
+      const end = endOfQuoted(text, j);
+      out += text.slice(j, end);
+      j = end;
+    } else if (c === "/" && text[j + 1] === "/") {
+      const end = text.indexOf("\n", j);
+      const stop = end === -1 ? text.length : end;
+      out += " ".repeat(stop - j);
+      j = stop;
+    } else if (c === "/" && text[j + 1] === "*") {
+      const end = text.indexOf("*/", j + 2);
+      const stop = end === -1 ? text.length : end + 2;
+      out += text.slice(j, stop).replace(/[^\n]/g, " ");
+      j = stop;
+    } else {
+      out += c;
+      j += 1;
+    }
+  }
+  return out;
+}
+
+/** The ids written in one source text (not in its comments). */
+export function idsIn(source) {
+  const text = withoutComments(source);
   const ids = [];
   const name = /\btestID(Prefix)?\b/g;
   for (let match = name.exec(text); match; match = name.exec(text)) {
@@ -116,7 +153,7 @@ export function idsIn(text) {
 }
 
 /** id → sorted list of files (relative to the repository root) for one package. */
-export function measure(pkg) {
+export function measure(pkg, root = ROOT) {
   const found = new Map();
   for (const file of sourceFiles(join(root, PACKAGES[pkg]))) {
     const rel = relative(root, file);
@@ -132,12 +169,12 @@ export function measure(pkg) {
   );
 }
 
-export function listPath(pkg) {
-  return join(here, `${pkg}.json`);
+export function listPath(pkg, lists = HERE) {
+  return join(lists, `${pkg}.json`);
 }
 
-export function readList(pkg) {
-  return JSON.parse(readFileSync(listPath(pkg), "utf8"));
+export function readList(pkg, lists = HERE) {
+  return JSON.parse(readFileSync(listPath(pkg, lists), "utf8"));
 }
 
 function render(pkg, ids) {
@@ -165,28 +202,42 @@ function render(pkg, ids) {
   ].join("\n");
 }
 
-/** Problems for one package: ids in the list that the source no longer has. */
-export function problems(pkg) {
-  const now = measure(pkg);
-  const listed = readList(pkg).ids;
+/**
+ * A list against the ids measured now: `missing` are listed ids the source no
+ * longer has, `added` are ids in the source the list does not hold yet.
+ */
+export function compare(listed, now) {
   const missing = listed.filter((entry) => !now.has(entry.id)).map((entry) => entry.id);
   const added = [...now.keys()].filter((id) => !listed.some((entry) => entry.id === id));
-  return { missing, added, now, listed };
+  return { missing, added };
+}
+
+/** Problems for one package: ids in the list that the source no longer has. */
+export function problems(pkg, { root = ROOT, lists = HERE } = {}) {
+  const now = measure(pkg, root);
+  const listed = readList(pkg, lists).ids;
+  return { ...compare(listed, now), now, listed };
+}
+
+function option(name) {
+  const at = process.argv.indexOf(name);
+  return at === -1 ? undefined : process.argv[at + 1];
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
   const write = process.argv.includes("--write");
+  const where = { root: option("--root") ?? ROOT, lists: option("--lists") ?? HERE };
   let failed = false;
   for (const pkg of Object.keys(PACKAGES)) {
     if (write) {
-      const ids = measure(pkg);
-      writeFileSync(listPath(pkg), render(pkg, ids));
+      const ids = measure(pkg, where.root);
+      writeFileSync(listPath(pkg, where.lists), render(pkg, ids));
       const uses = [...ids.values()].reduce((n, files) => n + files.length, 0);
       console.info(`testids ${pkg}: wrote ${ids.size} ids (${uses} id-file pairs)`);
       continue;
     }
-    const { missing, added, listed } = problems(pkg);
+    const { missing, added, listed } = problems(pkg, where);
     if (missing.length > 0) {
       failed = true;
       console.error(
