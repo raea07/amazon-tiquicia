@@ -2411,6 +2411,140 @@ push; expect no "function not found" but check it straight after. There the
 messages planner runs, so check the planned rows of one stopped order for
 real.
 
+### Migrations 084700, 084800 and 085000 (wave 9)
+
+Three migrations of wave 9, merged on 27 November 2026 and **not applied to
+the hosted preview yet** (it has 44). Written before anyone applies them.
+Apply them in filename order, in one sitting, then deploy the four web apps.
+
+1. `20261121084700_support_cases.sql` (the support desk): **new private
+   tables** `case_targets` (14 rows of targets), `cases`, `case_entries`,
+   `saved_replies` (5 starting answers) and `case_number_checks`; triggers on
+   `complaints`, `return_requests` and `content_reports` that open and follow
+   a case, and one on `auth.users` (after update of `deleted_at`) that erases
+   a deleted account's case text. It **opens a case for every complaint,
+   return request and content report that already exists**
+   (`private.cases_backfill()`, once): on the seed that is 9 complaints and 2
+   return requests, 11 cases; on the preview the count is
+   `select (select count(*) from public.complaints) + (select count(*) from
+   public.return_requests) + (select count(*) from public.content_reports)`,
+   run before the push. The backfill writes cases and their timeline only: it
+   **plans no message and emits no event**. It re-creates `ops_care_queues`
+   (same arguments and shape; a customer's own delivery code in their words
+   comes masked) and adds the staff and shopper functions of the desk.
+2. `20261121084800_system_health.sql`: the private table `store_builds`, eleven
+   partial indexes on queues the health page reads, `ops_system_health`,
+   `ops_versions`, `ops_set_store_build`, `ops_remove_store_build`, and
+   `health_ping`, **granted to visitors** (the eighteenth visitor function).
+   It reads `084700`'s tables, so it runs after it.
+3. `20261121085000_wave8_followups.sql` (six functions, all `create or
+   replace`, same arguments and columns): `cart_lines`, `get_order`,
+   `cancel_order`, `wms_receive_returned_shipment`, `private.price_items`
+   and `private.settle_gateway_refund`, and once
+   `private.reword_old_cancel_reasons()`, which rewords the orders cancelled
+   before it (a shopper's own text becomes "Cancelado por el cliente"; a
+   check-in of parcels staff stopped before they left becomes "Los paquetes
+   no salieron de la bodega") and prints how many. Nothing else of those
+   orders changes, and nothing is sent.
+
+**Why the web apps come after the migrations, and why that order is safe.**
+The preview's web apps run `12ec48c` until they are deployed again, and
+every function these migrations change or hang a trigger on still answers
+that code in its own shapes: a cart line of a product the caller may not see
+is its id with `buyable` false, which that cart already shows as "no
+disponible"; `get_order` gains only optional fields and one more reason that
+the old page shows with the staff-cancellation words; a complaint filed from
+the old shop opens a case by trigger and is answered from the old Atención
+as before. `packages/db/src/contract.wave9-integration.test.ts` runs the
+client code of `12ec48c` and of the store build `3f251c3`, taken from git,
+against the merged database and proves it (a return and its withdrawal, the
+quote, the order page, the cart, a complaint filed and answered).
+
+Do this in order.
+
+1. **Check the starting point**: `remote-db.sh status` lists 44 applied
+   files and these three pending. Record the counts of complaints, return
+   requests and content reports (above), and the orders with
+   `cancel_reason` 'Los paquetes regresaron sin entregarse'.
+2. **Check that the platform allows a trigger on `auth.users`** (an `after
+   update of deleted_at` trigger owned by `postgres`): `select tgname from
+   pg_trigger where tgrelid = 'auth.users'::regclass;` lists the triggers
+   already there; if creating one is refused, stop and report.
+3. **Apply the three** with `remote-db.sh push`; `status` then lists 47.
+   Straight after, call `health_ping` through the public API as a visitor:
+   `POST /rest/v1/rpc/health_ping` with the publishable key and body `{}`
+   answers `{"ok":true}` (a "function not found" means the API has not
+   reloaded its schema cache yet).
+4. **Check what they left**:
+
+   ```sql
+   select count(*) from private.cases;                       -- the count of point 1
+   select count(*) from private.case_entries where kind = 'opened'; -- the same
+   select count(*) from private.notification_deliveries
+    where created_at > now() - interval '10 minutes';        -- 0: nothing planned
+   select has_function_privilege('anon', 'public.health_ping()', 'execute');            -- true
+   select has_function_privilege('anon', 'public.ops_system_health()', 'execute');      -- false
+   select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute'); -- 18
+   ```
+
+   And: every new or redefined function a definer with an empty search path
+   and its migration's grants; no table privilege for an app role; row-level
+   security on every new table.
+5. **Run the suites** with `remote-db.sh test`: all 48 files, among them the
+   new `181_support_cases.sql` (it moves its own `REFUSED_CODE` audit rows
+   back an hour by switching `audit_log_immutable` off inside its rolled-back
+   transaction, which needs the table owner), `185_system_health.sql` (it
+   reads the real pg_cron history and accepts "unavailable" with
+   `no_access` or `not_logged`), `191` to `195` and `196_wave9_integration.sql`.
+   Never run the race harness or the contract race tests against a hosted
+   database.
+6. **Set the new settings per Vercel project, before the deploy**:
+   `YUNTERA_SELLER_URL` and `YUNTERA_FIELD_URL` on the console (the seller
+   centre's and the field app's addresses; not secret; without them the
+   Versiones panel says the address is missing). `YUNTERA_BUILD_COMMIT` is
+   passed by the deploy command (section 7), not stored.
+   `NEXT_PUBLIC_SENTRY_DSN` per website **only once the Sentry projects
+   exist** (the block below); without it the websites report nothing.
+7. **Deploy the four web apps** from the merged commit with the command of
+   section 7.
+8. **Check afterwards**: in the console, Salud del sistema shows each line
+   for an administrator, Versiones names the deployed commit for all four
+   apps and the newest migration `20261121085000`, and Tareas programadas
+   lists the seven jobs with their last runs (not "Sin historial"); Casos
+   lists the backfilled cases; the web shop's `/reclamo` files a complaint
+   and shows its reference; a staff answer reaches "Sus consultas". The
+   shopper app's new screens need a new store build; the store build
+   `3f251c3` keeps working.
+
+**Not verified on a hosted database:** the trigger on `auth.users`, the
+pg_cron history read by the owner of `ops_system_health`, `health_ping`
+through the hosted Data API, and the commit passed with `--build-env` and
+`--env` on Vercel.
+
+#### Later, by the owner's supervisor: the Sentry account
+
+From [error tracking](error-tracking.md#what-the-supervisor-creates-in-sentry);
+nothing of it is done yet.
+
+1. In the owner's existing Sentry account (free plan), create four projects
+   of platform Next.js: `yuntera-web`, `yuntera-seller`, `yuntera-ops`,
+   `yuntera-field`.
+2. In each, Project Settings → Security & Privacy → Data Scrubbing: keep the
+   default scrubbers on, add the sensitive fields listed in error-tracking.md
+   and switch on "Prevent Storing of IP Addresses" (?).
+3. In each, Inbound Filters (?) → Allowed Domains: that website's own hosts,
+   one by one, never `*.vercel.app`; switch on Spike Protection (?).
+4. In each, an issue alert on a new issue, by e-mail to the owner.
+5. One uptime monitor: POST
+   `https://<project-ref>.supabase.co/rest/v1/rpc/health_ping`, headers
+   `apikey: <publishable key>` and `content-type: application/json`, body
+   `{}`, every 5 minutes; up means HTTP 200 with `{"ok":true}`; an e-mail
+   alert.
+6. Then set `NEXT_PUBLIC_SENTRY_DSN` on each Vercel project (Production and
+   Preview), deploy again with the commit, and check one report arrives.
+   Never give Sentry a protection-bypass secret.
+
 ## 4. Confirm the database is what the migrations say
 
 Write these to a file and run it with `remote-db.sh sql <project-reference>
@@ -2723,11 +2857,22 @@ What has to be set on each project, in the dashboard or through the API:
    database.
 
 Then deploy from the repository root, one app at a time (the team builds one
-deployment at a time):
+deployment at a time), passing the commit for the build and for the running
+server (since wave 9; [decision 65](../02-architecture/decisions.md#65-one-build-commit-with-one-rule-given-at-deploy-time)):
 
 ```bash
-VERCEL_ORG_ID=<team id> VERCEL_PROJECT_ID=<project id> vercel deploy --prod
+COMMIT=$(git rev-parse HEAD)
+VERCEL_ORG_ID=<team id> VERCEL_PROJECT_ID=<project id> vercel deploy --prod \
+  --build-env YUNTERA_BUILD_COMMIT=$COMMIT --env YUNTERA_BUILD_COMMIT=$COMMIT
 ```
+
+The projects have no Git connection, so the upload has no `.git` folder and,
+as far as Vercel's documentation says, no `VERCEL_GIT_COMMIT_SHA` (it
+describes it as the commit a deployment was triggered by). Without
+`YUNTERA_BUILD_COMMIT` the console's Versiones panel says the deployment did
+not say which version it is, and error reports name the release
+`yuntera-<app>@unknown`. Deploy from a clean checkout, so the commit is what
+is built.
 
 Redeployed after `082500`–`082700` on 21 November 2026 (Vercel CLI 65.12.1
 through `npx`; where a proxy adds the credential, the CLI still wants a

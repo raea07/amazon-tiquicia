@@ -136,10 +136,11 @@ Only projects whose names start with `yuntera` (decision 57).
    `apikey: <the project's publishable key>` and
    `content-type: application/json`, body `{}`, every 5 minutes. The
    publishable key is public by design. `health_ping` is the database's
-   health function from the system-health work (granted to visitors, returns
-   only that the database answers); until it exists on the project, the
-   monitor has nothing to call. Then an alert rule on uptime issues, by
-   e-mail.
+   health function (migration `084800`, granted to visitors; it answers
+   `{"ok": true}` and nothing else). Up means HTTP 200 with that body;
+   anything else, or no answer within 10 seconds, is down. Until `084800` is
+   applied on the project, the monitor has nothing to call. Then an alert
+   rule on uptime issues, by e-mail.
 6. Then set each website's DSN as above, and check one report arrives by
    opening a page and making an error happen (the drill page below exists
    only on this machine).
@@ -157,11 +158,16 @@ plan has more than one).
 
 Each report carries `release: yuntera-<website>@<first 12 characters of the
 commit>` and `environment: production | preview` (from Vercel's `VERCEL_ENV`;
-`local` in the lanes). The commit comes from Vercel's `VERCEL_GIT_COMMIT_SHA`
-at build time, or from git on this machine, and is put into the build as
-`YUNTERA_COMMIT` (with `YUNTERA_ENVIRONMENT`) by `baseConfig` in
-`packages/next-kit/config.mjs`; a page that wants to say which version runs
-can read the same value. A commit is not a secret.
+`local` in the lanes). The commit is the one value of
+`packages/next-kit/build-commit.mjs`, read when the website is built and put
+into the server and browser code as `YUNTERA_BUILD_COMMIT` (with
+`YUNTERA_ENVIRONMENT`) by `baseConfig` in `packages/next-kit/config.mjs`: a
+value given at deploy time wins (the runbook's `vercel deploy` passes
+`git rev-parse HEAD` as `YUNTERA_BUILD_COMMIT`), then Vercel's
+`VERCEL_GIT_COMMIT_SHA` (a deployment from a Git connection), else the
+release ends in `@unknown`. There is no guess from git: the hosted websites
+are uploaded without their `.git` folder. The console's Versiones panel
+reads the same value. A commit is not a secret.
 
 ## Free plan quota, and tracing later
 

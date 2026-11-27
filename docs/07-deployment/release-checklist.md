@@ -22,8 +22,13 @@ release goes there only.
    deploy. Never put a secret in a `NEXT_PUBLIC_` setting.
 5. If the console is deployed for the first time with Versiones, set
    `YUNTERA_SELLER_URL` and `YUNTERA_FIELD_URL` on the console project (the
-   seller centre's and the field app's addresses). Vercel gives each app its
-   own commit (`VERCEL_GIT_COMMIT_SHA`) by itself.
+   seller centre's and the field app's addresses).
+   Pass the commit with every deploy, for the build and for the server:
+   `--build-env YUNTERA_BUILD_COMMIT=$(git rev-parse HEAD) --env
+   YUNTERA_BUILD_COMMIT=$(git rev-parse HEAD)`. The apps are uploaded with
+   `vercel deploy` from the repository, without a Git connection, so Vercel
+   gives no commit of its own; without it Versiones says the deployment did
+   not say which version it is (never a wrong commit).
 6. Deploy the four apps from the same commit.
 7. Open the shop, the seller centre, the console and the field app once each.
 8. In the console, open **Salud del sistema → Versiones**: each web app shows
