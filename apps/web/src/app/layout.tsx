@@ -1,4 +1,4 @@
-import { brand, themeColor } from "@yuntera/brand";
+import { appThemeColor, brand, light } from "@yuntera/brand";
 import { fontClassName } from "@yuntera/next-kit/fonts";
 import type { Metadata, Viewport } from "next";
 import { Footer } from "@/components/footer";
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor,
+  themeColor: light[appThemeColor.web],
   width: "device-width",
   initialScale: 1,
 };

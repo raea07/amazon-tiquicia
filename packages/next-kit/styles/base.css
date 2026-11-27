@@ -12,10 +12,22 @@
 @source "../src";
 
 /* The brand tokens name the typefaces; here they are bound to the self-hosted
-   font files loaded by @yuntera/next-kit/fonts. */
+   font files loaded by @yuntera/next-kit/fonts (Fira Sans for text, Epilogue
+   for titles). Today's names (font-sans, font-display) and the Carreta names
+   (--yt-font-text, --yt-font-title) both point at the same files. */
 @theme inline {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans:
+    var(--font-fira-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-epilogue), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* After the brand tokens (globals.css imports this file last), so these win
+   over the plain family names the Carreta token sheet writes. */
+:root {
+  --yt-font-text:
+    var(--font-fira-sans), "Fira Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --yt-font-title: var(--font-epilogue), "Epilogue", ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
