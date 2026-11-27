@@ -1770,3 +1770,94 @@ async function stockChangesWith(page, ...values) {
 }
 
 Object.assign(module.exports, { stockChangesWith });
+
+// ── Limits: sign-in, the idle session, the order search, the navigation ────
+
+/** Opens a console page and waits until React has taken over its forms. */
+async function openReady(page, path) {
+  await page.goto(BASE + path, { waitUntil: "load" });
+  await kit.hydrated(page);
+}
+
+/** One sign-in attempt from the console's sign-in page; the alert shown, or null when it signed in. */
+async function tryPassword(page, email, password) {
+  await openReady(page, "/ingresar");
+  return kit.trySignIn(page, email, password);
+}
+
+/** Waits for the notice that the session ended for being idle; returns main, as one line. */
+async function idleNotice(page) {
+  await settledText(main(page), /sin actividad/, { what: "the sign-in page", timeout: 10000 });
+  return text(main(page));
+}
+
+/** «Quitar la búsqueda», and waits for the search to go. */
+async function clearOrderSearch(page) {
+  await button(main(page), "Quitar la búsqueda").click();
+  await settledText(main(page), (t) => !t.includes("Quitar la búsqueda"), { what: "the orders list" });
+}
+
+/** What the order search field holds. */
+const orderSearchTyped = (page) => field(main(page), "q").inputValue();
+
+/** The console's main navigation (for its size and the keyboard). */
+const sectionsNavigation = (page) => page.getByRole("navigation", { name: "Secciones" });
+
+/** How many section links show now. */
+const visibleSectionLinks = (page) => sectionsNavigation(page).getByRole("link").count();
+
+/** Presses Tab from the header's first link, 40 times; returns the section links the keyboard reached. */
+async function sectionsReachedByTab(page) {
+  await page.getByRole("banner").getByRole("link").first().focus();
+  const reached = new Set();
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press("Tab");
+    const href = await page.evaluate(() =>
+      document.activeElement?.closest('nav[aria-label="Secciones"]')
+        ? document.activeElement.getAttribute("href")
+        : null,
+    );
+    if (href) reached.add(href);
+  }
+  return reached;
+}
+
+/** The button the sections fold into on a phone. */
+const sectionsMenu = (page) => sectionsNavigation(page).locator("summary");
+
+/** Opens the folded sections from the keyboard. */
+async function openSectionsMenuByKeyboard(page) {
+  await sectionsMenu(page).focus();
+  await page.keyboard.press("Enter");
+}
+
+/** Chooses a section of the opened menu and waits for the menu to fold. */
+async function chooseSection(page, name, path) {
+  await link(sectionsNavigation(page), name).click();
+  await page.waitForURL((u) => new URL(u).pathname === path);
+  await page.waitForFunction(() => !document.querySelector('nav[aria-label="Secciones"] details')?.open);
+}
+
+/** Takes down reported content from Atención (the report found by the product's title and its details). */
+async function takeDown(page, title, details, note) {
+  const card = withValue(withValue(main(page).getByRole("listitem"), title), details);
+  await field(card, "note", "textarea").fill(note);
+  await button(card, "Retirar el contenido").click();
+  // The page behind is drawn again, and the report leaves the queue.
+  await card.first().waitFor({ state: "detached" });
+}
+
+Object.assign(module.exports, {
+  openReady,
+  tryPassword,
+  idleNotice,
+  clearOrderSearch,
+  orderSearchTyped,
+  sectionsNavigation,
+  visibleSectionLinks,
+  sectionsReachedByTab,
+  sectionsMenu,
+  openSectionsMenuByKeyboard,
+  chooseSection,
+  takeDown,
+});

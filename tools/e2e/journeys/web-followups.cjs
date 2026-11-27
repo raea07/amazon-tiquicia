@@ -36,6 +36,8 @@
 const { spawn, spawnSync } = require("node:child_process");
 const { createHmac } = require("node:crypto");
 const { chromium, request } = require("playwright");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
 
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
@@ -50,7 +52,6 @@ const GUARD_KEY = process.env.AUTH_GUARD_KEY || "local-development-only-auth-gua
 const REFRESH_KEY = process.env.SHOP_REFRESH_KEY || "local-development-only";
 
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 const check = (ok, what) => {
   if (!ok) throw new Error(`check failed: ${what}`);
   log(`  ok: ${what}`);
@@ -90,17 +91,10 @@ async function sessionOf(context) {
   return { cookie, accessToken: session.access_token, claims };
 }
 
-/** Waits until React has taken over the visible page's form (the previous page stays hidden). */
-function hydrated(page) {
-  return page.waitForFunction(() => {
-    const main = [...document.querySelectorAll("main")].find((m) => m.checkVisibility());
-    const el = main?.querySelector("form") ?? main;
-    return el && Object.keys(el).some((key) => key.startsWith("__react"));
-  });
-}
+/** Opens a page and waits until React has taken over its forms (the previous page stays hidden). */
 async function go(page, url) {
   await page.goto(url, { waitUntil: "load" });
-  await hydrated(page);
+  await ops.hydrated(page);
 }
 const overflow = (page) =>
   page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -129,23 +123,8 @@ const overflow = (page) =>
     return { context, page };
   };
   /** One sign-in attempt; answers the alert shown, or null when it signed in. */
-  const tryPassword = async (page, base, email, password) => {
-    await go(page, `${base}/ingresar`);
-    const form = page.locator("main:visible form").first();
-    await form.locator('input[name="email"]').fill(email);
-    await form.locator('input[name="password"]').fill(password);
-    await form.locator('button[type="submit"]').click();
-    const outcome = await Promise.race([
-      page
-        .locator('main:visible [role="alert"]')
-        .first()
-        .waitFor()
-        .then(() => "alert"),
-      page.waitForURL((u) => new URL(u).pathname !== "/ingresar").then(() => "in"),
-    ]);
-    if (outcome === "in") return null;
-    return text(page.locator('main:visible [role="alert"]').first());
-  };
+  const tryPassword = (page, base, email, password) =>
+    (base === OPS ? ops : web).tryPassword(page, email, password);
   // Leaves the browser signed out, keeping its other cookies (as a closed tab would).
   const signOut = (page) => page.context().clearCookies({ name: /^sb-/ });
   const wrong = "una-clave-equivocada";
@@ -172,7 +151,7 @@ const overflow = (page) =>
   check(/espere 1[45] minutos/i.test(limited ?? ""), "the message says how long to wait");
   check(/Olvidé mi contraseña/.test(limited ?? ""), "and points to the reset");
   check(
-    (await attacker.page.locator('main:visible input[name="email"]').inputValue()) === comprador,
+    (await web.signInEmailTyped(attacker.page)) === comprador,
     "the form keeps the address typed",
   );
   await attacker.page.screenshot({ path: `${SHOTS}/wf01-sign-in-limit.png`, fullPage: true });
@@ -223,34 +202,9 @@ const overflow = (page) =>
 
   // The way back on that new browser: the reset e-mail and its code, although
   // the guesser asks for e-mails and types wrong codes for the same account.
-  const askReset = async (page) => {
-    await go(page, `${WEB}/recuperar`);
-    await page.fill('main:visible input[name="email"]', comprador);
-    await page.click('main:visible button:has-text("Enviarme un enlace")');
-    const answer = page
-      .locator('main:visible [role="status"], main:visible [role="alert"]')
-      .first();
-    await answer.waitFor();
-    return text(answer);
-  };
+  const askReset = (page) => web.askReset(page, comprador);
   // One code; answers the alert shown, or null when it led to the new-password page.
-  // Waits for the action's own answer: the alert of the previous try looks the same.
-  const tryCode = async (page, code) => {
-    await page.fill('main:visible input[name="code"]', code);
-    const answered = page.waitForResponse(
-      (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/recuperar",
-    );
-    await page.click('main:visible button:has-text("Continuar con el código")');
-    const response = await answered;
-    if (response.headers()["x-action-redirect"]) {
-      await page.waitForURL((u) => new URL(u).pathname === "/recuperar/nueva");
-      return null;
-    }
-    await page.waitForFunction(
-      () => !document.querySelector("main button[disabled], main button[aria-busy='true']"),
-    );
-    return text(page.locator('main:visible [role="alert"]').first());
-  };
+  const tryCode = (page, code) => web.tryResetCode(page, code);
   check(
     /Revise su correo/.test(await askReset(attacker.page)),
     "the guesser asks for a reset e-mail",
@@ -324,15 +278,11 @@ const overflow = (page) =>
   );
   const signUp = async (address, email) => {
     const { page } = await visitor(address);
-    await go(page, `${WEB}/ingresar?modo=crear`);
-    const form = page.locator("main:visible form").first();
-    await form.locator('input[name="fullName"]').fill("Ana Prueba Mora");
-    await form.locator('input[name="email"]').fill(email);
-    await form.locator('input[name="password"]').fill("una-clave-nueva-larga-7");
-    await form.locator('input[name="acepta"]').check();
-    await form.locator('button[type="submit"]').click();
-    await page.locator("main:visible >> text=Revise su correo").first().waitFor();
-    const screen = await text(page.locator("main:visible").first());
+    const screen = await web.signUpAnswer(page, {
+      name: "Ana Prueba Mora",
+      email,
+      password: "una-clave-nueva-larga-7",
+    });
     return { page, screen: screen.replaceAll(email, "<correo>") };
   };
   const existing = await signUp("198.51.100.50", comprador);
@@ -388,26 +338,19 @@ const overflow = (page) =>
   ]);
   await staff.page.goto(`${OPS}/pedidos`, { waitUntil: "load" });
   await staff.page.waitForURL((u) => new URL(u).pathname === "/ingresar");
-  await hydrated(staff.page);
+  await ops.hydrated(staff.page);
   check(
     new URL(staff.page.url()).searchParams.get("siguiente") === "/pedidos",
     "an idle console session is sent to sign in, keeping where it was",
   );
-  await staff.page
-    .locator("main:visible >> text=/sin actividad/")
-    .first()
-    .waitFor({ timeout: 10000 });
-  const notice = await text(staff.page.locator("main:visible").first());
+  const notice = await ops.idleNotice(staff.page);
   check(/sin actividad/.test(notice), "and is told why");
   await staff.page.screenshot({ path: `${SHOTS}/wf04-console-idle.png`, fullPage: true });
   check((await sessionOf(staff.context)) === null, "the session cookie is gone from the browser");
   const old = await api("POST", "/rest/v1/rpc/my_roles", {}, before.accessToken);
   log("   old token:", old.status, JSON.stringify(old.body).slice(0, 80));
   check(old.status >= 400, "and the old token no longer works");
-  const form = staff.page.locator("main:visible form").first();
-  await form.locator('input[name="email"]').fill("central@yuntera.example");
-  await form.locator('input[name="password"]').fill(PASSWORD);
-  await form.locator('button[type="submit"]').click();
+  await ops.fillSignIn(staff.page, "central@yuntera.example", PASSWORD);
   await staff.page.waitForURL((u) => new URL(u).pathname === "/pedidos");
   check(true, "signing in again comes back to the orders page");
 
@@ -415,24 +358,16 @@ const overflow = (page) =>
   log("4. order search");
   const seen = [];
   staff.page.on("request", (r) => seen.push(decodeURIComponent(r.url())));
-  await hydrated(staff.page);
-  await staff.page.fill("main:visible #q", "Andrés");
-  await staff.page.click('main:visible button:has-text("Buscar pedidos")');
-  await staff.page.locator("main:visible >> text=Quitar la búsqueda").waitFor();
-  const found = await staff.page.locator("main:visible tbody tr").count();
+  await ops.hydrated(staff.page);
+  await ops.searchOrders(staff.page, "Andrés");
+  const found = await ops.tableRows(staff.page);
   log("   rows for the name:", found);
   check(found > 0, "the search finds the shopper's orders");
   check(!/Andr/i.test(decodeURIComponent(staff.page.url())), "the name is not in the address bar");
   check(!seen.some((url) => /Andr/i.test(url)), "nor in the address of any request");
   await staff.page.screenshot({ path: `${SHOTS}/wf05-order-search.png`, fullPage: true });
-  await staff.page.click('main:visible button:has-text("Quitar la búsqueda")');
-  await staff.page
-    .locator("main:visible >> text=Quitar la búsqueda")
-    .waitFor({ state: "detached" });
-  check(
-    (await staff.page.inputValue("main:visible #q")) === "",
-    "clearing the search empties the field",
-  );
+  await ops.clearOrderSearch(staff.page);
+  check((await ops.orderSearchTyped(staff.page)) === "", "clearing the search empties the field");
 
   // ── 5. Every console section is reachable ───────────────────────────────
   log("5. console navigation");
@@ -449,9 +384,9 @@ const overflow = (page) =>
   ).length;
   log(`   sections in the console: ${sections}`);
   check(sections >= 16, "the console's section list is read");
-  const nav = staff.page.locator('nav[aria-label="Secciones"]');
+  const nav = ops.sectionsNavigation(staff.page);
   check(
-    (await nav.locator("a:visible").count()) === sections,
+    (await ops.visibleSectionLinks(staff.page)) === sections,
     `1280 px: all ${sections} sections show`,
   );
   const fits = await nav.evaluate((el) => {
@@ -462,30 +397,18 @@ const overflow = (page) =>
   });
   check(fits, "1280 px: none is cut off or scrolled out of sight");
   // The keyboard reaches every one of them.
-  await staff.page.locator("header a").first().focus();
-  const reached = new Set();
-  for (let i = 0; i < 40; i++) {
-    await staff.page.keyboard.press("Tab");
-    const href = await staff.page.evaluate(() =>
-      document.activeElement?.closest('nav[aria-label="Secciones"]')
-        ? document.activeElement.getAttribute("href")
-        : null,
-    );
-    if (href) reached.add(href);
-  }
+  const reached = await ops.sectionsReachedByTab(staff.page);
   check(reached.size === sections, "1280 px: Tab reaches every section");
   await staff.page.screenshot({ path: `${SHOTS}/wf06-console-nav-1280.png` });
 
   // A search left in place goes when the person signs out.
   await go(staff.page, `${OPS}/pedidos`);
-  await staff.page.fill("main:visible #q", "Andrés");
-  await staff.page.click('main:visible button:has-text("Buscar pedidos")');
-  await staff.page.locator("main:visible >> text=Quitar la búsqueda").waitFor();
+  await ops.searchOrders(staff.page, "Andrés");
   const searchCookie = async () =>
     // All cookies, not by address: this one is Secure, and the lane runs on http.
     (await staff.context.cookies()).find((c) => c.name === "yt-busqueda-pedidos");
   check(Boolean(await searchCookie()), "the search is kept for the orders page");
-  await staff.page.click('header button:has-text("Salir")');
+  await ops.signOut(staff.page);
   await staff.page.waitForURL((u) => new URL(u).pathname === "/ingresar");
   check(!(await searchCookie()), "signing out removes the search from the browser");
 
@@ -502,22 +425,15 @@ const overflow = (page) =>
     (await tryPassword(small, OPS, "central@yuntera.example", PASSWORD)) === null,
     "staff sign in on a phone",
   );
-  const menu = small.locator('nav[aria-label="Secciones"] summary');
-  check(await menu.isVisible(), "390 px: the sections fold into one button");
-  await menu.focus();
-  await small.keyboard.press("Enter");
-  const phoneLinks = small.locator('nav[aria-label="Secciones"] a:visible');
+  check(await ops.sectionsMenu(small).isVisible(), "390 px: the sections fold into one button");
+  await ops.openSectionsMenuByKeyboard(small);
   check(
-    (await phoneLinks.count()) === sections,
+    (await ops.visibleSectionLinks(small)) === sections,
     `390 px: opened from the keyboard, it lists all ${sections}`,
   );
   check((await overflow(small)) <= 0, "390 px: no sideways scrolling");
   await small.screenshot({ path: `${SHOTS}/wf07-console-nav-390.png`, fullPage: true });
-  await phoneLinks.filter({ hasText: "Auditoría" }).click();
-  await small.waitForURL((u) => new URL(u).pathname === "/auditoria");
-  await small.waitForFunction(
-    () => !document.querySelector('nav[aria-label="Secciones"] details')?.open,
-  );
+  await ops.chooseSection(small, "Auditoría", "/auditoria");
   check(true, "390 px: choosing a section goes there and folds the menu");
 
   // ── 6. The delivery zone shows that an update is coming ─────────────────
@@ -527,20 +443,9 @@ const overflow = (page) =>
     "select p.slug from public.products p where p.status = 'active' order by p.slug limit 1",
   );
   await go(shopper.page, `${WEB}/p/${slug}`);
-  await shopper.page.click('main:visible a[href^="/zona?siguiente="]');
-  await shopper.page.waitForURL((u) => new URL(u).pathname === "/zona");
-  await hydrated(shopper.page);
+  await web.openZoneChooser(shopper.page);
   // A district other than the one the page assumed (San José centre, 10101).
-  for (let i = 0; i < 3; i++) {
-    const select = shopper.page.locator("main:visible select").nth(i);
-    await select.waitFor();
-    const options = await select.locator("option").allTextContents();
-    const usable = options
-      .map((option, index) => ({ option, index }))
-      .filter(({ option, index }) => index > 0 && !option.includes("aún no"));
-    // San José, Central, and its second district (Merced) rather than the first.
-    await select.selectOption({ index: ((i === 2 && usable[1]) || usable[0]).index });
-  }
+  await web.chooseOtherDistrict(shopper.page);
   // A slow database, as on the hosted preview: the new date takes seconds to come.
   const slow = spawn("psql", [
     DATABASE_URL,
@@ -550,20 +455,15 @@ const overflow = (page) =>
     "begin; lock table public.offers in access exclusive mode; select pg_sleep(4); commit;",
   ]);
   await new Promise((resolve) => setTimeout(resolve, 500));
-  await shopper.page.click('main:visible button:has-text("Usar esta zona")');
-  const updating = "Actualizando la fecha de entrega y el envío para su zona";
-  const pending = shopper.page.locator('main:visible [role="status"]', { hasText: updating });
-  await pending.waitFor({ timeout: 4000 });
+  await web.useZone(shopper.page);
+  await web.waitForZoneUpdating(shopper.page, 4000);
   check(true, "while the new date is on its way, the page says an update is coming");
   await shopper.page.screenshot({ path: `${SHOTS}/wf08-zone-pending.png`, fullPage: true });
   await new Promise((resolve) => slow.on("exit", resolve));
   await shopper.page.waitForURL((u) => new URL(u).pathname === `/p/${slug}`);
-  await pending.waitFor({ state: "detached", timeout: 15000 });
-  await shopper.page.locator("main:visible >> text=/Envío ₡/").first().waitFor();
+  await web.waitForZoneUpdated(shopper.page, 15000);
   check(
-    !(await shopper.page
-      .locator("main:visible >> text=Elija su zona para confirmar la fecha")
-      .count()),
+    await web.zoneApplied(shopper.page),
     "then the page shows the chosen zone's date and price",
   );
   check(
@@ -579,14 +479,13 @@ const overflow = (page) =>
     ),
   );
   await shopper.page.reload({ waitUntil: "load" });
-  const stale = shopper.page.locator('main:visible [role="status"]', { hasText: updating });
-  await stale.waitFor({ timeout: 5000 });
+  await web.waitForZoneUpdating(shopper.page, 5000);
   check(
-    (await shopper.page.locator('main:visible [aria-busy="true"]').count()) > 0,
+    (await web.busyValues(shopper.page)) > 0,
     "a page still drawn for the old zone says an update is coming and marks its values busy",
   );
   await shopper.page.screenshot({ path: `${SHOTS}/wf10-zone-stale-copy.png`, fullPage: true });
-  await stale.waitFor({ state: "detached", timeout: 15000 });
+  await web.waitForZoneUpdated(shopper.page, 15000);
   check(true, "and gives up waiting after a while rather than for ever");
   await shopper.page.screenshot({ path: `${SHOTS}/wf09-zone-updated.png`, fullPage: true });
 
@@ -618,13 +517,7 @@ const overflow = (page) =>
   });
   check(reported.status < 300, "a visitor reports the product");
   await go(small, `${OPS}/atencion`);
-  const card = small.locator("main:visible li", { hasText: productTitle }).filter({
-    hasText: "Parece una imitación.",
-  });
-  await card.locator('textarea[name="note"]').fill("Producto falsificado: se retira.");
-  await card.locator('button:has-text("Retirar el contenido")').click();
-  // The page behind is drawn again, and the report leaves the queue.
-  await card.waitFor({ state: "detached" });
+  await ops.takeDown(small, productTitle, "Parece una imitación.", "Producto falsificado: se retira.");
   check(
     sql(`select status from public.products where id = '${productId}'`) === "rejected",
     "staff take the product down",

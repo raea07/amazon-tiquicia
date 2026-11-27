@@ -888,3 +888,98 @@ async function signInLandingOn(page, email, landsOn, password = PASSWORD) {
 }
 
 Object.assign(module.exports, { signInLandingOn });
+
+// ── Limits: sign-in attempts, reset codes, sign-up; the delivery zone ──────
+
+/** One sign-in attempt from the shop's sign-in page; the alert shown, or null when it signed in. */
+async function tryPassword(page, email, password) {
+  await openReady(page, "/ingresar");
+  return kit.trySignIn(page, email, password);
+}
+
+/** Asks for a reset e-mail from /recuperar; returns the answer. */
+async function askReset(page, email) {
+  await openReady(page, "/recuperar");
+  return kit.askResetAnswer(page, email);
+}
+
+/** Creates an account from the sign-up form and returns what the screen says once it asks to check the e-mail. */
+async function signUpAnswer(page, { name, email, password }) {
+  await openReady(page, "/ingresar?modo=crear");
+  const form = main(page).locator("form").first();
+  await field(form, "fullName").fill(name);
+  await field(form, "email").fill(email);
+  await field(form, "password").fill(password);
+  await field(form, "acepta").check();
+  await form.locator('button[type="submit"]').click();
+  await settledText(main(page), /Revise su correo/, { what: "the sign-up page" });
+  return text(main(page));
+}
+
+/** From a product page, the link to choose the delivery zone; waits for /zona. */
+async function openZoneChooser(page) {
+  await main(page).locator('a[href^="/zona?siguiente="]').first().click();
+  await page.waitForURL((u) => new URL(u).pathname === "/zona");
+  await hydrated(page);
+}
+
+/**
+ * Chooses province, canton and district on /zona: in each, the first that is
+ * served (the second one in the third list, so the district is not the one
+ * the page assumed).
+ */
+async function chooseOtherDistrict(page) {
+  for (let i = 0; i < 3; i++) {
+    const select = main(page).locator("select").nth(i);
+    await select.waitFor();
+    const options = await select.locator("option").allTextContents();
+    const usable = options
+      .map((option, index) => ({ option, index }))
+      .filter(({ option, index }) => index > 0 && !option.includes("aún no"));
+    await select.selectOption({ index: ((i === 2 && usable[1]) || usable[0]).index });
+  }
+}
+
+/** «Usar esta zona». */
+const useZone = (page) => button(main(page), "Usar esta zona").click();
+
+const ZONE_UPDATING = "Actualizando la fecha de entrega y el envío para su zona";
+
+/** Waits for the notice that the date and price are being updated for the zone. */
+const waitForZoneUpdating = (page, timeout) =>
+  kit.findMessage(main(page), ZONE_UPDATING, { roles: "status", timeout });
+
+/** Waits for that notice to go. */
+async function waitForZoneUpdated(page, timeout = 15000) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    const all = await main(page).getByRole("status").allInnerTexts();
+    if (!all.some((t) => t.includes(ZONE_UPDATING))) return;
+    if (Date.now() >= deadline) throw new Error(`the zone notice did not go within ${timeout} ms`);
+    await page.waitForTimeout(200);
+  }
+}
+
+/** Waits until the product page shows its delivery price; tells whether it still asks for a zone. */
+async function zoneApplied(page) {
+  await settledText(main(page), /Envío ₡/, { what: "the product page" });
+  return !(await mainText(page)).includes("Elija su zona para confirmar la fecha");
+}
+
+/** How many values the page marks as being updated. */
+const busyValues = (page) => main(page).locator('[aria-busy="true"]').count();
+
+Object.assign(module.exports, {
+  tryPassword,
+  askReset,
+  tryResetCode: kit.tryResetCode,
+  signInEmailTyped: kit.signInEmailTyped,
+  signUpAnswer,
+  openZoneChooser,
+  chooseOtherDistrict,
+  useZone,
+  waitForZoneUpdating,
+  waitForZoneUpdated,
+  zoneApplied,
+  busyValues,
+});

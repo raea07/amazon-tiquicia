@@ -429,3 +429,62 @@ async function waitForShown(locator, words, { timeout = 15000, what = "the eleme
 
 module.exports.shownText = shownText;
 module.exports.waitForShown = waitForShown;
+
+// ── Sign-in attempts and reset codes (next-kit forms), for the limits ──────
+
+/**
+ * Sends the sign-in form the page shows and answers the alert it shows, or
+ * null when it signed in (left /ingresar).
+ */
+async function trySignIn(page, email, password) {
+  const form = main(page).locator("form").first();
+  await field(form, "email").fill(email);
+  await field(form, "password").fill(password);
+  await form.locator('button[type="submit"]').click();
+  const outcome = await Promise.race([
+    main(page)
+      .getByRole("alert")
+      .first()
+      .waitFor()
+      .then(() => "alert"),
+    page.waitForURL((u) => new URL(u).pathname !== "/ingresar").then(() => "in"),
+  ]);
+  if (outcome === "in") return null;
+  return text(main(page).getByRole("alert").first());
+}
+
+/** The e-mail the sign-in form holds. */
+const signInEmailTyped = (page) => field(main(page), "email").inputValue();
+
+/** Asks for a reset e-mail on the page open now; returns the answer (status or alert). */
+async function askResetAnswer(page, email) {
+  await field(main(page), "email").fill(email);
+  await button(main(page), "Enviarme un enlace").click();
+  const answer = main(page).locator('[role="status"], [role="alert"]').first();
+  await answer.waitFor();
+  return text(answer);
+}
+
+/**
+ * One reset code; answers the alert shown, or null when it led to the
+ * new-password page. Waits for the action's own answer: the alert of the
+ * previous try looks the same.
+ */
+async function tryResetCode(page, code) {
+  await field(main(page), "code").fill(code);
+  const answered = page.waitForResponse(
+    (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/recuperar",
+  );
+  await button(main(page), "Continuar con el código").click();
+  const response = await answered;
+  if (response.headers()["x-action-redirect"]) {
+    await page.waitForURL((u) => new URL(u).pathname === "/recuperar/nueva");
+    return null;
+  }
+  await page.waitForFunction(
+    () => !document.querySelector("main button[disabled], main button[aria-busy='true']"),
+  );
+  return text(main(page).getByRole("alert").first());
+}
+
+Object.assign(module.exports, { trySignIn, signInEmailTyped, askResetAnswer, tryResetCode });
