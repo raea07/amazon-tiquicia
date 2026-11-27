@@ -2,7 +2,7 @@
  * The error tracker's settings for one website. Pure and small, because the
  * browser runs it on every page before anything else: the callers hand in
  * the values the build inlined
- * (`process.env.NEXT_PUBLIC_SENTRY_DSN`, `YUNTERA_APP`, `YUNTERA_COMMIT`,
+ * (`process.env.NEXT_PUBLIC_SENTRY_DSN`, `YUNTERA_APP`, `YUNTERA_BUILD_COMMIT`,
  * `YUNTERA_ENVIRONMENT`, set by next-kit/config), so the same rules are
  * tested here and applied in the browser and on the server.
  */

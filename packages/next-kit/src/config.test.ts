@@ -84,8 +84,14 @@ describe("WEB-9: the content-security policy", () => {
       buildInfo({ VERCEL_GIT_COMMIT_SHA: "abc1234", YUNTERA_LOCAL_RUN: "1" }).environment,
     ).toBe("local");
     expect(buildInfo({ VERCEL_GIT_COMMIT_SHA: "not a commit; rm -rf" }).commit).toBe("unknown");
-    // Outside Vercel the commit comes from git, as in the lanes.
-    expect(buildInfo({}).commit).toMatch(/^([0-9a-f]{40}|unknown)$/);
+    // The value given at deploy time wins; nothing given is unknown, never a guess.
+    expect(
+      buildInfo({ YUNTERA_BUILD_COMMIT: "b".repeat(40), VERCEL_GIT_COMMIT_SHA: "a".repeat(40) })
+        .commit,
+    ).toBe("b".repeat(40));
+    expect(buildInfo({}).commit).toBe("unknown");
+    expect(baseConfig({ app: "web" }).env).toHaveProperty("YUNTERA_BUILD_COMMIT");
+    expect(baseConfig({ app: "web" }).env).not.toHaveProperty("YUNTERA_COMMIT");
   });
 
   it("says which app it is, for the session lifetime", () => {

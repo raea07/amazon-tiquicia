@@ -9,6 +9,6 @@ import type { BuildValues } from "./settings";
 export const buildValues = (): BuildValues => ({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   app: process.env.YUNTERA_APP,
-  commit: process.env.YUNTERA_COMMIT,
+  commit: process.env.YUNTERA_BUILD_COMMIT,
   environment: process.env.YUNTERA_ENVIRONMENT,
 });

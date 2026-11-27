@@ -2,7 +2,7 @@ import { endSentence } from "@yuntera/core";
 import type { StoreBuild, SystemHealth } from "@yuntera/db";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
-import { buildCommit, fetchAppVersion } from "@yuntera/next-kit/version";
+import { builtCommit, fetchAppVersion } from "@yuntera/next-kit/version";
 import { Alert, Badge, formatDate, formatDateTime, Skeleton, touchLinkClass } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
@@ -192,7 +192,7 @@ async function Versions() {
     (await sessionApi()).opsVersions(),
     ...WEB_APPS.map((app) => fetchAppVersion(app.url(), process.env)),
   ]);
-  const own = buildCommit(process.env);
+  const own = builtCommit();
   const web = [
     {
       id: "ops",

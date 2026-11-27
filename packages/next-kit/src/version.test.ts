@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LOCAL_GUARD_KEY } from "./guard";
 import {
   buildCommit,
+  builtCommit,
   fetchAppVersion,
   VERSION_HEADER,
   versionProof,
@@ -26,6 +27,29 @@ describe("which commit an app was built from", () => {
     expect(buildCommit({})).toBeNull();
     // Anything that is not a commit is not shown.
     expect(buildCommit({ YUNTERA_BUILD_COMMIT: "main; rm -rf" })).toBeNull();
+    // A value given at deploy time wins, even over a valid one of Vercel's:
+    // given wrong, the answer is unknown, never another commit.
+    expect(buildCommit({ YUNTERA_BUILD_COMMIT: "main", VERCEL_GIT_COMMIT_SHA: SHA })).toBeNull();
+    expect(buildCommit({ YUNTERA_BUILD_COMMIT: "  ", VERCEL_GIT_COMMIT_SHA: SHA })).toBe(SHA);
+  });
+
+  it("answers the commit the build inlined, the same one the error reports name", async () => {
+    const before = process.env.YUNTERA_BUILD_COMMIT;
+    process.env.YUNTERA_BUILD_COMMIT = SHA;
+    try {
+      expect(builtCommit()).toBe(SHA);
+      const right = versionResponse(
+        "seller",
+        ask(versionProof(LOCAL.AUTH_GUARD_KEY)),
+        { ...LOCAL, YUNTERA_BUILD_COMMIT: "abcdef1" },
+        builtCommit(),
+      );
+      expect(await right.json()).toEqual({ app: "seller", commit: SHA });
+      process.env.YUNTERA_BUILD_COMMIT = "";
+      expect(builtCommit()).toBeNull();
+    } finally {
+      process.env.YUNTERA_BUILD_COMMIT = before;
+    }
   });
 
   it("is told only to a caller with the proof", async () => {

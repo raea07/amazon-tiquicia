@@ -7,17 +7,17 @@
  * a keyed hash of AUTH_GUARD_KEY, the server-only key all four apps already
  * share; anyone else gets 404, as for an address that does not exist.
  *
- * Where the commit comes from, in this order:
- *   1. YUNTERA_BUILD_COMMIT: set by tools/dev/stack.sh for a lane, or by any
- *      deployment that is not Vercel (the output of `git rev-parse HEAD`);
- *   2. VERCEL_GIT_COMMIT_SHA: Vercel sets it on every deployment from git
- *      (one of its system environment variables, available to the server
- *      while "Automatically expose System Environment Variables" is on, the
- *      default).
- * Neither is a NEXT_PUBLIC_ value: the commit never goes into the pages.
+ * The commit is the one value of build-commit.mjs, read once when the app
+ * is built and inlined as YUNTERA_BUILD_COMMIT (next-kit/config): the
+ * value given at deploy time wins, then Vercel's VERCEL_GIT_COMMIT_SHA
+ * (set for a deployment from a Git connection), else unknown, and the panel
+ * says so. The error reports name their release with the same value, so it
+ * is also in the browser code (a commit is not a secret); this route only
+ * keeps it from being listed to anyone who asks.
  */
 
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { commitFrom } from "../build-commit.mjs";
 import { type AppName, guardKey } from "./guard";
 
 type Env = Record<string, string | undefined>;
@@ -28,10 +28,17 @@ export const VERSION_HEADER = "x-yuntera-version-proof";
 export const versionProof = (key: string) =>
   createHmac("sha256", key).update("app-version").digest("hex");
 
-/** The commit this server runs, or null when the deployment did not say. */
+/** The commit by the one rule (build-commit.mjs), or null when nothing said. */
 export function buildCommit(env: Env): string | null {
-  const raw = (env.YUNTERA_BUILD_COMMIT || env.VERCEL_GIT_COMMIT_SHA || "").trim().toLowerCase();
-  return /^[0-9a-f]{7,40}$/.test(raw) ? raw : null;
+  return commitFrom(env);
+}
+
+/**
+ * The commit this app was built from: the value the build inlined (written
+ * out as `process.env.YUNTERA_BUILD_COMMIT` so the framework replaces it).
+ */
+export function builtCommit(): string | null {
+  return commitFrom({ YUNTERA_BUILD_COMMIT: process.env.YUNTERA_BUILD_COMMIT });
 }
 
 function same(given: string, expected: string): boolean {
@@ -40,16 +47,18 @@ function same(given: string, expected: string): boolean {
 }
 
 /** What `GET /api/version` answers. */
-export function versionResponse(app: AppName, request: Request, env: Env): Response {
+export function versionResponse(
+  app: AppName,
+  request: Request,
+  env: Env,
+  commit: string | null = buildCommit(env),
+): Response {
   const key = guardKey(env);
   const given = request.headers.get(VERSION_HEADER) ?? "";
   if (!key.ok || !given || !same(given, versionProof(key.value))) {
     return new Response(null, { status: 404 });
   }
-  return Response.json(
-    { app, commit: buildCommit(env) },
-    { headers: { "cache-control": "no-store" } },
-  );
+  return Response.json({ app, commit }, { headers: { "cache-control": "no-store" } });
 }
 
 export type AppVersion =

@@ -7,7 +7,7 @@
  * framework's compiler is running, so it cannot import TypeScript source.
  */
 
-import { execFileSync } from "node:child_process";
+import { commitFrom } from "./build-commit.mjs";
 import { errorTrackerIngest } from "./error-tracker.mjs";
 
 export { errorTrackerIngest };
@@ -28,29 +28,18 @@ export { errorTrackerIngest };
 export const CAPTCHA_ORIGIN = "https://challenges.cloudflare.com";
 
 /**
- * Which commit and which environment this build is, for the error reports
- * (and anything else that wants to say which version is running). A commit is
- * not a secret. On Vercel both come from the build's own settings; elsewhere
- * the commit is asked of git, and the environment is "local" for the lanes'
- * production builds (YUNTERA_LOCAL_RUN) or "development".
+ * Which commit and which environment this build is, for the error reports'
+ * release and the console's Versiones panel. A commit is not a secret. The
+ * commit follows the one rule of build-commit.mjs (YUNTERA_BUILD_COMMIT given
+ * at deploy time wins, then Vercel's VERCEL_GIT_COMMIT_SHA, else "unknown").
+ * The environment comes from Vercel's VERCEL_ENV; elsewhere it is "local" for
+ * the lanes' production builds (YUNTERA_LOCAL_RUN) or "development".
  *
  * @param {Record<string, string | undefined>} [env]
  * @returns {{ commit: string, environment: string }}
  */
 export function buildInfo(env = process.env) {
-  let commit = env.VERCEL_GIT_COMMIT_SHA || "";
-  if (!commit) {
-    try {
-      commit = execFileSync("git", ["rev-parse", "HEAD"], {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-        timeout: 5000,
-      }).trim();
-    } catch {
-      commit = "";
-    }
-  }
-  if (!/^[0-9a-f]{7,40}$/.test(commit)) commit = "unknown";
+  const commit = commitFrom(env) ?? "unknown";
   const vercel = env.VERCEL_ENV;
   const environment =
     vercel === "production" || vercel === "preview" || vercel === "development"
@@ -135,11 +124,12 @@ export function baseConfig(options) {
   const build = buildInfo();
   return {
     // Inlined at build time into the server code, the proxy and the browser
-    // code alike. The commit and the environment name the version in error
-    // reports (src/error-reports); neither is a secret.
+    // code alike. The commit names the version in error reports
+    // (src/error-reports) and on the console's Versiones panel (src/version.ts):
+    // one value, read once here; "" when unknown. Neither value is a secret.
     env: {
       YUNTERA_APP: options.app,
-      YUNTERA_COMMIT: build.commit,
+      YUNTERA_BUILD_COMMIT: build.commit === "unknown" ? "" : build.commit,
       YUNTERA_ENVIRONMENT: build.environment,
     },
     cacheComponents: true,
