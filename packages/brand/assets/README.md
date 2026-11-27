@@ -10,7 +10,71 @@ mark by hand and do not edit these files directly: change the geometry in
 `logo.tsx`, then regenerate. The full rules are in the
 [brand book](../../../docs/brand/brand-book.md).
 
-## Files
+## Carreta artwork (`lockups/`, `app-icons/`)
+
+The Carreta design ([SISTEMA.md §15](../../../docs/brand/system/SISTEMA.md))
+draws new lockups, with the letters as outlines, and new app icons. They are
+**copies**, byte for byte, of the files in
+[`docs/brand/system/assets`](../../../docs/brand/system/assets), under English
+names: `scripts/copy-assets.ts` makes them from the map in
+`src/asset-map.ts`, and `src/assets.test.ts` fails when a copy differs from
+its source (sha256), is missing, is not in the map, or when a PNG is blank,
+broken or the same as another. Never edit them here: redraw them with the
+specification's generators (`docs/brand/system/src/logo.py`, `assets.py`,
+`render.js`, `lockpng.py`), then copy again. No app uses them yet; step 1c of
+the rebuild wires them in. The mark inside them is the unchanged mark of
+`mark.svg`.
+
+Words in the names: `shop` (yuntera), `seller` (vende), `driver` (ruta),
+`warehouse` (bodega), `ops` (central); `brand` = achiote mark with noche
+letters, `ink` = all noche, `white` = all white.
+
+### Lockups
+
+Each lockup comes as an SVG (letters in outlines, no font needed) and as PNGs
+60 and 120 px high (`-60.png`, `-120.png`).
+
+| File                                        | Where it is used                                                                | Clear space                                                                                                                |
+| ------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `lockups/lockup-shop-brand.svg` + PNGs      | The shop and the company on white or arena: shop header, sign-in, e-mail header | SVG: drawn tight, keep a quarter of the mark's height free on every side. PNG: built in, 10 % of the height on every side. |
+| `lockups/lockup-shop-ink.svg` + PNGs        | The shop in one colour: print, stamps, a fax or a receipt                       | As above                                                                                                                   |
+| `lockups/lockup-shop-white.svg` + PNGs      | The shop on noche, achiote or a dark photograph                                 | As above                                                                                                                   |
+| `lockups/lockup-seller-brand.svg` + PNGs    | Yuntera Vende on white or arena: sign-in, store listing artwork                 | As above                                                                                                                   |
+| `lockups/lockup-seller-ink.svg` + PNGs      | Yuntera Vende in one colour                                                     | As above                                                                                                                   |
+| `lockups/lockup-seller-white.svg` + PNGs    | Yuntera Vende on its cacao bar                                                  | As above                                                                                                                   |
+| `lockups/lockup-driver-brand.svg` + PNGs    | Yuntera Ruta on white or arena                                                  | As above                                                                                                                   |
+| `lockups/lockup-driver-ink.svg` + PNGs      | Yuntera Ruta in one colour                                                      | As above                                                                                                                   |
+| `lockups/lockup-driver-white.svg` + PNGs    | Yuntera Ruta on its añil bar                                                    | As above                                                                                                                   |
+| `lockups/lockup-warehouse-brand.svg` + PNGs | Yuntera Bodega on white or arena                                                | As above                                                                                                                   |
+| `lockups/lockup-warehouse-ink.svg` + PNGs   | Yuntera Bodega on its white bar (with the 3 px ink rule)                        | As above                                                                                                                   |
+| `lockups/lockup-warehouse-white.svg` + PNGs | Yuntera Bodega on a dark ground                                                 | As above                                                                                                                   |
+| `lockups/lockup-ops-brand.svg` + PNGs       | Yuntera Central on white or arena                                               | As above                                                                                                                   |
+| `lockups/lockup-ops-ink.svg` + PNGs         | Yuntera Central in one colour                                                   | As above                                                                                                                   |
+| `lockups/lockup-ops-white.svg` + PNGs       | Yuntera Central on its noche side bar                                           | As above                                                                                                                   |
+
+### App icons
+
+`<app>` is `shop`, `seller`, `driver` or `warehouse` (the four phone apps);
+the console has a browser icon only (`ops`).
+
+| File                                                 | Where it is used                                                                                                                  | Clear space                                                             |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `app-icons/icon-<app>-1024.png` (RGB, no alpha)      | App Store; `apps/<app>-native/assets/icon.png`                                                                                    | Built in: the tile is the icon, nothing is added around it              |
+| `app-icons/icon-<app>-512.png`                       | Google Play listing (store console, not in the repository)                                                                        | Built in                                                                |
+| `app-icons/icon-<app>-180.png`                       | iPhone 60 pt @3x, for reference (Expo makes it from `icon.png`)                                                                   | Built in                                                                |
+| `app-icons/icon-<app>-48.png`                        | Android mdpi and the favicon of the Expo web export: `apps/<app>-native/assets/favicon.png`                                       | Built in                                                                |
+| `app-icons/icon-<app>-adaptive-foreground-432.png`   | Android adaptive icon foreground: `apps/<app>-native/assets/android-icon-foreground.png`                                          | Ring and mark at 68 %, the furthest pixel inside the 61.1 % safe circle |
+| `app-icons/icon-<app>-adaptive-background-432.png`   | Shows the background only; the app configuration uses the app colour token instead                                                | Not placed                                                              |
+| `app-icons/icon-<app>-monochrome-432.png`            | Android 13 themed icon: `apps/<app>-native/assets/android-icon-monochrome.png`                                                    | As the foreground, 68 %                                                 |
+| `app-icons/icon-<app>-splash-1024.png`               | Splash image, the wheel on the page colour: `apps/<app>-native/assets/splash-icon.png`                                            | Built in; the splash background colour is `page`                        |
+| `app-icons/icon-warehouse-splash-dark-1024.png`      | The warehouse splash in dark appearance (its ring is noche): `splash-icon-dark.png`                                               | As above, on `page` dark                                                |
+| `app-icons/icon-ops-512.png`, `-180.png`, `-48.png`  | The console's browser icon in raster form                                                                                         | Built in                                                                |
+| `app-icons/icon-<app>.svg`, `app-icons/icon-ops.svg` | Each web app's `public/icon.svg`: web ← `shop`, seller ← `seller`, field ← `driver`, ops ← `ops`; the warehouse one is its source | Built in: the tile is the icon                                          |
+
+## Today's files
+
+The files below are the artwork of before Carreta. They stay, unchanged, until
+every app has moved (a test holds their sha256).
 
 | File                   | What it is                                                               | Use it for                                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
@@ -38,11 +102,8 @@ sharp, but it means:
 - **Do not send these files to a printer, an app store or a partner.** For
   those, the letters must be converted to outlines.
 
-**To do:** export outlined-letter versions of the five lockups (plus white and
-ink variants). It needs a font tool — a vector editor's "create outlines", or a
-script with a font library — which was not available when these were generated.
-Until then, use `mark.svg` with the name typed next to it in the destination's
-own text, or export the lockup from a browser that has the font loaded.
+Outlined-letter lockups now exist in the Carreta lettering (Epilogue) under
+`lockups/` above. Use those for printers, stores and partners.
 
 The mark-only files and the app icon contain no text and are safe everywhere.
 
