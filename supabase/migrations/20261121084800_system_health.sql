@@ -106,6 +106,10 @@ create index payment_attempts_declined_idx on private.payment_attempts (declined
   where declined_at is not null;
 create index payment_attempts_error_idx on private.payment_attempts (updated_at)
   where status = 'error';
+-- Attempts only the worker can move on. payment_attempts_work_idx also holds
+-- the declined ones, which pile up, so it would be read through them.
+create index payment_attempts_worker_due_idx on private.payment_attempts (work_after)
+  where status in ('creating', 'cancel_requested');
 -- Routes being driven.
 create index routes_in_progress_idx on public.routes (started_at) where status = 'in_progress';
 
