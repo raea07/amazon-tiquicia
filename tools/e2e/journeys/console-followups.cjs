@@ -12,8 +12,9 @@
 //     one. Then the driver starts it and Central takes off another stop while
 //     the driver has the parcel: the driver's header and the dispatch card
 //     leave both out of the total and say how many were removed; the staff
-//     order page reads «Reprogramado», not «No se pudo entregar», and its
-//     history shows no machine codes.
+//     order page's parcel reads «Reprogramado», not «No se pudo entregar»,
+//     and its history says the stop was taken off a route, with no machine
+//     codes.
 //   - Catálogo → Marcas: a new brand is deleted from its row; a brand with
 //     products offers no deletion and says why; a brand that got a product
 //     while the page was open is refused with the number and what to do.
@@ -281,7 +282,7 @@ async function rpcAs(email, calls) {
   check(
     !/\b(confirmed|picking|processing|packed|ready_for_dispatch|out_for_delivery|shipped|delivery_failed|shipment_status)\b/.test(
       history,
-    ) && history.includes(removedWord),
+    ) && history.includes(REMOVED_FROM_ROUTE),
     `the staff order history shows machine codes: ${history.slice(0, 400)}`,
   );
   await staff.screenshot({ path: SHOTS + "/cf4-staff-order-rescheduled.png", fullPage: true });

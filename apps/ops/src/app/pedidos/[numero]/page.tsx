@@ -458,7 +458,8 @@ const RECALL_NOTE = "Central detuvo el paquete ";
 /**
  * A history line in words, never a status code. A parcel's step written by
  * staff taking its stop off a route (the same moment as the removal note)
- * reads "Quitado de una ruta", not "Entrega fallida": nobody went to the door.
+ * reads "Quitado de una ruta", not that the delivery failed: nobody went to
+ * the door.
  */
 function timelineWords(event: TimelineEvent, timeline: readonly TimelineEvent[]): string {
   if (event.note) return event.note;

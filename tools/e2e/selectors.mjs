@@ -25,8 +25,8 @@
 // - "status": a status word of tools/e2e/lib/words.cjs written as a whole
 //   string literal outside words.cjs (a role name in a helper — button(…,
 //   "Empacado"), link(…), name: … — is allowed, and so is a line marked
-//   `// not a status word`, where the same word labels something else).
-//   --check fails above 0.
+//   `// not a status word`, where the same word labels something else), or
+//   as a whole regular expression (`/^Entregado$/`). --check fails above 0.
 //
 // --check also fails when a journey file finds an element itself
 // (getByRole, locator, waitForSelector…): screen steps live in lib/.
@@ -59,6 +59,13 @@ const JS_TEXT_CEILING = 12;
 const STATUS_WORDS = new Set(createRequire(import.meta.url)("./lib/words.cjs").allWords());
 // A whole string literal, with what comes before it on its line.
 const LITERAL = /(^|[^\w])(["'`])((?:(?!\2)[^\\\n]|\\.)*)\2/g;
+// A whole regular expression literal (`/^Entregado$/`), anchors and \b left out.
+const REGEX_LITERAL = /(?:^|[=(,:!&|?{}[;]|return)\s*\/((?:[^/\\\n]|\\.)+)\/[dgimsuy]*/g;
+const regexWord = (body) =>
+  body
+    .replace(/^\^|\$$/g, "")
+    .replace(/\\b/g, "")
+    .replace(/\\(.)/g, "$1");
 const ROLE_NAME = /(?:\bbutton\(|\blink\(|name:\s*)[^"'`]*$/;
 // A selector string handed to Playwright or to the DOM: the first argument
 // (a literal '…', "…" or `…`) of a call that takes one.
@@ -111,6 +118,12 @@ for (const file of files) {
         const before = line.slice(0, m.index + m[1].length);
         if (file.startsWith("lib/") && ROLE_NAME.test(before)) continue;
         // The same word used for something that is not a state (a tile's label).
+        if (line.includes("// not a status word")) continue;
+        status += 1;
+        if (list) console.log(`${file}: status ${line.trim().slice(0, 100)}`);
+      }
+      for (const m of line.matchAll(REGEX_LITERAL)) {
+        if (!STATUS_WORDS.has(regexWord(m[1]))) continue;
         if (line.includes("// not a status word")) continue;
         status += 1;
         if (list) console.log(`${file}: status ${line.trim().slice(0, 100)}`);

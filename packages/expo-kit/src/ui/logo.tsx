@@ -6,8 +6,9 @@ import { Text } from "./text";
 
 /**
  * The lockup as the brand book builds it (§5): mark `size` high in the brand
- * colour, a gap of 0.30 × size, the lowercase wordmark in Bricolage Grotesque
- * 700 at 0.86 × size, and the descriptor at weight 500 and 62 % opacity.
+ * colour, a gap of 0.30 × size, the lowercase wordmark in the display face
+ * (Epilogue since decision 58) at 700 and 0.86 × size, and the descriptor at
+ * weight 500 and 62 % opacity.
  */
 export function Logo({ app = "shop", size = 28 }: { app?: AppId; size?: number }) {
   const identity = apps[app];

@@ -409,7 +409,14 @@ async function newRoute() {
       (await textOf(`stop-${B}-1`)).includes(word("queued_action", "pending", "driver")),
     "a queued arrival reads as done, 'Por enviar'",
   );
-  check(/No entregado/.test(await textOf(`stop-${B}-2`)), "a queued failure reads as done");
+  check(
+    (await textOf(`stop-${B}-2`)).includes(word("stop_status", "failed", "driver")),
+    "a queued failure reads as done",
+  );
+  check(
+    (await textOf("outbox")).includes(word("stop_status", "failed", "driver")),
+    "the queue names a failure in the stop's own word",
+  );
 
   // A start-up with no signal more than an hour after the last refresh: the
   // access token has expired and cannot be renewed. The driver stays in, with

@@ -17,10 +17,11 @@
  * the database has (marked «chosen» below), the word is written in the same
  * plain register; the report of the change that added this file lists them.
  *
- * Phase A of the migration (§2.5): no screen reads this module yet. Today's
- * labels (ORDER_STATUS_LABEL in lifecycle.ts, the apps' labels.ts files)
- * keep their words until one change moves every screen and journey here.
- * status-words.test.ts reads the enums and the `check (status in (…))` lists
+ * Every status badge and label table of the apps, the shared packages and
+ * the journeys reads this module (decision 59); status-words-copies.test.ts
+ * fails on a copy. Sentences that carry a state (an order summary, a refund
+ * line, a notice's subject) are not status words and still live with their
+ * screens. status-words.test.ts reads the enums and the `check (status in (…))` lists
  * of supabase/migrations and fails when a status has no word.
  */
 

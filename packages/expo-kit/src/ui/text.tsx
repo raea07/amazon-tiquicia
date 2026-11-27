@@ -7,9 +7,10 @@ import {
 import { colors, fontFamily, fontSize, lineHeight } from "../theme/tokens";
 
 /**
- * Text styles of the brand (brand book §8): Bricolage Grotesque for headings,
- * prices and big numbers; Inter for everything else. Body copy is never below
- * 16 px. Headings are announced as headings.
+ * Text styles of the brand: Epilogue (fontFamily.display) for headings,
+ * prices and big numbers; Fira Sans (fontFamily.body) for everything else
+ * (design system §3, decision 58). Body copy is never below 16 px. Headings
+ * are announced as headings.
  */
 export const textStyles = StyleSheet.create({
   display: {

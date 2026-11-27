@@ -5,7 +5,7 @@ import { Alert, Button, Card, formatDateTime, PinIcon, Stack, Text } from "@yunt
 import { Platform, StyleSheet, View } from "react-native";
 import { type Tracking, useDriver } from "@/lib/driver";
 import type { ArrivePayload, FailPayload } from "@/lib/outbox";
-import { findStop, reasonTitle, type ShownRoute } from "@/lib/route";
+import { findStop, reasonTitle, STOP_LABEL, type ShownRoute } from "@/lib/route";
 import { canOpenSettings, openSettings } from "@/lib/tracking";
 
 /** No signal: say what still works and what does not. */
@@ -33,7 +33,8 @@ function describe(entry: QueueEntry, routes: ShownRoute[] | null): string {
     : "una parada";
   if (entry.kind === "arrive") return `Llegada a la ${where}`;
   if (entry.kind === "fail") {
-    return `No entregado (${reasonTitle((entry.payload as FailPayload).reason).toLowerCase()}): ${where}`;
+    // The stop's own word (core's), so the queue and the stop read the same.
+    return `${STOP_LABEL.failed.label} (${reasonTitle((entry.payload as FailPayload).reason).toLowerCase()}): ${where}`;
   }
   return "Una acción";
 }

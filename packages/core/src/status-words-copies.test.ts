@@ -7,7 +7,10 @@
  * 1. a status value written next to one of the module's words, as in
  *    `delivered: "Entregado"` or `failed: { label: "Pago rechazado" }`;
  * 2. a word the module replaced (today's words before the Carreta words)
- *    written as a whole string literal anywhere.
+ *    written as a whole string literal, a whole regular expression
+ *    (`/No entregado/`) or the whole text of a JSX element anywhere;
+ * 3. one of the module's words written as a whole regular expression
+ *    (`/^Entregado$/`): a journey that checks a word asks the module for it.
  *
  * Sentences that carry a status («Retirada: usted retiró esta solicitud.»)
  * and badges of conditions that are not a database status («Faltante»,
@@ -64,6 +67,7 @@ const RETIRED_WORDS = [
   "Detenido: vuelve a la zona de devoluciones",
   "Quitado de una ruta: espera otra",
   "Ningún paquete en camino: espera otra ruta",
+  "No entregado",
 ];
 
 /** Every Spanish word of the module, for every kind and viewer. */
@@ -96,19 +100,45 @@ function scannedFiles(): string[] {
 
 const quoteRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/**
+ * The bodies of the regular expression literals on a line, without their
+ * anchors (`^`, `$`, `\b`) and with escaped characters unescaped:
+ * `/^No entregado$/i` gives "No entregado". A division (`a / b / c`) gives
+ * nothing a status word could equal.
+ */
+function regexBodies(line: string): string[] {
+  const out: string[] = [];
+  for (const m of line.matchAll(
+    /(?:^|[=(,:!&|?{}[;]|return)\s*\/((?:[^/\\\n]|\\.)+)\/[dgimsuy]*/g,
+  )) {
+    const body = (m[1] ?? "")
+      .replace(/^\^|\$$/g, "")
+      .replace(/\\b/g, "")
+      .replace(/\\(.)/g, "$1");
+    out.push(body);
+  }
+  return out;
+}
+
 /** The copies in one file's text, as "line: what". */
 function copiesIn(text: string, words: Set<string>, values: Set<string>): string[] {
   const nextTo = new RegExp(
     `(?:^|[\\s{,(])["']?(${[...values].map(quoteRe).join("|")})["']?\\s*:\\s*(?:\\{\\s*label:\\s*)?["'\`]([^"'\`]+)["'\`]`,
   );
-  const retired = new RegExp(`["'\`](${RETIRED_WORDS.map(quoteRe).join("|")})["'\`]`);
+  const retiredWords = RETIRED_WORDS.map(quoteRe).join("|");
+  const retired = new RegExp(`["'\`](${retiredWords})["'\`]`);
+  const retiredText = new RegExp(`>\\s*(${retiredWords})\\s*<`);
   const found: string[] = [];
   text.split("\n").forEach((line, i) => {
     if (line.trimEnd().endsWith("// not a status word")) return;
     const pair = line.match(nextTo);
     if (pair?.[2] && words.has(pair[2])) found.push(`${i + 1}: ${pair[1]} → «${pair[2]}»`);
-    const old = line.match(retired);
+    const old = line.match(retired) ?? line.match(retiredText);
     if (old) found.push(`${i + 1}: «${old[1]}» (a replaced word)`);
+    for (const body of regexBodies(line)) {
+      if (RETIRED_WORDS.includes(body)) found.push(`${i + 1}: /${body}/ (a replaced word)`);
+      else if (words.has(body)) found.push(`${i + 1}: /${body}/ (a word of the module)`);
+    }
   });
   return found;
 }
@@ -123,6 +153,13 @@ describe("status words have one source", () => {
       copiesIn(`  failed: { label: "Pago rechazado", tone: "danger" },`, words, values),
     ).toHaveLength(1);
     expect(copiesIn(`<Badge>{"En preparación"}</Badge>`, words, values)).toHaveLength(1);
+    expect(copiesIn(`<Badge>En preparación</Badge>`, words, values)).toHaveLength(1);
+    expect(
+      copiesIn(`  check(/No entregado/.test(text), "a failure");`, words, values),
+    ).toHaveLength(1);
+    expect(copiesIn(`  check(/^Entregado$/.test(text), "done");`, words, values)).toHaveLength(1);
+    expect(copiesIn(`  check(/Elija por qué/.test(text), "a reason");`, words, values)).toEqual([]);
+    expect(copiesIn(`  const half = total / 2 / count;`, words, values)).toEqual([]);
     expect(copiesIn(`  failed: "Escriba un correo válido.",`, words, values)).toEqual([]);
     expect(copiesIn(`  pending: "warning",`, words, values)).toEqual([]);
     expect(copiesIn(`  done: "Completado", // not a status word`, words, values)).toEqual([]);
