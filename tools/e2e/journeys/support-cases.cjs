@@ -92,6 +92,13 @@ function sql(statement) {
   sql(`insert into public.staff_members (user_id, role)
        select id, 'finance' from auth.users where email = '${FINANCE}'
        on conflict (user_id) do update set role = 'finance', active = true`);
+  // Three refused texts in an hour lock a writer out; earlier runs of this
+  // journey on the same database must not count (the trail is otherwise
+  // immutable, so the rows are moved back past the hour for this test only).
+  sql(`alter table private.audit_log disable trigger audit_log_immutable;
+       update private.audit_log set at = at - interval '2 hours'
+       where action = 'REFUSED_CODE' and actor_id = (select id from auth.users where email = '${SUPPORT}');
+       alter table private.audit_log enable trigger audit_log_immutable`);
   // One of the shopper's orders that still has a delivery code.
   const orderNumber = sql(`select o.order_number from public.orders o
     join auth.users u on u.id = o.user_id join private.delivery_codes c on c.order_id = o.id
@@ -169,6 +176,12 @@ function sql(statement) {
   await support.click('button:has-text("Guardar la nota")');
   await support.waitForSelector("text=código de entrega del cliente");
   check(true, "a note with the order's delivery code is refused");
+  check(
+    sql(`select count(*) from private.audit_log a join auth.users u on u.id = a.actor_id
+         where a.action = 'REFUSED_CODE' and u.email = '${SUPPORT}' and a.row_key = '${caseId}'
+           and a.new_row::text not like '%${code}%'`) === "1",
+    "the refusal is on the audit trail, without the text or the code",
+  );
   await support.fill(
     'textarea[name="note"]',
     `Nota interna de prueba: revisar el empaque del pedido ${orderNumber}, tel. 8888-${code}.`,

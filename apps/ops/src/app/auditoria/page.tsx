@@ -27,6 +27,7 @@ const TABLES: Record<string, string> = {
   products: "Productos",
   customers: "Clientes",
   saved_replies: "Respuestas guardadas",
+  cases: "Casos",
 };
 const ACTIONS: Record<string, string> = {
   INSERT: "Creó",
@@ -42,6 +43,13 @@ const ACTIONS: Record<string, string> = {
   TAKE_DOWN: "Retiró",
   RESTORE: "Volvió a publicar",
   VIEW_CONTACT: "Vio el contacto de un cliente",
+  REFUSED_CODE: "Escribió un código de entrega (se rechazó)",
+};
+// Where a refused text was written (the text itself is never kept).
+const REFUSED_IN: Record<string, string> = {
+  ops_add_case_note: "En una nota interna",
+  ops_answer_case: "En una respuesta al cliente",
+  ops_record_contact: "En el resumen de un contacto",
 };
 
 // Shown as "changed" only; the values of these are never printed on screen.
@@ -110,7 +118,9 @@ async function Trail() {
           <td className="max-w-md break-words text-xs text-ink-muted">
             {entry.action === "VIEW_CONTACT"
               ? `Motivo: ${String(entry.new_row?.reason ?? "")}`
-              : changes(entry.old_row, entry.new_row) || (entry.row_key ?? "")}
+              : entry.action === "REFUSED_CODE"
+                ? (REFUSED_IN[String(entry.new_row?.function ?? "")] ?? "En un caso")
+                : changes(entry.old_row, entry.new_row) || (entry.row_key ?? "")}
           </td>
           <td className="text-xs">
             {entry.actor_name ?? (entry.actor_id ? "Cuenta sin nombre" : "Sistema")}
