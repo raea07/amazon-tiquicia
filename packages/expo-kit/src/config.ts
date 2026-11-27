@@ -167,18 +167,10 @@ export function appLook(app: AppId) {
  * list a biometric permission. An app that adds a biometric feature deletes
  * them here.
  *
- * expo-haptics (installed for the driver and warehouse apps for the scan and
- * delivery signals of the design system, §5.23) declares VIBRATE in its
- * Android manifest. No screen uses haptics yet, and no store build may gain a
- * permission in the foundation stage, so VIBRATE is removed from every app
- * like the biometric ones. The change that wires the haptics declares it in
- * that app's `androidPermissions` and records it for the store listing.
- *
- * POST_NOTIFICATIONS and VIBRATE are the exceptions an app may lift, by
- * declaring them in `androidPermissions`. The drivers' app declares
- * POST_NOTIFICATIONS: its location foreground service must show its notice
- * on Android 13 and later. It asks for it, after its own explanation, only
- * when the driver starts sharing the position.
+ * POST_NOTIFICATIONS is the one exception an app may lift, by declaring it in
+ * `androidPermissions`: the drivers' app, whose location foreground service
+ * must show its notice on Android 13 and later. It asks for it, after its
+ * own explanation, only when the driver starts sharing the position.
  */
 const ALWAYS_BLOCKED = [
   "android.permission.RECORD_AUDIO",
@@ -187,14 +179,10 @@ const ALWAYS_BLOCKED = [
   "android.permission.RECEIVE_BOOT_COMPLETED",
   "android.permission.USE_BIOMETRIC",
   "android.permission.USE_FINGERPRINT",
-  "android.permission.VIBRATE",
 ];
 
-/** The always-blocked permissions an app may declare (see ALWAYS_BLOCKED). */
-const MAY_BE_DECLARED = new Set([
-  "android.permission.POST_NOTIFICATIONS",
-  "android.permission.VIBRATE",
-]);
+/** The only always-blocked permission an app may declare (see ALWAYS_BLOCKED). */
+const MAY_BE_DECLARED = new Set(["android.permission.POST_NOTIFICATIONS"]);
 
 /** The always-blocked list less what this app declares, and the app's own additions. */
 export function blockedFor(

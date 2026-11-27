@@ -103,13 +103,6 @@ describe("defineAppConfig", () => {
     }
   });
 
-  it("removes VIBRATE (declared by expo-haptics) from every app until one declares it", () => {
-    expect(blockedFor({})).toContain("android.permission.VIBRATE");
-    const declared = blockedFor({ androidPermissions: ["android.permission.VIBRATE"] });
-    expect(declared).not.toContain("android.permission.VIBRATE");
-    expect(declared).toContain("android.permission.POST_NOTIFICATIONS");
-  });
-
   it("lets an app declare POST_NOTIFICATIONS, and nothing else that is always blocked", () => {
     const declared = blockedFor({ androidPermissions: ["android.permission.POST_NOTIFICATIONS"] });
     expect(declared).not.toContain("android.permission.POST_NOTIFICATIONS");
