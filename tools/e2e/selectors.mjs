@@ -40,10 +40,14 @@ const SELECTOR_CALL =
 const CLASS =
   /(?:^|[\s>+~,([\]]|\b[a-z][a-z0-9]*)\.(?!example\b|png\b|jpe?g\b|webp\b|cjs\b|mjs\b|js\b|json\b|html\b|pdf\b|xml\b|svg\b|txt\b|csv\b|md\b|css\b)[a-zA-Z_-][\w-]*/;
 
+// kit.withValue is the one sanctioned text match (a data value, never a
+// product word); its own definition is not counted.
+const SANCTIONED = /^const withValue = \(/;
+
 const stripComments = (source) =>
   source
     .split("\n")
-    .map((line) => (/^\s*(\/\/|\*|\/\*)/.test(line) ? "" : line))
+    .map((line) => (/^\s*(\/\/|\*|\/\*)/.test(line) || SANCTIONED.test(line) ? "" : line))
     .join("\n");
 
 const list = process.argv.includes("--list");
@@ -70,7 +74,7 @@ for (const file of files) {
     }
   }
   const role = (source.match(/getByRole\(/g) ?? []).length;
-  const testid = (source.match(/data-testid|getByTestId\(/g) ?? []).length;
+  const testid = (source.match(/data-testid|getByTestId\(|\btestid\(/g) ?? []).length;
   const scroll = file.startsWith("journeys/") ? (source.match(/scrollWidth/g) ?? []).length : 0;
   const box = file.startsWith("journeys/") ? (source.match(/boundingBox\(/g) ?? []).length : 0;
   rows.push({ file, classes, text, role, testid, scroll, box });

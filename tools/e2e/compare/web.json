@@ -1,0 +1,215 @@
+{
+  "app": "web",
+  "rows": [
+    {
+      "shot": "01-home.png",
+      "template": "T1",
+      "reference": "home.html",
+      "width": 1280
+    },
+    {
+      "shot": "08-mobile-home.png",
+      "template": "T1",
+      "reference": "home.html",
+      "width": 390
+    },
+    {
+      "shot": "02-search.png",
+      "template": "T2",
+      "reference": "lista.html",
+      "width": 1280
+    },
+    {
+      "shot": "cc11-mobile-search.png",
+      "template": "T2",
+      "reference": "lista.html",
+      "width": 390
+    },
+    {
+      "shot": "cc14-shop-brand-filter-mobile.png",
+      "template": "T2",
+      "reference": "lista-filtros.html",
+      "width": 390
+    },
+    {
+      "shot": "sl6-shop-page.png",
+      "template": "T2",
+      "reference": "tienda.html",
+      "width": 1280
+    },
+    {
+      "shot": "sl6b-shop-page-390.png",
+      "template": "T2",
+      "reference": "tienda.html",
+      "width": 390
+    },
+    {
+      "shot": "03-product.png",
+      "template": "T3",
+      "reference": "producto.html",
+      "width": 1280
+    },
+    {
+      "shot": "09-mobile-product.png",
+      "template": "T3",
+      "reference": "producto.html",
+      "width": 390
+    },
+    {
+      "shot": "sl2-product-two-offers.png",
+      "template": "T3",
+      "reference": "producto.html",
+      "width": 1280
+    },
+    {
+      "shot": "sl2b-product-two-offers-390.png",
+      "template": "T3",
+      "reference": "producto.html",
+      "width": 390
+    },
+    {
+      "shot": "pp4-shop-gallery-390.png",
+      "template": "T3",
+      "reference": "producto.html",
+      "width": 390
+    },
+    {
+      "shot": "04-cart.png",
+      "template": "T4",
+      "reference": "carrito.html",
+      "width": 1280
+    },
+    {
+      "shot": "sl2c-cart-sold-out.png",
+      "template": "T4",
+      "reference": "carrito.html",
+      "width": 1280
+    },
+    {
+      "shot": "sl2d-cart-sold-out-390.png",
+      "template": "T4",
+      "reference": "carrito.html",
+      "width": 390
+    },
+    {
+      "shot": "cr4-cart-nothing-to-buy.png",
+      "template": "T4",
+      "reference": "carrito.html",
+      "width": 1280
+    },
+    {
+      "shot": "05-checkout.png",
+      "template": "T4",
+      "reference": "pago.html",
+      "width": 1280
+    },
+    {
+      "shot": "i01-checkout-factura.png",
+      "template": "T4",
+      "reference": "pago.html",
+      "width": 1280
+    },
+    {
+      "shot": "co2-checkout-zone-off.png",
+      "template": "T4",
+      "reference": "pago.html",
+      "width": 1280
+    },
+    {
+      "shot": "06-order-pending.png",
+      "template": "T5",
+      "reference": "pedido.html",
+      "width": 1280
+    },
+    {
+      "shot": "07-order-paid.png",
+      "template": "T5",
+      "reference": "pedido.html",
+      "width": 1280
+    },
+    {
+      "shot": "p06-sinpe-instructions-phone.png",
+      "template": "T5",
+      "reference": "pedido.html",
+      "width": 390
+    },
+    {
+      "shot": "p07-sinpe-paid-phone.png",
+      "template": "T5",
+      "reference": "pedido.html",
+      "width": 390
+    },
+    {
+      "shot": "of10-mobile-refunded.png",
+      "template": "T5",
+      "reference": "pedido.html",
+      "width": 390
+    },
+    {
+      "shot": "07b-orders.png",
+      "template": "T5",
+      "reference": "pedidos.html",
+      "width": 1280
+    },
+    {
+      "shot": "of9-mobile-list.png",
+      "template": "T5",
+      "reference": "pedidos.html",
+      "width": 390
+    },
+    {
+      "shot": "i03-invoice-page.png",
+      "template": "T9",
+      "reference": "comprobante.html",
+      "width": 1280
+    },
+    {
+      "shot": "i04-invoice-phone.png",
+      "template": "T9",
+      "reference": "comprobante.html",
+      "width": 390
+    },
+    {
+      "shot": "n01-shopper-settings.png",
+      "template": "T11",
+      "reference": "cuenta.html",
+      "width": 1280
+    },
+    {
+      "shot": "n02-shopper-settings-phone.png",
+      "template": "T11",
+      "reference": "cuenta.html",
+      "width": 390
+    },
+    {
+      "shot": "l6-report-refused.png",
+      "template": "T12",
+      "reference": "zona.html",
+      "width": 1280
+    },
+    {
+      "shot": "wf01-sign-in-limit.png",
+      "template": "T13",
+      "reference": "ingresar.html",
+      "width": 1280
+    },
+    {
+      "shot": "r1-requested.png",
+      "template": "T13",
+      "reference": "ingresar.html",
+      "width": 1280
+    },
+    {
+      "shot": "d2-delete.png",
+      "template": "T14",
+      "reference": "confirmar.html",
+      "width": 1280
+    },
+    {
+      "shot": "sc1-not-found-mobile.png",
+      "template": "T14",
+      "reference": "avisos.html",
+      "width": 390
+    }
+  ]
+}

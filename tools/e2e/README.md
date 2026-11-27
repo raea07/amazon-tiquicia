@@ -1,80 +1,30 @@
 # Browser journeys
 
-Four scripts that use the product the way its four kinds of users do, in a real
-browser, against a freshly seeded database:
+Each journey uses the apps as a shopper, seller, staff member, driver or
+warehouse worker would, in a real browser, against a freshly seeded database.
+It fails when a step does not arrive, the browser logs an error or a response
+is a 5xx. Run them in your own lane (never 0): `tools/dev/stack.sh up 1`, then
+`tools/dev/stack.sh e2e 1 [journey ...]`, then `tools/dev/stack.sh down 1`.
 
-| Journey  | App           | What it walks through                                                                                                                                                                                                   |
-| -------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `web`    | `apps/web`    | Search with a typo, product page, cart, sign-in with a wrong then right password, checkout, SINPE payment, delivery code, orders, another shopper's order hidden, phone width                                           |
-| `seller` | `apps/seller` | Sign-in redirect, switching shops, price edit and its validation, stock count, new listing with the fee preview, inbound stock, statements, packing, a new seller registering on a phone                                |
-| `ops`    | `apps/ops`    | Visitors and non-staff kept out, confirming a bank transfer, order search, product review, seller verification, route planning, a return approved and refunded, a complaint answered, drivers, audit trail, phone width |
-| `field`  | `apps/field`  | Driver: route, wrong delivery code, short cash, delivery, failed delivery, cash settlement and position reaching the console. Warehouse: wrong scan refused, picking, packing, receiving, stock lookup                  |
+## Rules for writing one
 
-Three more cover account security, reading e-mails from the stand-in's local
-mailbox (`GET /dev/mail`) and switching Auth settings for their own database
-(`POST /dev/settings`):
-
-| Journey               | App        | What it walks through                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `password-reset`      | `apps/web` | Same answer for an unknown address, the e-mail link, new password, old one refused, other session ended (its next page goes to sign-in); an ordinary session cannot use the reset page; then by 6-digit code; a reused and an expired link; a wrong code; a disallowed redirect falls back to the shop and still works                                                                                                                                                                                           |
-| `staff-second-factor` | `apps/ops` | Enrolment with computed codes; with the setting off, a password-only token is refused by the API; the second step after a wrong code; `require_staff_mfa` on (database refuses aal1 staff, colleague sent to enrolment); admin resets colleague, whose open session ends at once; a shopper with a factor is held at `/verificar` in the shop                                                                                                                                                                    |
-| `account-deletion`    | `apps/web` | Sign-up with confirmation on, resend limit, sign-in before confirming, code, deletion (wrong password first); another device's token and page stop working at once; same address signs up again, a shopper with an order refused                                                                                                                                                                                                                                                                                 |
-| `web-followups`       | all four   | The sign-in limit (wrong passwords until the limit, the message and the wait, the same answer for an unknown address, the owner's own browser let in, one visitor guessing many accounts stopped), sign-up with an existing address looking like a new one, an idle console session sent to sign in and back, the order search keeping names out of URLs, every console section at 1280 and 390 px, the delivery zone's pending state. Says who the visitor is in `X-Forwarded-For`, which the lane's apps trust |
-
-A journey fails if a step does not arrive where it should, if the browser logs
-an error, or if any response is a 5xx. They are deliberately few and long: they
-exist to prove the apps, the API and the database work together, not to cover
-every branch (the database and unit tests do that).
-
-## Running them
-
-```bash
-pnpm db:local:up
-```
-
-```bash
-pnpm --filter @yuntera/dev-api start
-```
-
-```bash
-pnpm build
-```
-
-Start the four apps, each in its own terminal:
-
-```bash
-pnpm --filter @yuntera/web start
-```
-
-```bash
-pnpm --filter @yuntera/seller start
-```
-
-```bash
-pnpm --filter @yuntera/ops start
-```
-
-```bash
-pnpm --filter @yuntera/field start
-```
-
-Then:
-
-```bash
-pnpm --filter @yuntera/e2e journeys
-```
-
-Screenshots of the main screens are written to `tools/e2e/screenshots/`
-(ignored by git). The runner resets the local database before each journey, so
-do not point it at a database you care about.
-
-## Settings
-
-All optional; the defaults match local development.
-
-| Variable                                        | Default                                    |
-| ----------------------------------------------- | ------------------------------------------ |
-| `WEB_URL`, `SELLER_URL`, `OPS_URL`, `FIELD_URL` | `http://127.0.0.1:3000` … `:3003`          |
-| `API_URL`, `API_KEY`                            | the local stand-in and its publishable key |
-| `SEED_PASSWORD`                                 | the local seed password                    |
-| `E2E_SHOTS`                                     | `tools/e2e/screenshots`                    |
+1. A journey file holds the flow, the checks on data and the size checks. Every
+   screen step (find, click, fill, read) is a named function in
+   `lib/web.cjs`, `lib/seller.cjs`, `lib/ops.cjs` or `lib/field.cjs`.
+2. Find things by role and accessible name, by `[name=…]` for a form field,
+   or by `data-testid`. Never by a CSS class, never by a text match.
+3. The one text match allowed is `kit.withValue`, for a data value (an order
+   number, a seed product's title, an e-mail address), never a product word.
+4. A status word comes from `lib/words.cjs` (later `packages/core`), not from a
+   string in the journey.
+5. A message without a test id is read with `kit.waitForMessage` by its words,
+   inside a helper.
+6. Size checks (`scrollWidth`, `boundingBox`) stay in the journey files, at 390
+   and 1280 px. Nobody loosens one in the same change as a screen.
+7. An app builder may change that app's helper file; journey files belong to the
+   journey owner. A test id may be added, never renamed or dropped.
+8. From the repository root, `node tools/e2e/selectors.mjs --check` must find
+   0 class and 0 text selectors; `node tools/e2e/touch-targets.cjs`, after
+   `eval "$(tools/dev/stack.sh env 1)"`, measures the 44 px targets.
+9. `node tools/e2e/compare.mjs --shots .lane/1/screenshots` puts each journey
+   screenshot beside its reference page (rows in `compare/<app>.json`).
