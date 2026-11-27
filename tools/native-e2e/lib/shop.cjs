@@ -109,3 +109,73 @@ module.exports = {
   tabs,
   withdrawn,
 };
+
+// ── Wave 9: the complaint form, «Sus consultas», a stopped order ───────────
+
+const { screenText, squash } = require("./screen.cjs");
+
+/** Signs in from the sign-in screen and waits for the order `orderNumber` in «Sus pedidos». */
+async function signInToOrders(page, base, email, password, orderNumber) {
+  await page.goto(`${base}/ingresar?siguiente=%2Fpedidos`, { waitUntil: "networkidle" });
+  await signIn(page, email, password);
+  await on(page, `order-${orderNumber}`).waitFor();
+}
+
+/** Everything Ayuda says, as one line (for its promised times). */
+const helpText = (page) => screenText(page);
+
+/** Waits for Ayuda's button to the complaint form. */
+const helpComplaintButton = (page) => on(page, "help-complaint").waitFor();
+
+/** On an order: «Presente un reclamo», and waits for the form. */
+async function openComplaintFromOrder(page) {
+  await on(page, "order-complaint").click();
+  await on(page, "complaint-form").waitFor();
+}
+
+/** The order number the complaint form carries. */
+const complaintOrderNumber = (page) => on(page, "complaint-order").inputValue();
+
+/** Types what happened. */
+const typeComplaint = (page, description) => on(page, "complaint-description").fill(description);
+
+/** Chooses what the complaint is about (`delivery`, `product`…). */
+const chooseComplaintCategory = (page, category) =>
+  on(page, `complaint-category-${category}`).click();
+
+/** Sends the complaint. */
+const sendComplaint = (page) => on(page, "complaint-submit").click();
+
+/** What the complaint form says now (a refusal or the filed message), as one line. */
+const complaintMessage = async (page) => squash(await on(page, "complaint-message").innerText());
+
+/** After filing: waits for the button to «Sus consultas». */
+const complaintFiled = (page) => on(page, "complaint-cases").waitFor();
+
+/** From the filed message, opens «Sus consultas». */
+const openMyCasesFromComplaint = (page) => on(page, "complaint-cases").click();
+
+/** The shopper's cases with their answers (in «Sus consultas» or on an order), as one line. */
+async function caseAnswersText(page) {
+  await on(page, "case-answers").waitFor();
+  return squash(await on(page, "case-answers").innerText());
+}
+
+/** Why an order was cancelled, as its screen says it. */
+const cancelReasonText = async (page) => squash(await on(page, "order-cancel-reason").innerText());
+
+Object.assign(module.exports, {
+  signInToOrders,
+  helpText,
+  helpComplaintButton,
+  openComplaintFromOrder,
+  complaintOrderNumber,
+  typeComplaint,
+  chooseComplaintCategory,
+  sendComplaint,
+  complaintMessage,
+  complaintFiled,
+  openMyCasesFromComplaint,
+  caseAnswersText,
+  cancelReasonText,
+});

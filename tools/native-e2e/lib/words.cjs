@@ -86,3 +86,15 @@ const RETURN_LINES = {
 const returnLine = (state) => RETURN_LINES[state];
 
 module.exports = { TODAY, core, makeWord, returnLine, word };
+
+// ── Wave 9: derived words (a stopped parcel) ───────────────────────────────
+
+/**
+ * Core's word of a status that depends on more than its value (the
+ * DERIVED_STATUS_WORDS of status-words.ts): `options` are statusWord's, such
+ * as `{ stoppedBeforeLeaving: true }` for a parcel that never left.
+ */
+const derivedWord = (kind, value, viewer, options) =>
+  core.statusWord(kind, value, { viewer, locale: "es", ...options }).word;
+
+Object.assign(module.exports, { derivedWord });

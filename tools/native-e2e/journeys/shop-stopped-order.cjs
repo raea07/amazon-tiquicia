@@ -8,10 +8,14 @@
 //   and packed by central, stopped by central and checked in by bodega, all
 //   through the API.
 //
-// Fails on any console error, uncaught exception or 5xx.
+// Screen steps are in lib/shop.cjs; the parcel's words come from
+// lib/words.cjs. Fails on any console error, uncaught exception or 5xx.
 
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
+const shop = require("../lib/shop.cjs");
+const { overflow, screenText } = require("../lib/screen.cjs");
+const { derivedWord, word } = require("../lib/words.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const SHOP = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
@@ -23,7 +27,6 @@ const DATABASE_URL =
 const SHOPPER = "comprador2@yuntera.example";
 const PRODUCT = "libreta-tapa-dura-a5";
 const log = (...args) => console.log(...args);
-const squash = (text) => text.replace(/\s+/g, " ").trim();
 
 function check(condition, message) {
   if (!condition) throw new Error(message);
@@ -79,7 +82,6 @@ async function as(email) {
   page.on("response", (response) => {
     if (response.status() >= 500) errors.push(`HTTP ${response.status()} ${response.url()}`);
   });
-  const visible = (testId) => page.getByTestId(testId).filter({ visible: true }).first();
 
   // ── The order, stopped before it left and checked in ──────────────────────
   const buyer = await as(SHOPPER);
@@ -124,13 +126,9 @@ async function as(email) {
   await bodega.dispose();
   log("stopped before it left and checked in:", placed.order_number);
 
-  await page.goto(`${SHOP}/ingresar?siguiente=%2Fpedidos`, { waitUntil: "networkidle" });
-  await visible("sign-in-email").fill(SHOPPER);
-  await visible("sign-in-password").fill(PASSWORD);
-  await visible("sign-in-submit").click();
-  await visible(`order-${placed.order_number}`).waitFor();
+  await shop.signInToOrders(page, SHOP, SHOPPER, PASSWORD, placed.order_number);
   await page.goto(`${SHOP}/pedidos/${placed.order_number}`, { waitUntil: "networkidle" });
-  const why = squash(await visible("order-cancel-reason").innerText());
+  const why = await shop.cancelReasonText(page);
   log("   the order page says:", why);
   check(
     why.startsWith("Cancelamos su pedido antes de que saliera de nuestra bodega") &&
@@ -140,7 +138,7 @@ async function as(email) {
       why.includes("haga el pedido de nuevo"),
     "the order page says it never left, that the money goes back, and where to ask why",
   );
-  const screen = squash(await page.locator("body").innerText());
+  const screen = await screenText(page);
   check(
     screen.includes("Cancelado: el pedido no llegó a salir de nuestra bodega"),
     "the history says the same",
@@ -149,18 +147,23 @@ async function as(email) {
     !screen.includes("regresaron sin entregarse") && !screen.includes("6632"),
     "nothing of parcels coming back, nor staff's reason",
   );
-  // The parcel itself (wave 9 integration): never "Devuelto" for one that never left.
+  // The parcel itself (wave 9 integration): never the words of a parcel that
+  // came back for one that never left.
+  const neverLeft = derivedWord("shipment_status", "returned", "shopper", {
+    stoppedBeforeLeaving: true,
+  });
+  const cameBack = word("shipment_status", "returned", "shopper");
+  // «Devuelto», the word a parcel that came back read before §4.3's words.
+  const cameBackBefore = word("payment_status", "refunded", "shopper");
   check(
-    screen.includes("No salió de la bodega") &&
-      screen.includes("Paquete: no salió de nuestra bodega") &&
-      !screen.includes("Devuelto") &&
-      !screen.includes("Paquete: devuelto"),
+    screen.includes(neverLeft) &&
+      screen.includes(`Paquete: ${neverLeft.toLowerCase()}`) &&
+      !screen.includes(cameBack) &&
+      !screen.includes(cameBackBefore) &&
+      !screen.includes(`Paquete: ${cameBackBefore.toLowerCase()}`),
     "the parcel and its history say it did not leave the warehouse",
   );
-  check(
-    (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-    "no sideways scrolling at 390 px",
-  );
+  check((await overflow(page)) <= 0, "no sideways scrolling at 390 px");
   await page.screenshot({ path: `${SHOTS}/native-stopped-order.png`, fullPage: true });
 
   log("\nERRORS:", errors.length ? errors : "none");

@@ -9,10 +9,13 @@
 //      administrator); the shopper reads the answer in "Sus consultas" and on
 //      the order's screen, and never the internal note staff wrote.
 //
-// Fails on any console error, uncaught exception or 5xx.
+// Screen steps are in lib/shop.cjs. Fails on any console error, uncaught
+// exception or 5xx.
 
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
+const shop = require("../lib/shop.cjs");
+const { overflow, screenText } = require("../lib/screen.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const SHOP = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
@@ -24,7 +27,6 @@ const DATABASE_URL =
 const SHOPPER = "comprador@yuntera.example";
 const STAFF = "central@yuntera.example";
 const log = (...args) => console.log(...args);
-const squash = (text) => text.replace(/\s+/g, " ").trim();
 
 function check(condition, message) {
   if (!condition) throw new Error(message);
@@ -80,53 +82,44 @@ async function as(email) {
   page.on("response", (response) => {
     if (response.status() >= 500) errors.push(`HTTP ${response.status()} ${response.url()}`);
   });
-  const visible = (testId) => page.getByTestId(testId).filter({ visible: true }).first();
   const noSideways = async (where) =>
-    check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
-      `no sideways scrolling at 390 px: ${where}`,
-    );
+    check((await overflow(page)) <= 0, `no sideways scrolling at 390 px: ${where}`);
   const orderNumber = sql(`select o.order_number from public.orders o
     join auth.users u on u.id = o.user_id where u.email = '${SHOPPER}'
     order by o.placed_at desc limit 1`);
 
   // ── 1. Ayuda ──────────────────────────────────────────────────────────────
-  await page.goto(`${SHOP}/ingresar?siguiente=%2Fpedidos`, { waitUntil: "networkidle" });
-  await visible("sign-in-email").fill(SHOPPER);
-  await visible("sign-in-password").fill(PASSWORD);
-  await visible("sign-in-submit").click();
-  await visible(`order-${orderNumber}`).waitFor();
+  await shop.signInToOrders(page, SHOP, SHOPPER, PASSWORD, orderNumber);
   await page.goto(`${SHOP}/ayuda`, { waitUntil: "networkidle" });
-  const help = squash(await page.locator("body").innerText());
+  const help = await shop.helpText(page);
   check(
     help.includes("1 día hábil") &&
       help.includes("5 días hábiles") &&
       !help.includes("2 días hábiles"),
     "Ayuda gives the times of customer-service.md",
   );
-  await visible("help-complaint").waitFor();
+  await shop.helpComplaintButton(page);
   check(true, "and a button to the complaint form");
 
   // ── 2. A complaint from the order's screen ────────────────────────────────
   await page.goto(`${SHOP}/pedidos/${orderNumber}`, { waitUntil: "networkidle" });
-  await visible("order-complaint").click();
-  await visible("complaint-form").waitFor();
+  await shop.openComplaintFromOrder(page);
   check(
-    (await visible("complaint-order").inputValue()) === orderNumber,
+    (await shop.complaintOrderNumber(page)) === orderNumber,
     "the form carries the order's number",
   );
-  await visible("complaint-description").fill("La caja llegó abierta y faltaba el manual.");
-  await visible("complaint-submit").click();
+  await shop.typeComplaint(page, "La caja llegó abierta y faltaba el manual.");
+  await shop.sendComplaint(page);
   check(
-    squash(await visible("complaint-message").innerText()) === "Elija de qué trata su reclamo.",
+    (await shop.complaintMessage(page)) === "Elija de qué trata su reclamo.",
     "a complaint without a choice is refused before anything is sent",
   );
-  await visible("complaint-category-delivery").click();
+  await shop.chooseComplaintCategory(page, "delivery");
   await noSideways("the complaint form");
   await page.screenshot({ path: `${SHOTS}/native-complaint-1-form.png`, fullPage: true });
-  await visible("complaint-submit").click();
-  await visible("complaint-cases").waitFor();
-  const filed = squash(await visible("complaint-message").innerText());
+  await shop.sendComplaint(page);
+  await shop.complaintFiled(page);
+  const filed = await shop.complaintMessage(page);
   log("   filed:", filed);
   const reference = /reclamo ([0-9A-F]{8})/.exec(filed)?.[1] ?? "";
   check(reference.length === 8, `the shopper reads the reference (${reference})`);
@@ -153,9 +146,8 @@ async function as(email) {
   });
   await staff.dispose();
 
-  await visible("complaint-cases").click();
-  await visible("case-answers").waitFor();
-  const mine = squash(await visible("case-answers").innerText());
+  await shop.openMyCasesFromComplaint(page);
+  const mine = await shop.caseAnswersText(page);
   check(
     mine.includes(`Reclamo ${reference}`) && mine.includes("Se lo enviamos por correo hoy mismo"),
     "the shopper reads the answer in Sus consultas",
@@ -165,15 +157,12 @@ async function as(email) {
   await page.screenshot({ path: `${SHOTS}/native-complaint-3-cases.png`, fullPage: true });
 
   await page.goto(`${SHOP}/pedidos/${orderNumber}`, { waitUntil: "networkidle" });
-  await visible("case-answers").waitFor();
   check(
-    squash(await visible("case-answers").innerText()).includes(
-      "Se lo enviamos por correo hoy mismo",
-    ),
+    (await shop.caseAnswersText(page)).includes("Se lo enviamos por correo hoy mismo"),
     "and on the order's screen",
   );
   check(
-    !squash(await page.locator("body").innerText()).includes("Nota interna nativa"),
+    !(await screenText(page)).includes("Nota interna nativa"),
     "the order's screen shows no note",
   );
   await noSideways("the order with its answer");

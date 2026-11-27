@@ -27,6 +27,10 @@
       "files": ["apps/shop-native/src/components/search-box.tsx"]
     },
     {
+      "id": "account-cases",
+      "files": ["apps/shop-native/src/app/(tabs)/cuenta.tsx"]
+    },
+    {
       "id": "account-delete",
       "files": ["apps/shop-native/src/app/(tabs)/cuenta.tsx"]
     },
@@ -151,6 +155,18 @@
       "files": ["apps/shop-native/src/components/cart-alternative.tsx"]
     },
     {
+      "id": "case-answer",
+      "files": ["apps/shop-native/src/components/case-answers.tsx"]
+    },
+    {
+      "id": "case-answer-body",
+      "files": ["apps/shop-native/src/components/case-answers.tsx"]
+    },
+    {
+      "id": "case-answers",
+      "files": ["apps/shop-native/src/components/case-answers.tsx"]
+    },
+    {
       "id": "categories-kept",
       "files": ["apps/shop-native/src/app/(tabs)/categorias.tsx"]
     },
@@ -173,6 +189,34 @@
     {
       "id": "checkout-summary",
       "files": ["apps/shop-native/src/app/pagar.tsx"]
+    },
+    {
+      "id": "complaint-cases",
+      "files": ["apps/shop-native/src/app/reclamo.tsx"]
+    },
+    {
+      "id": "complaint-category",
+      "files": ["apps/shop-native/src/app/reclamo.tsx"]
+    },
+    {
+      "id": "complaint-description",
+      "files": ["apps/shop-native/src/app/reclamo.tsx"]
+    },
+    {
+      "id": "complaint-form",
+      "files": ["apps/shop-native/src/app/reclamo.tsx"]
+    },
+    {
+      "id": "complaint-message",
+      "files": ["apps/shop-native/src/app/reclamo.tsx"]
+    },
+    {
+      "id": "complaint-order",
+      "files": ["apps/shop-native/src/app/reclamo.tsx"]
+    },
+    {
+      "id": "complaint-submit",
+      "files": ["apps/shop-native/src/app/reclamo.tsx"]
     },
     {
       "id": "delivery-code",
@@ -204,6 +248,10 @@
     {
       "id": "gateway-payment",
       "files": ["apps/shop-native/src/components/gateway-payment.tsx"]
+    },
+    {
+      "id": "help-complaint",
+      "files": ["apps/shop-native/src/app/ayuda.tsx"]
     },
     {
       "id": "home-kept",
@@ -251,6 +299,10 @@
     },
     {
       "id": "order-cancel-reason",
+      "files": ["apps/shop-native/src/app/pedidos/[numero].tsx"]
+    },
+    {
+      "id": "order-complaint",
       "files": ["apps/shop-native/src/app/pedidos/[numero].tsx"]
     },
     {
