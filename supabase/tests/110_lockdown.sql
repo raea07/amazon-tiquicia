@@ -31,8 +31,8 @@ insert into allowed (role, schema, fn)
 -- BEGIN visitor functions
 select 'anon', 'public', unnest(array[
   'auth_limit_release', 'auth_limit_reserve', 'cart_alternatives', 'cart_lines', 'category_redirect', 'check_request',
-  'checkout_quote', 'delivery_estimate', 'get_product', 'get_shop', 'list_brands', 'list_categories', 'list_districts',
-  'report_content', 'search_products', 'shop_path_exists', 'suggest_products'
+  'checkout_quote', 'delivery_estimate', 'get_product', 'get_shop', 'health_ping', 'list_brands', 'list_categories',
+  'list_districts', 'report_content', 'search_products', 'shop_path_exists', 'suggest_products'
 ])
 -- END visitor functions
 union all

@@ -71,6 +71,9 @@ case "${1:-}" in
     for file in "$ROOT"/migrations/*.sql; do
       echo "migrate  $(basename "$file")"
       run -f "$file"
+      # Recorded as a hosted project records it (remote-db.sh), for the console's Versiones panel.
+      base="$(basename "$file" .sql)"
+      run -c "insert into supabase_migrations.schema_migrations (version, name) values ('${base%%_*}', '${base#*_}')"
     done
     if [ -f "$ROOT/seed.sql" ]; then
       echo "seed     seed.sql"

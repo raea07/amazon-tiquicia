@@ -366,3 +366,14 @@ as $$ select 0::bigint $$;
 grant usage on schema net to anon, authenticated, service_role;
 grant all on all tables in schema net to anon, authenticated, service_role;
 grant execute on all functions in schema net to anon, authenticated, service_role;
+
+-- The table in which a hosted project records each migration applied (the
+-- Supabase command line and supabase/scripts/remote-db.sh write it; here
+-- local-db.sh does, after each file). public.ops_versions (084800) reads the
+-- newest one. No API role reaches it, as on the hosted project.
+create schema if not exists supabase_migrations;
+create table if not exists supabase_migrations.schema_migrations (
+  version text primary key,
+  statements text[],
+  name text
+);
