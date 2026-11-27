@@ -209,6 +209,12 @@ with gzip:
 | Tracker off (no DSN) | 144,592 bytes (+2.9%)                | 152,786 bytes (+2.8%)                   | nothing               |
 | Tracker on           | 144,225 bytes (+2.7%)                | 152,419 bytes (+2.5%)                   | 25,196 bytes, once    |
 
+Measured again after the redaction fixes (27 November 2026, lane 18,
+Chromium, cache off, bytes as sent on the wire with headers, against the
+reviewer's base build of 147,748 and 156,990 bytes): tracker off 152,904
+(+3.5%) and 162,139 (+3.3%); tracker on 153,185 (+3.7%) and 162,459
+(+3.5%), plus one SDK download of 26,580 bytes after the load event.
+
 The SDK itself is 25 KB compressed, 18% of the home page's first load, above
 the 15% limit, so it is never part of the first load: it is fetched once the
 page has loaded and the browser is idle (`client.ts`). Errors that happen
