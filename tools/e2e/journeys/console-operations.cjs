@@ -444,7 +444,8 @@ const crDay = (days = 0) =>
   const day = await field.mainText(driver);
   log("driver:", day.slice(0, 300));
   check(
-    day.includes("Omitida") && day.includes("Central quitó esta parada"),
+    day.includes(word("stop_status", "skipped", { viewer: "driver" })) &&
+      day.includes("Central quitó esta parada"),
     "the driver does not see the stops skipped",
   );
   await driver.screenshot({ path: SHOTS + "/co10-driver-skipped.png", fullPage: true });

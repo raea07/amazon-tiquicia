@@ -12,7 +12,7 @@
 //     one. Then the driver starts it and Central takes off another stop while
 //     the driver has the parcel: the driver's header and the dispatch card
 //     leave both out of the total and say how many were removed; the staff
-//     order page reads "Quitado de una ruta", not "Entrega fallida", and its
+//     order page reads «Reprogramado», not «No se pudo entregar», and its
 //     history shows no machine codes.
 //   - Catálogo → Marcas: a new brand is deleted from its row; a brand with
 //     products offers no deletion and says why; a brand that got a product

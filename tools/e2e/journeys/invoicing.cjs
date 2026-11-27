@@ -18,6 +18,10 @@ const web = require("../lib/web.cjs");
 const seller = require("../lib/seller.cjs");
 const ops = require("../lib/ops.cjs");
 const kit = require("../lib/kit.cjs");
+const { word } = require("../lib/words.cjs");
+// The invoice's stamp, from packages/core (the same words for every viewer).
+const ACCEPTED = word("invoice_status", "accepted", { viewer: "shopper" });
+const VOIDED = word("invoice_status", "voided", { viewer: "shopper" });
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
 const SELLER = seller.BASE;
@@ -143,7 +147,7 @@ async function until(what, fn, seconds = 60) {
   );
   await until("the order page to show it accepted", async () => {
     await web.openOrderPath(shopper, orderPath);
-    return (await web.mainText(shopper)).includes("Aceptado por Hacienda");
+    return (await web.mainText(shopper)).includes(ACCEPTED);
   });
   const invoices = await web.orderDocuments(shopper);
   check(invoices.includes("Factura electrónica"), "the order shows a factura electrónica");
@@ -228,7 +232,7 @@ async function until(what, fn, seconds = 60) {
   const feeRow = await until("the fee factura in the statements", async () => {
     await seller.open(sellerPage, "/pagos");
     const row = await seller.feeInvoiceRow(sellerPage, orderNumber);
-    return row?.includes("Aceptado por Hacienda") ? row : null;
+    return row?.includes(ACCEPTED) ? row : null;
   });
   check(feeRow.includes("Factura electrónica"), "a factura electrónica for the order's fees");
   await sellerPage.screenshot({ path: `${SHOTS}/i05-seller-invoices.png`, fullPage: true });
@@ -323,8 +327,7 @@ async function until(what, fn, seconds = 60) {
   const final = await until("the order page to show the credit note", async () => {
     await web.openOrderPath(shopper, orderPath);
     const section = await web.orderDocuments(shopper);
-    return section.includes("Nota de crédito electrónica") &&
-      section.includes("Anulado con nota de crédito")
+    return section.includes("Nota de crédito electrónica") && section.includes(VOIDED)
       ? section
       : null;
   });

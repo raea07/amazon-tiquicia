@@ -1,6 +1,26 @@
+import { statusLabels, statusWordMap } from "@yuntera/core";
 import type { Tone } from "@yuntera/ui";
 
-/** How the console words each state. One place, so screens agree. */
+/**
+ * How the console words each state. One place, so screens agree. The status
+ * words come from packages/core status-words (§4.3), as staff read them; the
+ * colours stay here until the status stamp replaces the badge.
+ */
+
+/** An order's status as staff read it («Por preparar», not «Pedido confirmado»). */
+export const ORDER_STATUS_STAFF = statusWordMap("order_status", "staff");
+
+/** The cash a driver hands in at the end of a route. */
+export const SETTLEMENT_STATUS: Readonly<Record<string, string>> = statusWordMap(
+  "driver_settlements",
+  "staff",
+);
+
+/** A shopper's complaint. */
+export const COMPLAINT_STATUS: Readonly<Record<string, string>> = statusWordMap(
+  "complaints",
+  "staff",
+);
 
 export const STAFF_ROLE: Record<string, string> = {
   admin: "Administración",
@@ -17,45 +37,55 @@ export const PAYMENT_METHOD: Record<string, string> = {
   bank_transfer: "Transferencia",
 };
 
-export const PAYMENT_STATUS: Record<string, { label: string; tone: Tone }> = {
-  pending: { label: "Pago pendiente", tone: "warning" },
-  authorized: { label: "Autorizado", tone: "info" },
-  captured: { label: "Pagado", tone: "success" },
-  failed: { label: "Pago fallido", tone: "danger" },
-  cancelled: { label: "Pago anulado", tone: "neutral" },
-  refunded: { label: "Reembolsado", tone: "neutral" },
-  partially_refunded: { label: "Reembolso parcial", tone: "neutral" },
-};
+export const PAYMENT_STATUS: Record<string, { label: string; tone: Tone }> = statusLabels(
+  "payment_status",
+  "staff",
+  {
+    pending: "warning",
+    authorized: "info",
+    captured: "success",
+    failed: "danger",
+    cancelled: "neutral",
+    refunded: "neutral",
+    partially_refunded: "neutral",
+  },
+);
 
-export const SELLER_STATUS: Record<string, { label: string; tone: Tone }> = {
-  pending: { label: "Por verificar", tone: "warning" },
-  active: { label: "Activo", tone: "success" },
-  suspended: { label: "Suspendido", tone: "danger" },
-  closed: { label: "Cerrado", tone: "neutral" },
-};
+export const SELLER_STATUS: Record<string, { label: string; tone: Tone }> = statusLabels(
+  "seller_status",
+  "staff",
+  { pending: "warning", active: "success", suspended: "danger", closed: "neutral" },
+);
 
-export const DRIVER_STATUS: Record<string, { label: string; tone: Tone }> = {
-  pending: { label: "Por aprobar", tone: "warning" },
-  active: { label: "Activo", tone: "success" },
-  suspended: { label: "Suspendido", tone: "danger" },
-  offboarded: { label: "Dado de baja", tone: "neutral" },
-};
+export const DRIVER_STATUS: Record<string, { label: string; tone: Tone }> = statusLabels(
+  "driver_status",
+  "staff",
+  { pending: "warning", active: "success", suspended: "danger", offboarded: "neutral" },
+);
 
-export const ROUTE_STATUS: Record<string, { label: string; tone: Tone }> = {
-  draft: { label: "Sin repartidor", tone: "warning" },
-  assigned: { label: "Asignada", tone: "info" },
-  in_progress: { label: "En ruta", tone: "info" },
-  completed: { label: "Terminada", tone: "success" },
-  cancelled: { label: "Cancelada", tone: "neutral" },
-};
+export const ROUTE_STATUS: Record<string, { label: string; tone: Tone }> = statusLabels(
+  "route_status",
+  "staff",
+  {
+    draft: "warning",
+    assigned: "info",
+    in_progress: "info",
+    completed: "success",
+    cancelled: "neutral",
+  },
+);
 
-export const STOP_STATUS: Record<string, { label: string; tone: Tone }> = {
-  pending: { label: "Pendiente", tone: "neutral" },
-  arrived: { label: "En la puerta", tone: "info" },
-  delivered: { label: "Entregado", tone: "success" },
-  failed: { label: "No entregado", tone: "danger" },
-  skipped: { label: "Omitida", tone: "neutral" },
-};
+export const STOP_STATUS: Record<string, { label: string; tone: Tone }> = statusLabels(
+  "stop_status",
+  "staff",
+  {
+    pending: "neutral",
+    arrived: "info",
+    delivered: "success",
+    failed: "danger",
+    skipped: "neutral",
+  },
+);
 
 export const VEHICLE: Record<string, string> = {
   motorcycle: "Moto",
@@ -71,11 +101,11 @@ export const RETURN_KIND: Record<string, string> = {
   wrong_item: "Producto equivocado",
 };
 
-export const RETURN_STATUS: Record<string, { label: string; tone: Tone }> = {
-  requested: { label: "Por decidir", tone: "warning" },
-  approved: { label: "Aprobada: falta recibir el producto", tone: "info" },
-  received: { label: "Producto recibido: falta reembolsar", tone: "info" },
-};
+export const RETURN_STATUS: Record<string, { label: string; tone: Tone }> = statusLabels(
+  "return_requests",
+  "staff",
+  { requested: "warning", approved: "info", received: "info" },
+);
 
 export const COMPLAINT_CATEGORY: Record<string, string> = {
   delivery: "Entrega",

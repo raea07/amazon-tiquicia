@@ -7,7 +7,13 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { completeReturn, decideReturn, resolveComplaint, resolveReport } from "@/app/actions";
 import { CloseReturnForm, ReceiveReturnForm } from "@/components/integrity-forms";
-import { COMPLAINT_CATEGORY, REPORT_REASON, RETURN_KIND, RETURN_STATUS } from "@/lib/labels";
+import {
+  COMPLAINT_CATEGORY,
+  COMPLAINT_STATUS,
+  REPORT_REASON,
+  RETURN_KIND,
+  RETURN_STATUS,
+} from "@/lib/labels";
 import { canSee, requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Atención" };
@@ -156,7 +162,7 @@ async function Queues() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold">{COMPLAINT_CATEGORY[item.category]}</p>
                   <Badge tone={item.status === "in_progress" ? "info" : "warning"}>
-                    {item.status === "in_progress" ? "En curso" : "Sin responder"}
+                    {COMPLAINT_STATUS[item.status === "in_progress" ? "in_progress" : "open"]}
                   </Badge>
                 </div>
                 <p className="text-ink-muted">

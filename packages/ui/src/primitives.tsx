@@ -277,17 +277,21 @@ export function Alert({
   title,
   children,
   className,
+  "data-testid": testId,
 }: {
   tone?: Exclude<Tone, "neutral" | "promo">;
   title?: string;
   children?: ReactNode;
   className?: string;
+  /** A stable hook for the browser journeys (SISTEMA §20.5). */
+  "data-testid"?: string;
 }) {
   return (
     <div
       // Errors interrupt; everything else is announced politely.
       role={tone === "danger" ? "alert" : "status"}
       className={cx("rounded-md border px-4 py-3 text-sm", ALERT_TONE[tone], className)}
+      data-testid={testId}
     >
       {title ? <p className="font-semibold">{title}</p> : null}
       {children ? <div className={title ? "mt-1" : undefined}>{children}</div> : null}

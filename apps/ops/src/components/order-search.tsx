@@ -1,9 +1,10 @@
 "use client";
 
-import { ORDER_STATUS_LABEL, ORDER_STATUSES, type OrderStatus } from "@yuntera/core";
+import { ORDER_STATUSES, type OrderStatus } from "@yuntera/core";
 import { type ActionState, FormMessage, SubmitButton } from "@yuntera/next-kit/client";
 import { useActionState } from "react";
 import { searchOrders } from "@/app/order-search-actions";
+import { ORDER_STATUS_STAFF } from "@/lib/labels";
 
 const initial: ActionState = {};
 
@@ -44,7 +45,7 @@ export function OrderSearchForm({ text, status }: { text: string; status: string
             <option value="">Todos</option>
             {ORDER_STATUSES.map((value) => (
               <option key={value} value={value}>
-                {ORDER_STATUS_LABEL[value as OrderStatus]["es-CR"]}
+                {ORDER_STATUS_STAFF[value as OrderStatus]}
               </option>
             ))}
           </select>

@@ -1,4 +1,4 @@
-import { parsePhone } from "@yuntera/core";
+import { parsePhone, statusLabels } from "@yuntera/core";
 import type { SellerShopChanges, ShopChangeKind } from "@yuntera/db";
 import { AccountSecuritySection } from "@yuntera/next-kit/account";
 import { sessionApi } from "@yuntera/next-kit/server";
@@ -24,17 +24,17 @@ const ID_TYPE = {
   dimex: "DIMEX",
   nite: "NITE",
 };
-const KYC = {
-  pending: { label: "En verificación", tone: "warning" },
-  verified: { label: "Verificada", tone: "success" },
-  rejected: { label: "No verificada", tone: "danger" },
-} as const;
-const STATUS = {
-  pending: { label: "En revisión", tone: "warning" },
-  active: { label: "Activa", tone: "success" },
-  suspended: { label: "Suspendida", tone: "danger" },
-  closed: { label: "Cerrada", tone: "neutral" },
-} as const;
+const KYC = statusLabels("kyc_status", "seller", {
+  pending: "warning",
+  verified: "success",
+  rejected: "danger",
+});
+const STATUS = statusLabels("seller_status", "seller", {
+  pending: "warning",
+  active: "success",
+  suspended: "danger",
+  closed: "neutral",
+});
 
 export default function AccountPage() {
   return (

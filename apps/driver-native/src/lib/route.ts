@@ -6,7 +6,7 @@
  * Pure functions with no React Native import.
  */
 
-import { format, LOCKED_CODE_MESSAGE, money, parseColones } from "@yuntera/core";
+import { format, LOCKED_CODE_MESSAGE, money, parseColones, statusLabels } from "@yuntera/core";
 // The day as driver_today gives it since 083200: each stop with its district.
 import type {
   PlacedDriverDay as DriverDay,
@@ -20,13 +20,18 @@ const formatPrice = (amountMinor: number) => format(money(amountMinor));
 
 export type StopStatus = DriverStop["status"];
 
-export const STOP_LABEL: Record<StopStatus, { label: string; tone: Tone }> = {
-  pending: { label: "Pendiente", tone: "neutral" },
-  arrived: { label: "En la puerta", tone: "info" },
-  delivered: { label: "Entregado", tone: "success" },
-  failed: { label: "No entregado", tone: "danger" },
-  skipped: { label: "Omitida", tone: "neutral" },
-};
+/** The words come from packages/core status-words, as a driver reads them. */
+export const STOP_LABEL: Record<StopStatus, { label: string; tone: Tone }> = statusLabels(
+  "stop_status",
+  "driver",
+  {
+    pending: "neutral",
+    arrived: "info",
+    delivered: "success",
+    failed: "danger",
+    skipped: "neutral",
+  },
+);
 
 /** The reasons the web offers, in its order and words. */
 export const FAILURE_REASONS = [

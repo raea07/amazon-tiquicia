@@ -262,7 +262,8 @@ const DESCRIPTION =
   const mediumText = await seller.variantText(sendero, "Talla M");
   log("own offer paused:", mediumText);
   check(
-    mediumText.includes("Su oferta en pausa") && !mediumText.includes("A la venta"),
+    mediumText.includes("Su oferta en pausa") &&
+      !mediumText.includes(word("offer_status", "active", { viewer: "seller" })),
     "a size whose own offer is paused is shown as on sale",
   );
   await seller.offerVariantAgain(sendero, "Talla M");

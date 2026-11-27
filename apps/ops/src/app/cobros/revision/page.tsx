@@ -1,4 +1,3 @@
-import { ORDER_STATUS_LABEL } from "@yuntera/core";
 import type { PaymentReview } from "@yuntera/db";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
@@ -17,6 +16,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { resolvePaymentReview } from "@/app/payment-actions";
 import { PaymentNav } from "@/components/payment-nav";
+import { ORDER_STATUS_STAFF } from "@/lib/labels";
 import { REFUND_STATUS, REVIEW_KIND } from "@/lib/payment-labels";
 import { requireStaff } from "@/lib/staff";
 
@@ -144,7 +144,7 @@ function ReviewCard({ review }: { review: PaymentReview }) {
           ) : (
             "Ninguno"
           )}
-          {review.order_status ? ` · ${ORDER_STATUS_LABEL[review.order_status]["es-CR"]}` : ""}
+          {review.order_status ? ` · ${ORDER_STATUS_STAFF[review.order_status]}` : ""}
         </dd>
         <dt className="text-ink-muted">Referencia</dt>
         <dd className="break-all">{review.payment_reference ?? "—"}</dd>

@@ -1,26 +1,23 @@
 // node --test tools/native-e2e/lib/words.test.cjs
-// words.cjs gives today's words now, and after the switch to packages/core it
-// still gives a word for every kind and viewer the journeys use.
+// words.cjs reads every status word from packages/core, and keeps a word of
+// its own only for the four kinds that are not database statuses.
 
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { TODAY, makeWord, word } = require("./words.cjs");
+const { TODAY, core, makeWord, word } = require("./words.cjs");
 
-/** Every (kind, viewer, value, word) of today's table. */
+/** Every (kind, viewer, value, word) of the table. */
 const entries = Object.entries(TODAY).flatMap(([kind, viewers]) =>
   Object.entries(viewers).flatMap(([viewer, values]) =>
     Object.entries(values).map(([value, text]) => ({ kind, viewer, value, text })),
   ),
 );
 
-// A stand-in for core's statusWord, shaped like the real one: it holds only
-// database statuses, throws a TypeError for a kind it does not know and a
-// RangeError for a value it does not know, and has no "warehouse" words.
+// A stand-in for core's statusWord, shaped like the real one: it throws a
+// TypeError for a kind it does not know and a RangeError for a value.
 const CORE_WORDS = {
   order_status: { shopper: { shipped: "En camino (core)" } },
   stop_status: { driver: { arrived: "En la puerta (core)" } },
-  product_status: { seller: { draft: "Borrador (core)" } },
-  shipment_status: { staff: { packed: "Empacado (core)" } },
 };
 const fakeCore = {
   statusWord(kind, value, { viewer }) {
@@ -32,39 +29,61 @@ const fakeCore = {
   },
 };
 
-test("today, every word comes from the table", () => {
-  assert.ok(entries.length > 0);
+test("the table holds only kinds packages/core does not have", () => {
+  assert.deepEqual(Object.keys(TODAY).sort(), [
+    "listing_edit",
+    "order_stopping",
+    "queued_action",
+    "variant_status",
+  ]);
+  for (const kind of Object.keys(TODAY)) {
+    assert.ok(!Object.hasOwn(core.STATUS_WORDS, kind), `${kind} is in core: drop it here`);
+  }
   for (const { kind, viewer, value, text } of entries) {
     assert.equal(word(kind, value, viewer), text, `${kind} ${value} (${viewer})`);
   }
 });
 
-test("after the switch, core's word wins where core has one", () => {
+test("every status word the journeys ask for is core's word", () => {
+  const asked = [
+    ["order_status", "shipped", "shopper"],
+    ["shipment_status", "pending", "warehouse"],
+    ["shipment_status", "packed", "warehouse"],
+    ["stop_status", "arrived", "driver"],
+    ["stop_status", "skipped", "driver"],
+    ["offer_status", "paused", "seller"],
+    ["product_status", "draft", "seller"],
+    ["product_status", "active", "seller"],
+  ];
+  for (const [kind, value, viewer] of asked) {
+    assert.equal(word(kind, value, viewer), core.statusWord(kind, value, { viewer }).word);
+  }
+  assert.equal(word("stop_status", "skipped", "driver"), "Quitada por Central");
+  assert.equal(word("shipment_status", "pending", "warehouse"), "Por preparar");
+});
+
+test("core's word wins where core has one", () => {
   const switched = makeWord(fakeCore);
   assert.equal(switched("order_status", "shipped", "shopper"), "En camino (core)");
   assert.equal(switched("stop_status", "arrived", "driver"), "En la puerta (core)");
-  assert.equal(switched("product_status", "draft", "seller"), "Borrador (core)");
 });
 
-test("after the switch, every kind and viewer core lacks still has today's word", () => {
+test("every kind core lacks still has the table's word", () => {
   const switched = makeWord(fakeCore);
   for (const { kind, viewer, value, text } of entries) {
-    if (CORE_WORDS[kind]?.[viewer]?.[value]) continue;
     assert.equal(switched(kind, value, viewer), text, `${kind} ${value} (${viewer})`);
   }
-  // The four kinds that are not database statuses, and the warehouse viewer.
   assert.equal(switched("order_stopping", "cancels", "shopper"), "Se está cancelando");
   assert.equal(switched("queued_action", "pending", "driver"), "Por enviar");
   assert.equal(switched("listing_edit", "pending", "seller"), "Cambios en revisión");
   assert.equal(switched("variant_status", "retired", "seller"), "Retirada");
-  assert.equal(switched("shipment_status", "packed", "warehouse"), "Empacado");
 });
 
 test("a core that answers with no word falls back too", () => {
   const empty = makeWord({ statusWord: () => ({ sign: "done", word: "" }) });
-  assert.equal(empty("offer_status", "paused", "seller"), "En pausa");
+  assert.equal(empty("queued_action", "pending", "driver"), "Por enviar");
   const nothing = makeWord({ statusWord: () => undefined });
-  assert.equal(nothing("offer_status", "paused", "seller"), "En pausa");
+  assert.equal(nothing("queued_action", "pending", "driver"), "Por enviar");
 });
 
 test("a word neither core nor the table has is an error that names it", () => {

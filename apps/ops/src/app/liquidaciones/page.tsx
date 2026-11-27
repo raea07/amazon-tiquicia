@@ -5,6 +5,7 @@ import { Badge, formatDate, formatPrice, Skeleton, TextField } from "@yuntera/ui
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { settleRoute } from "@/app/actions";
+import { SETTLEMENT_STATUS } from "@/lib/labels";
 import { requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Liquidaciones" };
@@ -107,7 +108,7 @@ async function Settlements() {
                   </td>
                   <td>
                     <Badge tone={row.status === "short" ? "danger" : "success"}>
-                      {row.status === "short" ? "Con diferencia" : "Completa"}
+                      {SETTLEMENT_STATUS[row.status === "short" ? "short" : "settled"]}
                     </Badge>
                     {row.note ? (
                       <p className="mt-1 max-w-56 text-xs text-ink-muted">{row.note}</p>

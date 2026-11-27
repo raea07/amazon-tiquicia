@@ -23,6 +23,7 @@ const { chromium, request } = require("playwright");
 const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
 const kit = require("../lib/kit.cjs");
+const { word } = require("../lib/words.cjs");
 
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
@@ -276,7 +277,9 @@ const EMAIL = "o'brien+factura@example.com";
   // ── 4. The pages show it as text ────────────────────────────────────────
   await until("the order page to show the factura", async () => {
     await web.openOrderPath(shopper, orderPath);
-    return (await web.orderDocuments(shopper)).includes("Aceptado por Hacienda");
+    return (await web.orderDocuments(shopper)).includes(
+      word("invoice_status", "accepted", { viewer: "shopper" }),
+    );
   });
   check(
     (await web.orderDocuments(shopper)).includes(`a nombre de ${clean(RECEIVER, 100)}`),

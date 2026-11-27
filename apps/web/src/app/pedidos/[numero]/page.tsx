@@ -9,6 +9,8 @@ import {
   ORDER_STATUS_LABEL,
   orderAwaitingNewAttempt,
   orderComingBack,
+  statusWord,
+  statusWordMap,
   toCostaRicaTime,
   waitsForNewAttempt,
 } from "@yuntera/core";
@@ -28,7 +30,6 @@ import {
   formatDateTime,
   formatPrice,
   OrderStatusBadge,
-  SHIPMENT_STATUS_LABEL,
   ShipmentStatusBadge,
   Skeleton,
   touchLinkClass,
@@ -312,9 +313,16 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                       <Badge tone="warning">Detenido en la bodega</Badge>
                     ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ||
                       waitsForNewAttempt(shipment.status, shipment.attempt_count) ? (
-                      <Badge tone="info">Entrega reprogramada</Badge>
+                      <Badge tone="info">
+                        {
+                          statusWord("shipment_status", "delivery_failed", {
+                            viewer: "shopper",
+                            attemptCount: 0,
+                          }).word
+                        }
+                      </Badge>
                     ) : (
-                      <ShipmentStatusBadge status={shipment.status} />
+                      <ShipmentStatusBadge status={shipment.status} viewer="shopper" />
                     )}
                   </div>
                   {shipment.driver_first_name ? (
@@ -614,6 +622,9 @@ function PaymentInstructions({ order, payment }: { order: OrderDetail; payment: 
   );
 }
 
+/** A parcel's words as the shopper reads them (packages/core status-words). */
+const PARCEL_WORDS = statusWordMap("shipment_status", "shopper");
+
 function describeEvent(event: OrderDetail["timeline"][number], order: OrderDetail): string {
   if (event.kind === "note") return event.note ?? "Nota";
   if (event.kind === "payment") return event.note ?? "Pago";
@@ -623,12 +634,8 @@ function describeEvent(event: OrderDetail["timeline"][number], order: OrderDetai
   if (event.kind === "order_status" && event.to_status && event.to_status in ORDER_STATUS_LABEL) {
     return ORDER_STATUS_LABEL[event.to_status as keyof typeof ORDER_STATUS_LABEL]["es-CR"];
   }
-  if (
-    event.kind === "shipment_status" &&
-    event.to_status &&
-    event.to_status in SHIPMENT_STATUS_LABEL
-  ) {
-    return `Paquete: ${SHIPMENT_STATUS_LABEL[event.to_status as keyof typeof SHIPMENT_STATUS_LABEL].toLowerCase()}`;
+  if (event.kind === "shipment_status" && event.to_status && event.to_status in PARCEL_WORDS) {
+    return `Paquete: ${PARCEL_WORDS[event.to_status as keyof typeof PARCEL_WORDS].toLowerCase()}`;
   }
   return event.to_status ?? "Actualización";
 }

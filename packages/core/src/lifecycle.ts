@@ -6,6 +6,8 @@
  * actions that are valid and lets tests assert the two never drift.
  */
 
+import { statusWord } from "./status-words";
+
 export const ORDER_STATUSES = [
   "pending_payment",
   "payment_review",
@@ -141,27 +143,20 @@ export const ORDER_PROGRESS: readonly OrderStatus[] = [
 /**
  * Buyer-facing wording. Statuses are internal; customers read sentences.
  *
- * Today's screens read these words. The Carreta words of every status, for
- * every viewer, are in status-words.ts (`statusWord`); they differ here for
- * `completed` («Entregado» for the shopper) and in English for
- * `payment_review`. This table keeps its words until one change moves every
- * screen and journey to status-words.ts, and is deleted then.
+ * The shopper's words of status-words.ts (§4.3 of the design system), in the
+ * shape today's callers read. Every other viewer asks `statusWord` with its
+ * own viewer.
  */
-export const ORDER_STATUS_LABEL: Readonly<Record<OrderStatus, { "es-CR": string; en: string }>> = {
-  pending_payment: { "es-CR": "Esperando el pago", en: "Awaiting payment" },
-  payment_review: { "es-CR": "Verificando el pago", en: "Verifying payment" },
-  confirmed: { "es-CR": "Pedido confirmado", en: "Order confirmed" },
-  processing: { "es-CR": "Preparando su pedido", en: "Preparing your order" },
-  partially_shipped: {
-    "es-CR": "Parte del pedido va en camino",
-    en: "Part of your order is on its way",
-  },
-  shipped: { "es-CR": "En camino", en: "On its way" },
-  delivered: { "es-CR": "Entregado", en: "Delivered" },
-  completed: { "es-CR": "Completado", en: "Completed" },
-  cancelled: { "es-CR": "Cancelado", en: "Cancelled" },
-  refunded: { "es-CR": "Reembolsado", en: "Refunded" },
-};
+export const ORDER_STATUS_LABEL: Readonly<Record<OrderStatus, { "es-CR": string; en: string }>> =
+  Object.fromEntries(
+    ORDER_STATUSES.map((status) => [
+      status,
+      {
+        "es-CR": statusWord("order_status", status, { viewer: "shopper" }).word,
+        en: statusWord("order_status", status, { viewer: "shopper", locale: "en" }).word,
+      },
+    ]),
+  ) as Record<OrderStatus, { "es-CR": string; en: string }>;
 
 /**
  * A parcel back at the warehouse's door without anyone having tried to

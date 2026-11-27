@@ -1,3 +1,4 @@
+import { statusLabels } from "@yuntera/core";
 import type { NotificationRow } from "@yuntera/db";
 import type { Tone } from "@yuntera/ui";
 
@@ -60,16 +61,20 @@ export function audienceOf(row: NotificationRow): string {
   }
 }
 
-export const NOTIFICATION_STATUS: Record<string, { label: string; tone: Tone }> = {
-  pending: { label: "En cola", tone: "neutral" },
-  sending: { label: "Enviando", tone: "info" },
-  sent: { label: "Enviado", tone: "info" },
-  delivered: { label: "Entregado", tone: "success" },
-  failed: { label: "No entregado", tone: "danger" },
-  skipped: { label: "No se envió", tone: "neutral" },
-  expired: { label: "Vencido", tone: "neutral" },
-  dead: { label: "Detenido", tone: "danger" },
-};
+export const NOTIFICATION_STATUS: Record<string, { label: string; tone: Tone }> = statusLabels(
+  "notification_deliveries",
+  "staff",
+  {
+    pending: "neutral",
+    sending: "info",
+    sent: "info",
+    delivered: "success",
+    failed: "danger",
+    skipped: "neutral",
+    expired: "neutral",
+    dead: "danger",
+  },
+);
 
 /** Why a message was not sent, in words staff can act on. */
 export const SKIP_REASON: Record<string, string> = {

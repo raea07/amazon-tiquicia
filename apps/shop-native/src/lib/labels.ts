@@ -1,10 +1,16 @@
-import { ORDER_STATUS_LABEL, type OrderStatus, type ShipmentStatus } from "@yuntera/core";
+import {
+  ORDER_STATUS_LABEL,
+  type OrderStatus,
+  type ShipmentStatus,
+  statusWordMap,
+} from "@yuntera/core";
 import type { Tone } from "@yuntera/expo-kit/theme";
 
 /**
- * Status words and their colours, as the website shows them
- * (packages/ui/src/commerce.tsx; `labels.test.ts` compares the two). The
- * colour is never the only signal: the word is always shown.
+ * Status words and their colours, as the website shows them to the shopper.
+ * The words come from packages/core status-words (§4.3); the colours match
+ * packages/ui/src/commerce.tsx. The colour is never the only signal: the word
+ * is always shown.
  */
 
 export const ORDER_TONE: Record<OrderStatus, Tone> = {
@@ -22,18 +28,11 @@ export const ORDER_TONE: Record<OrderStatus, Tone> = {
 
 export const orderLabel = (status: OrderStatus) => ORDER_STATUS_LABEL[status]["es-CR"];
 
-export const SHIPMENT_STATUS_LABEL: Record<ShipmentStatus, string> = {
-  pending: "Por preparar",
-  picking: "En preparación",
-  packed: "Empacado",
-  ready_for_dispatch: "Listo para salir",
-  out_for_delivery: "En camino",
-  delivered: "Entregado",
-  delivery_failed: "Entrega fallida",
-  returning: "De regreso",
-  returned: "Devuelto",
-  cancelled: "Cancelado",
-};
+/** A parcel's words as the shopper reads them (packages/core status-words). */
+export const SHIPMENT_STATUS_LABEL: Readonly<Record<ShipmentStatus, string>> = statusWordMap(
+  "shipment_status",
+  "shopper",
+);
 
 export const SHIPMENT_TONE: Record<ShipmentStatus, Tone> = {
   pending: "neutral",

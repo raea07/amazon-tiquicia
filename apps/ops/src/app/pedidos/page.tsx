@@ -103,7 +103,7 @@ async function Orders({ searchParams }: Pick<PageProps<"/pedidos">, "searchParam
                   ) : null}
                 </td>
                 <td>
-                  <OrderStatusBadge status={order.status} />
+                  <OrderStatusBadge status={order.status} viewer="staff" />
                 </td>
                 <td>
                   {formatDate(order.promise_latest, {

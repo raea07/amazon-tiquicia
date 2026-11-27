@@ -1,6 +1,6 @@
 "use client";
 
-import { PHOTO_RULES } from "@yuntera/core";
+import { PHOTO_RULES, statusWordMap } from "@yuntera/core";
 import type { ProductPhoto } from "@yuntera/db";
 import { type ActionState, FormMessage, SubmitButton } from "@yuntera/next-kit/client";
 import { Alert, Badge, Button, buttonClass, TextField, type Tone } from "@yuntera/ui";
@@ -277,13 +277,16 @@ export interface ManagedPhoto extends ProductPhoto {
   preview: string | null;
 }
 
+// The photo's own states read packages/core's words; the other three are
+// sentences about the listing around the photo.
+const PHOTO = statusWordMap("product_photos", "seller");
 const STATE = {
-  pending: { label: "En revisión", tone: "warning" },
+  pending: { label: PHOTO.pending, tone: "warning" },
   draft: { label: "Se revisa con el producto", tone: "info" },
-  approved: { label: "Aprobada", tone: "success" },
+  approved: { label: PHOTO.approved, tone: "success" },
   publishing: { label: "Aprobada; se está publicando", tone: "info" },
   leaving: { label: "Se quitará al aprobarse el cambio", tone: "warning" },
-  rejected: { label: "Rechazada", tone: "danger" },
+  rejected: { label: PHOTO.rejected, tone: "danger" },
 } satisfies Record<string, { label: string; tone: Tone }>;
 
 function stateOf(photo: ProductPhoto, listingStatus: string) {

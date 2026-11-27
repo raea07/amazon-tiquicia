@@ -1,4 +1,4 @@
-import { endSentence } from "@yuntera/core";
+import { endSentence, statusLabels } from "@yuntera/core";
 import type { InvoiceDetail, InvoiceRow, InvoiceStatus } from "@yuntera/db";
 import {
   DOCUMENT_NAME,
@@ -25,13 +25,12 @@ import Link from "next/link";
  * this page is how people read it, and it links to both files.
  */
 
-export const INVOICE_STATUS: Record<InvoiceStatus, { label: string; tone: Tone }> = {
-  pending: { label: "Preparándose para Hacienda", tone: "info" },
-  sent: { label: "Enviado, esperando a Hacienda", tone: "info" },
-  accepted: { label: "Aceptado por Hacienda", tone: "success" },
-  rejected: { label: "Rechazado por Hacienda", tone: "danger" },
-  voided: { label: "Anulado con nota de crédito", tone: "neutral" },
-};
+/** The words come from packages/core status-words (invoice_status, §4.3). */
+export const INVOICE_STATUS: Record<InvoiceStatus, { label: string; tone: Tone }> = statusLabels(
+  "invoice_status",
+  "staff",
+  { pending: "info", sent: "info", accepted: "success", rejected: "danger", voided: "neutral" },
+);
 
 export const INVOICE_KIND: Record<InvoiceRow["kind"], string> = {
   delivery: "Entrega a domicilio",

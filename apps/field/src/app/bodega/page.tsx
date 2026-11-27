@@ -1,3 +1,4 @@
+import { statusWordMap } from "@yuntera/core";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { Alert, Badge, buttonClass, formatDate, Skeleton, type Tone } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
@@ -9,11 +10,13 @@ import { requireWarehouse } from "@/lib/access";
 
 export const metadata: Metadata = { title: "Bodega" };
 
+// The words come from packages/core status-words, as the warehouse reads them.
+const WORD = statusWordMap("shipment_status", "warehouse");
 const STEP: Record<string, { label: string; tone: Tone; order: number }> = {
-  picking: { label: "Alistando", tone: "info", order: 0 },
-  pending: { label: "Por alistar", tone: "warning", order: 1 },
-  packed: { label: "Empacado", tone: "success", order: 2 },
-  ready_for_dispatch: { label: "En zona de despacho", tone: "success", order: 3 },
+  picking: { label: WORD.picking, tone: "info", order: 0 },
+  pending: { label: WORD.pending, tone: "warning", order: 1 },
+  packed: { label: WORD.packed, tone: "success", order: 2 },
+  ready_for_dispatch: { label: WORD.ready_for_dispatch, tone: "success", order: 3 },
 };
 
 export default function WarehousePage(props: PageProps<"/bodega">) {

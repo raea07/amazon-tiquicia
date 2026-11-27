@@ -1,3 +1,4 @@
+import { statusLabels } from "@yuntera/core";
 import type { PayoutBlock, PayoutStatus, WarehouseRole } from "@yuntera/db";
 import type { Tone } from "@yuntera/ui";
 
@@ -15,11 +16,11 @@ export const ID_TYPE: Record<string, string> = {
   nite: "NITE",
 };
 
-export const PAYOUT_STATUS: Record<PayoutStatus, { label: string; tone: Tone }> = {
-  scheduled: { label: "Por transferir", tone: "warning" },
-  paid: { label: "Pagado", tone: "success" },
-  failed: { label: "No se pagó", tone: "danger" },
-};
+export const PAYOUT_STATUS: Record<PayoutStatus, { label: string; tone: Tone }> = statusLabels(
+  "payouts",
+  "staff",
+  { scheduled: "warning", paid: "success", failed: "danger" },
+);
 
 /** Why a shop with a balance is left out of a run. */
 export const PAYOUT_BLOCK: Record<PayoutBlock, string> = {
@@ -29,11 +30,15 @@ export const PAYOUT_BLOCK: Record<PayoutBlock, string> = {
   below_minimum: "Disponible menor al mínimo",
 };
 
-export const REQUEST_STATUS: Record<string, { label: string; tone: Tone }> = {
-  pending: { label: "Por resolver", tone: "warning" },
-  approved: { label: "Aprobada", tone: "success" },
-  rejected: { label: "Rechazada", tone: "danger" },
-};
+/**
+ * A shop change or new payout details waiting for staff. Both tables read the
+ * same words in packages/core (seller_change_requests, payout_detail_requests).
+ */
+export const REQUEST_STATUS: Record<string, { label: string; tone: Tone }> = statusLabels(
+  "seller_change_requests",
+  "staff",
+  { pending: "warning", approved: "success", rejected: "danger" },
+);
 
 /** An account number the way banks print it, in groups of four. */
 export const groupIban = (iban: string) => iban.replace(/(.{4})(?=.)/g, "$1 ");

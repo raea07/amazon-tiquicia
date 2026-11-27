@@ -2,11 +2,11 @@ import {
   deliveryFeeComesBack,
   isRescheduledShipment,
   isStoppedShipment,
-  ORDER_STATUS_LABEL,
   type OrderStatus,
   orderAwaitingNewAttempt,
   orderComingBack,
   type ShipmentStatus,
+  statusWord,
 } from "@yuntera/core";
 import { ApiError, type OrderDetailWithRecall } from "@yuntera/db";
 import { BackLink } from "@yuntera/next-kit/back-link";
@@ -35,7 +35,7 @@ import { CatalogueOutcome } from "@/components/catalogue-outcome";
 import { DeliveryCodePanel, ReturnedParcelForm } from "@/components/integrity-forms";
 import { NotificationLine } from "@/components/notification-list";
 import { RecallShipmentForm } from "@/components/order-recall-form";
-import { PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
+import { ORDER_STATUS_STAFF, PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
 import {
   ATTEMPT_STATUS,
   gatewayFailure,
@@ -98,9 +98,11 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
             ) : orderComingBack(order.status, order.shipments) ? (
               <Badge tone="warning">Un paquete regresa a la bodega; el resto se entregó</Badge>
             ) : orderAwaitingNewAttempt(order.status, order.shipments) ? (
-              <Badge tone="warning">Ningún paquete en camino: espera otra ruta</Badge>
+              <Badge tone="warning">
+                {statusWord("order_flags", "awaiting_route", { viewer: "staff" }).word}
+              </Badge>
             ) : (
-              <OrderStatusBadge status={order.status} />
+              <OrderStatusBadge status={order.status} viewer="staff" />
             )}
           </div>
           <p className="mt-1 text-ink-muted">
@@ -172,9 +174,18 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                     </span>
                   </span>
                   {isStoppedShipment(shipment.status, shipment.recalled) ? (
-                    <Badge tone="warning">Detenido: vuelve a la zona de devoluciones</Badge>
+                    <Badge tone="warning">
+                      {statusWord("order_flags", "stopped", { viewer: "staff" }).word}
+                    </Badge>
                   ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ? (
-                    <Badge tone="warning">Quitado de una ruta: espera otra</Badge>
+                    <Badge tone="warning">
+                      {
+                        statusWord("shipment_status", "delivery_failed", {
+                          viewer: "staff",
+                          attemptCount: 0,
+                        }).word
+                      }
+                    </Badge>
                   ) : (
                     <ShipmentStatusBadge status={shipment.status} />
                   )}
@@ -469,7 +480,7 @@ function timelineWords(event: TimelineEvent, timeline: readonly TimelineEvent[])
     return words ? `Paquete: ${words.toLowerCase()}` : "El paquete cambió de estado";
   }
   if (event.kind === "order_status") {
-    return ORDER_STATUS_LABEL[status as OrderStatus]?.["es-CR"] ?? "El pedido cambió de estado";
+    return ORDER_STATUS_STAFF[status as OrderStatus] ?? "El pedido cambió de estado";
   }
   if (event.kind === "payment") return "Cambio en el pago";
   return "Nota";

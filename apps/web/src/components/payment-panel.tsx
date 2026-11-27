@@ -283,7 +283,7 @@ export function MoneyInReview({ payment }: { payment: OrderPayment }) {
 }
 
 const REFUND_STATE = {
-  done: { label: "Completado", tone: "success" },
+  done: { label: "Completado", tone: "success" }, // not a status word
   onItsWay: { label: "En camino", tone: "info" },
   problem: { label: "En revisión", tone: "warning" },
 } as const;

@@ -1,3 +1,4 @@
+import { statusLabels } from "@yuntera/core";
 import { ApiError, type OpsCatalogProduct } from "@yuntera/db";
 import { messageOf, sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader } from "@yuntera/next-kit/shell";
@@ -53,13 +54,13 @@ function refOf(text: string): string {
 const STATUS: Record<
   OpsCatalogProduct["status"],
   { label: string; tone: "success" | "warning" | "info" | "danger" | "neutral" }
-> = {
-  active: { label: "Publicado", tone: "success" },
-  pending_review: { label: "En revisión", tone: "info" },
-  rejected: { label: "No publicado", tone: "warning" },
-  draft: { label: "Borrador", tone: "neutral" },
-  archived: { label: "Archivado", tone: "neutral" },
-};
+> = statusLabels("product_status", "staff", {
+  active: "success",
+  pending_review: "info",
+  rejected: "warning",
+  draft: "neutral",
+  archived: "neutral",
+});
 
 async function Correction({
   searchParams,

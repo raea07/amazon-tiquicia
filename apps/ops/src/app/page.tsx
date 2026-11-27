@@ -1,10 +1,11 @@
-import { ORDER_STATUS_LABEL, type OrderStatus } from "@yuntera/core";
+import type { OrderStatus } from "@yuntera/core";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader, Stat } from "@yuntera/next-kit/shell";
 import { Alert, formatPrice, Skeleton, touchLinkClass } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { ORDER_STATUS_STAFF } from "@/lib/labels";
 import { canSee, requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Resumen" };
@@ -136,7 +137,7 @@ async function Overview() {
                 href={`/pedidos?estado=${status}` as Route}
                 className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-3 hover:border-border-strong"
               >
-                {ORDER_STATUS_LABEL[status as OrderStatus]?.["es-CR"] ?? status}
+                {ORDER_STATUS_STAFF[status as OrderStatus] ?? status}
                 <span className="font-semibold tabular-nums">{count}</span>
               </Link>
             </li>

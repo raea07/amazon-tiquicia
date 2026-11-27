@@ -5,7 +5,7 @@
 // Two cases, as the web field app's journey (tools/e2e/journeys/console-followups.cjs):
 //
 //   Started route. Central removes the first stop of the demo driver's route
-//   R-1003 through the API, as the console does. The stop reads "Omitida"
+//   R-1003 through the API, as the console does. The stop reads «Quitada por Central»
 //   with the sentence that tells them to bring the parcel back, and the
 //   route's header counts only the stops still on it ("0 de 1 entregadas ·
 //   1 omitida").

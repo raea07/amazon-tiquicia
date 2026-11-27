@@ -40,6 +40,37 @@
       ],
       "outputs": ["coverage/**"]
     },
+    "@yuntera/core#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/supabase/migrations/**",
+        "$TURBO_ROOT$/docs/brand/system/migration.json",
+        "$TURBO_ROOT$/apps/*/src/**",
+        "$TURBO_ROOT$/packages/*/src/**",
+        "$TURBO_ROOT$/tools/e2e/**",
+        "$TURBO_ROOT$/tools/native-e2e/**"
+      ],
+      "outputs": ["coverage/**"]
+    },
+    "@yuntera/brand#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/*/src/**",
+        "$TURBO_ROOT$/docs/brand/system/**"
+      ],
+      "outputs": ["coverage/**"]
+    },
+    "@yuntera/native-e2e#test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/*-native/src/**",
+        "$TURBO_ROOT$/packages/expo-kit/src/**",
+        "$TURBO_ROOT$/packages/core/src/status-words.ts"
+      ],
+      "outputs": []
+    },
     "dev": {
       "cache": false,
       "persistent": true

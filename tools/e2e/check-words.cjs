@@ -1,14 +1,11 @@
-// Checks tools/e2e/lib/words.cjs, so the switch to core's status words stays
-// one line:
+// Checks tools/e2e/lib/words.cjs: every status word comes from
+// packages/core/src/status-words.ts, and SCREEN_ONLY holds only words core
+// has no state for.
 //
-//   node tools/e2e/check-words.cjs                       the table on its own
-//   node tools/e2e/check-words.cjs <status-words.ts>     and against core
+//   node tools/e2e/check-words.cjs
 //
-// Without a path it uses packages/core/src/status-words.ts when that file
-// exists. Exits 1 on any problem, and says which.
+// Exits 1 on any problem, and says which.
 
-const { existsSync } = require("node:fs");
-const { resolve } = require("node:path");
 const words = require("./lib/words.cjs");
 
 const problems = [];
@@ -23,47 +20,33 @@ try {
   words.word("order_status", "no_such_state", { viewer: "shopper" });
   problems.push("word() for an unknown state did not throw");
 } catch {}
-// Every entry of today's table gives a word to every viewer it is read by.
-for (const table of [words.TODAY, words.SCREEN_ONLY]) {
-  for (const [kind, values] of Object.entries(table)) {
-    for (const [value, entry] of Object.entries(values)) {
-      const viewers =
-        typeof entry === "string" || "_" in entry ? words.VIEWERS : Object.keys(entry);
-      for (const viewer of viewers) {
-        if (!words.VIEWERS.includes(viewer))
-          problems.push(`${kind}.${value}: unknown viewer ${viewer}`);
-        else if (typeof words.word(kind, value, { viewer }) !== "string")
-          problems.push(`${kind}.${value} (${viewer}) has no word`);
-      }
-    }
-  }
-}
-for (const kind of Object.keys(words.SCREEN_ONLY)) {
-  if (kind in words.TODAY) problems.push(`${kind} is in both TODAY and SCREEN_ONLY`);
-}
 
-const corePath = resolve(process.argv[2] ?? `${__dirname}/../../packages/core/src/status-words.ts`);
-if (existsSync(corePath)) {
-  // Every kind and value of TODAY must have the same name in core, or the
-  // switch would read a word for a state that does not exist there.
-  const core = words.loadCore(corePath);
-  for (const [kind, values] of Object.entries(words.TODAY)) {
-    const spec = core.STATUS_WORDS[kind];
-    if (!spec) {
-      problems.push(`core has no kind ${kind}`);
-      continue;
-    }
-    for (const value of Object.keys(values)) {
-      if (!Object.hasOwn(spec.words, value)) problems.push(`core has no ${kind}.${value}`);
+const core = words.loadCore();
+// Core's words reach the journeys unchanged.
+for (const [kind, value, viewer] of [
+  ["order_status", "confirmed", "staff"],
+  ["order_status", "confirmed", "shopper"],
+  ["shipment_status", "returning", "staff"],
+  ["stop_status", "skipped", "driver"],
+]) {
+  const expected = core.statusWord(kind, value, { viewer, locale: "es" }).word;
+  if (words.word(kind, value, { viewer }) !== expected) {
+    problems.push(`${kind}.${value} (${viewer}) is not core's word «${expected}»`);
+  }
+}
+// Every entry of SCREEN_ONLY gives a word to every viewer it is read by, and
+// names a kind core does not have.
+for (const [kind, values] of Object.entries(words.SCREEN_ONLY)) {
+  if (core.STATUS_WORDS[kind]) problems.push(`${kind} is in core now: move it out of SCREEN_ONLY`);
+  for (const [value, entry] of Object.entries(values)) {
+    const viewers = typeof entry === "string" || "_" in entry ? words.VIEWERS : Object.keys(entry);
+    for (const viewer of viewers) {
+      if (!words.VIEWERS.includes(viewer))
+        problems.push(`${kind}.${value}: unknown viewer ${viewer}`);
+      else if (typeof words.word(kind, value, { viewer }) !== "string")
+        problems.push(`${kind}.${value} (${viewer}) has no word`);
     }
   }
-  for (const kind of Object.keys(words.SCREEN_ONLY)) {
-    if (core.STATUS_WORDS[kind])
-      problems.push(`${kind} is in core now: move it out of SCREEN_ONLY`);
-  }
-  console.log(`compared with ${corePath}`);
-} else {
-  console.log(`no ${corePath}: checked the table on its own`);
 }
 
 if (problems.length > 0) {

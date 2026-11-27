@@ -1,3 +1,4 @@
+import { statusLabels } from "@yuntera/core";
 import type { GatewayRefundStatus, PaymentReviewKind, PaymentsMode } from "@yuntera/db";
 import type { Tone } from "@yuntera/ui";
 
@@ -55,14 +56,15 @@ export const REVIEW_KIND: Record<PaymentReviewKind, { label: string; text: strin
   },
 };
 
-export const REFUND_STATUS: Record<GatewayRefundStatus, { label: string; tone: Tone }> = {
-  requested: { label: "Solicitado", tone: "warning" },
-  sending: { label: "Enviándose", tone: "info" },
-  sent: { label: "Enviado, sin confirmar", tone: "info" },
-  unknown: { label: "Respuesta perdida: se verifica", tone: "warning" },
-  succeeded: { label: "Completado", tone: "success" },
-  failed: { label: "Falló", tone: "danger" },
-};
+export const REFUND_STATUS: Record<GatewayRefundStatus, { label: string; tone: Tone }> =
+  statusLabels("gateway_refunds", "staff", {
+    requested: "warning",
+    sending: "info",
+    sent: "info",
+    unknown: "warning",
+    succeeded: "success",
+    failed: "danger",
+  });
 
 export const REFUND_CHANNEL: Record<string, string> = {
   gateway: "Por el procesador",

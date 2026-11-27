@@ -39,7 +39,7 @@ export const CLOSURE_STATE: Record<string, { label: string; tone: Tone }> = {
   upcoming: { label: "Próximo", tone: "info" },
   current: { label: "En curso", tone: "warning" },
   over: { label: "Terminado", tone: "neutral" },
-  cancelled: { label: "Cancelado", tone: "neutral" },
+  cancelled: { label: "Cancelado", tone: "neutral" }, // not a status word
 };
 
 export const STUCK_REASON: Record<string, string> = {

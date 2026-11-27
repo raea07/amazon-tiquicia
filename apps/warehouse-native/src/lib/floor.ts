@@ -5,7 +5,8 @@
  * text is the web's own. `floor.test.ts` runs them in Node.
  */
 
-import type { ShipmentStatus } from "@yuntera/core";
+// The status words come from packages/core status-words (warehouse viewer).
+import { type ShipmentStatus, statusWordMap } from "@yuntera/core";
 import type { Tone } from "@yuntera/expo-kit/theme";
 
 export interface BoardShipment {
@@ -13,11 +14,12 @@ export interface BoardShipment {
 }
 
 /** The steps a parcel goes through on the floor, in the order the board lists them. */
+const WORD = statusWordMap("shipment_status", "warehouse");
 export const STEP: Partial<Record<ShipmentStatus, { label: string; tone: Tone; order: number }>> = {
-  picking: { label: "Alistando", tone: "info", order: 0 },
-  pending: { label: "Por alistar", tone: "warning", order: 1 },
-  packed: { label: "Empacado", tone: "success", order: 2 },
-  ready_for_dispatch: { label: "En zona de despacho", tone: "success", order: 3 },
+  picking: { label: WORD.picking, tone: "info", order: 0 },
+  pending: { label: WORD.pending, tone: "warning", order: 1 },
+  packed: { label: WORD.packed, tone: "success", order: 2 },
+  ready_for_dispatch: { label: WORD.ready_for_dispatch, tone: "success", order: 3 },
 };
 
 /** In picking first, then waiting, then done; the database's order within each. */

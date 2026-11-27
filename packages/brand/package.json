@@ -9,6 +9,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./tokens.css": "./src/tokens.css",
+    "./tokens.legacy.css": "./styles/tokens.legacy.css",
+    "./carreta/tokens.css": "./styles/tokens.css",
+    "./carreta-base.css": "./styles/carreta-base.css",
     "./logo": "./src/logo.tsx"
   },
   "scripts": {

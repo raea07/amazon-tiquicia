@@ -140,11 +140,11 @@ async function Orders() {
                   </td>
                   <td className="tabular-nums">{formatPrice(line.line_total_minor)}</td>
                   <td>
-                    <OrderStatusBadge status={line.order_status} />
+                    <OrderStatusBadge status={line.order_status} viewer="seller" />
                   </td>
                   <td>
                     {line.shipment_status ? (
-                      <ShipmentStatusBadge status={line.shipment_status} />
+                      <ShipmentStatusBadge status={line.shipment_status} viewer="seller" />
                     ) : (
                       "—"
                     )}

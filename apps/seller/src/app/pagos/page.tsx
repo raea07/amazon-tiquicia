@@ -1,3 +1,4 @@
+import { statusLabels } from "@yuntera/core";
 import type { SellerPayouts } from "@yuntera/db";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { DataTable, PageHeader, Stat } from "@yuntera/next-kit/shell";
@@ -28,11 +29,7 @@ const METHOD: Record<string, string> = {
 const PAYOUT_STATUS: Record<
   SellerPayouts["payouts"][number]["status"],
   { label: string; tone: Tone }
-> = {
-  scheduled: { label: "En camino a su cuenta", tone: "info" },
-  paid: { label: "Pagado", tone: "success" },
-  failed: { label: "No se pudo pagar", tone: "danger" },
-};
+> = statusLabels("payouts", "seller", { scheduled: "info", paid: "success", failed: "danger" });
 
 const day = (value: string) => formatDate(value, { day: "numeric", month: "long" });
 const dayWithYear = (value: string) =>

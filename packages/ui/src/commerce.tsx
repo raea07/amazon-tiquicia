@@ -7,9 +7,11 @@ import {
   bayesianRating,
   format,
   money,
-  ORDER_STATUS_LABEL,
   type OrderStatus,
   type ShipmentStatus,
+  type StatusViewer,
+  statusWord,
+  statusWordMap,
 } from "@yuntera/core";
 import { Badge, cx, type Tone } from "./primitives";
 
@@ -117,22 +119,24 @@ const ORDER_TONE: Record<OrderStatus, Tone> = {
   refunded: "neutral",
 };
 
-export function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  return <Badge tone={ORDER_TONE[status]}>{ORDER_STATUS_LABEL[status]["es-CR"]}</Badge>;
+/** The word comes from packages/core status-words (§4.3), for the viewer. */
+export function OrderStatusBadge({
+  status,
+  viewer = "shopper",
+}: {
+  status: OrderStatus;
+  viewer?: StatusViewer;
+}) {
+  return (
+    <Badge tone={ORDER_TONE[status]}>{statusWord("order_status", status, { viewer }).word}</Badge>
+  );
 }
 
-export const SHIPMENT_STATUS_LABEL: Record<ShipmentStatus, string> = {
-  pending: "Por preparar",
-  picking: "En preparación",
-  packed: "Empacado",
-  ready_for_dispatch: "Listo para salir",
-  out_for_delivery: "En camino",
-  delivered: "Entregado",
-  delivery_failed: "Entrega fallida",
-  returning: "De regreso",
-  returned: "Devuelto",
-  cancelled: "Cancelado",
-};
+/** A parcel's words as staff, sellers and drivers read them (packages/core). */
+export const SHIPMENT_STATUS_LABEL: Readonly<Record<ShipmentStatus, string>> = statusWordMap(
+  "shipment_status",
+  "staff",
+);
 
 const SHIPMENT_TONE: Record<ShipmentStatus, Tone> = {
   pending: "neutral",
@@ -147,8 +151,18 @@ const SHIPMENT_TONE: Record<ShipmentStatus, Tone> = {
   cancelled: "neutral",
 };
 
-export function ShipmentStatusBadge({ status }: { status: ShipmentStatus }) {
-  return <Badge tone={SHIPMENT_TONE[status]}>{SHIPMENT_STATUS_LABEL[status]}</Badge>;
+export function ShipmentStatusBadge({
+  status,
+  viewer = "staff",
+}: {
+  status: ShipmentStatus;
+  viewer?: StatusViewer;
+}) {
+  return (
+    <Badge tone={SHIPMENT_TONE[status]}>
+      {statusWord("shipment_status", status, { viewer }).word}
+    </Badge>
+  );
 }
 
 /** Dates as people write them in Costa Rica: "lunes 23 de noviembre". */

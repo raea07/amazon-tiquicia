@@ -22,8 +22,10 @@ import {
   type StatusKind,
   type StatusTone,
   type StatusWordOptions,
+  statusLabels,
   statusValues,
   statusWord,
+  statusWordMap,
   statusWordOf,
 } from "./status-words";
 
@@ -350,8 +352,28 @@ describe("statusWord", () => {
     expect(statusWordOf("order_status", "toString", { viewer: "staff" })).toBeNull();
   });
 
-  it("leaves today's ORDER_STATUS_LABEL untouched (screens still read it)", () => {
-    expect(ORDER_STATUS_LABEL.completed["es-CR"]).toBe("Completado");
-    expect(ORDER_STATUS_LABEL.payment_review.en).toBe("Verifying payment");
+  it("ORDER_STATUS_LABEL is the shopper's words of this module", () => {
+    expect(ORDER_STATUS_LABEL.completed["es-CR"]).toBe("Entregado");
+    expect(ORDER_STATUS_LABEL.payment_review.en).toBe("Checking your payment");
+    for (const status of statusValues("order_status")) {
+      expect(ORDER_STATUS_LABEL[status]["es-CR"]).toBe(
+        statusWord("order_status", status, { viewer: "shopper" }).word,
+      );
+    }
+  });
+
+  it("statusWordMap and statusLabels take the words of one viewer", () => {
+    expect(statusWordMap("stop_status", "driver").skipped).toBe("Quitada por Central");
+    expect(statusWordMap("shipment_status", "shopper").packed).toBe("Preparando");
+    expect(statusWordMap("shipment_status", "staff", "en").returning).toBe(
+      "Returning to the warehouse",
+    );
+    const labels = statusLabels("payouts", "seller", { paid: "success", failed: "danger" });
+    expect(labels).toEqual({
+      paid: { label: "Transferido", tone: "success" },
+      failed: { label: "No se pudo transferir", tone: "danger" },
+    });
+    expect(statusWord("seller_status", "active", { viewer: "seller" }).word).toBe("Activa");
+    expect(statusWord("seller_status", "active", { viewer: "staff" }).word).toBe("Activo");
   });
 });

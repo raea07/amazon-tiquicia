@@ -24,7 +24,9 @@
  * of supabase/migrations and fails when a status has no word.
  */
 
-import { type CoreLocaleInput, coreLocale } from "./dates";
+// Type-only import: this file has no run-time import, so plain Node can load
+// it (the browser and native journeys require it directly).
+import type { CoreLocaleInput } from "./dates";
 
 export type StatusViewer = "shopper" | "seller" | "staff" | "driver" | "warehouse";
 export const STATUS_VIEWERS: readonly StatusViewer[] = [
@@ -377,6 +379,15 @@ export const STATUS_WORDS = {
       suspended: e("err", "Suspendido", "Suspended"),
       closed: e("ended", "Cerrado", "Closed"),
     },
+    // The seller reads the state of their shop («la tienda»).
+    byViewer: {
+      seller: {
+        pending: e("half", "En revisión", "In review"),
+        active: e("ok", "Activa", "Active"),
+        suspended: e("err", "Suspendida", "Suspended"),
+        closed: e("ended", "Cerrada", "Closed"),
+      },
+    },
   },
   /** Chosen: the check of a seller's identity. */
   kyc_status: {
@@ -385,6 +396,14 @@ export const STATUS_WORDS = {
       pending: e("plain", "Por verificar", "To verify"),
       verified: e("ok", "Verificado", "Verified"),
       rejected: e("err", "Rechazado", "Rejected"),
+    },
+    // The seller reads the check of their identity («la identidad»).
+    byViewer: {
+      seller: {
+        pending: e("half", "En verificación", "Being checked"),
+        verified: e("ok", "Verificada", "Verified"),
+        rejected: e("err", "No verificada", "Not verified"),
+      },
     },
   },
   /** Chosen: a driver's account. */
@@ -555,7 +574,7 @@ export function statusWord<K extends StatusKind>(
     sign,
     tone: entry.tone,
     glyph: STATUS_SIGN_GLYPH[sign],
-    word: coreLocale(opts.locale) === "en" ? entry.en : entry.es,
+    word: opts.locale === "en" ? entry.en : entry.es,
   };
 }
 
@@ -571,4 +590,43 @@ export function statusWordOf(
 ): StatusWord | null {
   if (!Object.hasOwn(STATUS_WORDS[kind].words, value)) return null;
   return statusWord(kind, value as StatusValue<typeof kind>, opts);
+}
+
+/**
+ * Every word of a kind for one viewer, keyed by database value: for a
+ * select, a filter or a history line.
+ * `statusWordMap("stop_status", "driver").skipped` → «Quitada por Central».
+ */
+export function statusWordMap<K extends StatusKind>(
+  kind: K,
+  viewer: StatusViewer,
+  locale?: CoreLocaleInput,
+): Readonly<Record<StatusValue<K>, string>> {
+  const out = {} as Record<StatusValue<K>, string>;
+  for (const value of statusValues(kind)) {
+    out[value] = statusWord(kind, value, { viewer, ...(locale ? { locale } : {}) }).word;
+  }
+  return out;
+}
+
+/**
+ * The `{ label, tone }` table a screen renders as a badge: the words from
+ * here, the colour from the screen's own tone table (until the status stamp
+ * of §5.3 replaces the badge). Only the values the tone table names are kept.
+ */
+export function statusLabels<K extends StatusKind, const T extends string>(
+  kind: K,
+  viewer: StatusViewer,
+  // Keyed by the kind's values; a key the kind lacks throws when the module loads.
+  tones: Readonly<Record<string, T>>,
+  locale?: CoreLocaleInput,
+): Readonly<Record<StatusValue<K>, { label: string; tone: T }>> {
+  const out = {} as Record<StatusValue<K>, { label: string; tone: T }>;
+  for (const [value, tone] of Object.entries(tones) as [StatusValue<K>, T][]) {
+    out[value] = {
+      label: statusWord(kind, value, { viewer, ...(locale ? { locale } : {}) }).word,
+      tone,
+    };
+  }
+  return out;
 }

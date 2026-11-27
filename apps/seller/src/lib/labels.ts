@@ -1,18 +1,22 @@
+import { statusLabels } from "@yuntera/core";
 import type { SellerListing, SellerOverview } from "@yuntera/db";
 import type { Tone } from "@yuntera/ui";
 
-/** How the seller centre words each state. One place, so screens agree. */
+/**
+ * How the seller centre words each state. One place, so screens agree. Status
+ * words come from packages/core status-words (§4.3), as a seller reads them.
+ */
 
 export const PRODUCT_STATUS: Record<
   SellerListing["product_status"],
   { label: string; tone: Tone }
-> = {
-  draft: { label: "Borrador", tone: "neutral" },
-  pending_review: { label: "En revisión", tone: "warning" },
-  active: { label: "Publicado", tone: "success" },
-  rejected: { label: "Rechazado", tone: "danger" },
-  archived: { label: "Archivado", tone: "neutral" },
-};
+> = statusLabels("product_status", "seller", {
+  draft: "neutral",
+  pending_review: "warning",
+  active: "success",
+  rejected: "danger",
+  archived: "neutral",
+});
 
 export const SELLER_HEALTH: Record<
   SellerOverview["seller"]["health"],
@@ -29,11 +33,15 @@ export const FULFILLMENT_LABEL: Record<SellerListing["fulfillment"], string> = {
   seller: "Usted despacha, Yuntera entrega",
 };
 
-export const INBOUND_STATUS: Record<string, { label: string; tone: Tone }> = {
-  draft: { label: "Borrador", tone: "neutral" },
-  in_transit: { label: "En camino a la bodega", tone: "info" },
-  receiving: { label: "Recibiéndose", tone: "warning" },
-  received: { label: "Recibido", tone: "success" },
-  closed: { label: "Cerrado", tone: "neutral" },
-  cancelled: { label: "Cancelado", tone: "neutral" },
-};
+export const INBOUND_STATUS: Record<string, { label: string; tone: Tone }> = statusLabels(
+  "inbound_status",
+  "seller",
+  {
+    draft: "neutral",
+    in_transit: "info",
+    receiving: "warning",
+    received: "success",
+    closed: "neutral",
+    cancelled: "neutral",
+  },
+);

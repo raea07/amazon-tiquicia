@@ -76,14 +76,18 @@ export function Stat({
   value,
   hint,
   tone,
+  "data-testid": testId,
 }: {
   label: string;
   value: ReactNode;
   hint?: ReactNode;
   tone?: "warning" | "danger";
+  /** A stable hook for the browser journeys (SISTEMA §20.5). */
+  "data-testid"?: string;
 }) {
   return (
     <div
+      data-testid={testId}
       className={`rounded-lg border bg-surface p-4 ${
         tone === "danger"
           ? "border-danger"

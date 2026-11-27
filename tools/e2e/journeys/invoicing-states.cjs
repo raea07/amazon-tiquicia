@@ -27,6 +27,9 @@ const { chromium } = require("playwright");
 const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
 const kit = require("../lib/kit.cjs");
+const { word } = require("../lib/words.cjs");
+// The invoice's stamp, from packages/core.
+const ACCEPTED = word("invoice_status", "accepted", { viewer: "shopper" });
 
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
@@ -290,7 +293,7 @@ const mode = (value) =>
   setting("invoicing_issuer", "ready", "true");
   section = await until("the factura for the real cash to be accepted", async () => {
     const s = await invoicesOf(realCash);
-    return s.includes("Aceptado por Hacienda") ? s : null;
+    return s.includes(ACCEPTED) ? s : null;
   });
   check(
     section.includes("Factura electrónica") && section.includes("a nombre de María Pérez Rojas"),
@@ -299,7 +302,7 @@ const mode = (value) =>
   check(section.includes(ISSUES), "and now says Yuntera issued it");
   section = await until("the tiquete for the other real cash to be accepted", async () => {
     const s = await invoicesOf(tiqueteCash);
-    return s.includes("Aceptado por Hacienda") ? s : null;
+    return s.includes(ACCEPTED) ? s : null;
   });
   check(
     section.includes("Tiquete electrónico") && !section.includes("Factura electrónica"),

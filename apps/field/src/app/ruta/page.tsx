@@ -1,4 +1,4 @@
-import { skippedStopNote } from "@yuntera/core";
+import { skippedStopNote, statusLabels } from "@yuntera/core";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { Alert, Badge, EmptyState, formatPrice, Skeleton, type Tone } from "@yuntera/ui";
@@ -11,13 +11,13 @@ import { requireDriver } from "@/lib/access";
 
 export const metadata: Metadata = { title: "Mi ruta" };
 
-const STOP: Record<string, { label: string; tone: Tone }> = {
-  pending: { label: "Pendiente", tone: "neutral" },
-  arrived: { label: "En la puerta", tone: "info" },
-  delivered: { label: "Entregado", tone: "success" },
-  failed: { label: "No entregado", tone: "danger" },
-  skipped: { label: "Omitida", tone: "neutral" },
-};
+const STOP: Record<string, { label: string; tone: Tone }> = statusLabels("stop_status", "driver", {
+  pending: "neutral",
+  arrived: "info",
+  delivered: "success",
+  failed: "danger",
+  skipped: "neutral",
+});
 
 export default function RoutePage({ searchParams }: PageProps<"/ruta">) {
   return (
