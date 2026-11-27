@@ -25,6 +25,9 @@ const TABLES: Record<string, string> = {
   search_synonyms: "Sinónimos de búsqueda",
   reviews: "Reseñas",
   products: "Productos",
+  customers: "Clientes",
+  saved_replies: "Respuestas guardadas",
+  cases: "Casos",
 };
 const ACTIONS: Record<string, string> = {
   INSERT: "Creó",
@@ -39,6 +42,14 @@ const ACTIONS: Record<string, string> = {
   CORRECT: "Corrigió",
   TAKE_DOWN: "Retiró",
   RESTORE: "Volvió a publicar",
+  VIEW_CONTACT: "Vio el contacto de un cliente",
+  REFUSED_CODE: "Escribió un código de entrega (se rechazó)",
+};
+// Where a refused text was written (the text itself is never kept).
+const REFUSED_IN: Record<string, string> = {
+  ops_add_case_note: "En una nota interna",
+  ops_answer_case: "En una respuesta al cliente",
+  ops_record_contact: "En el resumen de un contacto",
 };
 
 // Shown as "changed" only; the values of these are never printed on screen.
@@ -49,7 +60,8 @@ export default function AuditPage() {
     <div className="shell py-8">
       <PageHeader title="Auditoría">
         Quién cambió qué en lo que no debe cambiar en silencio: permisos, repartidores, estado y
-        datos bancarios de vendedores, pagos, tarifas y ajustes. Este registro no se puede editar.
+        datos bancarios de vendedores, pagos, tarifas y ajustes, y quién vio el contacto de un
+        cliente y para qué. Este registro no se puede editar.
       </PageHeader>
       <div className="mt-6">
         <Suspense fallback={<Skeleton className="h-96" />}>
@@ -104,7 +116,11 @@ async function Trail() {
             {entry.subject ? <p className="text-xs text-ink-muted">{entry.subject}</p> : null}
           </td>
           <td className="max-w-md break-words text-xs text-ink-muted">
-            {changes(entry.old_row, entry.new_row) || (entry.row_key ?? "")}
+            {entry.action === "VIEW_CONTACT"
+              ? `Motivo: ${String(entry.new_row?.reason ?? "")}`
+              : entry.action === "REFUSED_CODE"
+                ? (REFUSED_IN[String(entry.new_row?.function ?? "")] ?? "En un caso")
+                : changes(entry.old_row, entry.new_row) || (entry.row_key ?? "")}
           </td>
           <td className="text-xs">
             {entry.actor_name ?? (entry.actor_id ? "Cuenta sin nombre" : "Sistema")}

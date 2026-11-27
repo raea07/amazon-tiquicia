@@ -11,11 +11,14 @@ import {
   orderComingBack,
   statusWord,
   statusWordMap,
+  stoppedParcelHistory,
+  stoppedParcelLabel,
   toCostaRicaTime,
   waitsForNewAttempt,
 } from "@yuntera/core";
 import {
   ApiError,
+  type MyCase,
   type MyOrderReturn,
   type MyOrderReview,
   type OrderDetailWithRecall as OrderDetail,
@@ -39,6 +42,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { CaseAnswers } from "@/components/case-answers";
 import {
   CancelOrderForm,
   ReturnForm,
@@ -100,6 +104,8 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
   const payment: OrderPayment = await api.orderPayment(numero);
   // Which of the shopper's reviews on this order staff hid, and why.
   const reviewStates: MyOrderReview[] = await api.myOrderReviews(numero);
+  // The shopper's complaints, returns and contacts about this order, with the answers.
+  const cases: MyCase[] = await api.myCases(numero);
   const throughGateway = [
     "start",
     "preparing",
@@ -309,8 +315,10 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                         {shipment.tracking_code}
                       </span>
                     </p>
-                    {isStoppedShipment(shipment.status, shipment.recalled) ? (
-                      <Badge tone="warning">Detenido en la bodega</Badge>
+                    {stoppedParcelLabel(shipment.status, stoppedFlags(shipment)) ? (
+                      <Badge tone={shipment.status === "returning" ? "warning" : "neutral"}>
+                        {stoppedParcelLabel(shipment.status, stoppedFlags(shipment))}
+                      </Badge>
                     ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ||
                       waitsForNewAttempt(shipment.status, shipment.attempt_count) ? (
                       <Badge tone="info">
@@ -472,6 +480,17 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
             />
           </Suspense>
 
+          {cases.length > 0 ? (
+            <section aria-labelledby="consultas">
+              <h2 id="consultas" className="text-xl font-bold">
+                Sus consultas sobre este pedido
+              </h2>
+              <div className="mt-3">
+                <CaseAnswers cases={cases} showOrder={false} />
+              </div>
+            </section>
+          ) : null}
+
           <section aria-labelledby="historial">
             <h2 id="historial" className="text-xl font-bold">
               Historial
@@ -559,7 +578,10 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
 
           <p className="text-sm text-ink-muted">
             ¿Algo no salió bien?{" "}
-            <Link href="/ayuda#reclamos" className={touchLinkClass()}>
+            <Link
+              href={`/reclamo?pedido=${order.order_number}` as Route}
+              className={touchLinkClass()}
+            >
               Presente un reclamo
             </Link>
             .
@@ -634,8 +656,18 @@ function describeEvent(event: OrderDetail["timeline"][number], order: OrderDetai
   if (event.kind === "order_status" && event.to_status && event.to_status in ORDER_STATUS_LABEL) {
     return ORDER_STATUS_LABEL[event.to_status as keyof typeof ORDER_STATUS_LABEL]["es-CR"];
   }
+  const stopped =
+    event.kind === "shipment_status"
+      ? stoppedParcelHistory(event.to_status, event.stopped_before_leaving)
+      : null;
+  if (stopped) return stopped;
   if (event.kind === "shipment_status" && event.to_status && event.to_status in PARCEL_WORDS) {
     return `Paquete: ${PARCEL_WORDS[event.to_status as keyof typeof PARCEL_WORDS].toLowerCase()}`;
   }
   return event.to_status ?? "Actualización";
+}
+
+/** What parcel-words.ts needs to know of a parcel staff stopped. */
+function stoppedFlags(shipment: OrderDetail["shipments"][number]) {
+  return { recalled: shipment.recalled, stoppedBeforeLeaving: shipment.stopped_before_leaving };
 }

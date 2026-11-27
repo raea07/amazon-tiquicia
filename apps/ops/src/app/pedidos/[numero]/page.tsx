@@ -24,6 +24,7 @@ import {
   Skeleton,
   TextAreaField,
   TextField,
+  touchLinkClass,
 } from "@yuntera/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -34,6 +35,7 @@ import { staffCancelOrder } from "@/app/integrity-actions";
 import { CatalogueOutcome } from "@/components/catalogue-outcome";
 import { DeliveryCodePanel, ReturnedParcelForm } from "@/components/integrity-forms";
 import { NotificationLine } from "@/components/notification-list";
+import { OrderCases } from "@/components/order-cases";
 import { RecallShipmentForm } from "@/components/order-recall-form";
 import { ORDER_STATUS_STAFF, PAYMENT_METHOD, PAYMENT_STATUS } from "@/lib/labels";
 import {
@@ -232,6 +234,18 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
           </section>
         ) : null}
 
+        <section aria-labelledby="casos">
+          <h2 id="casos" className="text-xl font-bold">
+            Casos
+          </h2>
+          <Suspense fallback={<Skeleton className="mt-3 h-24" />}>
+            <OrderCases
+              orderNumber={order.order_number}
+              canRecord={canSee(staff.staff_role, ["support"])}
+            />
+          </Suspense>
+        </section>
+
         <section aria-labelledby="historial">
           <h2 id="historial" className="text-xl font-bold">
             Historial
@@ -300,7 +314,7 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                 </li>
               ))}
               <li>
-                <Link href="/cobros/reembolsos" className="text-link underline">
+                <Link href="/cobros/reembolsos" className={touchLinkClass()}>
                   Ver en Cobros
                 </Link>
               </li>
@@ -376,7 +390,7 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
                 label="Motivo"
                 name="note"
                 rows={2}
-                hint="El cliente lo ve en su pedido."
+                hint="Solo lo ve el equipo. El cliente lee «Cancelamos este pedido» y que puede preguntar por qué desde Ayuda."
               />
             </ActionForm>
           </section>

@@ -68,6 +68,20 @@ mailbox, not to each person.
 | `fees.offers_paused`        | `seller_offers_paused_fees`     | the shop               | `email`, `push`                    |
 | `route.assigned`            | `driver_route_assigned`         | the driver             | `push`                             |
 
+Since wave 9 (`084700`), outside the table above because the planner does
+not route it: an answer to any case other than a complaint (a
+return, a report, a recorded contact) plans `case_answered`, by e-mail and
+push, through `ops_answer_case`; its event is recorded as already processed,
+because no worker consumer reads that topic. Like `complaint_answered`, it
+says an answer is waiting in the shopper's account and on the order's page,
+never the answer itself. The answer times the messages promise come from
+`packages/core/src/service-times.ts` (the targets of `private.case_targets`):
+`complaint_received` promises a written answer within 5 working days (it said
+10 before wave 9; the law's 10 working days stay in the staff template), and
+`return_received` 1 working day for a withdrawal and 2 working hours for a
+damaged, wrong or warranty item (it said 3 working days). A test in
+`packages/notifications` keeps the templates' words equal to core's.
+
 <!-- END notification-table -->
 
 One message is planned outside the table's planner: when catalogue staff

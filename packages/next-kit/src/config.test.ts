@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { baseConfig, securityHeaders } from "../config.mjs";
+import { baseConfig, buildInfo, errorTrackerIngest, securityHeaders } from "../config.mjs";
 
 const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8");
 const API = "https://abcdefghijklmnop.supabase.co";
@@ -45,8 +45,57 @@ describe("WEB-9: the content-security policy", () => {
     expect(policy()["script-src"]).toContain("https://challenges.cloudflare.com");
   });
 
+  it("allows the error tracker's one ingest address only when a tracker is configured", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(policy()["connect-src"]).toBe("'self'");
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", "https://0123abcd@o4508.ingest.us.sentry.io/4509876");
+    expect(policy()["connect-src"]).toBe(
+      "'self' https://o4508.ingest.us.sentry.io/api/4509876/envelope/",
+    );
+    // Scripts, frames and pictures never come from the tracker: no tunnel, no widget.
+    for (const directive of ["script-src", "frame-src", "img-src", "default-src"]) {
+      expect(policy()[directive], directive).not.toContain("sentry");
+    }
+    // A DSN with a secret in it, or plain http to another machine, is not used at all.
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", "https://key:secret@o4508.ingest.us.sentry.io/4509876");
+    expect(policy()["connect-src"]).toBe("'self'");
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", "http://key@ingest.example.com/1");
+    expect(policy()["connect-src"]).toBe("'self'");
+    // The local stand-in of the error-reports journey.
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", "http://lane18@127.0.0.1:54686/18");
+    expect(policy()["connect-src"]).toBe("'self' http://127.0.0.1:54686/api/18/envelope/");
+  });
+
+  it("keeps a self-hosted tracker's path in the ingest address", () => {
+    expect(errorTrackerIngest("https://k@errors.example.com/sentry/7")?.connectSource).toBe(
+      "https://errors.example.com/sentry/api/7/envelope/",
+    );
+  });
+
+  it("names the commit and the environment of the build", () => {
+    expect(buildInfo({ VERCEL_GIT_COMMIT_SHA: "a".repeat(40), VERCEL_ENV: "preview" })).toEqual({
+      commit: "a".repeat(40),
+      environment: "preview",
+    });
+    expect(
+      buildInfo({ VERCEL_GIT_COMMIT_SHA: "abc1234", VERCEL_ENV: "production" }).environment,
+    ).toBe("production");
+    expect(
+      buildInfo({ VERCEL_GIT_COMMIT_SHA: "abc1234", YUNTERA_LOCAL_RUN: "1" }).environment,
+    ).toBe("local");
+    expect(buildInfo({ VERCEL_GIT_COMMIT_SHA: "not a commit; rm -rf" }).commit).toBe("unknown");
+    // The value given at deploy time wins; nothing given is unknown, never a guess.
+    expect(
+      buildInfo({ YUNTERA_BUILD_COMMIT: "b".repeat(40), VERCEL_GIT_COMMIT_SHA: "a".repeat(40) })
+        .commit,
+    ).toBe("b".repeat(40));
+    expect(buildInfo({}).commit).toBe("unknown");
+    expect(baseConfig({ app: "web" }).env).toHaveProperty("YUNTERA_BUILD_COMMIT");
+    expect(baseConfig({ app: "web" }).env).not.toHaveProperty("YUNTERA_COMMIT");
+  });
+
   it("says which app it is, for the session lifetime", () => {
-    expect(baseConfig({ app: "ops" }).env).toEqual({ YUNTERA_APP: "ops" });
+    expect(baseConfig({ app: "ops" }).env).toMatchObject({ YUNTERA_APP: "ops" });
     for (const app of ["web", "seller", "ops", "field"]) {
       expect(read(`../../../apps/${app}/next.config.ts`)).toContain(`app: "${app}"`);
     }

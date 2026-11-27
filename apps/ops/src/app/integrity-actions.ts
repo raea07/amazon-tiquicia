@@ -24,6 +24,7 @@ import {
 } from "@yuntera/next-kit/server";
 import { refresh } from "next/cache";
 import { z } from "zod";
+import { refusedForCode } from "@/lib/refused-for-code";
 import { currentStaff } from "@/lib/staff";
 
 async function staffAction(
@@ -68,7 +69,9 @@ export async function receiveReturn(
   return staffAction(
     "/atencion",
     async (api) => {
-      await api.opsReceiveReturn(returnId.data, state.data === "resellable", values.note || null);
+      refusedForCode(
+        await api.opsReceiveReturn(returnId.data, state.data === "resellable", values.note || null),
+      );
       return state.data === "resellable"
         ? "Recibido y de vuelta a la venta. Ya puede registrar el reembolso."
         : "Recibido como dañado; no vuelve a la venta. Ya puede registrar el reembolso.";
@@ -94,7 +97,7 @@ export async function closeReturn(
   return staffAction(
     "/atencion",
     async (api) => {
-      await api.opsDecideReturn(returnId.data, false, (values.note ?? "").trim());
+      refusedForCode(await api.opsDecideReturn(returnId.data, false, (values.note ?? "").trim()));
       return "Devolución cerrada; el cliente ve el motivo en su pedido.";
     },
     values,

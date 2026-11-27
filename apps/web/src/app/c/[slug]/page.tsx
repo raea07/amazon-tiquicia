@@ -43,13 +43,16 @@ async function Category({ params, searchParams }: PageProps<"/c/[slug]">) {
       <nav aria-label="Ruta" className="mb-3 text-sm text-ink-muted">
         <ol className="flex flex-wrap items-center gap-1.5">
           <li>
-            <Link href="/" className="hover:underline">
+            <Link href="/" className="-my-3 inline-flex min-h-11 items-center hover:underline">
               Inicio
             </Link>
           </li>
           {parent ? (
             <li className="before:mr-1.5 before:content-['/']">
-              <Link href={`/c/${parent.slug}` as Route} className="hover:underline">
+              <Link
+                href={`/c/${parent.slug}` as Route}
+                className="-my-3 inline-flex min-h-11 items-center hover:underline"
+              >
                 {parent.name_es}
               </Link>
             </li>

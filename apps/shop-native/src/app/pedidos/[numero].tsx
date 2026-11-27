@@ -8,6 +8,8 @@ import {
   ORDER_STATUS_LABEL,
   orderAwaitingNewAttempt,
   orderComingBack,
+  stoppedParcelHistory,
+  stoppedParcelLabel,
   toCostaRicaTime,
   waitsForNewAttempt,
 } from "@yuntera/core";
@@ -41,6 +43,7 @@ import { Link, Stack as Nav, Redirect, useLocalSearchParams } from "expo-router"
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { OrderStatusBadge, ShipmentStatusBadge } from "@/components/badges";
+import { CaseAnswers } from "@/components/case-answers";
 import {
   GATEWAY_STAGES,
   GatewayPayment,
@@ -70,6 +73,11 @@ import { PAYMENT_LABEL, SHIPMENT_STATUS_LABEL } from "@/lib/labels";
 import { amountComingBack, refundedSoFar as refundedSoFarOf } from "@/lib/refund-outlook";
 import { returnNextStep, returnTitle } from "@/lib/returns";
 
+/** What parcel-words.ts needs to know of a parcel staff stopped. */
+function stoppedFlags(shipment: OrderDetail["shipments"][number]) {
+  return { recalled: shipment.recalled, stoppedBeforeLeaving: shipment.stopped_before_leaving };
+}
+
 function describeEvent(event: OrderDetail["timeline"][number], order: OrderDetail): string {
   if (event.kind === "note") return event.note ?? "Nota";
   if (event.kind === "payment") return event.note ?? "Pago";
@@ -79,6 +87,11 @@ function describeEvent(event: OrderDetail["timeline"][number], order: OrderDetai
   if (event.kind === "order_status" && event.to_status && event.to_status in ORDER_STATUS_LABEL) {
     return ORDER_STATUS_LABEL[event.to_status as keyof typeof ORDER_STATUS_LABEL]["es-CR"];
   }
+  const stopped =
+    event.kind === "shipment_status"
+      ? stoppedParcelHistory(event.to_status, event.stopped_before_leaving)
+      : null;
+  if (stopped) return stopped;
   if (
     event.kind === "shipment_status" &&
     event.to_status &&
@@ -170,6 +183,11 @@ export default function OrderScreen() {
     personal: true,
     enabled: order.data !== undefined,
   });
+  // The shopper's complaints, returns and contacts about this order, with the answers.
+  const cases = useApiQuery(["order-cases", number], (api) => api.myCases(number), {
+    personal: true,
+    enabled: order.data !== undefined,
+  });
   // How its payment stands at the gateway; asked again while it changes on its own.
   const payment = useApiQuery(["order-payment", number], (api) => api.orderPayment(number), {
     personal: true,
@@ -185,9 +203,12 @@ export default function OrderScreen() {
   const [pulling, setPulling] = useState(false);
   const readAgain = () => {
     setPulling(true);
-    void Promise.allSettled([order.refetch(), payment.refetch(), returns.refetch()]).finally(() =>
-      setPulling(false),
-    );
+    void Promise.allSettled([
+      order.refetch(),
+      payment.refetch(),
+      returns.refetch(),
+      cases.refetch(),
+    ]).finally(() => setPulling(false));
   };
 
   if (needsSignIn(status)) return <Redirect href={signInPath(`/pedidos/${number}`)} />;
@@ -425,8 +446,10 @@ export default function OrderScreen() {
                   ? `Paquete ${index + 1} de ${o.shipments.length}`
                   : "Paquete"}
               </Text>
-              {isStoppedShipment(shipment.status, shipment.recalled) ? (
-                <Badge tone="warning">Detenido en la bodega</Badge>
+              {stoppedParcelLabel(shipment.status, stoppedFlags(shipment)) ? (
+                <Badge tone={shipment.status === "returning" ? "warning" : "neutral"}>
+                  {stoppedParcelLabel(shipment.status, stoppedFlags(shipment)) ?? ""}
+                </Badge>
               ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ||
                 waitsForNewAttempt(shipment.status, shipment.attempt_count) ? (
                 <Badge tone="info">Entrega reprogramada</Badge>
@@ -600,6 +623,13 @@ export default function OrderScreen() {
         </Card>
       ) : null}
 
+      {cases.data && cases.data.length > 0 ? (
+        <Stack gap={2}>
+          <Text variant="heading">Sus consultas sobre este pedido</Text>
+          <CaseAnswers cases={cases.data} showOrder={false} />
+        </Stack>
+      ) : null}
+
       <Stack gap={2}>
         <Text variant="heading">Historial</Text>
         <View style={styles.timeline}>
@@ -618,7 +648,9 @@ export default function OrderScreen() {
         <Text variant="small" tint="muted">
           ¿Algo no salió bien?
         </Text>
-        <TextLink href="/ayuda">Presente un reclamo</TextLink>
+        <TextLink href={`/reclamo?pedido=${o.order_number}`} testID="order-complaint">
+          Presente un reclamo
+        </TextLink>
       </View>
     </Screen>
   );

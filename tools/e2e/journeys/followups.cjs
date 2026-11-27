@@ -138,6 +138,13 @@ async function as(email) {
 
   // Tab A, reloaded: the claim waits for a decision and can be withdrawn.
   await web.openOrder(a, target.number, "load");
+  // A return request is named as a return, not as a complaint (wave 9: the
+  // word «Reclamo» belongs to the complaint form).
+  const before = await web.returnRequestText(a, title);
+  check(
+    /Devolución por producto dañado/.test(before) && !/Reclamo por/.test(before),
+    "the request is named «Devolución por producto dañado»",
+  );
   const opener = web.withdrawOpener(a, title);
   const box = await opener.boundingBox();
   check(box && box.height >= 44, `the withdraw opener is at least 44 px tall (${box?.height})`);

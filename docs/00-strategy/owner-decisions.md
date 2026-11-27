@@ -3,7 +3,7 @@
 **What this is.** Every question the strategy documents, the marketing pieces and the November research ask the owner, each asked once, in the order the answers are needed. Written 24 November 2026.
 **How to answer.** Reply like "D4 A, D10 D". "ok" accepts every recommended option of one group, for example "ok before the pilot". An answer is recorded in `docs/02-architecture/decisions.md`.
 **Where they come from.** [Go-to-market](go-to-market.md), [roll-out plan](rollout-plan.md), [team structure](team-structure.md), [pricing strategy](pricing-strategy.md), the [marketing pieces](../../marketing/README.md) and the research in [market and costs](../research/market-and-costs-2026-11.md), [support and system-health tools](../research/support-and-system-health-tools.md) and [English translation](../research/english-translation-plan.md). Those documents point here instead of asking.
-**Count.** 54 numbers: 4 already decided, 5 needed now, 2 the builders do unless you object, 31 before the pilot with real money, 10 before the open launch, 2 later. A number never changes once given, so the list is not in number order.
+**Count.** 56 numbers: 4 already decided, 5 needed now, 2 the builders do unless you object, 33 before the pilot with real money, 10 before the open launch, 2 later. A number never changes once given, so the list is not in number order.
 
 Amounts are colones a month unless stated, from the document named; US dollars at ₡450. Every amount is an estimate or an assumption, as its source says. Questions for the lawyer and the accountant are separate: they are in [compliance](../05-security-compliance/compliance-costa-rica.md) §9 and §10 and in [open questions](../08-open-questions.md) 67 to 82. A decision that waits on one names it.
 
@@ -294,6 +294,21 @@ Cost of A: until authorised, about ₡2,600 a parcel with IVA; once authorised, 
 - B. The team reviews. No cost, and mistakes reach print.
 
 Cost: not researched; ask 2 editors for quotes. Waits on it: every "final text" piece, the tagline (D32), the English release.
+
+**D55. Does the staff order page show the delivery phone only on request?** From: the support desk build (wave 9), `STATUS.md`, "Not built". Today the console's order page shows the recipient's phone in its delivery block to every staff role that opens it, while the customer view shows a customer's phone only after "Mostrar contacto" with a reason on the audit trail.
+
+- A. The order page hides the phone too, behind the same "Mostrar contacto" with a reason. **(recommended)** One rule for every screen, and every look at a phone is on the audit trail. Staff who call about a delivery need one more click.
+- B. Keep it as it is. Faster for operations staff; looks at a phone there leave no trace.
+
+Waits on it: a small change to the console's order page.
+
+**D56. What are the service hours, and does Saturday count as a working day?** From: [customer service](../06-operations/customer-service.md), "Response targets"; the support desk build (wave 9). The desk counts working days Monday to Friday without public holidays, and working hours from 08:00 to 17:00. Customer service promises service Monday to Saturday, and its hours are not published yet.
+
+- A. Monday to Friday 08:00 to 17:00 and Saturday 08:00 to 12:00, with Saturday a working day for the targets. **(recommended)** It matches the delivery days, and no answer waits over a weekend that has deliveries.
+- B. Monday to Friday 08:00 to 17:00 only, as the desk counts today. No change to the code; a complaint filed on Friday may wait until Monday.
+- C. Other hours, which the owner writes.
+
+Waits on it: the published hours and the desk's working calendar (a change to `private.case_due` and its tests).
 
 ---
 

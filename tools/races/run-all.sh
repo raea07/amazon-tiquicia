@@ -16,7 +16,7 @@ mkdir -p "$OUT"
 node guard-check.cjs
 for f in race-a-known-deadlocks race-b-sweep race-c-sort-keys race-d-confirm-table \
   race-e-product-rows race-f-stale-summary race-g-recall-route race-h-seller-pack \
-  race-i-count-into-location; do
+  race-i-count-into-location race-j-support-desk; do
   letter="${f#race-}"
   letter="${letter:0:1}"
   letter="${letter^^}"

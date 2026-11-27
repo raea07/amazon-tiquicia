@@ -14,7 +14,23 @@
 
 import { clean, colones, fullDate, longDate } from "../format.ts";
 import { FOLLOWUP_TEMPLATES } from "./followups.ts";
+
+// How fast staff answer, in the words of packages/core/src/service-times.ts
+// (the targets of private.case_targets). Written here because the templates
+// also run where the workspace packages do not; service-times.test.ts in
+// this package keeps them equal.
+export const COMPLAINT_ANSWER_WORDS = "5 días hábiles";
+export const RETURN_ANSWER_WORDS: Record<string, string> = {
+  withdrawal: "1 día hábil",
+  damaged: "2 horas hábiles",
+  wrong_item: "2 horas hábiles",
+  warranty: "2 horas hábiles",
+};
+const returnAnswerWords = (kind: string) =>
+  RETURN_ANSWER_WORDS[kind] ?? RETURN_ANSWER_WORDS.withdrawal;
+
 import { STAFF_CATALOGUE_TEMPLATES } from "./staff-catalogue.ts";
+import { SUPPORT_TEMPLATES } from "./support-cases.ts";
 
 export type Vars = Record<string, unknown>;
 
@@ -420,11 +436,11 @@ export const TEMPLATES: Record<string, Template> = {
     return {
       from: "orders",
       subject: `Recibimos su solicitud de devolución ${ref}`,
-      preheader: "La revisamos en un máximo de 3 días hábiles.",
+      preheader: `La revisamos y le respondemos en un máximo de ${returnAnswerWords(s(v.return_kind))}.`,
       greeting: hello(name),
       paragraphs: [
         `Recibimos su solicitud de devolución ${ref} (${RETURN_KIND[s(v.return_kind)] ?? "devolución"}) de ${clean(s(v.return_title), 90)}, del pedido ${number}.`,
-        "La revisamos y le respondemos por este medio en un máximo de 3 días hábiles. No envíe el producto todavía: le diremos cómo hacerlo.",
+        `La revisamos y le respondemos por este medio en un máximo de ${returnAnswerWords(s(v.return_kind))}. No envíe el producto todavía: le diremos cómo hacerlo.`,
       ],
       facts: [
         ["Solicitud", ref],
@@ -486,11 +502,11 @@ export const TEMPLATES: Record<string, Template> = {
     return {
       from: "orders",
       subject: `Recibimos su reclamo ${ref}`,
-      preheader: "Le respondemos en un máximo de 10 días hábiles.",
+      preheader: `Le respondemos por escrito en un máximo de ${COMPLAINT_ANSWER_WORDS}.`,
       greeting: hello(name),
       paragraphs: [
         `Recibimos su reclamo ${ref}${v.order_number ? ` sobre el pedido ${orderNumber(v)}` : ""}.`,
-        "Una persona del equipo lo revisa y le responde en un máximo de 10 días hábiles. Si necesita agregar algo, responda a este correo.",
+        `Este correo es la confirmación de que lo recibimos. Una persona del equipo lo revisa y le responde por escrito en un máximo de ${COMPLAINT_ANSWER_WORDS}; la respuesta también queda en su cuenta. Si necesita agregar algo, responda a este correo.`,
       ],
       action: { label: "Ir a su cuenta", url: `${links.shop}/cuenta` },
       note: "Guarde este correo: es el comprobante de que presentó el reclamo.",
@@ -724,6 +740,8 @@ export const TEMPLATES: Record<string, Template> = {
   ...FOLLOWUP_TEMPLATES,
   // The message added with migration 083700 (./staff-catalogue.ts).
   ...STAFF_CATALOGUE_TEMPLATES,
+  // The message added with migration 084700 (./support-cases.ts).
+  ...SUPPORT_TEMPLATES,
 };
 
 export const TEMPLATE_NAMES = Object.keys(TEMPLATES).sort();

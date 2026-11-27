@@ -1115,6 +1115,7 @@ end $$;
 select pg_temp.login('comprador3@yuntera.example');
 do $$
 declare
+  v_doc text;
   v jsonb;
   r jsonb;
 begin
@@ -1123,9 +1124,14 @@ begin
   assert r ->> 'status' = 'in_progress' and (r ->> 'open_stops')::integer = 2
          and jsonb_array_length(r -> 'stops') = 2,
     format('routes: listed %s', r);
-  -- Never a delivery code, a recipient's name or phone.
-  assert position(current_setting('t.code_a') in r::text) = 0
-         and position(current_setting('t.code_b') in r::text) = 0
+  -- Never a delivery code, a recipient's name or phone. A code counts as a
+  -- value or a number of its own, not as four digits inside an id, a time or
+  -- a route code (a random code matched those by chance now and then).
+  v_doc := regexp_replace(r::text,
+             '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9:.]+([+-][0-9:]+|Z)?)?|R-[0-9]+',
+             ' ', 'gi');
+  assert v_doc !~ ('(?<![0-9A-Za-z])' || current_setting('t.code_a') || '(?![0-9A-Za-z])')
+         and v_doc !~ ('(?<![0-9A-Za-z])' || current_setting('t.code_b') || '(?![0-9A-Za-z])')
          and position('Prueba Rutas' in r::text) = 0 and r::text !~ 'pin|recipient|phone',
     'routes: no delivery code, name or phone';
 end

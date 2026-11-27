@@ -1,0 +1,221 @@
+-- What the outside review of the wave 9 integration found, each fixed in
+-- 084700 (applied nowhere yet):
+--
+--   Atención keeps a refusal: a staff text that holds the customer's live
+--                  delivery code, sent through ops_resolve_complaint,
+--                  ops_decide_return, ops_receive_return or
+--                  ops_complete_return, is refused with the refusal kept on
+--                  the audit trail and its numbers counted (the call answers
+--                  null and changes nothing else), so the lock-out of three
+--                  refusals an hour holds across Casos and Atención; a text
+--                  too long for the timeline is refused before the code is
+--                  looked at, so a long text with the code and one without
+--                  give the same answer and leave nothing;
+--   the masking:   the customer's own live code reaches staff masked also
+--                  when typed with other separators (slashes, underscores,
+--                  spaced dashes, several spaces);
+--   Atención:      ops_care_queues lists for each role only the complaints,
+--                  returns and reports whose case that role reads (table 4.1)
+--                  and names the customer by first name.
+--
+-- Everything is this suite's own and rolls back.
+
+begin;
+\ir _helpers.sql
+\ir _money_helpers.sql
+
+select pg_temp.shopper('cliente197@yuntera.example', 'Dalia Cliente Refusal');
+select pg_temp.shopper('soporte197@yuntera.example', 'Sara Soporte');
+select pg_temp.shopper('finanzas197@yuntera.example', 'Flor Finanzas');
+select pg_temp.shopper('catalogo197@yuntera.example', 'Ciro Catalogo');
+select pg_temp.shopper('ops197@yuntera.example', 'Omar Operaciones');
+insert into public.staff_members (user_id, role)
+select u.id, x.role::public.staff_role
+from (values ('soporte197@yuntera.example', 'support'), ('finanzas197@yuntera.example', 'finance'),
+             ('catalogo197@yuntera.example', 'catalog'), ('ops197@yuntera.example', 'ops')) x (email, role)
+join auth.users u on u.email = x.email;
+
+-- A delivered order (its code spent) with a complaint and two returns, and a
+-- second order still to be delivered, whose code 6284 is live.
+select pg_temp.remember('order_d', pg_temp.place('cliente197@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:2'), 'card', 'refusal-197-d')::text);
+select pg_temp.pay(current_setting('t.order_d')::uuid);
+select pg_temp.deliver(current_setting('t.order_d')::uuid);
+select pg_temp.remember('order_l', pg_temp.place('cliente197@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'refusal-197-l')::text);
+select pg_temp.pay(current_setting('t.order_l')::uuid);
+update private.delivery_codes set code = '6284' where order_id = current_setting('t.order_l')::uuid;
+select pg_temp.remember('user_d', (select id::text from auth.users where email = 'cliente197@yuntera.example'));
+
+do $$
+declare
+  v_item uuid := pg_temp.item(current_setting('t.order_d')::uuid, 'libreta-tapa-dura-a5');
+begin
+  perform pg_temp.act('cliente197@yuntera.example');
+  perform pg_temp.remember('complaint', public.file_complaint('delivery', 'El pedido llegó tarde y nadie me avisó.',
+    (select order_number from public.orders where id = current_setting('t.order_d')::uuid))::text);
+  perform pg_temp.remember('return_a', public.request_return(v_item, 'damaged', 1, 'Llegó rota la tapa.')::text);
+  perform pg_temp.remember('return_b', public.request_return(v_item, 'damaged', 1, 'La otra también.')::text);
+  perform pg_temp.logout();
+end $$;
+
+-- How many refusals and counted texts the support writer has, and whether
+-- the complaint and the returns are as the customer left them.
+create function pg_temp.trail() returns text
+language sql as $$
+  select format('refused=%s counted=%s answers=%s complaint=%s/%s a=%s b=%s',
+    (select count(*) from private.audit_log a join auth.users u on u.id = a.actor_id
+     where u.email = 'soporte197@yuntera.example' and a.action = 'REFUSED_CODE'),
+    (select count(*) from private.case_number_checks k join auth.users u on u.id = k.actor_id
+     where u.email in ('soporte197@yuntera.example', 'finanzas197@yuntera.example')),
+    (select count(*) from private.case_entries e join private.cases c on c.id = e.case_id
+     where e.kind = 'answer' and (c.complaint_id = current_setting('t.complaint')::uuid
+       or c.return_id in (current_setting('t.return_a')::uuid, current_setting('t.return_b')::uuid))),
+    (select status from public.complaints where id = current_setting('t.complaint')::uuid),
+    (select coalesce(resolution, '-') from public.complaints where id = current_setting('t.complaint')::uuid),
+    (select status from public.return_requests where id = current_setting('t.return_a')::uuid),
+    (select status from public.return_requests where id = current_setting('t.return_b')::uuid))
+$$;
+
+-- ── A text too long for the timeline: the same answer, code or not ─────────
+
+do $$
+declare
+  v_before text := pg_temp.trail();
+begin
+  perform pg_temp.act('soporte197@yuntera.example');
+  perform pg_temp.refused(format('select public.ops_resolve_complaint(%L, %L, false)',
+    current_setting('t.complaint'), 'Pruebe 0000 0001 6284 0003 0004 ' || repeat('x', 4000)), 'text_too_long');
+  perform pg_temp.refused(format('select public.ops_resolve_complaint(%L, %L, false)',
+    current_setting('t.complaint'), 'Pruebe 0000 0001 0002 0003 0004 ' || repeat('x', 4000)), 'text_too_long');
+  perform pg_temp.refused(format('select public.ops_decide_return(%L, false, %L)',
+    current_setting('t.return_a'), 'Pruebe 6284 ' || repeat('x', 4000)), 'text_too_long');
+  perform pg_temp.logout();
+  assert pg_temp.trail() = v_before, format('a long text leaves nothing: %s, was %s', pg_temp.trail(), v_before);
+end $$;
+
+-- ── A code refused through Atención is kept on the trail ───────────────────
+
+do $$
+declare
+  v_jobs integer := (select count(*) from private.outbox_events where topic in ('complaint.answered', 'return.decided'));
+begin
+  perform pg_temp.act('soporte197@yuntera.example');
+  -- A complaint's answer with the code: refused, nothing else changes.
+  assert public.ops_resolve_complaint(current_setting('t.complaint')::uuid,
+    'Dalia, su código 6284 queda anulado.', false) is null, 'the answer with the code answers null';
+  assert pg_temp.trail() = 'refused=1 counted=1 answers=0 complaint=open/- a=requested b=requested',
+    format('after the first refusal: %s', pg_temp.trail());
+  -- An answer without it is kept, and its number counts.
+  assert public.ops_resolve_complaint(current_setting('t.complaint')::uuid,
+    'Dalia, revisamos la ruta 1234 y le escribimos mañana.', false), 'an answer without the code is kept';
+  assert pg_temp.trail() like 'refused=1 counted=2 answers=1 complaint=in_progress/Dalia, revisamos%',
+    format('after an accepted answer: %s', pg_temp.trail());
+  -- A return refused with the code in its note: refused, still requested.
+  assert public.ops_decide_return(current_setting('t.return_a')::uuid, false,
+    'No vemos daño; el 6 2 8 4 no aplica.') is null, 'the decision with the code answers null';
+  -- An approval whose note holds it: refused too, nothing approved.
+  assert public.ops_decide_return(current_setting('t.return_b')::uuid, true,
+    'Aprobada. Entregue con el código 6284.') is null, 'the approval with the code answers null';
+  assert pg_temp.trail() like 'refused=3 counted=4 answers=1 complaint=in_progress/% a=requested b=requested',
+    format('after three refusals: %s', pg_temp.trail());
+  -- Three refusals in the hour, across Atención: the writer is locked out
+  -- everywhere, in Casos too, whatever the text.
+  perform pg_temp.refused(format('select public.ops_resolve_complaint(%L, %L, false)',
+    current_setting('t.complaint'), 'Le escribimos mañana sin falta.'), 'too_many_refusals');
+  perform pg_temp.refused(format('select public.ops_decide_return(%L, true, %L)',
+    current_setting('t.return_a'), 'Aprobada, la recogemos mañana.'), 'too_many_refusals');
+  perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)',
+    (select id from private.cases where complaint_id = current_setting('t.complaint')::uuid),
+    'Nota sin números.'), 'too_many_refusals');
+  -- A decision without a note writes no text, so it still goes through.
+  assert public.ops_decide_return(current_setting('t.return_a')::uuid, true, null), 'an approval without a note';
+  perform pg_temp.logout();
+  assert (select count(*) from private.outbox_events where topic in ('complaint.answered', 'return.decided'))
+         = v_jobs + 2, 'messages only for what was kept (one answer, one approval)';
+end $$;
+
+-- ── Receiving and refunding: the same, for the note on each ────────────────
+
+do $$
+declare
+  v_refund jsonb;
+begin
+  -- Another writer (the support writer is locked out for the hour).
+  perform pg_temp.act('ops197@yuntera.example');
+  assert public.ops_receive_return(current_setting('t.return_a')::uuid, true,
+    'Recibida; la caja traía el 6284 escrito.') is null, 'a receipt note with the code answers null';
+  assert (select status from public.return_requests where id = current_setting('t.return_a')::uuid) = 'approved',
+    'not received';
+  assert public.ops_receive_return(current_setting('t.return_a')::uuid, true, 'Recibida en buen estado.'),
+    'a receipt without the code';
+  perform pg_temp.act('finanzas197@yuntera.example');
+  assert public.ops_complete_return(current_setting('t.return_a')::uuid, 'Reembolso hecho, código 6284.') is null,
+    'a refund note with the code answers null';
+  assert (select status from public.return_requests where id = current_setting('t.return_a')::uuid) = 'received',
+    'not refunded';
+  assert not exists (select 1 from private.refunds r where r.reason = 'return' and r.source_id = current_setting('t.return_a')::uuid),
+    'no refund was made';
+  v_refund := public.ops_complete_return(current_setting('t.return_a')::uuid, 'Reembolso hecho a su tarjeta.');
+  assert (v_refund ->> 'refund_minor')::bigint > 0, format('the refund without the code: %s', v_refund);
+  perform pg_temp.logout();
+  assert (select count(*) from private.audit_log a join auth.users u on u.id = a.actor_id
+          where u.email = 'finanzas197@yuntera.example' and a.action = 'REFUSED_CODE'
+            and a.new_row ->> 'function' = 'return_decision') = 1, 'the refund''s refusal is on the trail';
+end $$;
+
+-- ── The customer's own code, typed with other separators ───────────────────
+
+do $$
+declare
+  v_user uuid := current_setting('t.user_d')::uuid;
+  v_text text;
+begin
+  foreach v_text in array array['6 - 2 - 8 - 4', '6/2/8/4', '6_2_8_4', '6   2   8   4', '6284', '6 2 8 4',
+                                '62-84', '6.2.8.4', '٦٢٨٤', '8888-6284', '(6)(2)(8)(4)'] loop
+    assert private.mask_shopper_codes('Mi código: ' || v_text || '.', null, v_user) !~ '6.{0,12}2.{0,12}8.{0,12}4'
+           and private.mask_shopper_codes('Mi código: ' || v_text || '.', null, v_user) like '%••••%',
+      format('%s reaches staff masked: %s', v_text, private.mask_shopper_codes('Mi código: ' || v_text || '.', null, v_user));
+  end loop;
+  -- Other numbers stay as written.
+  assert private.mask_shopper_codes('Pedido 1234, tel. 8888-1234, del 6 al 28 de abril.', null, v_user)
+         = 'Pedido 1234, tel. 8888-1234, del 6 al 28 de abril.', 'nothing else is masked';
+end $$;
+
+-- ── Atención lists for each role what table 4.1 lets it read ───────────────
+
+do $$
+declare
+  q jsonb;
+  v_role text;
+  v_email text;
+  v_report uuid;
+begin
+  perform pg_temp.act('cliente197@yuntera.example');
+  v_report := public.report_content('product', (select id from public.products where slug = 'libreta-tapa-dura-a5'),
+    'misleading', 'La foto no es la del producto.', null);
+  perform pg_temp.logout();
+  for v_role, v_email in values ('support', 'soporte197@yuntera.example'), ('ops', 'ops197@yuntera.example'),
+                               ('finance', 'finanzas197@yuntera.example'), ('catalog', 'catalogo197@yuntera.example') loop
+    perform pg_temp.act(v_email);
+    q := public.ops_care_queues();
+    -- The complaint is about an order (ops, support); the return is a
+    -- payment matter (finance, ops, support); the report a listing (catalog, support).
+    assert (q -> 'complaints' @> jsonb_build_array(jsonb_build_object('id', current_setting('t.complaint'))))
+           = (v_role in ('support', 'ops')), format('%s and the complaint: %s', v_role, q -> 'complaints');
+    assert (q -> 'returns' @> jsonb_build_array(jsonb_build_object('id', current_setting('t.return_b'))))
+           = (v_role in ('support', 'ops', 'finance')), format('%s and the return', v_role);
+    assert (q -> 'reports' @> jsonb_build_array(jsonb_build_object('id', v_report)))
+           = (v_role in ('support', 'catalog')), format('%s and the report', v_role);
+    assert q::text !~ 'Refusal', format('%s reads no surname: %s', v_role, q);
+    assert (q #>> '{totals,complaints}')::int = jsonb_array_length(q -> 'complaints')
+           or jsonb_array_length(q -> 'complaints') = 100, format('%s: the total counts what it lists', v_role);
+  end loop;
+  perform pg_temp.act('soporte197@yuntera.example');
+  assert public.ops_care_queues() -> 'returns' @> jsonb_build_array(jsonb_build_object(
+    'id', current_setting('t.return_b'), 'customer', 'Dalia')), 'the customer by first name';
+  perform pg_temp.logout();
+end $$;
+
+select 'ok' as atencion_refusals;
+rollback;

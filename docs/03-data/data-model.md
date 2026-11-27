@@ -432,6 +432,39 @@ erDiagram
 
 ---
 
+## Support desk and system health
+
+Migrations `084700` and `084800` (wave 9). Every table is in `private`, with
+row-level security on and no grant to an app role: the console and the
+shopper reach them only through the functions in the
+[API reference](api-reference.md#support-desk-and-system-health-084700-084800).
+
+```mermaid
+erDiagram
+  COMPLAINTS ||--o| CASES : "opens"
+  RETURN_REQUESTS ||--o| CASES : "opens"
+  CONTENT_REPORTS ||--o| CASES : "opens"
+  ORDERS ||--o{ CASES : about
+  AUTH_USERS ||--o{ CASES : "the customer"
+  CASES ||--o{ CASE_ENTRIES : "timeline"
+  CASE_TARGETS ||--o{ CASES : "due times"
+```
+
+| Table                        | Holds                                                                                                                                                                                                                                                            | Notes                                                                                                                                                                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `private.case_targets`       | One row per kind of case and topic (`*` for any other): first-response and resolution amounts and units (`minutes`, `working_hours`, `working_days`, `calendar_days`, `same_day`) and the situation of customer-service.md they come from                        | The only copy of the targets; `packages/core/src/service-times.ts` holds the shopper's words of them and a test keeps both equal to customer-service.md. Working days are Monday to Friday without `holidays`; working hours 08:00 to 17:00, an assumption |
+| `private.cases`              | One case per complaint, return request, content report or recorded contact: kind, topic, area (`order`, `payment`, `listing`, `account`), order, customer, channel, a contact's summary, status, assignee, due times, first response, resolution, times reopened | Opened by triggers on the three source tables (and once for every row that existed when `084700` ran). Account deletion erases the summary and closes an open contact                                                                                      |
+| `private.case_entries`       | The timeline: opened, note (staff only), answer (the customer reads it), assigned, closed, reopened, status                                                                                                                                                      | Append-only; the one exception is the erasure of a deleted account's notes and answers ("Texto eliminado junto con la cuenta.")                                                                                                                            |
+| `private.saved_replies`      | Title and body of an answer staff start from, who changed it last                                                                                                                                                                                                | Every change on the audit trail                                                                                                                                                                                                                            |
+| `private.case_number_checks` | How many four-digit numbers a staff member wrote in a text, and when (never the numbers)                                                                                                                                                                         | The hourly allowance of the delivery-code guard (decision 61); rows older than a day are dropped                                                                                                                                                           |
+| `private.store_builds`       | Phone builds recorded by hand: app, platform, version, build number, the day out, internal or public, who recorded it                                                                                                                                            | Read on the Versiones panel; entries and removals audited                                                                                                                                                                                                  |
+
+`orders.cancel_reason` gains "Los paquetes no salieron de la bodega"
+(`085000`) for an order whose parcels staff all stopped before they left; the
+migration rewords the orders cancelled that way before it, once.
+
+---
+
 ## Settings
 
 `app_settings` holds switches that must change without a deploy. It is readable

@@ -2,8 +2,9 @@
 
 Each journey uses the apps as a shopper, seller, staff member, driver or
 warehouse worker would, in a real browser, against a freshly seeded database.
-It fails when a step does not arrive, the browser logs an error or a response
-is a 5xx. Run them in your own lane (never 0): `tools/dev/stack.sh up 1`, then
+It fails when a step does not arrive, the browser logs an error, a response
+is a 5xx, or the browser asks anything of a host that is not this machine
+(`lib/local-only.cjs`, loaded before every journey by `run.mjs`). Run them in your own lane (never 0): `tools/dev/stack.sh up 1`, then
 `tools/dev/stack.sh e2e 1 [journey ...]`, then `tools/dev/stack.sh down 1`.
 
 ## Rules for writing one

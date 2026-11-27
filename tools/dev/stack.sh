@@ -30,6 +30,14 @@
 # The apps read the API address when they are BUILT, so each lane builds its own
 # copy; `up` writes apps/*/.env.local for the lane before building.
 #
+# Error reports are off in a lane: the websites are built without a tracker
+# address, so they load no tracker code and send nothing. With
+# `ERROR_TRACKER=standin tools/dev/stack.sh up <lane>` the websites are built
+# to report to a stand-in tracker on this machine instead (API port + 6,
+# tools/e2e/lib/tracker-standin.cjs), which only records what arrives in
+# .lane/<lane>/error-tracker.jsonl; the error-reports journey then checks it.
+# The next `up` without it builds them off again.
+#
 # `native` builds the WEB EXPORT of the native apps (apps/*-native) for the
 # lane, into .lane/<lane>/native/<app>, and serves each on the lane's first app
 # port plus 10 to 13 (shop +10, seller +11, driver +12, warehouse +13: lane 0
@@ -65,6 +73,7 @@ DB_URL="${ADMIN_URL%/*}/${DB_NAME}"
 API_URL="http://127.0.0.1:${API_PORT}"
 FUNCTIONS_PORT=$((API_PORT + 1)); FAKE_PORT=$((API_PORT + 2)); FAKE_PAY_PORT=$((API_PORT + 3))
 HACIENDA_PORT=$((API_PORT + 4)); INVOICE_FUNCTIONS_PORT=$((API_PORT + 5))
+TRACKER_PORT=$((API_PORT + 6))
 API_KEY="sb_publishable_local_development_only"
 # Lets the seller centre, the console and the journeys ask the shop to drop its cached
 # catalogue (apps/web/src/app/api/catalogo/refrescar). A local value, not a secret.
@@ -127,6 +136,9 @@ export DEV_HACIENDA_PORT=$HACIENDA_PORT
 export DEV_INVOICE_FUNCTIONS_PORT=$INVOICE_FUNCTIONS_PORT
 export HACIENDA_FAKE_URL=http://127.0.0.1:$HACIENDA_PORT
 export INVOICE_FUNCTIONS_URL=http://127.0.0.1:$INVOICE_FUNCTIONS_PORT
+export ERROR_TRACKER_URL=http://127.0.0.1:$TRACKER_PORT
+export ERROR_TRACKER_LOG=$STATE/error-tracker.jsonl
+export ERROR_TRACKER_ON=$([ -e "$STATE/error-tracker.on" ] && echo 1 || echo 0)
 ENV
 }
 
@@ -256,6 +268,12 @@ case "$COMMAND" in
 
   up)
     mkdir -p "$STATE"; stop_all
+    # Error reports: off, unless this run asks for the stand-in tracker.
+    if [ "${ERROR_TRACKER:-}" = "standin" ]; then
+      touch "$STATE/error-tracker.on"; : > "$STATE/error-tracker.jsonl"
+    else
+      rm -f "$STATE/error-tracker.on"
+    fi
     start_api
     for app in "${APPS[@]}"; do
       [ -d "$ROOT/apps/$app" ] || continue
@@ -268,12 +286,22 @@ case "$COMMAND" in
         echo "SHOP_REFRESH_KEY=$REFRESH_KEY"
         # Signs the sign-in limit's hashes and the console's activity cookie. A local value.
         echo "AUTH_GUARD_KEY=$GUARD_KEY"
+        # Which commit the build is from, and where the console asks the seller centre and
+        # the field app for theirs (the console's Versiones panel; packages/next-kit/src/version.ts).
+        echo "YUNTERA_BUILD_COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
+        echo "YUNTERA_SELLER_URL=http://127.0.0.1:$(app_port seller)"
+        echo "YUNTERA_FIELD_URL=http://127.0.0.1:$(app_port field)"
         # Nothing stands in front of the apps here, so the journeys may say who the
         # visitor is in X-Forwarded-For; a deployment trusts only its own proxy.
         echo "AUTH_CLIENT_IP_HEADER=x-forwarded-for"
         # A production build on this machine: the readable keys above are accepted
         # only because this says it is a local run (guard.ts, isLocalRun).
         echo "YUNTERA_LOCAL_RUN=1"
+        # Only with ERROR_TRACKER=standin: report errors to the stand-in on this
+        # machine, one project number per website (web 1, seller 2, ops 3, field 4).
+        if [ -e "$STATE/error-tracker.on" ]; then
+          echo "NEXT_PUBLIC_SENTRY_DSN=http://lane${LANE}@127.0.0.1:${TRACKER_PORT}/$(( $(app_port "$app") - APP_BASE + 1 ))"
+        fi
       } > "$ROOT/apps/$app/.env.local"
     done
     echo "lane $LANE: building the apps (log: $STATE/build.log)"
@@ -282,6 +310,13 @@ case "$COMMAND" in
     # lifetime, and a journey would then meet offers that no longer exist.
     ( cd "$ROOT" && pnpm exec turbo run build --force > "$STATE/build.log" 2>&1 ) || {
       tail -40 "$STATE/build.log" >&2; exit 1; }
+    if [ -e "$STATE/error-tracker.on" ]; then
+      start tracker "$ROOT/tools/e2e" env ERROR_TRACKER_PORT="$TRACKER_PORT" \
+        ERROR_TRACKER_LOG="$STATE/error-tracker.jsonl" node lib/tracker-standin.cjs
+      wait_for "http://127.0.0.1:$TRACKER_PORT/ready" 20 tracker
+      : > "$STATE/error-tracker.jsonl"
+      echo "lane $LANE: error reports go to the stand-in tracker on http://127.0.0.1:$TRACKER_PORT"
+    fi
     for app in "${APPS[@]}"; do
       [ -d "$ROOT/apps/$app" ] || continue
       start "$app" "$ROOT/apps/$app" pnpm exec next start --port "$(app_port "$app")"

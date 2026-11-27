@@ -1,3 +1,4 @@
+import { returnRequestedText } from "@yuntera/core";
 import type { MyOrderReturn } from "@yuntera/db";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { formatPrice } from "@yuntera/ui";
@@ -6,15 +7,15 @@ import { withdrawReturn } from "@/app/return-actions";
 const KIND: Record<MyOrderReturn["kind"], string> = {
   withdrawal: "Devolución",
   warranty: "Garantía",
-  damaged: "Reclamo por producto dañado",
-  wrong_item: "Reclamo por producto equivocado",
+  damaged: "Devolución por producto dañado",
+  wrong_item: "Devolución por producto equivocado",
 };
 
 /** What happens next, in the shopper's words, for each step of a return. */
 function nextStep(item: MyOrderReturn): string {
   switch (item.status) {
     case "requested":
-      return "Recibimos su solicitud. Le respondemos en un máximo de 2 días hábiles.";
+      return returnRequestedText(item.kind);
     case "approved":
       return "Aprobada. Le contactaremos para recoger el producto, sin costo para usted. Téngalo listo y completo; cuando llegue a nuestra bodega le reembolsamos por el mismo medio de pago.";
     case "received":

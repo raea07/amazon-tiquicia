@@ -228,6 +228,13 @@ export default function AccountScreen() {
         />
         <Divider />
         <ListRow
+          href="/cuenta/casos"
+          title="Sus consultas"
+          subtitle="Sus reclamos y devoluciones, con nuestras respuestas"
+          testID="account-cases"
+        />
+        <Divider />
+        <ListRow
           href="/cuenta/notificaciones"
           title="Notificaciones"
           subtitle="Correo, WhatsApp, SMS y publicidad"

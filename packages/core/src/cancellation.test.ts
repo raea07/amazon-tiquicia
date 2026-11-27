@@ -10,17 +10,34 @@ const SQL = readdirSync(MIGRATIONS)
   .map((file) => readFileSync(`${MIGRATIONS}${file}`, "utf8"))
   .join("\n");
 
+/** The newest definition of a function across the migrations. */
+function newest(name: string): string {
+  const pattern = new RegExp(
+    `create or replace function ${name.replace(".", "\\.")}\\([\\s\\S]*?\\n\\$\\$;`,
+    "g",
+  );
+  return [...SQL.matchAll(pattern)].at(-1)?.[0] ?? "";
+}
+
 describe("the reasons the database writes on a cancelled order", () => {
   it("are written in SQL exactly as here", () => {
-    // The sweep and the return write them; the shopper's apps send the third.
+    // The sweep and the return write them; cancel_order writes the shopper's own.
     expect(SQL).toContain(`cancel_order_internal(v_order, '${CANCEL_REASON.unpaid}')`);
     expect(SQL).toContain(`cancel_reason = '${CANCEL_REASON.returned}'`);
     expect(SQL).toContain(`'${CANCEL_REASON.shopper}'`);
+    // Since 085000 the check-in of a returned parcel chooses between two.
+    const checkIn = newest("public.wms_receive_returned_shipment");
+    expect(checkIn).toContain(`then '${CANCEL_REASON.stopped}'`);
+    expect(checkIn).toContain(`else '${CANCEL_REASON.returned}' end`);
+    expect(checkIn).toContain("cancel_reason = v_reason");
+    // And cancel_order stores the shopper's own sentence whatever they sent.
+    expect(newest("public.cancel_order")).toContain(
+      `when v_order.user_id = (select auth.uid()) then '${CANCEL_REASON.shopper}'`,
+    );
   });
 
-  it("are the only reasons public.get_order gives the shopper (084600)", () => {
-    const file = readdirSync(MIGRATIONS).find((f) => f.includes("_shopper_followups.sql"));
-    const sql = readFileSync(`${MIGRATIONS}${file}`, "utf8");
+  it("are the only reasons public.get_order gives the shopper (084600, 085000)", () => {
+    const sql = newest("public.get_order");
     const listed = sql.match(/o\.cancel_reason in \(([^)]*)\)/)?.[1] ?? "";
     const sentences = [...listed.matchAll(/'([^']*)'/g)].map((m) => m[1]).sort();
     expect(sentences).toEqual(Object.values(CANCEL_REASON).sort());
@@ -29,6 +46,7 @@ describe("the reasons the database writes on a cancelled order", () => {
   it("are recognised, with surrounding spaces, and anything else is staff's own note", () => {
     expect(cancelReasonKind("Pago no recibido a tiempo")).toBe("unpaid");
     expect(cancelReasonKind(" Los paquetes regresaron sin entregarse ")).toBe("returned");
+    expect(cancelReasonKind("Los paquetes no salieron de la bodega")).toBe("stopped");
     expect(cancelReasonKind("Cancelado por el cliente")).toBe("shopper");
     expect(cancelReasonKind("El cliente llamó para cancelar")).toBe("other");
     expect(cancelReasonKind(null)).toBe("other");
@@ -71,6 +89,18 @@ describe("cancellationWords", () => {
     expect(cancellationWords(CANCEL_REASON.returned, false, feeKept).body).not.toContain(
       "El envío",
     );
+  });
+
+  it("says a parcel stopped before it left never left, where the money goes, and points to Ayuda", () => {
+    const paid = cancellationWords(CANCEL_REASON.stopped, true);
+    expect(paid.title).toBe("Cancelamos su pedido antes de que saliera de nuestra bodega");
+    expect(paid.title).not.toContain("regresaron");
+    expect(paid.body).toContain("no llegaron a salir de nuestra bodega");
+    expect(paid.body).toContain("Le devolvemos lo que pagó por el mismo medio con que pagó.");
+    expect(paid.body).toContain("Ayuda");
+    expect(paid.body).toContain("haga el pedido de nuevo");
+    expect(paid.history).toBe("Cancelado: el pedido no llegó a salir de nuestra bodega");
+    expect(cancellationWords(CANCEL_REASON.stopped, false).body).toContain("No se le cobró nada.");
   });
 
   it("tells the shopper they cancelled it", () => {

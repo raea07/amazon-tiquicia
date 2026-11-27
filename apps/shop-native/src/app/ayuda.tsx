@@ -1,7 +1,7 @@
 import { brand } from "@yuntera/brand";
-import { DEFAULT_RANKING } from "@yuntera/core";
+import { COMPLAINT_PROMISE, DEFAULT_RANKING, REFUND_TIME } from "@yuntera/core";
 import { colors, radius, space } from "@yuntera/expo-kit/theme";
-import { Button, Screen, Stack, Text } from "@yuntera/expo-kit/ui";
+import { Button, LinkButton, Screen, Stack, Text } from "@yuntera/expo-kit/ui";
 import * as Linking from "expo-linking";
 import type { ReactNode } from "react";
 import { View } from "react-native";
@@ -98,8 +98,8 @@ export default function HelpScreen() {
           compra; nosotros lo contamos desde la entrega, que nunca es menos.
         </Item>
         <Item>
-          <Text variant="bodyStrong">Reembolso:</Text> en un máximo de 8 días naturales, por el
-          mismo medio con el que pagó.
+          <Text variant="bodyStrong">Reembolso:</Text> en un máximo de {REFUND_TIME}, por el mismo
+          medio con el que pagó.
         </Item>
         <Item>
           <Text variant="bodyStrong">Garantía:</Text> todo producto tiene al menos 30 días hábiles
@@ -114,9 +114,12 @@ export default function HelpScreen() {
 
       <Section title="Presentar un reclamo">
         <Text>
-          Escríbanos a {brand.support.email} con el número de su pedido. Respondemos en un máximo de
-          2 días hábiles. Reclamar no tiene costo.
+          Use el formulario de reclamos; desde la pantalla de su pedido ya lleva el número. También
+          puede escribirnos a {brand.support.email}. {COMPLAINT_PROMISE}
         </Text>
+        <LinkButton href="/reclamo" testID="help-complaint">
+          Presentar un reclamo
+        </LinkButton>
         <Button variant="secondary" onPress={mail}>
           {`Escribir a ${brand.support.email}`}
         </Button>

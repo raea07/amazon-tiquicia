@@ -124,9 +124,10 @@ function allText(rendered: ReturnType<typeof render>): string {
 describe("every template on every channel", () => {
   it("has the templates of section 8", () => {
     // 26 of section 8, 9 added with migration 083200 (followups.ts), 1 with
-    // migration 083600 (seller_offers_paused_edit, also in followups.ts) and
-    // 1 with 083700 (seller_listing_staff_change, staff-catalogue.ts).
-    expect(TEMPLATE_NAMES).toHaveLength(37);
+    // migration 083600 (seller_offers_paused_edit, also in followups.ts),
+    // 1 with 083700 (seller_listing_staff_change, staff-catalogue.ts) and
+    // 1 with 084700 (case_answered, support-cases.ts).
+    expect(TEMPLATE_NAMES).toHaveLength(38);
     expect(channelsOf("shipment_out_for_delivery")).toEqual(["email", "push", "whatsapp", "sms"]);
     expect(channelsOf("seller_new_order")).toEqual(["email", "push", "whatsapp"]);
     expect(channelsOf("order_placed")).toContain("whatsapp");
