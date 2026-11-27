@@ -249,7 +249,10 @@ function Item({
         </div>
       </details>
       <details className="border-t border-border pt-1">
-        <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-link">
+        <summary
+          className="flex min-h-11 cursor-pointer items-center font-semibold text-link"
+          data-testid="stock-correct"
+        >
           Corregir cantidad
         </summary>
         <div className="mt-2">

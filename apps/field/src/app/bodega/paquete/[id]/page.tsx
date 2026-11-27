@@ -101,7 +101,7 @@ async function Shipment({ params }: Pick<PageProps<"/bodega/paquete/[id]">, "par
                 {task.title}
                 {task.variant_name ? ` (${task.variant_name})` : ""}
               </p>
-              <p className="text-sm text-ink-muted">
+              <p className="text-sm text-ink-muted" data-testid="pick-sku">
                 {task.sku_code}
                 {task.gtin ? ` · ${task.gtin}` : ""}
                 {task.picked_quantity > 0 && task.status !== "done"

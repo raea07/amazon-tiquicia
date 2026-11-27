@@ -117,7 +117,10 @@ function RouteCard({ route }: { route: OpsOpenRouteWithAttempts }) {
 
       {route.open_stops === 0 ? (
         <details className="mt-3">
-          <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+          <summary
+            className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+            data-testid="route-close"
+          >
             Cerrar la ruta {route.code}
           </summary>
           <div className="mt-2 max-w-xl">
@@ -185,7 +188,10 @@ function StopRow({ stop }: { stop: OpsRouteStopWithAttempts }) {
       ) : null}
       {stop.not_removable === null ? (
         <details>
-          <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+          <summary
+            className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+            data-testid="stop-remove"
+          >
             Quitar de la ruta
           </summary>
           <div className="mt-2 max-w-xl">

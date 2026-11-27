@@ -308,7 +308,10 @@ function ClosureRow({ closure, today }: { closure: OpsClosure; today: string }) 
 
       {closure.state === "over" ? null : (
         <details className="mt-1">
-          <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+          <summary
+            className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+            data-testid="closure-end-now"
+          >
             Terminar el cierre ahora
           </summary>
           <div className="mt-2">

@@ -75,7 +75,10 @@ async function Account() {
 
   return (
     <div className="grid max-w-4xl gap-6 lg:grid-cols-2">
-      <section className="rounded-lg border border-border bg-surface p-5">
+      <section
+        className="rounded-lg border border-border bg-surface p-5"
+        data-testid="shop-details"
+      >
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-bold">Tienda</h2>
           <Badge tone={status.tone}>{status.label}</Badge>
@@ -128,7 +131,10 @@ async function Account() {
         ) : null}
       </section>
 
-      <section className="rounded-lg border border-border bg-surface p-5">
+      <section
+        className="rounded-lg border border-border bg-surface p-5"
+        data-testid="fiscal-details"
+      >
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-bold">Identidad fiscal</h2>
           <Badge tone={kyc.tone}>{kyc.label}</Badge>
@@ -168,7 +174,10 @@ async function Account() {
         )}
       </section>
 
-      <section className="rounded-lg border border-border bg-surface p-5 lg:col-span-2">
+      <section
+        className="rounded-lg border border-border bg-surface p-5 lg:col-span-2"
+        data-testid="payout-details"
+      >
         <h2 className="text-lg font-bold">Dónde le pagamos</h2>
         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
           <Item label="Cuenta IBAN">{payout.current.iban_masked ?? "Sin registrar"}</Item>

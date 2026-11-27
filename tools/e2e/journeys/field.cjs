@@ -5,13 +5,13 @@
 // browser logs an error, or when any response is a 5xx.
 
 const { chromium, request } = require("playwright");
+const field = require("../lib/field.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const BASE = process.env.FIELD_URL || "http://127.0.0.1:3003";
+const BASE = field.BASE;
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 async function rpcAs(email, calls) {
   const ctx = await request.newContext();
@@ -61,20 +61,13 @@ async function pinFor(email, tracking) {
       geolocation: { latitude: 9.9336, longitude: -84.0513 },
       permissions: ["geolocation"],
     });
-  const signIn = async (page, email) => {
-    await page.goto(BASE + "/ingresar", { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => !["/ingresar", "/"].includes(new URL(u).pathname));
-    await page.waitForLoadState("networkidle");
-  };
+  const signIn = (page, email) => field.signInToOwnPage(page, email);
 
   // 0. People who are neither drivers nor warehouse staff
   const c0 = await phone();
   const p0 = await c0.newPage();
   watch(p0);
-  await p0.goto(BASE + "/ruta", { waitUntil: "networkidle" });
+  await field.open(p0, "/ruta");
   log("visitor on /ruta ->", p0.url().replace(BASE, ""));
   await signIn(p0, "comprador@yuntera.example");
   log("shopper lands on:", new URL(p0.url()).pathname);
@@ -85,96 +78,56 @@ async function pinFor(email, tracking) {
   const page = await c1.newPage();
   watch(page);
   await signIn(page, "repartidor@yuntera.example");
-  log(
-    "driver lands on:",
-    new URL(page.url()).pathname,
-    "|",
-    await text(page.locator("main h1:visible")),
-  );
-  log(
-    "route card:",
-    (await text(page.locator("main:visible section > div").first())).slice(0, 170),
-  );
-  const stops = page.locator("main:visible ol > li");
-  log("stops:", await stops.count(), "| first:", (await text(stops.first())).slice(0, 150));
+  log("driver lands on:", new URL(page.url()).pathname, "|", await field.heading(page));
+  log("route card:", (await field.todaySummary(page)).slice(0, 170));
+  const stops = await field.stopsShown(page);
+  log("stops:", stops.count, "| first:", stops.first.slice(0, 150));
   log(
     "overflow px:",
     await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
   );
   await page.waitForTimeout(1500);
-  log("position note:", await text(page.locator('main:visible p[aria-live="polite"]').first()));
+  log("position note:", await field.positionNote(page));
   await page.screenshot({ path: SHOTS + "/f1-route.png", fullPage: true });
 
   // Stop 1: cash on delivery
-  await stops.first().locator("a").click();
-  // The route page has its own h1, so wait for the address to change first.
-  await page.waitForURL((u) => /^\/ruta\/[^/]+$/.test(new URL(u).pathname));
-  await page.waitForSelector("main h1:visible");
-  const header = await text(page.locator("main:visible header:visible"));
+  await field.openFirstStop(page);
+  const header = await field.stopHeader(page);
   const tracking1 = /paquete (YT\d+)/.exec(header)[1];
   log(
     "stop 1:",
     header,
     "| page shows a PIN:",
-    /código de entrega: \d{4}/i.test(await page.locator("main:visible").innerText()),
+    /código de entrega: \d{4}/i.test(await field.mainText(page)),
   );
-  log(
-    "links:",
-    await page
-      .locator(
-        'main:visible a[href^="https://www.google.com/maps"], main:visible a[href^="tel:"], main:visible a[href^="https://wa.me"]',
-      )
-      .evaluateAll((a) => a.map((x) => x.getAttribute("href").slice(0, 60))),
-  );
+  log("links:", await field.stopContactLinks(page));
   await page.screenshot({ path: SHOTS + "/f2-stop.png", fullPage: true });
-  await page.click('main:visible button:has-text("Llegué")');
-  await page.waitForSelector("main:visible >> text=Llegada registrada");
+  await field.arrive(page);
   const pin1 = await pinFor("comprador@yuntera.example", tracking1);
   const wrong = pin1 === "0000" ? "1111" : "0000";
-  const cashLabel = await text(page.locator('main:visible label:has-text("Efectivo recibido")'));
+  const cashLabel = await field.cashLabel(page);
   const due = /debe ser ₡([\d\s  ]+)/.exec(cashLabel)[1].replace(/\D/g, "");
-  await page.fill('main:visible input[name="collected"]', due);
-  await page.fill('main:visible input[name="recipientName"]', "María Fernández");
-  await page.fill('main:visible input[name="pin"]', wrong);
-  await page.click('main:visible button:has-text("Entregar")');
-  await page.waitForSelector('main:visible form [role="alert"]');
+  await field.deliver(page, { collected: due, recipient: "María Fernández", pin: wrong });
   log(
     "wrong PIN:",
-    await text(page.locator('main:visible form [role="alert"]').first()),
+    await field.deliveryError(page),
     "| name kept:",
-    await page.inputValue('main:visible input[name="recipientName"]'),
+    await field.recipientTyped(page),
   );
-  await page.fill('main:visible input[name="collected"]', "1000");
-  await page.fill('main:visible input[name="pin"]', pin1);
-  await page.click('main:visible button:has-text("Entregar")');
-  await page.waitForFunction(() =>
-    /exactamente/.test(document.querySelector("main")?.innerText ?? ""),
-  );
-  log("short cash:", await text(page.locator('main:visible form [role="alert"]').first()));
-  await page.fill('main:visible input[name="collected"]', due);
-  await page.fill('main:visible input[name="pin"]', pin1);
-  await page.click('main:visible button:has-text("Entregar")');
-  await page.waitForURL((u) => new URL(u).pathname === "/ruta");
-  await page.waitForSelector("main:visible >> text=Entrega registrada");
+  await field.deliver(page, { collected: "1000", pin: pin1 });
+  log("short cash:", await field.cashError(page));
+  await field.deliver(page, { collected: due, pin: pin1 });
+  await field.deliveredNotice(page);
   log(
     "after delivery:",
-    await text(page.locator('main:visible [role="status"]').first()),
+    await field.statusText(page),
     "|",
-    (await text(page.locator("main:visible section > div").first())).slice(0, 120),
+    (await field.todaySummary(page)).slice(0, 120),
   );
 
   // Stop 2: nobody home
-  await page.locator("main:visible ol > li a").first().click();
-  await page.waitForSelector("main:visible summary");
-  await page.click("main:visible summary");
-  await page.selectOption('main:visible select[name="reason"]', "nobody_home");
-  await page.click('main:visible button:has-text("Registrar que no se entregó")');
-  await page.waitForURL((u) => new URL(u).pathname === "/ruta");
-  await page.waitForSelector("main:visible >> text=Terminó la ruta");
-  log(
-    "route finished:",
-    (await text(page.locator("main:visible section > div").first())).slice(0, 190),
-  );
+  await field.failFirstStop(page, "nobody_home");
+  log("route finished:", (await field.todaySummary(page)).slice(0, 190));
   await page.screenshot({ path: SHOTS + "/f3-route-done.png", fullPage: true });
   await c1.close();
 
@@ -212,96 +165,47 @@ async function pinFor(email, tracking) {
   const w = await c2.newPage();
   watch(w);
   await signIn(w, "bodega@yuntera.example");
-  log(
-    "warehouse lands on:",
-    new URL(w.url()).pathname,
-    "|",
-    await text(w.locator("main h1:visible")),
-  );
-  log("board:", await w.locator("main:visible h2").allInnerTexts());
+  log("warehouse lands on:", new URL(w.url()).pathname, "|", await field.heading(w));
+  log("board:", await field.boardSections(w));
   log(
     "overflow px:",
     await w.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
   );
   await w.screenshot({ path: SHOTS + "/f4-warehouse.png", fullPage: true });
 
-  await w
-    .locator('main:visible section[aria-labelledby="paquetes"] li a', { hasText: "Por alistar" })
-    .first()
-    .click();
-  // The board has its own header and h1: wait for the parcel's page itself.
-  await w.waitForURL((u) => new URL(u).pathname.startsWith("/bodega/paquete/"));
-  await w.waitForSelector("main h1:visible");
-  log("parcel:", await text(w.locator("main:visible header:visible")));
-  await w.click('main:visible button:has-text("Empezar a alistar")');
-  await w.waitForSelector('main:visible input[name="code"]');
-  const lines = await w.locator("main:visible ol > li").count();
+  await field.openParcelToPick(w);
+  log("parcel:", await field.parcelHeader(w));
+  const lines = await field.startPicking(w);
   log("lines to pick:", lines);
   // wrong product first
-  await w.locator('main:visible input[name="code"]').first().fill("YT-NOPE0000");
-  await w.locator('main:visible ol > li button[type="submit"]').first().click();
-  await w.waitForSelector('main:visible ol [role="alert"]');
-  log("wrong scan:", await text(w.locator('main:visible ol [role="alert"]').first()));
-  for (let i = 0; i < lines; i++) {
-    const open = w.locator('main:visible ol > li:has(input[name="code"])').first();
-    const sku = /(YT-[A-Z0-9]+|[A-Z0-9]+-[A-Z0-9-]+)/.exec(
-      await open.locator("p.text-sm").first().innerText(),
-    )[1];
-    await open.locator('input[name="code"]').fill(sku);
-    await open.locator('button[type="submit"]').click();
-    await w.waitForFunction(
-      (n) => document.querySelectorAll('main ol > li input[name="code"]').length === n,
-      lines - i - 1,
-    );
-  }
-  log("all lines:", await w.locator("main:visible h2#lineas").innerText());
+  log("wrong scan:", await field.scanWrong(w, "YT-NOPE0000"));
+  await field.pickAll(w);
+  log("all lines:", await field.linesHeading(w));
   await w.screenshot({ path: SHOTS + "/f5-pick.png", fullPage: true });
-  await w.click('main:visible button:has-text("Empacado")');
-  await w.waitForSelector("main:visible >> text=/zona de despacho/");
-  log("packed:", (await text(w.locator('main:visible [role="status"]').first())).slice(0, 120));
+  await field.pack(w);
+  log("packed:", (await field.statusText(w)).slice(0, 120));
 
   // Receiving
-  await w.goto(BASE + "/bodega", { waitUntil: "networkidle" });
-  const inbound = w
-    .locator('main:visible section[aria-labelledby="recepciones"] > ul > li')
-    .first();
-  log("inbound:", (await text(inbound)).slice(0, 150));
-  await inbound.locator('input[name="good"]').fill("10");
-  await inbound.locator('input[name="damaged"]').fill("1");
-  await inbound.locator('button[type="submit"]').click();
-  await inbound.locator('[role="status"], [role="alert"]').first().waitFor();
-  log(
-    "received:",
-    await text(inbound.locator('[role="status"], [role="alert"]').first()),
-    "|",
-    (await text(inbound.locator("li").first())).slice(0, 110),
-  );
+  await field.open(w, "/bodega");
+  log("inbound:", (await field.firstInboundText(w)).slice(0, 150));
+  const received = await field.receiveFirst(w, { good: "10", damaged: "1" });
+  log("received:", received.message, "|", received.line.slice(0, 110));
 
   // Lookup
   const skuCode = /(YT-[A-Z0-9]+|[A-Z0-9]+-[A-Z0-9-]+) · esperadas/.exec(
-    await inbound.innerText(),
+    await field.firstInboundRaw(w),
   )[1];
-  await w.goto(BASE + "/bodega/buscar?codigo=" + encodeURIComponent(skuCode), {
-    waitUntil: "networkidle",
-  });
-  log(
-    "lookup",
-    skuCode,
-    "->",
-    (await text(w.locator("main:visible section").first())).slice(0, 170),
-  );
-  await w.goto(BASE + "/bodega/buscar?codigo=NOEXISTE", { waitUntil: "networkidle" });
-  log(
-    "lookup unknown ->",
-    await text(w.locator('main:visible [role="status"], main:visible [role="alert"]').first()),
-  );
+  await field.open(w, "/bodega/buscar?codigo=" + encodeURIComponent(skuCode));
+  log("lookup", skuCode, "->", (await field.lookupResult(w)).slice(0, 170));
+  await field.open(w, "/bodega/buscar?codigo=NOEXISTE");
+  log("lookup unknown ->", await field.lookupMessage(w));
   // A driver cannot open the warehouse half
   await c2.close();
   const c3 = await phone();
   const d = await c3.newPage();
   watch(d);
   await signIn(d, "repartidor2@yuntera.example");
-  await d.goto(BASE + "/bodega", { waitUntil: "networkidle" });
+  await field.open(d, "/bodega");
   log("driver on /bodega ->", new URL(d.url()).pathname);
   await c3.close();
 

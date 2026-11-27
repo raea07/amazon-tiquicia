@@ -12,16 +12,15 @@
 // provider. Fails on any browser error or 5xx, like the other journeys.
 
 const { chromium, request } = require("playwright");
+const web = require("../lib/web.cjs");
+const seller = require("../lib/seller.cjs");
+const ops = require("../lib/ops.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const SELLER = process.env.SELLER_URL || "http://127.0.0.1:3001";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
 const FAKE = process.env.FAKE_PROVIDERS_URL || "http://127.0.0.1:54323";
-const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const SHOPPER = "comprador@yuntera.example";
 const MOBILE = "+50688881234";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 function check(condition, message) {
   if (!condition) throw new Error(`check failed: ${message}`);
@@ -67,62 +66,46 @@ async function until(what, fn, seconds = 40) {
   // ── 1. The shopper chooses WhatsApp ─────────────────────────────────────
   const shopper = await (await browser.newContext(desktop)).newPage();
   watch(shopper);
-  await shopper.goto(`${WEB}/ingresar?siguiente=/cuenta/notificaciones`, {
-    waitUntil: "networkidle",
-  });
-  await shopper.fill('main input[name="email"]', SHOPPER);
-  await shopper.fill('main input[name="password"]', PASSWORD);
-  await shopper.click('main form button[type="submit"]');
+  await web.signIn(shopper, SHOPPER, { next: "/cuenta/notificaciones" });
   await shopper.waitForURL((u) => new URL(u).pathname === "/cuenta/notificaciones");
-  await shopper.waitForSelector('h1:has-text("Notificaciones")');
+  await web.waitForNotificationSettings(shopper);
   check(
-    await shopper.locator("#aviso-email").isDisabled(),
+    (await web.channelState(shopper, "email")).disabled,
     "e-mail cannot be switched off with an order open",
   );
   check(
-    (await text(shopper.locator("main"))).includes(
+    (await web.mainText(shopper)).includes(
       "No se puede desactivar mientras tenga un pedido en curso",
     ),
     "and the page says why",
   );
   check(
-    !(await shopper.locator("#aviso-commercial").isChecked()),
+    !(await web.channelState(shopper, "commercial")).checked,
     "commercial consent starts unticked",
   );
-  check(!(await shopper.locator("#aviso-whatsapp").isChecked()), "WhatsApp starts off");
+  check(!(await web.channelState(shopper, "whatsapp")).checked, "WhatsApp starts off");
 
-  await shopper.check("#aviso-whatsapp");
-  await shopper.fill('main input[name="phone"]', "2222-1234");
-  await shopper.click('main button:has-text("Guardar preferencias")');
-  await shopper.waitForSelector('main [role="alert"]');
-  const refusal = await text(shopper.locator('main [role="alert"]').first());
+  await web.setChannel(shopper, "whatsapp", true);
+  await web.typeMobile(shopper, "2222-1234");
+  const refusal = await web.savePreferencesRefused(shopper);
   check(/celular costarricense/.test(refusal), `a landline is refused: "${refusal}"`);
-  check(
-    (await shopper.inputValue('main input[name="phone"]')) === "2222-1234",
-    "the form keeps what was typed",
-  );
-  check(await shopper.locator("#aviso-whatsapp").isChecked(), "and the choice");
+  check((await web.mobileTyped(shopper)) === "2222-1234", "the form keeps what was typed");
+  check((await web.channelState(shopper, "whatsapp")).checked, "and the choice");
 
-  await shopper.fill('main input[name="phone"]', "8888-1234");
-  await shopper.click('main button:has-text("Guardar preferencias")');
-  await shopper.waitForSelector("text=Guardamos sus preferencias");
+  await web.typeMobile(shopper, "8888-1234");
+  await web.savePreferencesUntil(shopper, /Guardamos sus preferencias/);
   await shopper.reload({ waitUntil: "networkidle" });
-  check(await shopper.locator("#aviso-whatsapp").isChecked(), "WhatsApp saved");
-  check((await shopper.inputValue('main input[name="phone"]')) === "88881234", "the number saved");
+  check((await web.channelState(shopper, "whatsapp")).checked, "WhatsApp saved");
+  check((await web.mobileTyped(shopper)) === "88881234", "the number saved");
   await shopper.screenshot({ path: `${SHOTS}/n01-shopper-settings.png`, fullPage: true });
 
   const shopperPhone = await (await browser.newContext(phone)).newPage();
   watch(shopperPhone);
-  await shopperPhone.goto(`${WEB}/ingresar?siguiente=/cuenta/notificaciones`, {
-    waitUntil: "networkidle",
-  });
-  await shopperPhone.fill('main input[name="email"]', SHOPPER);
-  await shopperPhone.fill('main input[name="password"]', PASSWORD);
-  await shopperPhone.click('main form button[type="submit"]');
+  await web.signIn(shopperPhone, SHOPPER, { next: "/cuenta/notificaciones" });
   await shopperPhone.waitForURL((u) => new URL(u).pathname === "/cuenta/notificaciones");
-  await shopperPhone.waitForSelector('h1:has-text("Notificaciones")');
+  await web.waitForNotificationSettings(shopperPhone);
   check((await overflow(shopperPhone)) <= 0, "settings fit 390 px");
-  const box = await shopperPhone.locator('label[for="aviso-whatsapp"]').boundingBox();
+  const box = await web.channelLabel(shopperPhone, "whatsapp").boundingBox();
   check(box && box.height >= 44, `choices are at least 44 px tall (${box && box.height})`);
   await shopperPhone.screenshot({
     path: `${SHOTS}/n02-shopper-settings-phone.png`,
@@ -130,40 +113,30 @@ async function until(what, fn, seconds = 40) {
   });
 
   // A tab left open does not silently undo what another tab saved since.
-  await shopper.check("#aviso-commercial");
-  await shopper.click('main button:has-text("Guardar preferencias")');
-  await shopper.waitForSelector("text=Lo aceptó el");
-  await shopperPhone.uncheck("#aviso-whatsapp");
-  await shopperPhone.click('main button:has-text("Guardar preferencias")');
-  await shopperPhone.waitForSelector('main [role="alert"]');
+  await web.setChannel(shopper, "commercial", true);
+  await web.savePreferencesUntil(shopper, /Lo aceptó el/);
+  await web.setChannel(shopperPhone, "whatsapp", false);
   check(
-    /cambiaron en otra ventana/.test(
-      await text(shopperPhone.locator('main [role="alert"]').first()),
-    ),
+    /cambiaron en otra ventana/.test(await web.savePreferencesRefused(shopperPhone)),
     "a save from an out-of-date tab is refused, with a request to reload",
   );
   await shopperPhone.reload({ waitUntil: "networkidle" });
   check(
-    (await shopperPhone.locator("#aviso-whatsapp").isChecked()) &&
-      (await shopperPhone.locator("#aviso-commercial").isChecked()),
+    (await web.channelState(shopperPhone, "whatsapp")).checked &&
+      (await web.channelState(shopperPhone, "commercial")).checked,
     "and nothing saved in the other tab was lost",
   );
-  await shopper.uncheck("#aviso-commercial");
-  await shopper.click('main button:has-text("Guardar preferencias")');
-  await shopper.waitForSelector("text=Si no marca la casilla");
+  await web.setChannel(shopper, "commercial", false);
+  await web.savePreferencesUntil(shopper, /Si no marca la casilla/);
 
   // ── 2. The shopper orders, by SINPE Móvil ───────────────────────────────
-  await shopper.goto(`${WEB}/p/cafe-molido-tarrazu-340g`, { waitUntil: "networkidle" });
-  await shopper
-    .locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")')
-    .click();
-  await shopper.waitForSelector("text=Agregado al carrito");
-  await shopper.goto(`${WEB}/pagar`, { waitUntil: "networkidle" });
-  await shopper.waitForSelector("text=Resumen del pedido");
-  await shopper.check('input[name="paymentMethod"][value="sinpe_movil"]');
+  await web.open(shopper, "/p/cafe-molido-tarrazu-340g");
+  await web.addToCart(shopper);
+  await web.openCheckout(shopper);
+  await web.choosePayment(shopper, "sinpe_movil");
   // The provider will accept the first WhatsApp message and later report it undelivered.
   await behave([{ mode: "fail_later", channel: "whatsapp", to: MOBILE, times: 1 }]);
-  await shopper.click('button:has-text("Confirmar pedido")');
+  await web.confirmOrder(shopper);
   await shopper.waitForURL((u) => /^\/pedidos\/YT-/.test(new URL(u).pathname));
   const orderNumber = new URL(shopper.url()).pathname.split("/").pop();
   log("order:", orderNumber);
@@ -211,36 +184,28 @@ async function until(what, fn, seconds = 40) {
   // ── 4. Staff find the undelivered message and send it again ─────────────
   const staff = await (await browser.newContext(desktop)).newPage();
   watch(staff);
-  await staff.goto(`${OPS}/ingresar`, { waitUntil: "networkidle" });
-  await staff.fill('main input[name="email"]', "central@yuntera.example");
-  await staff.fill('main input[name="password"]', PASSWORD);
-  await staff.click('main form button[type="submit"]');
-  await staff.waitForURL((u) => new URL(u).pathname === "/");
+  await ops.signInHome(staff, "central@yuntera.example");
   check(
-    (await text(staff.locator("nav"))).includes("Mensajes"),
+    (await ops.sectionsNav(staff)).includes("Mensajes"),
     "the console lists Mensajes for an admin",
   );
-  await staff.goto(`${OPS}/mensajes`, { waitUntil: "networkidle" });
-  const failedRow = staff
-    .locator("main li", { hasText: "Pedido recibido" })
-    .filter({ hasText: orderNumber })
-    .filter({ hasText: "WhatsApp" });
+  await ops.open(staff, "/mensajes");
   await until(
     "the undelivered WhatsApp message among the stuck ones",
     async () => {
       await staff.reload({ waitUntil: "networkidle" });
-      return (await failedRow.count()) === 1;
+      return (await ops.stuckCount(staff, "order_placed", "whatsapp", orderNumber)) === 1;
     },
     20,
   );
-  const failedText = await text(failedRow);
+  const failedText = await ops.stuckText(staff, "order_placed", "whatsapp", orderNumber);
   check(
-    /No entregado/.test(failedText) && /no llegó a la persona/.test(failedText),
+    failedText.includes(word("notification_status", "failed")) &&
+      /no llegó a la persona/.test(failedText),
     `failed after sending: ${failedText}`,
   );
   check(!/message_undeliverable/.test(failedText), "no provider code on screen");
-  await failedRow.locator('button:has-text("Reenviar")').click();
-  await staff.waitForSelector("text=Lo enviamos de nuevo");
+  await ops.resend(staff, "order_placed", "whatsapp", orderNumber);
   const resentWhatsApp = await until("the resent WhatsApp message", async () =>
     (
       await fakeGet(`?channel=whatsapp&template=order_placed&to=${encodeURIComponent(MOBILE)}`)
@@ -254,20 +219,17 @@ async function until(what, fn, seconds = 40) {
   );
   check(resentWhatsApp.id !== placedWhatsApp.id, "sent again as a new request, and delivered");
   const messagesOf = async () => {
-    await staff.goto(`${OPS}/pedidos/${orderNumber}`, { waitUntil: "networkidle" });
-    return (await staff.locator('section[aria-labelledby="mensajes"] li').allInnerTexts()).map(
-      (t) => t.replace(/\s+/g, " "),
-    );
+    await ops.openOrder(staff, orderNumber);
+    return ops.orderMessages(staff);
   };
   // One line of the list: this template, on this channel, to the shopper, delivered.
-  const line = (lines, template, channel) =>
-    lines.find((l) => l.startsWith(`${template} ${channel} · Cliente`) && l.endsWith("Entregado"));
+  const line = (lines, template, channel) => ops.deliveredLine(lines, template, channel);
   // ── 5. Staff see them delivered ─────────────────────────────────────────
   const delivered = await until(
     "the console to show both delivered",
     async () => {
       const lines = await messagesOf();
-      return line(lines, "Pedido recibido", "Correo") && line(lines, "Pedido recibido", "WhatsApp")
+      return line(lines, "order_placed", "email") && line(lines, "order_placed", "whatsapp")
         ? lines
         : null;
     },
@@ -280,33 +242,28 @@ async function until(what, fn, seconds = 40) {
 
   // ── 6. The fake rejects the shopper's address; the message dies ─────────
   await behave([{ mode: "reject", channel: "email", to: SHOPPER }]);
-  await shopper.goto(`${WEB}/pedidos/${orderNumber}`, { waitUntil: "networkidle" });
-  await shopper.click('button:visible:has-text("Simular pago")');
-  await shopper.waitForSelector("text=Su código de entrega", { timeout: 15000 });
-  const pin = (
-    await shopper.locator('section:visible:has-text("Su código de entrega") p').first().innerText()
-  ).trim();
+  await web.openOrder(shopper, orderNumber);
+  await web.simulatePayment(shopper);
+  const pin = await web.deliveryPin(shopper);
   check(/^\d{4}$/.test(pin), "the shopper sees the delivery code");
 
   await until("the rejected attempt", async () => {
     const attempts = await (await fake.get(`${FAKE}/_fake/attempts`)).json();
     return attempts.some((a) => a.channel === "email" && a.to === SHOPPER && a.status === 422);
   });
-  await staff.goto(`${OPS}/mensajes`, { waitUntil: "networkidle" });
-  const deadRow = staff
-    .locator("main li", { hasText: "Pago recibido" })
-    .filter({ hasText: orderNumber });
+  await ops.open(staff, "/mensajes");
   await until(
     "the dead letter in the console",
     async () => {
       await staff.reload({ waitUntil: "networkidle" });
-      return (await deadRow.count()) === 1;
+      return (await ops.stuckCount(staff, "payment_received", "email", orderNumber)) === 1;
     },
     20,
   );
-  const deadText = await text(deadRow);
+  const deadText = await ops.stuckText(staff, "payment_received", "email", orderNumber);
   check(
-    /Detenido/.test(deadText) && /el proveedor rechazó el mensaje/.test(deadText),
+    deadText.includes(word("notification_status", "dead")) &&
+      /el proveedor rechazó el mensaje/.test(deadText),
     `dead letter: ${deadText}`,
   );
   check(!/\b422\b/.test(deadText), "no error code on screen");
@@ -315,8 +272,7 @@ async function until(what, fn, seconds = 40) {
   // ── 7. The fake recovers; staff send it again; it soft-bounces once; ────
   //       the worker retries by itself under a new key; it arrives once.
   await behave([{ mode: "bounce_later", channel: "email", to: SHOPPER, times: 1 }]);
-  await deadRow.locator('button:has-text("Reenviar")').click();
-  await staff.waitForSelector("text=Lo enviamos de nuevo");
+  await ops.resend(staff, "payment_received", "email", orderNumber);
   const paidOf = async () =>
     (await fakeGet(`?channel=email&template=payment_received&to=${SHOPPER}`)).filter((m) =>
       m.subject.includes(orderNumber),
@@ -357,7 +313,7 @@ async function until(what, fn, seconds = 40) {
     "the resent message delivered in the console",
     async () => {
       const lines = await messagesOf();
-      return line(lines, "Pago recibido", "Correo") ? lines : null;
+      return line(lines, "payment_received", "email") ? lines : null;
     },
     20,
   );
@@ -374,37 +330,28 @@ async function until(what, fn, seconds = 40) {
   await mailDesk.screenshot({ path: `${SHOTS}/n07-email-desktop.png`, fullPage: true });
 
   // ── 9. The shop's settings, and the console at phone width ─────────────
-  const seller = await (await browser.newContext(phone)).newPage();
-  watch(seller);
-  await seller.goto(`${SELLER}/ingresar`, { waitUntil: "networkidle" });
-  await seller.fill('main input[name="email"]', "vendedor@yuntera.example");
-  await seller.fill('main input[name="password"]', PASSWORD);
-  await seller.click('main form button[type="submit"]');
-  await seller.waitForURL((u) => new URL(u).pathname === "/");
-  await seller.goto(`${SELLER}/cuenta/notificaciones`, { waitUntil: "networkidle" });
-  await seller.waitForSelector('h1:has-text("Notificaciones")');
-  check(await seller.locator("#aviso-email").isDisabled(), "a shop's e-mail is always on");
+  const shopOwner = await (await browser.newContext(phone)).newPage();
+  watch(shopOwner);
+  await seller.signInHome(shopOwner, "vendedor@yuntera.example");
+  await seller.open(shopOwner, "/cuenta/notificaciones");
+  await seller.waitForNotificationSettings(shopOwner);
+  check((await seller.channelState(shopOwner, "email")).disabled, "a shop's e-mail is always on");
   check(
-    (await seller.locator("#aviso-sms").count()) === 0,
+    (await seller.channelState(shopOwner, "sms")).offered === 0,
     "a shop is not offered SMS, which it would never get",
   );
-  await seller.check("#aviso-whatsapp");
-  await seller.fill('main input[name="phone"]', "8702-3344");
-  await seller.click('main button:has-text("Guardar preferencias")');
-  await seller.waitForSelector("text=Guardamos las preferencias de su tienda");
-  check((await overflow(seller)) <= 0, "the shop's settings fit 390 px");
-  await seller.screenshot({ path: `${SHOTS}/n08-seller-settings-phone.png`, fullPage: true });
+  await seller.setChannel(shopOwner, "whatsapp", true);
+  await seller.typeMobile(shopOwner, "8702-3344");
+  await seller.savePreferencesUntil(shopOwner, /Guardamos las preferencias de su tienda/);
+  check((await overflow(shopOwner)) <= 0, "the shop's settings fit 390 px");
+  await shopOwner.screenshot({ path: `${SHOTS}/n08-seller-settings-phone.png`, fullPage: true });
 
   const staffPhone = await (await browser.newContext(phone)).newPage();
   watch(staffPhone);
-  await staffPhone.goto(`${OPS}/ingresar`, { waitUntil: "networkidle" });
-  await staffPhone.fill('main input[name="email"]', "central@yuntera.example");
-  await staffPhone.fill('main input[name="password"]', PASSWORD);
-  await staffPhone.click('main form button[type="submit"]');
-  await staffPhone.waitForURL((u) => new URL(u).pathname === "/");
-  await staffPhone.goto(`${OPS}/pedidos/${orderNumber}`, { waitUntil: "networkidle" });
+  await ops.signInHome(staffPhone, "central@yuntera.example");
+  await ops.openOrder(staffPhone, orderNumber);
   check((await overflow(staffPhone)) <= 0, "the order's messages fit 390 px");
-  await staffPhone.goto(`${OPS}/mensajes`, { waitUntil: "networkidle" });
+  await ops.open(staffPhone, "/mensajes");
   check((await overflow(staffPhone)) <= 0, "the dead letters fit 390 px");
   await staffPhone.screenshot({ path: `${SHOTS}/n09-ops-messages-phone.png`, fullPage: true });
 

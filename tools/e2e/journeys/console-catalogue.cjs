@@ -9,12 +9,11 @@
 // browser logs an error, or when any response is a 5xx.
 
 const { chromium } = require("playwright");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
-const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
+const WEB = web.BASE;
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 (async () => {
   const browser = await chromium.launch();
@@ -31,14 +30,6 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const signIn = async (page, base, email) => {
-    await page.goto(base + "/ingresar", { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname !== "/ingresar");
-    await page.waitForLoadState("networkidle");
-  };
   const overflow = (page) =>
     page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 
@@ -49,7 +40,7 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     await shopper?.context().close();
     shopper = await (await browser.newContext({ locale: "es-CR" })).newPage();
     watch(shopper);
-    await shopper.goto(WEB + path, { waitUntil: "networkidle" });
+    await web.open(shopper, path);
     return shopper;
   };
   const status = async (path) => {
@@ -65,7 +56,7 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     let items = [];
     for (let visit = 0; visit < 4; visit += 1) {
       const page = await shop("/");
-      items = await page.locator('header nav[aria-label="Categorías"] a').allInnerTexts();
+      items = await web.categoryMenu(page);
       if (expected === undefined || expected(items)) break;
       await page.waitForTimeout(1000);
     }
@@ -73,7 +64,7 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   };
   const found = async (query) => {
     const page = await shop(`/buscar?q=${encodeURIComponent(query)}`);
-    return page.locator("main article h3").allInnerTexts();
+    return web.resultTitles(page);
   };
 
   const staffContext = await browser.newContext({
@@ -82,102 +73,59 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   });
   const staff = await staffContext.newPage();
   watch(staff);
-  await signIn(staff, OPS, "central@yuntera.example");
-
-  // Submits an ActionForm and waits for its new outcome (success or refusal): the
-  // form's message once it differs from before. `after` is where to read it when the
-  // change itself moves the form (a renamed category's row has a new address).
-  const submit = async (scope, button, after = scope) => {
-    const outcomes = () => after.locator('[role="status"], [role="alert"]');
-    const before = (await scope.locator('[role="status"], [role="alert"]').allInnerTexts()).join(
-      "|",
-    );
-    await scope.locator(`button:has-text("${button}")`).last().click();
-    const deadline = Date.now() + 15000;
-    let now = "";
-    while (Date.now() < deadline) {
-      await staff.waitForTimeout(250);
-      now = (await outcomes().allInnerTexts()).join("|");
-      if (now && now !== before) break;
-    }
-    return (await outcomes().allInnerTexts()).at(-1)?.replace(/\s+/g, " ").trim() ?? "";
-  };
-
-  // What the page says at its top once the form that did something is gone
-  // (CatalogueOutcome in the console), waiting a moment for `expected`.
-  const outcome = async (expected) => {
-    const region = staff.locator("[data-catalogue-outcome]");
-    await region
-      .locator('[role="status"]', { hasText: expected })
-      .waitFor({ timeout: 5000 })
-      .catch(() => undefined);
-    return text(region);
-  };
+  await ops.signIn(staff, "central@yuntera.example");
 
   // ── 1. A new department, empty ────────────────────────────────────────────
-  await staff.goto(OPS + "/catalogo/categorias", { waitUntil: "networkidle" });
-  const nav = await staff.locator('nav[aria-label="Catálogo"] a').allInnerTexts();
+  await ops.openCatalogue(staff, "/categorias");
+  const nav = await ops.catalogueNav(staff);
   log("catalogue pages:", nav);
   check(
     nav.includes("Categorías") && nav.includes("Reseñas"),
     "the catalogue section has no subpages",
   );
-  const create = staff.locator('section[aria-labelledby="nueva"]');
-  await create.locator('input[name="name"]').fill("Regalos ticos");
-  const created = await submit(create, "Crear categoría");
+  const created = await ops.createCategory(staff, "Regalos ticos");
   log("created:", created);
   check(created.includes("/c/regalos-ticos"), `category not created: ${created}`);
   // The same name again, address left empty: the refusal says the address is
   // the one made from the name, which the person never typed.
-  await create.locator('input[name="name"]').fill("Regalos ticos");
-  const again = await submit(create, "Crear categoría");
+  const again = await ops.createCategory(staff, "Regalos ticos");
   log("same name, no address:", again);
   check(
     again.includes("a partir del nombre «Regalos ticos»"),
     `the refusal does not say where the address came from: ${again}`,
   );
-  await create.locator('input[name="name"]').fill("");
+  await ops.clearNewCategory(staff);
   await staff.screenshot({ path: SHOTS + "/cc1-categories.png", fullPage: true });
 
   const empty = await shop("/c/regalos-ticos");
-  log("shop /c/regalos-ticos:", await text(empty.locator("main h1")));
-  check(
-    (await text(empty.locator("main"))).includes("Todavía no hay productos aquí"),
-    "new category page",
-  );
+  log("shop /c/regalos-ticos:", await web.heading(empty));
+  check((await web.mainText(empty)).includes("Todavía no hay productos aquí"), "new category page");
   check(
     !(await menu((items) => !items.includes("Regalos ticos"))).includes("Regalos ticos"),
     "an empty department is in the menu",
   );
 
   // ── 2. A product's category corrected by staff ─────────────────────────────
-  await staff.goto(OPS + "/catalogo/productos?producto=chorreador-madera-artesanal", {
-    waitUntil: "networkidle",
-  });
-  log("product found:", (await text(staff.locator("main h2").first())).slice(0, 80));
-  const correct = staff.locator('section[aria-labelledby="corregir"]');
-  const categoryOption = await correct
-    .locator('select[name="categoryId"] option', { hasText: "Regalos ticos" })
-    .getAttribute("value");
-  await correct.locator('select[name="categoryId"]').selectOption(categoryOption);
-  await correct.locator('textarea[name="note"]').fill("abc");
-  const short = await submit(correct, "Guardar la corrección");
+  await ops.openCatalogue(staff, "/productos?producto=chorreador-madera-artesanal");
+  log("product found:", (await ops.productFound(staff)).slice(0, 80));
+  const short = await ops.correctCategory(staff, "Regalos ticos", "abc");
   log("short reason:", short);
   check(short.includes("al menos 10"), "a correction without a reason was accepted");
-  await correct
-    .locator('textarea[name="note"]')
-    .fill("Es un regalo típico, no un utensilio de cocina.");
-  const corrected = await submit(correct, "Guardar la corrección");
+  const corrected = await ops.correctCategory(
+    staff,
+    "Regalos ticos",
+    "Es un regalo típico, no un utensilio de cocina.",
+  );
   log("corrected:", corrected);
   check(corrected.includes("Corrección guardada"), `correction refused: ${corrected}`);
-  await staff.waitForSelector('main dd[data-current-category="regalos-ticos"]');
+  await ops.waitForCurrentCategory(staff, "regalos-ticos");
   await staff.screenshot({ path: SHOTS + "/cc2-product-corrected.png", fullPage: true });
 
   const inMenu = await menu((items) => items.includes("Regalos ticos"));
   log("menu after the correction:", inMenu);
   check(inMenu.includes("Regalos ticos"), "the department with a product is not in the menu");
   const filed = await shop("/c/regalos-ticos");
-  const filedTitles = await filed.locator("main article h3").allInnerTexts();
+  const filedTitles = await web.resultTitles(filed);
   log("in /c/regalos-ticos:", filedTitles);
   check(
     filedTitles.some((t) => t.includes("Chorreador")),
@@ -185,26 +133,20 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   );
   const artesania = await shop("/c/artesania");
   check(
-    !(await artesania.locator("main article h3").allInnerTexts()).some((t) =>
-      t.includes("Chorreador"),
-    ),
+    !(await web.resultTitles(artesania)).some((t) => t.includes("Chorreador")),
     "the corrected product is still in its old category",
   );
 
   // ── 3. Moved: refused where the commission would change, done where it does not ──
-  await staff.goto(OPS + "/catalogo/categorias", { waitUntil: "networkidle" });
-  const row = () => staff.locator('li[data-category="regalos-ticos"]');
-  await row().locator("summary", { hasText: "Cambiar «Regalos ticos»" }).click();
-  const moveForm = row().locator("form", { has: staff.locator('select[name="parentId"]') });
-  await moveForm.locator('select[name="parentId"]').selectOption({ label: "Electrónica" });
-  const refusedMove = await submit(moveForm, "Mover");
+  await ops.openCatalogue(staff, "/categorias");
+  await ops.openCategoryChange(staff, "regalos-ticos");
+  const refusedMove = await ops.moveCategory(staff, "regalos-ticos", "Electrónica");
   log("move under Electrónica:", refusedMove);
   check(
     refusedMove.includes("otra comisión"),
     `a move that changes commission was not refused: ${refusedMove}`,
   );
-  await moveForm.locator('select[name="parentId"]').selectOption({ label: "Hogar y cocina" });
-  const moved = await submit(moveForm, "Mover");
+  const moved = await ops.moveCategory(staff, "regalos-ticos", "Hogar y cocina");
   log("move under Hogar y cocina:", moved);
   check(moved.includes("movida"), `move refused: ${moved}`);
 
@@ -213,23 +155,17 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     "a sub-category is still a department in the menu",
   );
   const hogar = await shop("/c/hogar");
-  const chips = await hogar.locator('main a[href^="/c/"]').allInnerTexts();
+  const chips = await web.subCategories(hogar);
   log("/c/hogar sub-categories:", chips);
   check(chips.includes("Regalos ticos"), "the moved category is not under its new parent");
 
   // ── 4. Renamed: the old address leads to the new one ────────────────────────
-  await staff.goto(OPS + "/catalogo/categorias", { waitUntil: "networkidle" });
-  await row().locator("summary", { hasText: "Cambiar «Regalos ticos»" }).click();
-  const renameForm = row().locator("form", { has: staff.locator('input[name="slug"]') });
-  await renameForm.locator('input[name="name"]').fill("Regalos hechos a mano");
-  await renameForm.locator('input[name="slug"]').fill("regalos-hechos-a-mano");
-  const renamed = await submit(
-    renameForm,
-    "Guardar nombre y dirección",
-    staff.locator('li[data-category="regalos-hechos-a-mano"] form', {
-      has: staff.locator('input[name="slug"]'),
-    }),
-  );
+  await ops.openCatalogue(staff, "/categorias");
+  await ops.openCategoryChange(staff, "regalos-ticos");
+  const renamed = await ops.renameCategory(staff, "regalos-ticos", {
+    name: "Regalos hechos a mano",
+    newSlug: "regalos-hechos-a-mano",
+  });
   log("renamed:", renamed);
   check(renamed.includes("/c/regalos-ticos"), `rename refused: ${renamed}`);
 
@@ -240,30 +176,18 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     "the old address does not redirect",
   );
   const renamedPage = await shop("/c/regalos-ticos");
-  log(
-    "followed to:",
-    new URL(renamedPage.url()).pathname,
-    "|",
-    await text(renamedPage.locator("main h1")),
-  );
+  log("followed to:", new URL(renamedPage.url()).pathname, "|", await web.heading(renamedPage));
   check(
-    (await text(renamedPage.locator("main h1"))) === "Regalos hechos a mano",
+    (await web.heading(renamedPage)) === "Regalos hechos a mano",
     "the renamed category's page",
   );
   await renamedPage.screenshot({ path: SHOTS + "/cc3-renamed-category.png" });
 
   // ── 5. Hidden: out of the menus and pages, its product still sold ───────────
-  await staff.goto(OPS + "/catalogo/categorias", { waitUntil: "networkidle" });
-  const hidden = staff.locator('li[data-category="regalos-hechos-a-mano"]');
-  await hidden.locator("summary", { hasText: "Cambiar «Regalos hechos a mano»" }).click();
-  await hidden.locator("summary", { hasText: "Ocultar de la tienda" }).click();
-  const hideForm = hidden.locator("form", {
-    has: staff.locator('button:has-text("Ocultar la categoría")'),
-  });
-  await hideForm.locator('button:has-text("Ocultar la categoría")').click();
+  await ops.openCatalogue(staff, "/categorias");
   // The form gives way to "Mostrar en la tienda" once it worked.
-  await hidden.locator('button:has-text("Mostrar en la tienda")').waitFor();
-  const badge = await text(hidden.locator("span", { hasText: "Oculta" }).first());
+  await ops.hideCategory(staff, "regalos-hechos-a-mano");
+  const badge = await ops.categoryVisibility(staff, "regalos-hechos-a-mano");
   log("hidden:", badge);
   check(badge === "Oculta", `hide did not take: ${badge}`);
   await staff.screenshot({ path: SHOTS + "/cc4-category-hidden.png", fullPage: true });
@@ -284,62 +208,36 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   plain.on("response", (r) => {
     if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
   });
-  await plain.goto(`${OPS}/ingresar`, { waitUntil: "load" });
-  await plain.fill('main input[name="email"]', "central@yuntera.example");
-  await plain.fill('main input[name="password"]', PASSWORD);
-  await Promise.all([
-    plain.waitForNavigation({ waitUntil: "load" }),
-    plain.click('main form button[type="submit"]'),
-  ]);
+  await ops.signInWithoutScripts(plain, "central@yuntera.example");
   check(new URL(plain.url()).pathname !== "/ingresar", "sign-in without the app's scripts");
-  await plain.goto(`${OPS}/catalogo/categorias`, { waitUntil: "load" });
-  const plainForm = plain.locator('section[aria-labelledby="nueva"] form');
-  const plainMarkup = await plainForm.evaluate((f) => ({
-    method: f.method,
-    action: [...f.querySelectorAll('input[type="hidden"]')].some((i) =>
-      i.name.startsWith("$ACTION"),
-    ),
-  }));
+  await ops.openCatalogue(plain, "/categorias", "load");
+  const plainMarkup = await ops.newCategoryFormMarkup(plain);
   log("the create form before scripts:", plainMarkup);
   check(
     plainMarkup.method === "post" && plainMarkup.action,
     "the catalogue form does not post to its action without scripts",
   );
-  await plainForm.locator('input[name="name"]').fill("Pruebas sin guion");
-  await Promise.all([
-    plain.waitForNavigation({ waitUntil: "load" }),
-    plainForm.locator('button:has-text("Crear categoría")').click(),
-  ]);
-  await plain.goto(`${OPS}/catalogo/categorias`, { waitUntil: "load" });
+  await ops.createCategoryWithoutScripts(plain, "Pruebas sin guion");
+  await ops.openCatalogue(plain, "/categorias", "load");
   check(
-    (await plain.locator('li[data-category="pruebas-sin-guion"]').count()) === 1,
+    (await ops.categoryRows(plain, "pruebas-sin-guion")) === 1,
     "a category posted without scripts was not created",
   );
   await plainContext.close();
 
   // A category hidden by one above it names the nearest hidden one.
-  const parentOption = async (form, name) =>
-    form.locator('select[name="parentId"] option', { hasText: name }).first().getAttribute("value");
   const createUnder = async (name, parent) => {
-    await staff.goto(`${OPS}/catalogo/categorias`, { waitUntil: "networkidle" });
-    const form = staff.locator('section[aria-labelledby="nueva"]');
-    await form.locator('input[name="name"]').fill(name);
-    await form.locator('select[name="parentId"]').selectOption(await parentOption(form, parent));
-    return submit(form, "Crear categoría");
+    await ops.openCatalogue(staff, "/categorias");
+    return ops.createCategory(staff, name, { parent });
   };
-  const hideCategory = async (slug, name) => {
-    await staff.goto(`${OPS}/catalogo/categorias`, { waitUntil: "networkidle" });
-    const item = staff.locator(`li[data-category="${slug}"]`);
-    await item.locator("summary", { hasText: `Cambiar «${name}»` }).click();
-    await item.locator("summary", { hasText: "Ocultar de la tienda" }).click();
-    await item.locator('button:has-text("Ocultar la categoría")').click();
-    await item.locator('button:has-text("Mostrar en la tienda")').waitFor();
+  const hideCategory = async (slug) => {
+    await ops.openCatalogue(staff, "/categorias");
+    await ops.hideCategory(staff, slug);
   };
-  const badgeOf = async (slug) =>
-    text(staff.locator(`li[data-category="${slug}"] span`, { hasText: "Oculta" }).first());
+  const badgeOf = (slug) => ops.categoryVisibility(staff, slug);
   const madeTwo = await createUnder("Nivel dos", "Pruebas sin guion");
   check(madeTwo.includes("/c/nivel-dos"), `level two not created: ${madeTwo}`);
-  await hideCategory("pruebas-sin-guion", "Pruebas sin guion");
+  await hideCategory("pruebas-sin-guion");
   const madeThree = await createUnder("Nivel tres", "Nivel dos");
   log("under a hidden department:", madeThree);
   check(
@@ -347,7 +245,7 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     `a category made under a hidden one says it does not show: ${madeThree}`,
   );
   // Nivel dos is active itself: the badge of Nivel tres names the department.
-  await staff.goto(`${OPS}/catalogo/categorias`, { waitUntil: "networkidle" });
+  await ops.openCatalogue(staff, "/categorias");
   const byDept = await badgeOf("nivel-tres");
   log("badge, department hidden:", byDept);
   check(
@@ -355,8 +253,8 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     `the badge does not name the hidden department: ${byDept}`,
   );
   // Nivel dos hidden too: now it is the nearest hidden one above.
-  await hideCategory("nivel-dos", "Nivel dos");
-  await staff.goto(`${OPS}/catalogo/categorias`, { waitUntil: "networkidle" });
+  await hideCategory("nivel-dos");
+  await ops.openCatalogue(staff, "/categorias");
   const byParent = await badgeOf("nivel-tres");
   log("badge, its parent hidden too:", byParent);
   check(
@@ -370,9 +268,7 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   check(gone.status === 404, "a hidden category still has a page");
   const hogarAfter = await shop("/c/hogar");
   check(
-    !(await hogarAfter.locator('main a[href^="/c/"]').allInnerTexts()).includes(
-      "Regalos hechos a mano",
-    ),
+    !(await web.subCategories(hogarAfter)).includes("Regalos hechos a mano"),
     "a hidden category is still listed under its parent",
   );
   const stillFound = await found("chorreador");
@@ -388,44 +284,36 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
   // ── 6. A duplicate brand merged ──────────────────────────────────────────────
   const brandsBefore = await shop("/buscar");
-  const optionsBefore = await brandsBefore.locator('select[name="marca"] option').allInnerTexts();
+  const optionsBefore = await web.brandOptions(brandsBefore);
   log("brand filter before:", optionsBefore);
   check(
     optionsBefore.some((o) => o.startsWith("Luma")),
     "Luma is not in the brand filter",
   );
-  await staff.goto(OPS + "/catalogo/marcas", { waitUntil: "networkidle" });
-  const luma = staff.locator('li[data-brand="luma"]');
-  await luma.locator("summary", { hasText: "Cambiar «Luma»" }).click();
-  await luma.locator("summary", { hasText: "unirlas" }).click();
-  const mergeForm = luma.locator("form", { has: staff.locator('select[name="intoId"]') });
-  await mergeForm.locator('select[name="intoId"]').selectOption({ label: "Volcán" });
-  await mergeForm.locator('button:has-text("Unir «Luma» a la elegida")').click();
+  await ops.openCatalogue(staff, "/marcas");
+  await ops.mergeBrand(staff, "luma", "Volcán");
   // Luma leaves the list of brands for the list of merged ones.
-  const mergedRow = staff.locator('section[aria-labelledby="unidas"] li', { hasText: "Luma" });
-  await mergedRow.waitFor();
-  const merged = await text(mergedRow);
+  const merged = await ops.mergedBrand(staff, "Luma");
   log("merged:", merged);
   check(merged.includes("Volcán"), `merge did not take: ${merged}`);
   // The form that was merged is gone; the page still says what happened.
-  const mergeSaid = await outcome("Marcas unidas");
+  const mergeSaid = await ops.pageOutcome(staff, "Marcas unidas");
   log("merge outcome:", mergeSaid);
   check(mergeSaid.includes("Marcas unidas"), `the merge's outcome is not shown: ${mergeSaid}`);
   await staff.screenshot({ path: SHOTS + "/cc5-brands-merged.png", fullPage: true });
 
   const brandsAfter = await shop("/buscar");
-  const optionsAfter = await brandsAfter.locator('select[name="marca"] option').allInnerTexts();
+  const optionsAfter = await web.brandOptions(brandsAfter);
   log("brand filter after:", optionsAfter);
   check(!optionsAfter.some((o) => o.startsWith("Luma")), "a merged brand is still in the filter");
   check(
     optionsAfter.includes("Volcán (5)"),
     "the brand that remains does not count the moved product",
   );
-  await brandsAfter.locator('select[name="marca"]').selectOption({ label: "Volcán (5)" });
-  await brandsAfter.click('button:has-text("Filtrar por marca")');
+  await web.filterByBrand(brandsAfter, "Volcán (5)");
   await brandsAfter.waitForURL(/marca=volcan/);
   await brandsAfter.waitForLoadState("networkidle");
-  const volcan = await brandsAfter.locator("main article h3").allInnerTexts();
+  const volcan = await web.resultTitles(brandsAfter);
   log(
     "filtered by Volcán:",
     volcan.length,
@@ -440,8 +328,8 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   );
   // The old brand's filter address selects and names the brand it went into.
   const oldAddress = await shop("/buscar?marca=luma");
-  const selected = await oldAddress.locator('select[name="marca"]').inputValue();
-  const summary = await text(oldAddress.locator("main p", { hasText: "Mostrando" }).first());
+  const selected = await web.chosenBrand(oldAddress);
+  const summary = await web.brandFilterSummary(oldAddress);
   log("?marca=luma selects:", selected, "|", summary);
   check(
     selected === "volcan" && summary.includes("de Volcán"),
@@ -452,20 +340,16 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   const before = await found("pichinga");
   log('search "pichinga" before:', before);
   check(before.length === 0, "pichinga already finds something");
-  await staff.goto(OPS + "/catalogo/busqueda?q=pichinga", { waitUntil: "networkidle" });
-  log("preview before:", await text(staff.locator("#vista-previa")));
-  const add = staff.locator('section[aria-labelledby="nuevo-sinonimo"]');
-  await add.locator('input[name="term"]').fill("Pichinga");
-  await add.locator('textarea[name="expansions"]').fill("de la");
-  const common = await submit(add, "Agregar sinónimo");
+  await ops.openCatalogue(staff, "/busqueda?q=pichinga");
+  log("preview before:", await ops.searchPreview(staff));
+  const common = await ops.addSynonym(staff, { term: "Pichinga", expansions: "de la" });
   log("a stopword:", common);
   check(common.includes("común"), "a synonym that matches nothing specific was accepted");
-  await add.locator('textarea[name="expansions"]').fill("botella térmica");
-  const added = await submit(add, "Agregar sinónimo");
+  const added = await ops.addSynonym(staff, { expansions: "botella térmica" });
   log("added:", added);
   check(added.includes("«pichinga»"), `synonym refused: ${added}`);
-  await staff.goto(OPS + "/catalogo/busqueda?q=pichinga", { waitUntil: "networkidle" });
-  const preview = await text(staff.locator("#vista-previa"));
+  await ops.openCatalogue(staff, "/busqueda?q=pichinga");
+  const preview = await ops.searchPreview(staff);
   log("preview after:", preview.slice(0, 200));
   check(preview.includes("Botella térmica"), "the preview does not show what the synonym finds");
   await staff.screenshot({ path: SHOTS + "/cc6-synonyms.png", fullPage: true });
@@ -478,40 +362,34 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
   // ── 8. A review hidden and shown, the rating following ───────────────────────
   const product = await shop("/p/hamaca-algodon-doble");
-  const ratingBefore = await text(product.locator("#resenas"));
+  const ratingBefore = await web.reviewsSection(product);
   log("hamaca reviews before:", ratingBefore.slice(0, 90));
   check(!ratingBefore.includes("Todavía no tiene reseñas"), "the hamaca has no review to hide");
-  await staff.goto(OPS + "/catalogo/resenas", { waitUntil: "networkidle" });
-  const card = staff.locator("main li[data-review]", { hasText: "Hamaca de algodón" });
-  log("review card:", (await text(card)).slice(0, 160));
-  check(!(await text(card)).includes("@"), "staff see an e-mail of the reviewer");
-  await card.locator("summary", { hasText: "Ocultar la reseña" }).click();
-  const hideReview = card.locator("form", { has: staff.locator('select[name="reason"]') }).first();
+  await ops.openCatalogue(staff, "/resenas");
+  const card = ops.reviewCard(staff, "Hamaca de algodón");
+  log("review card:", (await ops.text(card)).slice(0, 160));
+  check(!(await ops.text(card)).includes("@"), "staff see an e-mail of the reviewer");
   // No reason is chosen for staff: the form does not go without one.
-  const required = await hideReview
-    .locator('select[name="reason"]')
-    .evaluate((select) => select.required && select.value === "");
+  const required = await ops.openHideReview(card);
   log("the reason must be chosen:", required);
   check(required, "a review can be hidden without choosing a reason");
-  await hideReview.locator('select[name="reason"]').selectOption("personal_data");
-  await hideReview.locator('button:has-text("Ocultar la reseña")').click();
-  await card.locator('button:has-text("Mostrar la reseña de nuevo")').waitFor();
-  const hiddenReview = await text(card);
+  await ops.hideReview(card, "personal_data");
+  const hiddenReview = await ops.text(card);
   log("hidden:", hiddenReview.slice(0, 160));
   check(hiddenReview.includes("Oculta: Datos personales"), `review not hidden: ${hiddenReview}`);
-  const hideSaid = await outcome("Reseña oculta");
+  const hideSaid = await ops.pageOutcome(staff, "Reseña oculta");
   log("hide outcome:", hideSaid);
   check(hideSaid.includes("Reseña oculta"), `the hide's outcome is not shown: ${hideSaid}`);
 
   const productHidden = await shop("/p/hamaca-algodon-doble");
-  const ratingHidden = await text(productHidden.locator("#resenas"));
+  const ratingHidden = await web.reviewsSection(productHidden);
   log("hamaca reviews after hiding:", ratingHidden.slice(0, 90));
   check(
     ratingHidden.includes("Todavía no tiene reseñas"),
     "the hidden review still counts on the product page",
   );
   const results = await shop("/buscar?q=hamaca");
-  const resultCard = await text(results.locator("main article", { hasText: "Hamaca" }).first());
+  const resultCard = await web.resultCard(results, "Hamaca");
   log("hamaca in search:", resultCard.slice(0, 120));
   check(
     resultCard.includes("Sin reseñas todavía"),
@@ -528,13 +406,9 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     })
   ).newPage();
   watch(author);
-  await signIn(author, WEB, "comprador@yuntera.example");
-  await author.goto(WEB + "/pedidos/YT-100007", { waitUntil: "networkidle" });
-  const notice = author.locator("main", { hasText: "Retiramos su reseña" });
-  await notice.waitFor();
-  const noticeText = await text(
-    author.locator('[role="status"]', { hasText: "Retiramos su reseña" }),
-  );
+  await web.signIn(author, "comprador@yuntera.example");
+  await web.openOrder(author, "YT-100007");
+  const noticeText = await web.reviewWithdrawnNotice(author);
   log("the author reads:", noticeText);
   check(noticeText.includes("datos personales"), "the author is not told why");
   log("order page overflow px:", await overflow(author));
@@ -542,14 +416,12 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
   await author.screenshot({ path: SHOTS + "/cc7-author-order.png", fullPage: true });
 
   // Shown again.
-  await staff.goto(OPS + "/catalogo/resenas?filtro=hidden", { waitUntil: "networkidle" });
-  const hiddenCard = staff.locator("main li[data-review]", { hasText: "Hamaca de algodón" });
-  await hiddenCard.locator('button:has-text("Mostrar la reseña de nuevo")').click();
+  await ops.openCatalogue(staff, "/resenas?filtro=hidden");
   // Shown again, it leaves the list of hidden reviews.
-  await hiddenCard.waitFor({ state: "detached" });
+  await ops.showReview(ops.reviewCard(staff, "Hamaca de algodón"));
   log("shown: it left the hidden list");
   const productShown = await shop("/p/hamaca-algodon-doble");
-  const ratingShown = await text(productShown.locator("#resenas"));
+  const ratingShown = await web.reviewsSection(productShown);
   log("hamaca reviews after showing:", ratingShown.slice(0, 90));
   check(!ratingShown.includes("Todavía no tiene reseñas"), "the review shown again does not count");
 
@@ -572,7 +444,7 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     ["/catalogo/resenas", "cc12-mobile-reviews"],
     ["/catalogo/productos?producto=licuadora-volcan-600w", "cc13-mobile-product"],
   ]) {
-    await m.goto(OPS + path, { waitUntil: "networkidle" });
+    await ops.open(m, path);
     // Open every disclosure, so what it hides is measured too.
     await m.evaluate(() => {
       for (const details of document.querySelectorAll("main details")) details.open = true;
@@ -626,7 +498,7 @@ const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
     })
   ).newPage();
   watch(shopPhone);
-  await shopPhone.goto(WEB + "/buscar?marca=volcan", { waitUntil: "networkidle" });
+  await web.open(shopPhone, "/buscar?marca=volcan");
   log("shop brand filter on a phone overflow px:", await overflow(shopPhone));
   check((await overflow(shopPhone)) <= 0, "the shop's brand filter scrolls sideways on a phone");
   await shopPhone.screenshot({

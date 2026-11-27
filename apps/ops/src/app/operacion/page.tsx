@@ -135,7 +135,10 @@ function ZoneRow({ zone }: { zone: OpsZone }) {
       </dl>
 
       <details className="mt-2">
-        <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+        <summary
+          className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+          data-testid="zone-change"
+        >
           Cambiar «{zone.name}»
         </summary>
         <div className="mt-3">
@@ -149,7 +152,10 @@ function ZoneRow({ zone }: { zone: OpsZone }) {
 
       {zone.active ? (
         <details className="mt-1">
-          <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+          <summary
+            className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+            data-testid="zone-switch-off"
+          >
             Apagar la zona
           </summary>
           <div className="mt-2">
@@ -188,7 +194,10 @@ function ZoneRow({ zone }: { zone: OpsZone }) {
 
       {zone.in_use ? null : (
         <details className="mt-1">
-          <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+          <summary
+            className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+            data-testid="zone-delete"
+          >
             Borrar la zona
           </summary>
           <div className="mt-2">

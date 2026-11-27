@@ -87,6 +87,7 @@ async function SearchTools({
           <div
             className="mt-4 rounded-lg border border-border bg-surface p-5 text-sm"
             id="vista-previa"
+            data-testid="search-preview"
           >
             <p>
               La búsqueda lee «<span className="font-semibold">{preview.query}</span>» y encuentra{" "}

@@ -26,7 +26,10 @@ export function RecallShipmentForm({
 }) {
   return (
     <details>
-      <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+      <summary
+        className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+        data-testid="parcel-stop"
+      >
         Detener el paquete {trackingCode}
       </summary>
       <div className="mt-2 max-w-xl">

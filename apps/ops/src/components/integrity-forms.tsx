@@ -44,7 +44,7 @@ export function ReceiveReturnForm({ returnId }: { returnId: string }) {
 export function CloseReturnForm({ returnId }: { returnId: string }) {
   return (
     <details className="mt-4">
-      <summary className="cursor-pointer font-semibold text-link">
+      <summary className="cursor-pointer font-semibold text-link" data-testid="return-not-arrived">
         El producto no llegó: cerrar la devolución
       </summary>
       <div className="mt-3">

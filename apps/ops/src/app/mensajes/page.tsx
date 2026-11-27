@@ -68,6 +68,7 @@ async function DeadLetters() {
               <li
                 key={row.id}
                 className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 text-sm"
+                data-testid={`stuck-${row.template}-${row.channel}`}
               >
                 <NotificationLine row={row} />
                 <div className="flex flex-wrap items-center gap-3">

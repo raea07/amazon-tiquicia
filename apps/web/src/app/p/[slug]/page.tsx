@@ -274,7 +274,7 @@ function OfferFacts({ offer }: { offer: ProductOffer }) {
       {offer.promise ? (
         <div className="flex gap-1.5">
           <dt className="text-ink-muted">Llega</dt>
-          <dd className="font-semibold text-success">
+          <dd className="font-semibold text-success" data-testid="offer-arrival">
             {offer.promise.earliest === offer.promise.latest
               ? `el ${formatDate(offer.promise.latest)}`
               : `entre el ${formatDate(offer.promise.earliest)} y el ${formatDate(offer.promise.latest)}`}

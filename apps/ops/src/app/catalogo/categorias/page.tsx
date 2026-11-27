@@ -152,11 +152,17 @@ function CategoryRow({
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-base font-bold">{category.name_es}</h3>
         {category.visible ? (
-          <Badge tone="success">Se ve en la tienda</Badge>
+          <Badge tone="success" data-testid="category-visibility">
+            Se ve en la tienda
+          </Badge>
         ) : category.active ? (
-          <Badge tone="warning">Oculta: {hiddenBy?.name_es ?? "la de arriba"} está oculta</Badge>
+          <Badge tone="warning" data-testid="category-visibility">
+            Oculta: {hiddenBy?.name_es ?? "la de arriba"} está oculta
+          </Badge>
         ) : (
-          <Badge tone="warning">Oculta</Badge>
+          <Badge tone="warning" data-testid="category-visibility">
+            Oculta
+          </Badge>
         )}
       </div>
       <p className="mt-1 break-words text-ink-muted">
@@ -173,7 +179,10 @@ function CategoryRow({
       ) : null}
 
       <details className="mt-2">
-        <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+        <summary
+          className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+          data-testid="category-change"
+        >
           Cambiar «{category.name_es}»
         </summary>
         <div className="mt-3 grid gap-5 lg:grid-cols-2">
@@ -244,7 +253,10 @@ function CategoryRow({
 
             {category.active ? (
               <details>
-                <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+                <summary
+                  className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+                  data-testid="category-hide"
+                >
                   Ocultar de la tienda
                 </summary>
                 <div className="mt-2">

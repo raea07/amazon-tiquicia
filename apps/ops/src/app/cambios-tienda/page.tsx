@@ -145,7 +145,10 @@ function RequestCard({ request }: { request: ShopChangeRequest }) {
   const { seller, signals } = request;
   const status = SELLER_STATUS[seller.status];
   return (
-    <li className="rounded-lg border border-border bg-surface p-5 text-sm">
+    <li
+      className="rounded-lg border border-border bg-surface p-5 text-sm"
+      data-testid={`shop-change-${request.kind}`}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-lg font-bold break-words">{seller.trade_name}</h3>
         <Badge tone={status?.tone ?? "neutral"}>{status?.label ?? seller.status}</Badge>

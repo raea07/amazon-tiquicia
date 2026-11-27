@@ -16,15 +16,14 @@
 // step that does not arrive, a console error or any 5xx response.
 
 const { chromium, request } = require("playwright");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
+const fieldApp = require("../lib/field.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
-const FIELD = process.env.FIELD_URL || "http://127.0.0.1:3003";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 const check = (condition, message) => {
   if (!condition) throw new Error(message);
 };
@@ -91,14 +90,6 @@ async function as(email) {
       locale: "es-CR",
       ...extra,
     });
-  const signIn = async (page, base, email) => {
-    await page.goto(base + "/ingresar", { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname !== "/ingresar");
-    await page.waitForLoadState("networkidle");
-  };
   const noSideways = async (page, label) => {
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
@@ -111,37 +102,31 @@ async function as(email) {
   const shop = await phone();
   const a = await shop.newPage();
   watch(a);
-  await signIn(a, WEB, "comprador@yuntera.example");
-  const orderUrl = `${WEB}/pedidos/${target.number}`;
-  await a.goto(orderUrl, { waitUntil: "load" });
+  await web.signIn(a, "comprador@yuntera.example");
+  await web.openOrder(a, target.number, "load");
   // A second tab, left open on the same page from before.
   const b = await shop.newPage();
   watch(b);
-  await b.goto(orderUrl, { waitUntil: "load" });
+  await web.openOrder(b, target.number, "load");
 
-  await a.waitForSelector("main:visible h1");
-  await b.waitForSelector("main:visible h1");
+  await web.waitForOrderHeading(a);
+  await web.waitForOrderHeading(b);
   log("order page open in two tabs");
-  const line = (page) =>
-    page.locator("main:visible li", { hasText: target.item.title }).filter({
-      has: page.locator("summary", { hasText: "Devolver o reclamar garantía" }),
-    });
+  const title = target.item.title;
   // Tab A: a claim for every unit of the line.
-  await line(a).locator("summary", { hasText: "Devolver o reclamar garantía" }).click();
-  await line(a).locator('select[name="kind"]').selectOption("damaged");
-  await line(a).locator('select[name="quantity"]').selectOption(String(target.item.quantity));
-  await line(a).locator('textarea[name="reason"]').fill("La caja llegó abierta y aplastada.");
-  await line(a).locator('button:has-text("Solicitar devolución")').click();
-  await a.waitForSelector("main:visible >> text=/Recibimos su solicitud/");
-  log("claim:", await text(a.locator("main:visible >> text=/Recibimos su solicitud/").first()));
+  await web.requestReturn(a, title, {
+    kind: "damaged",
+    quantity: target.item.quantity,
+    reason: "La caja llegó abierta y aplastada.",
+  });
+  log("claim:", await web.returnReceived(a));
 
   // Tab B, stale: asking again for the same unit is refused with its own words.
-  await line(b).locator("summary", { hasText: "Devolver o reclamar garantía" }).click();
-  await line(b).locator('select[name="kind"]').selectOption("damaged");
-  await line(b).locator('textarea[name="reason"]').fill("La caja llegó abierta y aplastada.");
-  await line(b).locator('button:has-text("Solicitar devolución")').click();
-  await b.waitForSelector('main:visible [role="alert"]');
-  const second = await text(b.locator('main:visible [role="alert"]').first());
+  await web.requestReturn(b, title, {
+    kind: "damaged",
+    reason: "La caja llegó abierta y aplastada.",
+  });
+  const second = await web.firstAlert(b);
   log("second request:", second);
   check(
     /ya están en otra solicitud de devolución/.test(second) && !/carrito|máximo/.test(second),
@@ -152,29 +137,21 @@ async function as(email) {
   await b.close();
 
   // Tab A, reloaded: the claim waits for a decision and can be withdrawn.
-  await a.goto(orderUrl, { waitUntil: "load" });
-  const claim = a.locator("main:visible li", { hasText: "Reclamo por producto dañado" }).first();
-  const opener = claim.locator("summary", { hasText: "Retirar la solicitud" });
+  await web.openOrder(a, target.number, "load");
+  const opener = web.withdrawOpener(a, title);
   const box = await opener.boundingBox();
   check(box && box.height >= 44, `the withdraw opener is at least 44 px tall (${box?.height})`);
   await opener.click();
   await a.screenshot({ path: SHOTS + "/fu2-withdraw-offer.png", fullPage: true });
-  await claim.locator('button:has-text("Retirar la solicitud")').click();
-  // The page is redrawn with the request closed as the shopper's own doing.
-  await a.waitForSelector("main:visible >> text=/Retirada: usted retiró esta solicitud/");
-  await a.goto(orderUrl, { waitUntil: "load" });
-  const after = await text(
-    a.locator("main:visible li", { hasText: "Reclamo por producto dañado" }).first(),
-  );
+  await web.withdrawReturn(a, title);
+  await web.openOrder(a, target.number, "load");
+  const after = await web.returnRequestText(a, title);
   log("after withdrawing:", after);
   check(/Retirada: usted retiró esta solicitud/.test(after), "the order says it was withdrawn");
-  check(
-    (await a.locator("main:visible summary", { hasText: "Retirar la solicitud" }).count()) === 0,
-    "nothing left to withdraw",
-  );
+  check((await web.withdrawOffers(a)) === 0, "nothing left to withdraw");
   // Its units are free again: the return form is back on the line.
   check(
-    (await line(a).count()) === 1,
+    (await web.returnableLines(a, title)) === 1,
     "the line can be returned again once the request is withdrawn",
   );
   await a.screenshot({ path: SHOTS + "/fu3-withdrawn.png", fullPage: true });
@@ -192,18 +169,17 @@ async function as(email) {
   });
   const f = await field.newPage();
   watch(f);
-  await signIn(f, FIELD, "repartidor@yuntera.example");
-  await f.goto(FIELD + "/ruta", { waitUntil: "networkidle" });
-  const row = f.locator("main:visible ol > li", { hasText: stop.recipient_name }).first();
-  const rowText = await text(row);
+  await fieldApp.signIn(f, "repartidor@yuntera.example");
+  await fieldApp.open(f, "/ruta");
+  const rowText = await fieldApp.stopFor(f, stop.recipient_name);
   log("stop in the list:", rowText.slice(0, 160));
   check(rowText.includes(`${stop.district}, ${stop.canton}`), "the list shows the district");
   await f.screenshot({ path: SHOTS + "/fu4-route-district.png", fullPage: true });
   await noSideways(f, "route with districts");
   const routeOfStop = day.routes.find((r) => r.stops.some((s) => s.stop_id === stop.stop_id));
   if (routeOfStop.status === "in_progress") {
-    await f.goto(`${FIELD}/ruta/${stop.stop_id}`, { waitUntil: "networkidle" });
-    const header = await text(f.locator("main:visible header"));
+    await fieldApp.open(f, `/ruta/${stop.stop_id}`);
+    const header = await fieldApp.stopHeader(f);
     log("stop page header:", header);
     check(header.includes(`${stop.district}, ${stop.canton}`), "the stop shows its district");
     await f.screenshot({ path: SHOTS + "/fu5-stop-district.png", fullPage: true });
@@ -214,16 +190,11 @@ async function as(email) {
   // ── 3. Picking refuses another product's code ───────────────────────────
   const w = await (await phone()).newPage();
   watch(w);
-  await signIn(w, FIELD, "bodega@yuntera.example");
-  await w.goto(FIELD + "/bodega", { waitUntil: "networkidle" });
-  await w
-    .locator('main:visible section[aria-labelledby="paquetes"] li a', { hasText: "Por alistar" })
-    .first()
-    .click();
-  await w.waitForURL((u) => new URL(u).pathname.startsWith("/bodega/paquete/"));
+  await fieldApp.signIn(w, "bodega@yuntera.example");
+  await fieldApp.open(w, "/bodega");
+  await fieldApp.openParcelToPickNow(w);
   const shipmentId = new URL(w.url()).pathname.split("/").pop();
-  await w.click('main:visible button:has-text("Empezar a alistar")');
-  await w.waitForSelector('main:visible input[name="code"]');
+  await fieldApp.startPicking(w);
   const parcel = await bodega.rpc("wms_shipment", { p_shipment_id: shipmentId });
   const task = parcel.tasks.find((t) => t.status !== "done");
   const others = ["YT-DA4ED076", "YT-64D3BDF4", "YT-4C4384BC", "YT-1BFC5FE2"];
@@ -249,33 +220,22 @@ async function as(email) {
   check(wrongScan.value?.message === "scanned_wrong_item", "the database refuses another product");
 
   // On the screen: another product's real code, then the right one in lower case.
-  const open = w.locator('main:visible ol > li:has(input[name="code"])').first();
-  await open.locator('input[name="code"]').fill(otherCode);
-  await open.locator('button[type="submit"]').click();
-  await w.waitForSelector('main:visible ol [role="alert"]');
-  const refusal = await text(w.locator('main:visible ol [role="alert"]').first());
+  const refusal = await fieldApp.scanWrong(w, otherCode);
   log("wrong product on screen:", refusal);
   check(/no es el de este producto/.test(refusal), "the screen says it is another product");
   await w.screenshot({ path: SHOTS + "/fu6-pick-wrong.png", fullPage: true });
   await noSideways(w, "picking with a wrong scan");
-  const lines = await w.locator('main:visible ol > li:has(input[name="code"])').count();
-  const first = w.locator('main:visible ol > li:has(input[name="code"])').first();
-  const sku = /(YT-[A-Z0-9]+)/.exec(await first.locator("p.text-sm").first().innerText())[1];
-  await first.locator('input[name="code"]').fill(`  ${sku.toLowerCase()} `);
-  await first.locator('button[type="submit"]').click();
-  await w.waitForFunction(
-    (n) => document.querySelectorAll('main ol > li input[name="code"]').length === n,
-    lines - 1,
-  );
+  const sku = /(YT-[A-Z0-9]+)/.exec(await fieldApp.firstOpenSku(w))[1];
+  await fieldApp.pickFirstWith(w, `  ${sku.toLowerCase()} `);
   log("right product, typed in lower case: line confirmed");
   await w.screenshot({ path: SHOTS + "/fu7-pick-right.png", fullPage: true });
 
   // ── 4. Offers paused by a fee change, for finance ───────────────────────
   const o = await (await phone()).newPage();
   watch(o);
-  await signIn(o, OPS, "central@yuntera.example");
-  await o.goto(OPS + "/tarifas", { waitUntil: "networkidle" });
-  const page4 = await text(o.locator("main:visible"));
+  await ops.signIn(o, "central@yuntera.example");
+  await ops.open(o, "/tarifas");
+  const page4 = await ops.mainText(o);
   log("console list:", page4.slice(0, 200));
   check(/Ofertas en pausa por tarifas/.test(page4), "the console page opens");
   await o.screenshot({ path: SHOTS + "/fu8-fee-floor.png", fullPage: true });

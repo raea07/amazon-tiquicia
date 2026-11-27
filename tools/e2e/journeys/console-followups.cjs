@@ -25,14 +25,14 @@
 
 const { chromium, request } = require("playwright");
 const { ownRoute } = require("../lib/own-route.cjs");
+const ops = require("../lib/ops.cjs");
+const field = require("../lib/field.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
-const FIELD = process.env.FIELD_URL || "http://127.0.0.1:3003";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 /** Calls database functions as a demo user (or a visitor, with no email), as an app does. */
 async function rpcAs(email, calls) {
@@ -70,14 +70,6 @@ async function rpcAs(email, calls) {
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const signIn = async (page, base, email) => {
-    await page.goto(base + "/ingresar", { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname !== "/ingresar");
-    await page.waitForLoadState("networkidle");
-  };
   const overflow = (page) =>
     page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   const phone = (extra = {}) =>
@@ -95,28 +87,8 @@ async function rpcAs(email, calls) {
   });
   const staff = await staffContext.newPage();
   watch(staff);
-  await signIn(staff, OPS, "central@yuntera.example");
-  const go = (path) => staff.goto(OPS + path, { waitUntil: "networkidle" });
-
-  // Submits a form and waits for its new outcome (its own message, or the page's notice
-  // once the form that sent it is gone).
-  const submit = async (scope, button) => {
-    const outcomes = () =>
-      staff.locator(
-        '[data-catalogue-outcome] [role="status"], main [role="status"], main [role="alert"]',
-      );
-    const before = (await outcomes().allInnerTexts()).join("|");
-    await scope.locator(`button:has-text("${button}")`).last().click();
-    const deadline = Date.now() + 15000;
-    let now = "";
-    while (Date.now() < deadline) {
-      await staff.waitForTimeout(250);
-      now = (await outcomes().allInnerTexts()).join("|");
-      if (now && now !== before) break;
-    }
-    const all = await outcomes().allInnerTexts();
-    return (all.find((t) => !before.includes(t)) ?? all.at(-1) ?? "").replace(/\s+/g, " ").trim();
-  };
+  await ops.signIn(staff, "central@yuntera.example");
+  const go = (path) => ops.open(staff, path);
 
   // ── 1. A holiday's counts in correct Spanish ──────────────────────────────
   const [product] = await rpcAs(null, [
@@ -129,7 +101,7 @@ async function rpcAs(email, calls) {
   ]);
   log("holiday added:", JSON.stringify(added));
   await go("/operacion/feriados");
-  const holiday = await text(staff.locator(`li[data-holiday="${promised}"]`));
+  const holiday = await ops.holidayRow(staff, promised);
   log("holiday row:", holiday);
   check(holiday.includes("Feriado de conteo"), "the holiday is not listed");
   check(
@@ -151,59 +123,33 @@ async function rpcAs(email, calls) {
 
   // ── 2. Districts: the preview asked for with nothing chosen ───────────────
   await go("/operacion/distritos?canton=115");
-  await staff.locator('button:has-text("Revisar el cambio")').click();
-  await staff.waitForLoadState("networkidle");
-  let alert = await text(
-    staff.locator('main [role="status"], main [role="alert"]').filter({ hasText: "Elija" }).first(),
-  );
+  let alert = await ops.reviewDistrictChange(staff);
   log("nothing chosen:", alert);
   check(
     alert.includes("Elija al menos un distrito y a qué zona pasan"),
     `nothing chosen gives no message: ${alert}`,
   );
-  await staff.locator('li[data-district="11503"] input[type="checkbox"]').check();
-  await staff.locator('button:has-text("Revisar el cambio")').click();
-  await staff.waitForLoadState("networkidle");
-  alert = await text(
-    staff.locator('main [role="status"], main [role="alert"]').filter({ hasText: "Elija" }).first(),
-  );
+  await ops.chooseDistrict(staff, "11503");
+  alert = await ops.reviewDistrictChange(staff);
   log("no destination:", alert);
   check(alert.includes("Elija a qué zona pasan"), `no destination gives no message: ${alert}`);
-  check(
-    (await staff.locator('li[data-district="11503"] input[type="checkbox"]').isChecked()) === true,
-    "the chosen district is not kept",
-  );
+  check((await ops.districtChosen(staff, "11503")) === true, "the chosen district is not kept");
   await staff.screenshot({ path: SHOTS + "/cf2-districts-nothing-chosen.png", fullPage: true });
 
   // ── 3. Confirmation boxes kept after a refusal ────────────────────────────
   await go("/operacion/ajustes");
-  const cod = staff.locator('li[data-setting="cod_max_order_minor"]');
-  await cod.locator("summary").click();
-  await cod.locator('input[name="value"]').fill("150,5");
-  await cod.locator('input[name="confirm"]').check();
-  const centimos = await submit(cod, "Guardar el nuevo valor");
+  const centimos = await ops.changeSetting(staff, "cod_max_order_minor", "150,5");
+  const cod = await ops.settingForm(staff, "cod_max_order_minor");
   log("amount with céntimos:", centimos);
   check(centimos.includes("sin céntimos"), `an amount with céntimos was not refused: ${centimos}`);
-  check(
-    (await cod.locator('input[name="confirm"]').isChecked()) === true,
-    "the setting's confirmation box was cleared after a refusal",
-  );
-  check(
-    (await cod.locator('input[name="value"]').inputValue()) === "150,5",
-    "the typed amount was not kept",
-  );
+  check(cod.confirmed === true, "the setting's confirmation box was cleared after a refusal");
+  check(cod.value === "150,5", "the typed amount was not kept");
   await go("/operacion/feriados");
-  const holidayForm = staff
-    .locator("main form")
-    .filter({ has: staff.locator('input[name="name"]') });
-  await holidayForm.locator('input[name="day"]').fill(promised);
-  await holidayForm.locator('input[name="name"]').fill("X");
-  await holidayForm.locator('input[name="confirm"]').check();
-  const shortName = await submit(holidayForm, "Agregar el feriado");
+  const shortName = await ops.addHoliday(staff, { day: promised, name: "X" });
   log("short holiday name:", shortName);
   check(shortName.includes("Escriba el nombre"), `a one-letter name was not refused: ${shortName}`);
   check(
-    (await holidayForm.locator('input[name="confirm"]').isChecked()) === true,
+    (await ops.holidayConfirmTicked(staff)) === true,
     "the holiday's confirmation box was cleared after a refusal",
   );
 
@@ -228,16 +174,15 @@ async function rpcAs(email, calls) {
     })
   ).newPage();
   watch(driver);
-  await signIn(driver, FIELD, "repartidor@yuntera.example");
-  await driver.goto(FIELD + "/ruta", { waitUntil: "networkidle" });
-  const section = driver.locator(`section[aria-labelledby="ruta-${route.code}"]`);
-  let header = await text(section.locator("> div").first());
+  await field.signIn(driver, "repartidor@yuntera.example");
+  await field.open(driver, "/ruta");
+  let header = await field.routeSummary(driver, route.code);
   log("driver header before the start:", header.slice(0, 220));
   check(
     header.includes("0 de 2 entregadas · 1 omitida") && header.includes("Recoja 2 bultos"),
     `the driver is sent to collect the removed parcel: ${header.slice(0, 220)}`,
   );
-  const earlyStop = await text(section.locator("ol > li").first());
+  const earlyStop = await field.firstStop(driver, route.code);
   check(
     earlyStop.includes("No recoja este paquete: volvió a Despacho") &&
       !earlyStop.includes("devuélvalo"),
@@ -260,8 +205,8 @@ async function rpcAs(email, calls) {
   log("removed:", JSON.stringify(removed));
   check(removed.shipment_status === "delivery_failed", "the parcel did not go back to dispatch");
 
-  await driver.goto(FIELD + "/ruta", { waitUntil: "networkidle" });
-  header = await text(section.locator("> div").first());
+  await field.open(driver, "/ruta");
+  header = await field.routeSummary(driver, route.code);
   log("driver header:", header.slice(0, 160));
   check(
     header.includes("0 de 1 entregadas · 2 omitidas"),
@@ -270,12 +215,8 @@ async function rpcAs(email, calls) {
   // Once the route has started, the stop removed BEFORE the start still says
   // not to collect its parcel (the driver never had it); the one removed
   // after says to bring it back.
-  const beforeStart = await text(
-    section.locator("ol > li").filter({ hasText: route.stops[0].tracking }).first(),
-  );
-  const afterStart = await text(
-    section.locator("ol > li").filter({ hasText: route.stops[1].tracking }).first(),
-  );
+  const beforeStart = await field.stopWith(driver, route.code, route.stops[0].tracking);
+  const afterStart = await field.stopWith(driver, route.code, route.stops[1].tracking);
   log("removed before the start, once started:", beforeStart.slice(0, 200));
   log("removed after the start:", afterStart.slice(0, 200));
   check(
@@ -296,29 +237,26 @@ async function rpcAs(email, calls) {
     [route.stops[0], "No recoja este paquete: volvió a Despacho", "devuélvalo"],
     [route.stops[1], "Si lleva el paquete, devuélvalo a la bodega", "No recoja"],
   ]) {
-    await driver.goto(`${FIELD}/ruta/${which.stopId}`, { waitUntil: "networkidle" });
-    const closed = await text(driver.locator('[data-testid="stop-closed"]'));
+    await field.open(driver, `/ruta/${which.stopId}`);
+    const closed = await field.closedStop(driver);
     log("removed stop's page:", closed.slice(0, 200));
     check(
       closed.includes("Central quitó esta parada") &&
         closed.includes(says) &&
         !closed.includes(never) &&
-        !(await text(driver.locator("body"))).includes("quedó como no entregada"),
+        !(await field.pageText(driver)).includes("quedó como no entregada"),
       `the removed stop's own page says what the route list says: ${closed.slice(0, 200)}`,
     );
     // Not visited: no directions and no call to the customer, as in the drivers' app.
     check(
-      (await driver.getByRole("link", { name: "Cómo llegar" }).count()) === 0 &&
-        (await driver.locator('a[href^="tel:"], a[href^="https://wa.me/"]').count()) === 0,
+      (await field.contactOffers(driver)) === 0,
       "the removed stop's page still offers directions or a call to the customer",
     );
   }
   await driver.screenshot({ path: SHOTS + "/cf3b-driver-removed-stop.png", fullPage: true });
 
   await go("/despacho");
-  const card = await text(
-    staff.locator("li").filter({ has: staff.locator(`h3:text-is("${route.code}")`) }),
-  );
+  const card = await ops.dispatchRouteCard(staff, route.code);
   log("dispatch card:", card.slice(0, 160));
   check(
     card.includes("0 de 1 entregadas · 2 omitidas"),
@@ -326,54 +264,50 @@ async function rpcAs(email, calls) {
   );
 
   await go(`/pedidos/${order}`);
-  const parcels = await text(staff.locator('section[aria-labelledby="paquetes"]'));
+  const parcels = await ops.orderParcels(staff);
+  const removedWord = word("shipment_status", "delivery_failed", {
+    viewer: "staff",
+    attemptCount: 0,
+  });
   log("staff order parcels:", parcels.slice(0, 200));
   check(
-    parcels.includes("Quitado de una ruta") &&
+    parcels.includes(removedWord) &&
       parcels.includes("quitado de una ruta, sin intento de entrega") &&
-      !parcels.includes("Entrega fallida"),
+      !parcels.includes(word("shipment_status", "delivery_failed", { viewer: "staff" })),
     `the staff order page calls the removed stop a failed delivery: ${parcels.slice(0, 200)}`,
   );
-  const history = await text(staff.locator('section[aria-labelledby="historial"]'));
+  const history = await ops.orderHistory(staff);
   log("staff order history:", history.slice(0, 400));
   check(
     !/\b(confirmed|picking|processing|packed|ready_for_dispatch|out_for_delivery|shipped|delivery_failed|shipment_status)\b/.test(
       history,
-    ) && history.includes("Quitado de una ruta"),
+    ) && history.includes(removedWord),
     `the staff order history shows machine codes: ${history.slice(0, 400)}`,
   );
   await staff.screenshot({ path: SHOTS + "/cf4-staff-order-rescheduled.png", fullPage: true });
 
   // ── 5. Deleting a brand ───────────────────────────────────────────────────
   await go("/catalogo/marcas");
-  const form = staff.locator('section[aria-labelledby="nueva-marca"]');
-  await form.locator('input[name="name"]').fill("Marca de Paso");
-  const created = await submit(form, "Crear marca");
+  const created = await ops.createBrand(staff, "Marca de Paso");
   log("created:", created);
   check(created.includes("Marca «Marca de Paso» creada"), `brand not created: ${created}`);
   await go("/catalogo/marcas");
-  const row = staff.locator('li[data-brand="marca-de-paso"]');
-  await row.locator("summary", { hasText: "Cambiar «Marca de Paso»" }).click();
-  await row.locator("summary", { hasText: "Eliminar la marca" }).click();
-  const warning = await text(row.locator("details[open] details[open] p"));
+  await ops.openBrandChange(staff, "marca-de-paso");
+  const warning = await ops.openBrandDeletion(staff, "marca-de-paso");
   check(warning.includes("No se puede deshacer"), `the deletion does not warn: ${warning}`);
-  const deleted = await submit(row, "Eliminar «Marca de Paso»");
+  const deleted = await ops.deleteBrand(staff, "marca-de-paso", "Marca de Paso");
   log("deleted:", deleted);
   check(deleted.includes("Marca «Marca de Paso» eliminada"), `brand not deleted: ${deleted}`);
   await go("/catalogo/marcas");
-  check(
-    (await staff.locator('li[data-brand="marca-de-paso"]').count()) === 0,
-    "the brand is still listed",
-  );
+  check((await ops.brandRows(staff, "marca-de-paso")) === 0, "the brand is still listed");
 
   // A brand with products offers no deletion, and says why.
-  const nimbo = staff.locator('li[data-brand="nimbo"]');
-  await nimbo.locator("summary", { hasText: "Cambiar «Nimbo»" }).click();
+  await ops.openBrandChange(staff, "nimbo");
   check(
-    (await nimbo.locator("summary", { hasText: "Eliminar la marca" }).count()) === 0,
+    (await ops.brandDeletionOffered(staff, "nimbo")) === 0,
     "a brand with products offers to be deleted",
   );
-  const why = await text(nimbo);
+  const why = await ops.brandRowText(staff, "nimbo");
   check(why.includes("No se puede eliminar"), `the brand with products does not say why: ${why}`);
 
   // A brand that gets a product while the page is open: refused with the number.
@@ -381,9 +315,8 @@ async function rpcAs(email, calls) {
     ["ops_create_brand", { p_name: "Marca Ocupada" }],
   ]);
   await go("/catalogo/marcas");
-  const busyRow = staff.locator('li[data-brand="marca-ocupada"]');
-  await busyRow.locator("summary", { hasText: "Cambiar «Marca Ocupada»" }).click();
-  await busyRow.locator("summary", { hasText: "Eliminar la marca" }).click();
+  await ops.openBrandChange(staff, "marca-ocupada");
+  await ops.openBrandDeletion(staff, "marca-ocupada");
   const [hamaca] = await rpcAs(null, [["get_product", { p_slug: "hamaca-algodon-doble" }]]);
   const [before] = await rpcAs("central@yuntera.example", [
     ["ops_catalog_product", { p_ref: hamaca.id }],
@@ -399,7 +332,7 @@ async function rpcAs(email, calls) {
     ],
   ]);
   check(corrected?.brand?.name === "Marca Ocupada", "the hamaca did not get the brand");
-  const refused = await submit(busyRow, "Eliminar «Marca Ocupada»");
+  const refused = await ops.deleteBrand(staff, "marca-ocupada", "Marca Ocupada");
   log("refused:", refused);
   check(
     refused.includes("Hay 1 producto con esta marca") && refused.includes("únala a esa"),
@@ -424,7 +357,7 @@ async function rpcAs(email, calls) {
     ["/operacion/distritos?canton=115&revisar=1", "cf7-mobile-districts"],
     [`/pedidos/${order}`, "cf8-mobile-order"],
   ]) {
-    await mobile.goto(OPS + path, { waitUntil: "networkidle" });
+    await ops.open(mobile, path);
     await mobile.evaluate(() => {
       for (const details of document.querySelectorAll("main details")) details.open = true;
     });

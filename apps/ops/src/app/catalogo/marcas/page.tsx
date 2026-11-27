@@ -148,7 +148,10 @@ function BrandRow({
       ) : null}
 
       <details className="mt-2">
-        <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+        <summary
+          className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+          data-testid="brand-change"
+        >
           Cambiar «{brand.name}»
         </summary>
         <div className="mt-3 flex flex-col gap-5">
@@ -204,7 +207,10 @@ function BrandRow({
 
           {others.length > 0 ? (
             <details>
-              <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+              <summary
+                className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+                data-testid="brand-merge"
+              >
                 Es la misma que otra marca: unirlas
               </summary>
               <div className="mt-2">
@@ -237,7 +243,10 @@ function BrandRow({
 
           {brand.deletable ? (
             <details>
-              <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+              <summary
+                className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+                data-testid="brand-delete"
+              >
                 Eliminar la marca
               </summary>
               <div className="mt-2">

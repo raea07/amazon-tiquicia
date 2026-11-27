@@ -252,9 +252,15 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
           ) : null}
 
           {order.delivery_pin && !back ? (
-            <section className="rounded-lg border-2 border-brand bg-brand-soft p-5">
+            <section
+              className="rounded-lg border-2 border-brand bg-brand-soft p-5"
+              data-testid="delivery-code"
+            >
               <h2 className="text-lg font-bold">Su código de entrega</h2>
-              <p className="mt-2 font-display text-5xl font-extrabold tracking-[0.2em] text-link tabular-nums">
+              <p
+                data-testid="delivery-pin"
+                className="mt-2 font-display text-5xl font-extrabold tracking-[0.2em] text-link tabular-nums"
+              >
                 {order.delivery_pin}
               </p>
               <p className="mt-2 text-sm text-ink-muted">
@@ -415,7 +421,10 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
                         </details>
                         {returnable > 0 && (withdrawalOpen || warrantyOpen) ? (
                           <details className="group">
-                            <summary className="cursor-pointer text-sm font-semibold text-link">
+                            <summary
+                              className="cursor-pointer text-sm font-semibold text-link"
+                              data-testid="return-open"
+                            >
                               Devolver o reclamar garantía
                             </summary>
                             <div className="mt-3">
@@ -569,7 +578,7 @@ function PaymentInstructions({ order, payment }: { order: OrderDetail; payment: 
     );
   }
   return (
-    <section className="rounded-lg border border-maiz-300 bg-maiz-50 p-5">
+    <section className="rounded-lg border border-maiz-300 bg-maiz-50 p-5" data-testid="payment-due">
       <h2 className="text-lg font-bold">Falta el pago de {formatPrice(order.total_minor)}</h2>
       {order.payment_method === "sinpe_movil" ? (
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
