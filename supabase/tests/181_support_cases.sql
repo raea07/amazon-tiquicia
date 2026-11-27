@@ -593,6 +593,25 @@ begin
     'granted to authenticated only';
 end $$;
 
+-- A case follows its source row if one is ever deleted (nothing in the API
+-- does; tests that clean up after themselves do), timeline included.
+do $$
+declare
+  v_return uuid;
+  v_case uuid;
+begin
+  insert into public.return_requests (order_item_id, user_id, kind, quantity, status)
+  select i.id, o.user_id, 'withdrawal', 1, 'requested'
+  from public.order_items i join public.orders o on o.id = i.order_id
+  where o.id = current_setting('t.order_b')::uuid limit 1
+  returning id into v_return;
+  select id into strict v_case from private.cases where return_id = v_return;
+  delete from public.return_requests where id = v_return;
+  assert not exists (select 1 from private.cases where id = v_case)
+         and not exists (select 1 from private.case_entries where case_id = v_case),
+    'the case and its timeline went with the return';
+end $$;
+
 select pg_temp.login('casos181a@yuntera.example');
 select pg_temp.refused('select count(*) from private.cases', 'forbidden');
 select pg_temp.refused('select count(*) from private.case_entries', 'forbidden');

@@ -148,9 +148,11 @@ create table private.cases (
   area text not null check (area in ('order', 'payment', 'listing', 'account')),
   order_id uuid references public.orders (id),
   user_id uuid references auth.users (id),
-  complaint_id uuid unique references public.complaints (id),
-  return_id uuid unique references public.return_requests (id),
-  report_id uuid unique references public.content_reports (id),
+  -- Nothing in the API deletes these; if one is deleted (a test cleaning up
+  -- after itself), its case and the case's timeline go with it.
+  complaint_id uuid unique references public.complaints (id) on delete cascade,
+  return_id uuid unique references public.return_requests (id) on delete cascade,
+  report_id uuid unique references public.content_reports (id) on delete cascade,
   -- Where it came in: the shop (web or app) or a contact staff recorded.
   channel text not null check (channel in ('shop', 'whatsapp', 'phone', 'email')),
   -- What a recorded contact was about, in staff's words (complaints,
@@ -181,11 +183,12 @@ create index cases_user_idx on private.cases (user_id, created_at desc) where us
 create index cases_created_idx on private.cases (created_at);
 
 -- Who did what to a case, in order. Append-only: no function updates or
--- deletes an entry (the one exception is erasing the text of a deleted
--- account's cases, section 8).
+-- deletes an entry. Two exceptions: erasing the text of a deleted account's
+-- cases (section 8), and the entries of a case that is itself gone (its
+-- source row was deleted, which nothing in the API does).
 create table private.case_entries (
   id bigint generated always as identity primary key,
-  case_id uuid not null references private.cases (id),
+  case_id uuid not null references private.cases (id) on delete cascade,
   -- opened · note (staff only) · answer (the customer reads it) · assigned ·
   -- closed · reopened · status (the source row moved: body is its new status)
   kind text not null check (kind in ('opened', 'note', 'answer', 'assigned', 'closed', 'reopened', 'status')),
@@ -207,6 +210,9 @@ begin
      and new.author_id is not distinct from old.author_id and new.created_at = old.created_at
      and new.body = private.erased_case_text() then
     return new;
+  end if;
+  if tg_op = 'DELETE' and not exists (select 1 from private.cases c where c.id = old.case_id) then
+    return old;
   end if;
   raise exception 'Rows in % are immutable', tg_table_name using errcode = 'P0001';
 end;
