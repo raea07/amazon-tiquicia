@@ -22,16 +22,16 @@ Each report is built anew from a short list of allowed fields
 (`scrub.ts`, `scrubEvent`); a field the SDK adds in a later version is left
 out until someone allows it.
 
-| Sent                                                                                                            | Never sent                                                                                                           |
-| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| The error's type and message, with personal data removed (below)                                                  | Cookies and every request header (so no session, no browser name, no address it came from)                           |
-| The stack: file, function, line, column                                                                           | The request body and the form fields; a Server Action's arguments                                                    |
-| Which website (`app` tag), environment (`production`, `preview`, `local`) and commit (the release)                | Query strings and fragments of any address                                                                           |
-| The page's path without its query, and the route pattern (`/pedidos/[numero]`)                                    | The user: no id, no e-mail, no IP address (Sentry is also told never to infer one)                                    |
-| For a database error: its short code (`insufficient_stock`) and, for an answer of the wrong shape, the function's name | A database error's detail text and the text of its cause                                                             |
-| The runtime (Node.js version)                                                                                     | Breadcrumbs: clicks, typed text, console lines, visited addresses                                                    |
-|                                                                                                                   | Source lines and local variables of the stack; extra data; every other context; screenshots, session replay, feedback |
-|                                                                                                                   | Performance traces, profiles, sessions, reports about dropped events                                                 |
+| Sent                                                                                                                   | Never sent                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| The error's type and message, with personal data removed (below)                                                       | Cookies and every request header (so no session, no browser name, no address it came from)                            |
+| The stack: file, function, line, column                                                                                | The request body and the form fields; a Server Action's arguments                                                     |
+| Which website (`app` tag), environment (`production`, `preview`, `local`) and commit (the release)                     | Query strings and fragments of any address                                                                            |
+| The page's path without its query, and the route pattern (`/pedidos/[numero]`)                                         | The user: no id, no e-mail, no IP address (Sentry is also told never to infer one)                                    |
+| For a database error: its short code (`insufficient_stock`) and, for an answer of the wrong shape, the function's name | A database error's detail text and the text of its cause                                                              |
+| The runtime (Node.js version)                                                                                          | Breadcrumbs: clicks, typed text, console lines, visited addresses                                                     |
+|                                                                                                                        | Source lines and local variables of the stack; extra data; every other context; screenshots, session replay, feedback |
+|                                                                                                                        | Performance traces, profiles, sessions, reports about dropped events                                                  |
 
 Every string that is kept goes through `redactText`, which replaces:
 e-mail addresses; Costa Rican phone numbers (8 digits starting 2, 4–8, with or
@@ -177,11 +177,11 @@ Measured on the shop's home page and a product page in a production build
 (lane 18, Chromium, 27 November 2026), the JavaScript downloaded, compressed
 with gzip:
 
-| Build                                      | Home page, before the page is usable | Product page, before the page is usable | Downloaded afterwards |
-| ------------------------------------------ | ------------------------------------ | --------------------------------------- | --------------------- |
-| Before this work                           | 140,456 bytes                        | 148,650 bytes                           | —                     |
-| Tracker off (no DSN)                       | 144,592 bytes (+2.9%)                | 152,786 bytes (+2.8%)                   | nothing               |
-| Tracker on                                 | 144,225 bytes (+2.7%)                | 152,419 bytes (+2.5%)                   | 25,196 bytes, once    |
+| Build                | Home page, before the page is usable | Product page, before the page is usable | Downloaded afterwards |
+| -------------------- | ------------------------------------ | --------------------------------------- | --------------------- |
+| Before this work     | 140,456 bytes                        | 148,650 bytes                           | —                     |
+| Tracker off (no DSN) | 144,592 bytes (+2.9%)                | 152,786 bytes (+2.8%)                   | nothing               |
+| Tracker on           | 144,225 bytes (+2.7%)                | 152,419 bytes (+2.5%)                   | 25,196 bytes, once    |
 
 The SDK itself is 25 KB compressed, 18% of the home page's first load, above
 the 15% limit, so it is never part of the first load: it is fetched once the
