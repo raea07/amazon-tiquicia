@@ -21,7 +21,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { callRpc } from "@yuntera/dev-api/rpc";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -47,6 +47,10 @@ function oldSource(commit: string): string | null {
       stdio: "ignore",
     });
     execFileSync("tar", ["-xf", archive, "-C", dir], { stdio: "ignore" });
+    // Only the client is needed: the old tests must not be found and run.
+    for (const name of readdirSync(join(dir, "packages/db/src"), { recursive: true })) {
+      if (String(name).endsWith(".test.ts")) rmSync(join(dir, "packages/db/src", String(name)));
+    }
     return dir;
   } catch {
     return null;

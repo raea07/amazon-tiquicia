@@ -55,7 +55,6 @@ mailbox, not to each person.
 | `complaint.filed`           | `complaint_received`            | shopper                | `email`                            |
 | `complaint.filed`           | `staff_complaint_filed`         | care team              | `email`                            |
 | `complaint.answered`        | `complaint_answered`            | shopper                | `email`                            |
-| `case.answered`             | `case_answered`                 | shopper                | `email`, `push`                    |
 | `content.reported`          | `staff_content_reported`        | trust team             | `email`                            |
 | `report.resolved`           | `report_resolved`               | whoever reported it    | `email`                            |
 | `product.reviewed`          | `seller_listing_approved`       | the listing's shop     | `email`, `push`                    |
@@ -69,7 +68,8 @@ mailbox, not to each person.
 | `fees.offers_paused`        | `seller_offers_paused_fees`     | the shop               | `email`, `push`                    |
 | `route.assigned`            | `driver_route_assigned`         | the driver             | `push`                             |
 
-Since wave 9 (`084700`): an answer to any case other than a complaint (a
+Since wave 9 (`084700`), outside the table above because the planner does
+not route it: an answer to any case other than a complaint (a
 return, a report, a recorded contact) plans `case_answered`, by e-mail and
 push, through `ops_answer_case`; its event is recorded as already processed,
 because no worker consumer reads that topic. Like `complaint_answered`, it

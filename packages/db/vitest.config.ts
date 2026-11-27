@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 // The contract files share one seeded database, and the operations races
 // (src/contract.operations-races.test.ts) commit, for a moment, a shop with
@@ -8,5 +8,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     fileParallelism: false,
+    // build/ holds old commits' clients that contract.wave9-integration unpacks.
+    exclude: [...configDefaults.exclude, "build/**"],
   },
 });
