@@ -6,15 +6,60 @@
 //
 //   eval "$(tools/dev/stack.sh env 15)" && node tools/e2e/touch-targets.cjs
 //
-// Pages are read signed in as the demo account of each app.
+// Pages are read signed in as the demo account of each app. Since the wave 8
+// follow-ups it also reads a category page of the shop (its breadcrumb) and a
+// refunded order in the console ("Ver en Cobros"). The seed has no refunded
+// order: when the console lists none, the script makes one first, as the
+// demo shopper comprador3 through the API (a card order paid in the
+// simulation and cancelled at once), and says so.
 
-const { chromium } = require("playwright");
+const { chromium, request } = require("playwright");
 
 const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
 const SELLER = process.env.SELLER_URL || "http://127.0.0.1:3001";
 const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
 const FIELD = process.env.FIELD_URL || "http://127.0.0.1:3003";
+const API = process.env.API_URL || "http://127.0.0.1:54321";
+const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
+
+/** A refunded order for the console to show, made through the API when there is none. */
+async function refundedOrder() {
+  const ctx = await request.newContext();
+  const token = await ctx.post(`${API}/auth/v1/token?grant_type=password`, {
+    headers: { apikey: KEY },
+    data: { email: "comprador3@yuntera.example", password: PASSWORD },
+  });
+  const { access_token } = await token.json();
+  const rpc = async (fn, args = {}) => {
+    const r = await ctx.post(`${API}/rest/v1/rpc/${fn}`, {
+      headers: { apikey: KEY, authorization: `Bearer ${access_token}` },
+      data: args,
+    });
+    const body = await r.json().catch(() => null);
+    if (r.status() >= 400) throw new Error(`${fn}: ${r.status()} ${JSON.stringify(body)}`);
+    return body;
+  };
+  try {
+    const address = (await rpc("my_addresses")).find((a) => a.is_default);
+    const product = await rpc("get_product", { p_slug: "libreta-tapa-dura-a5" });
+    const offer = product.skus.flatMap((k) => k.offers).find((o) => o.fulfillment === "platform");
+    const placed = await rpc("place_order", {
+      p_items: [{ offer_id: offer.offer_id, quantity: 1 }],
+      p_address_id: address.id,
+      p_payment_method: "card",
+      p_idempotency_key: `touch-targets-${Date.now()}`,
+    });
+    await rpc("confirm_sandbox_payment", { p_order_id: placed.order_id });
+    await rpc("cancel_order", {
+      p_order_id: placed.order_id,
+      p_reason: "Cancelado por el cliente",
+    });
+    console.log(`Made the refunded order ${placed.order_number} for the console's page.`);
+  } finally {
+    await ctx.dispose();
+  }
+}
 
 const APPS = [
   {
@@ -23,6 +68,7 @@ const APPS = [
     pages: [
       "/",
       "/buscar?q=libreta",
+      "/c/cafe",
       "/p/libreta-tapa-dura-a5",
       "/carrito",
       "/zona",
@@ -54,6 +100,8 @@ const APPS = [
       "/",
       "/pedidos",
       "#first-order",
+      "/pedidos?estado=refunded",
+      "#refunded-order",
       "/catalogo",
       "/despacho",
       "/operacion/cierres",
@@ -125,14 +173,24 @@ function small() {
         // The first order, location or stop of the page read before.
         const pattern = {
           "#first-order": /\/pedidos\/YT-/,
+          "#refunded-order": /\/pedidos\/YT-/,
           "#first-location": /\/bodega\/ubicacion\?codigo=/,
           "#first-stop": /\/ruta\/[0-9a-f-]{36}/,
         }[path];
-        const hrefs = await page
-          .locator("a[href]")
-          .evaluateAll((as) => as.map((a) => a.getAttribute("href")));
+        const links = () =>
+          page.locator("a[href]").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
+        let hrefs = await links();
+        if (path === "#refunded-order" && !hrefs.some((h) => pattern.test(h ?? ""))) {
+          await refundedOrder();
+          await page.reload({ waitUntil: "networkidle" });
+          hrefs = await links();
+        }
+        const wanted = path;
         path = hrefs.find((h) => pattern.test(h ?? "")) ?? "";
-        if (!path) continue;
+        if (!path) {
+          if (wanted === "#refunded-order") found.push(`${app.base} | no refunded order listed`);
+          continue;
+        }
       }
       await page.goto(`${app.base}${path}`, { waitUntil: "networkidle" }).catch(() => undefined);
       last = path;
