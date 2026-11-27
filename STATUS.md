@@ -557,10 +557,12 @@ Vercel or on a phone.
   code of the store build `3f251c3` and of the preview's web apps `12ec48c`,
   taken from git, against the merged database).
 - **Races**: every family A to J at 50 natural and 50 forced rounds on a
-  freshly reset lane 11 with nothing else running: 180 rows, 0 wrong rounds
-  and 0 timeouts everywhere; lock errors only in the documented E5, E5b, E6,
-  E7 and E11. The new family J (the support desk against Atención and
-  account deletion) is 0 in all 22 rows; with `ops_answer_case` taking the
+  freshly reset lane 11 with nothing else running, after the last change to
+  the database: 183 rows, 0 wrong rounds and 0 timeouts everywhere; lock
+  errors only in the documented E5, E5b, E6, E7 and E11. The new family J
+  (the support desk against Atención and account deletion, with J7, a
+  contact recorded during a deletion, added after the outside review) is 0
+  in all 25 rows; with `ops_answer_case` taking the
   case before the complaint, J1 deadlocked in 15 of 100 natural and 100 of
   100 forced rounds. Table in
   `/root/yuntera-audit/races-wave9/integration/table.txt`.
