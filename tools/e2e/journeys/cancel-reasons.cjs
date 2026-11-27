@@ -202,6 +202,12 @@ async function as(email) {
       !shown.includes("El total cambia") && !shown.includes("Continuar con la compra"),
       "the summary says what to do once, and speaks of no total",
     );
+    const title = sql(`select title from public.products where slug = '${PRODUCT}'`);
+    const page = await text(visitor.locator("main"));
+    check(
+      page.includes(title) && !page.includes("Producto no disponible"),
+      "the paused line still names its product, so the shopper knows what to remove",
+    );
     check((await overflow(visitor)) <= 0, "the cart fits 390 px");
     await visitor.screenshot({ path: SHOTS + "/cr4-cart-nothing-to-buy.png", fullPage: true });
   } finally {

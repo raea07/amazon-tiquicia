@@ -3,11 +3,13 @@
  * 084600), against the merged database.
  *
  *   - The store build of the shopper app (commit 3f251c3, on testers'
- *     phones). Of the 29 database functions it calls, four run code that
+ *     phones). Of the 29 database functions it calls, five run code that
  *     wave 8 changed: cancel_order (private.cancel_order_internal, 084400),
  *     place_order and confirm_sandbox_payment (the stock triggers that refresh
- *     a product's summary, 084400), and get_order (redefined directly in
- *     084600). Their answers, and get_order and my_orders
+ *     a product's summary, 084400), and get_order and cart_lines (redefined
+ *     directly in 084600; cart_lines now names the product of a paused
+ *     offer, read here with both the store build's and today's schema).
+ *     Their answers, and get_order and my_orders
  *     of an order cancelled for no payment (whose reason the new screens now
  *     show) and of one staff cancelled with their own note (whose reason
  *     get_order, since 084600, gives the shopper as null), parse with that
@@ -33,6 +35,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { variantChange } from "./areas/seller-listings";
+import { cartLine as currentCartLine } from "./schemas";
 import { contractDatabase } from "./contract.helpers";
 
 vi.setConfig({ testTimeout: 60_000 });
@@ -181,6 +184,22 @@ export const placedOrder = z.object({
 // BEGIN 3f251c3 orderAction
 export const orderAction = z.object({ order_id: id, status: orderStatus });
 // END 3f251c3 orderAction
+// BEGIN 3f251c3 cartLine
+export const cartLine = z.object({
+  offer_id: id,
+  buyable: z.boolean(),
+  product_slug: z.string().nullable(),
+  title: z.string().nullable(),
+  variant_name: z.string().nullable(),
+  image_path: z.string().nullable(),
+  seller_name: z.string().nullable(),
+  price_minor: money.nullable(),
+  list_price_minor: money.nullable(),
+  available: z.number().int(),
+  fulfillment: fulfillment.nullable(),
+  handling_days: z.number().int().nullable(),
+});
+// END 3f251c3 cartLine
 
 describe.skipIf(!db.enabled)("callers of before wave 8 (against a seeded database)", () => {
   let pool: pg.Pool;
@@ -246,7 +265,7 @@ describe.skipIf(!db.enabled)("callers of before wave 8 (against a seeded databas
       return;
     }
     const self = execFileSync("cat", [__filename], { encoding: "utf8" });
-    for (const name of ["orderSummary", "orderDetail", "placedOrder", "orderAction"]) {
+    for (const name of ["orderSummary", "orderDetail", "placedOrder", "orderAction", "cartLine"]) {
       const block = self.slice(
         self.indexOf(`// BEGIN 3f251c3 ${name}\n`) + `// BEGIN 3f251c3 ${name}\n`.length,
         self.indexOf(`// END 3f251c3 ${name}`),
@@ -324,6 +343,35 @@ describe.skipIf(!db.enabled)("callers of before wave 8 (against a seeded databas
     expect(list.map((o) => o.order_number)).toEqual(
       expect.arrayContaining([paid.order_number, unpaid.order_number, staffed.order_number]),
     );
+  });
+
+  it("answers the store build's and the 717048f web shop's cart in their shape, naming a paused offer's product", async () => {
+    // A product no other test touches, so pausing its only offer for a moment
+    // disturbs nothing else.
+    const { rows } = await db.query<{ id: string; title: string }>(
+      `select o.id, p.title from public.offers o join public.skus k on k.id = o.sku_id
+         join public.products p on p.id = k.product_id
+        where p.slug = 'jabon-artesanal-avena-miel-3u' and o.status = 'active'
+        order by o.id limit 1`,
+    );
+    const offer = rows[0];
+    expect(offer, "the seed has an active offer of the soap").toBeDefined();
+    if (!offer) return;
+    const live = z.array(cartLine).parse(await rpc(SHOPPER, "cart_lines", { p_offer_ids: [offer.id] }));
+    expect(live[0]?.buyable).toBe(true);
+    await db.query("update public.offers set status = 'paused' where id = $1", [offer.id]);
+    try {
+      const answer = await rpc(SHOPPER, "cart_lines", { p_offer_ids: [offer.id] });
+      const [frozen] = z.array(cartLine).parse(answer);
+      const [current] = z.array(currentCartLine).parse(answer);
+      expect(frozen?.buyable).toBe(false);
+      expect(frozen?.title).toBe(offer.title);
+      expect(frozen?.seller_name).toBeNull();
+      expect(frozen?.price_minor).toBeNull();
+      expect(current?.title).toBe(offer.title);
+    } finally {
+      await db.query("update public.offers set status = 'active' where id = $1", [offer.id]);
+    }
   });
 
   it("answers the 717048f seller centre's variant switch in its shape", async () => {

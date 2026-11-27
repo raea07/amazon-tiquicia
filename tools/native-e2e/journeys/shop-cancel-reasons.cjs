@@ -145,6 +145,11 @@ async function as(email) {
         (await page.getByTestId("cart-blocked").count()) === 0,
       "the bottom bar says nothing more: no total and no second instruction",
     );
+    const title = sql(`select title from public.products where slug = '${PRODUCT}'`);
+    check(
+      screen.includes(title) && !screen.includes("Producto no disponible"),
+      "the paused line still names its product, so the shopper knows what to remove",
+    );
     await noSideways("the cart with nothing to buy");
     await page.screenshot({ path: `${SHOTS}/native-cancel-reasons-2-cart.png`, fullPage: true });
   } finally {

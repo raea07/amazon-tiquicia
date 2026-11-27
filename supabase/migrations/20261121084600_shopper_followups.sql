@@ -62,6 +62,21 @@
 --      null otherwise; staff get it as stored. The field stays (the store
 --      build of 3f251c3 reads it as a string or null). Nothing else of
 --      get_order changes.
+--
+--   4. A CART LINE KEEPS ITS PRODUCT'S NAME WHEN ITS OFFER IS PAUSED.
+--      public.cart_lines (082800) gave an offer the caller can no longer
+--      see (paused, or its shop not active) nothing but its id, so the web
+--      shop and the shopper app could only say "Producto no disponible" and
+--      the shopper could not tell which line to remove. The product's own
+--      facts (slug, title, variant, first photo) now come through the
+--      offer's product whenever the caller may see that product (it is
+--      active, or the caller is staff or the product's own seller), which
+--      is exactly what its product page shows anyway. The offer's own facts
+--      (shop, price, stock, how it is delivered) still come only from an
+--      offer the caller may see, and `buyable` is unchanged. An offer of a
+--      product that is not public (a listing awaiting review) still comes
+--      back with nothing but its id. Columns and their order are unchanged,
+--      so every older client reads the answer as before.
 
 -- ═══ 1. The delivery date of a cart alternative ════════════════════════════
 
@@ -556,7 +571,54 @@ begin
 end;
 $$;
 
--- ═══ 5. Grants ═════════════════════════════════════════════════════════════
+-- ═══ 5. The product of a cart line whose offer is paused ══════════════════
+
+-- Replaces the version in 20261121082800_lockdown.sql. Unchanged but for the
+-- join `oa` (any offer with that id), through which the product and the
+-- variant are found (section 4 of the header).
+create or replace function public.cart_lines(p_offer_ids uuid[])
+returns table (offer_id uuid, buyable boolean, product_slug text, title text, variant_name text,
+               image_path text, seller_name text, price_minor bigint, list_price_minor bigint,
+               available integer, fulfillment public.fulfillment_type, handling_days smallint)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  with viewer as (
+    select private.is_staff() as staff,
+           coalesce(array(select private.my_seller_ids()), '{}'::uuid[]) as sellers
+  )
+  select req.offer_id,
+         coalesce(o.id is not null and o.status = 'active' and k.active and p.status = 'active'
+                  and s.status = 'active' and o.available_quantity > 0, false),
+         p.slug, p.title, k.variant_name,
+         (select i.path from public.product_images i
+          where i.product_id = p.id order by i.sort, i.id limit 1),
+         s.trade_name, o.price_minor, o.list_price_minor,
+         least(coalesce(o.available_quantity, 0), 10), o.fulfillment, o.handling_days
+  from viewer v
+  cross join unnest(p_offer_ids[1:60]) with ordinality as req (offer_id, position)
+  left join public.offers o
+    on o.id = req.offer_id
+   and ((o.status = 'active' and exists (
+           select 1 from public.sellers so where so.id = o.seller_id and so.status = 'active'))
+        or o.seller_id = any (v.sellers) or v.staff)
+  -- The offer whatever its state, only to find its product: a paused offer's
+  -- line still names a product the caller may see.
+  left join public.offers oa on oa.id = req.offer_id
+  left join public.products p
+    on p.id = (select k2.product_id from public.skus k2 where k2.id = oa.sku_id)
+   and (p.status = 'active' or v.staff or p.created_by_seller_id = any (v.sellers))
+  left join public.skus k on k.id = oa.sku_id and k.product_id = p.id
+  left join public.sellers s
+    on s.id = o.seller_id
+   and (s.status = 'active' or v.staff or s.id = any (v.sellers))
+  -- In the order the cart asked for them, as the earlier version returned them.
+  order by req.position;
+$$;
+
+-- ═══ 6. Grants ═════════════════════════════════════════════════════════════
 
 revoke all on function private.refund_announcement(uuid, boolean) from public, anon, authenticated;
 
