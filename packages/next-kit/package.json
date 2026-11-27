@@ -25,7 +25,7 @@
     "./back-link": "./src/back-link.tsx"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p fonts",
     "test": "vitest run"
   },
   "dependencies": {
