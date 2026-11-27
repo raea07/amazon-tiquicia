@@ -275,31 +275,31 @@ a checkout, packing or a cancellation; two checkouts) went from 4 to 41
 deadlocks in 100 natural rounds (every forced round) to 0, and the stale
 summary (race F) from 58 to 100 wrong rounds in 100 to 0. What still can
 deadlock on product rows, measured with 100 natural and 100 forced rounds
-in `tools/races` on a local database of a shared machine (family E;
-numbers natural / forced). The loser's transaction rolls back whole; the
+in `tools/races` on a local database of a shared machine (family E). The
+numbers move between runs, so they are kept in one place: `STATUS.md`,
+"Things to know before trusting the numbers", Wave 8, gives each one's range
+over the named full runs. The loser's transaction rolls back whole; the
 shopper, packer or staff member reads "Alguien más cambiaba lo mismo en ese
 momento, así que no se guardó nada. Inténtelo de nuevo." (`try_again`); the sweep runs again five minutes later:
 
 - two transactions that each take offers of two shared products across zero
-  in opposite order: two checkouts of last units (E5: 24 to 33 / 43 to 63
-  over the runs); a staff cancellation giving back last units against such a
-  checkout (E5b: 1 to 5 / 61 to 74); by the same mechanism, not raced separately, the
+  in opposite order: two checkouts of last units (E5); a staff cancellation giving back last units against such a
+  checkout (E5b); by the same mechanism, not raced separately, the
   sweep against such a checkout (packing never takes an offer across zero);
 - a cancellation or the sweep that gives back the last unit of one offer of
   a product and then writes another offer of the same product, against the
   seller changing or pausing that second offer at that moment (the seller's
   update takes the offer row, then the product row) (E6). A checkout does
   not: it takes its offers `FOR SHARE` before it writes any stock row, so
-  the seller waits for it (E6: 22 to 26 / 100; E6b: 0 / 0);
+  the seller waits for it (E6; E6b never deadlocked);
 - a shop suspended or reinstated (its products in id order) against a
   writer that takes two of its products across zero in the other order
-  (E7: 0 to 4 / 100);
+  (E7);
 - staff merging two brands (`ops_merge_brands`: one `UPDATE` of every
   product of the brand, in scan order) against a checkout that holds one of
   those products after taking its offer across zero and wants another (E11,
-  found by an independent review: natural 0 to 20 in 100 rounds over the runs and the two checkouts tried;
-  forced up to 74 in 100,
-  depending on which session waits first; the same before 084400). Rare (a
+  found by an independent review; the forced rate depends on which session
+  waits first; the same before 084400). Rare (a
   staff action). No summary was wrong in any round.
 
 Found while listing the writers of product rows: a seller switching off a
@@ -343,8 +343,7 @@ variant or its shop takes (an order line, a ledger row, a reservation); a
 | `public.seller_create_listing`                                                                                                                                                                                                                                        | `INSERT` (a new row)                                                      | the shop row `FOR UPDATE`                                            | variant, offer inserted                                                      | nothing else holds a new row                                                                                                                                                                                                                                                      |
 | `public.ops_review_listing_edit`                                                                                                                                                                                                                                      | `FOR UPDATE`, `UPDATE`                                                    | the change request                                                   | offers below the fee floor paused, variants updated                          | product before offers, the opposite of a stock writer; a checkout holding those offers `FOR SHARE` and wanting a key share on the product could deadlock with it (by reading; not raced)                                                                                          |
 | `private.sellers_hand_over_on_close` (a shop closes)                                                                                                                                                                                                                  | the shop's listings `FOR UPDATE`, id order, `UPDATE`                      | the shop row                                                         | change requests, photos, logos                                               | id order, as the summary refresh                                                                                                                                                                                                                                                  |
-| `public.ops_merge_brands`                                                                                                                                                                                                                                             | one `UPDATE` over every product of a brand, scan order                    | the brand rows                                                       | nothing                                                                      | staff action, rare: against a checkout crossing zero on two of the brand's products it deadlocks (E11: natural 0 to 20 in 100 rounds over three runs and the two checkouts tried;                                                                                                 |
-| forced up to 56 in 100, depending on which session waits first); no summary wrong                                                                                                                                                                                     |
+| `public.ops_merge_brands`                                                                                                                                                                                                                                             | one `UPDATE` over every product of a brand, scan order                    | the brand rows                                                       | nothing                                                                      | staff action, rare: against a checkout crossing zero on two of the brand's products it deadlocks (E11; see `STATUS.md` for the measured range); no summary wrong                                                                                                                  |
 | `private.refresh_product_search` (products trigger)                                                                                                                                                                                                                   | `UPDATE` of the same row                                                  | the row, held by the caller                                          | nothing                                                                      | none                                                                                                                                                                                                                                                                              |
 
 ### Why this simple rule is enough for the pilot

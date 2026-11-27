@@ -134,17 +134,18 @@
 --     unchanged.
 --
 -- WHAT STILL CAN DEADLOCK ON PRODUCT ROWS (measured with tools/races on a
--- local database of a shared machine, with this migration, natural / forced
--- rounds of 100; the numbers move between runs, so they are ranges over the
--- full runs on the merged tree;
--- the loser rolls back whole and the person reads "nothing was saved, try
--- again", try_again; the sweep runs again five minutes later):
+-- local database of a shared machine, with this migration). The numbers move
+-- between runs, so they are kept in one place: STATUS.md, "Things to know
+-- before trusting the numbers", Wave 8, gives each one's range over the named
+-- full runs on the merged tree. Below, only the numbers before this migration.
+-- In each, the loser rolls back whole and the person reads "nothing was saved,
+-- try again", try_again; the sweep runs again five minutes later:
 --   - two transactions that EACH take an offer of two shared products across
 --     zero (out of stock, or back in stock), in opposite order. Two checkouts
---     of last units (E5: 24 to 33 / 43 to 63; before this
---     migration 26 / 74, and then the summary was also wrong in 42 / 26
+--     of last units (E5; before this
+--     migration 26 / 74 natural / forced in 100, and then the summary was also wrong in 42 / 26
 --     rounds); a staff cancellation giving back last units against such a
---     checkout (E5b: 1 to 5 / 61 to 74, the same before); by the same mechanism, not
+--     checkout (E5b, about the same before); by the same mechanism, not
 --     raced separately: the sweep against such a checkout (packing never
 --     takes an offer across zero);
 --   - a staff cancellation or the sweep giving back the last unit of one
@@ -152,18 +153,16 @@
 --     the same product, against the seller changing or pausing that second
 --     offer at that moment (offer row, then product row) (E6). A checkout
 --     does not deadlock with it: place_order takes its offers FOR SHARE before it writes a stock row,
---     so the seller waits (E6: 22 to 26 / 100, before 20 / 100; E6b: 0 / 0);
+--     so the seller waits (E6, before 20 / 100; E6b: never);
 --   - a shop suspended or reinstated (its products in product-id order)
 --     against a writer that takes two of its products across zero in the
---     other order (E7: 0 to 4 / 100; before this migration, when its walk
+--     other order (E7; before this migration, when its walk
 --     had no order, 1 / 100);
 --   - staff merging two brands (public.ops_merge_brands: one UPDATE of every
 --     product of the brand, in scan order) against a checkout that holds one
 --     of those products after taking its offer across zero and wants another
---     (E11, found by an independent review: natural 0 to 20 in 100 rounds
---     over the runs and the two checkouts tried; forced up to 74 in 100,
---     depending on which session waits first; the same
---     before this migration). Not changed here; the function is outside
+--     (E11, found by an independent review; the forced rate depends on
+--     which session waits first; the same before this migration). Not changed here; the function is outside
 --     this migration.
 --   * A VARIANT SWITCHED OFF. public.seller_set_variant_active took the
 --     product row (private.own_listing, FOR UPDATE), then the variant FOR
