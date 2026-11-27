@@ -1,3 +1,4 @@
+import { returnRequestedText } from "@yuntera/core";
 import { messageOf } from "@yuntera/expo-kit/api";
 import { useApiMutation } from "@yuntera/expo-kit/data";
 import { colors, radius, space, touchTarget } from "@yuntera/expo-kit/theme";
@@ -265,7 +266,7 @@ export function ReturnForm({
               ok:
                 kind === "withdrawal"
                   ? WITHDRAWAL_APPROVED
-                  : "Recibimos su solicitud. Le respondemos en un máximo de 1 día hábil.",
+                  : returnRequestedText(kind),
             });
           } catch (error) {
             setResult({ error: messageOf(error) });

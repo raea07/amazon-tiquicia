@@ -57,6 +57,8 @@ const orderDetailShipment = orderDetail.shape.shipments.element.extend({
   recalled: z.boolean().default(false),
   /** Operations staff can still stop it (ops_recall_shipment); always false for the shopper. */
   can_recall: z.boolean().default(false),
+  /** Stopped by staff and never out on a route (since 085000; false from an older database). */
+  stopped_before_leaving: z.boolean().default(false),
   /** How many of each order line travel in this parcel (a line can be split). */
   units: z
     .array(z.object({ order_item_id: id, quantity: z.number().int().positive() }))
@@ -66,6 +68,12 @@ const orderDetailShipment = orderDetail.shape.shipments.element.extend({
 /** One order in full, each parcel saying whether it was stopped (since 084200). */
 export const orderDetailWithRecall = orderDetail.extend({
   shipments: z.array(orderDetailShipment),
+  /** Each line of a parcel stopped before it left says so (since 085000). */
+  timeline: z.array(
+    orderDetail.shape.timeline.element.extend({
+      stopped_before_leaving: z.boolean().default(false),
+    }),
+  ),
 });
 export type OrderDetailWithRecall = z.infer<typeof orderDetailWithRecall>;
 

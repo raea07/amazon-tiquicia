@@ -1,3 +1,4 @@
+import { returnRequestedText } from "@yuntera/core";
 import type { MyOrderReturn } from "@yuntera/db";
 import { ActionForm } from "@yuntera/next-kit/client";
 import { formatPrice } from "@yuntera/ui";
@@ -14,7 +15,7 @@ const KIND: Record<MyOrderReturn["kind"], string> = {
 function nextStep(item: MyOrderReturn): string {
   switch (item.status) {
     case "requested":
-      return "Recibimos su solicitud. Le respondemos en un máximo de 1 día hábil.";
+      return returnRequestedText(item.kind);
     case "approved":
       return "Aprobada. Le contactaremos para recoger el producto, sin costo para usted. Téngalo listo y completo; cuando llegue a nuestra bodega le reembolsamos por el mismo medio de pago.";
     case "received":

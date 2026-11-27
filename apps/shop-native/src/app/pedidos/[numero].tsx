@@ -8,6 +8,8 @@ import {
   ORDER_STATUS_LABEL,
   orderAwaitingNewAttempt,
   orderComingBack,
+  stoppedParcelHistory,
+  stoppedParcelLabel,
   toCostaRicaTime,
   waitsForNewAttempt,
 } from "@yuntera/core";
@@ -71,6 +73,11 @@ import { PAYMENT_LABEL, SHIPMENT_STATUS_LABEL } from "@/lib/labels";
 import { amountComingBack, refundedSoFar as refundedSoFarOf } from "@/lib/refund-outlook";
 import { returnNextStep, returnTitle } from "@/lib/returns";
 
+/** What parcel-words.ts needs to know of a parcel staff stopped. */
+function stoppedFlags(shipment: OrderDetail["shipments"][number]) {
+  return { recalled: shipment.recalled, stoppedBeforeLeaving: shipment.stopped_before_leaving };
+}
+
 function describeEvent(event: OrderDetail["timeline"][number], order: OrderDetail): string {
   if (event.kind === "note") return event.note ?? "Nota";
   if (event.kind === "payment") return event.note ?? "Pago";
@@ -80,6 +87,11 @@ function describeEvent(event: OrderDetail["timeline"][number], order: OrderDetai
   if (event.kind === "order_status" && event.to_status && event.to_status in ORDER_STATUS_LABEL) {
     return ORDER_STATUS_LABEL[event.to_status as keyof typeof ORDER_STATUS_LABEL]["es-CR"];
   }
+  const stopped =
+    event.kind === "shipment_status"
+      ? stoppedParcelHistory(event.to_status, event.stopped_before_leaving)
+      : null;
+  if (stopped) return stopped;
   if (
     event.kind === "shipment_status" &&
     event.to_status &&
@@ -434,8 +446,10 @@ export default function OrderScreen() {
                   ? `Paquete ${index + 1} de ${o.shipments.length}`
                   : "Paquete"}
               </Text>
-              {isStoppedShipment(shipment.status, shipment.recalled) ? (
-                <Badge tone="warning">Detenido en la bodega</Badge>
+              {stoppedParcelLabel(shipment.status, stoppedFlags(shipment)) ? (
+                <Badge tone={shipment.status === "returning" ? "warning" : "neutral"}>
+                  {stoppedParcelLabel(shipment.status, stoppedFlags(shipment)) ?? ""}
+                </Badge>
               ) : isRescheduledShipment(shipment.status, shipment.attempt_count) ||
                 waitsForNewAttempt(shipment.status, shipment.attempt_count) ? (
                 <Badge tone="info">Entrega reprogramada</Badge>

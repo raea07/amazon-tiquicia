@@ -9,7 +9,7 @@
  * and a sensible redirect. Errors come back as text safe to show the user.
  */
 
-import { parsePhone } from "@yuntera/core";
+import { parsePhone, returnRequestedText } from "@yuntera/core";
 import { ApiError } from "@yuntera/db";
 import { tagsForOffers, tagsForProducts } from "@yuntera/next-kit/cache-tags";
 import {
@@ -342,7 +342,7 @@ export async function requestReturn(
     await api.requestReturn({ ...parsed.data, reason: parsed.data.reason || null });
     return parsed.data.kind === "withdrawal"
       ? "Devolución aprobada. Le contactaremos para recoger el producto, sin costo para usted; cuando llegue a nuestra bodega le reembolsamos por el mismo medio de pago."
-      : "Recibimos su solicitud. Le respondemos en un máximo de 1 día hábil.";
+      : returnRequestedText(parsed.data.kind);
   });
   return state.error ? { ...state, values } : state;
 }

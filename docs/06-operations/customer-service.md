@@ -38,6 +38,7 @@ note, so the next person does not ask the shopper to repeat themselves.
 | Payment question                                            | 2 working hours                                  | 1 working day                                                 |
 | Seller question                                             | 1 working day                                    | 3 working days                                                |
 | Formal complaint                                            | Acknowledged in 1 working day                    | Written answer within 5 working days                          |
+| Any other question                                          | 1 working day                                    | 5 working days                                                |
 
 Being late against these targets is itself an exception that appears in the
 operations queue.

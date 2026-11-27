@@ -14,7 +14,7 @@
 //      version is refused with what was typed kept; then records one with a
 //      typo in its number, sees it shown as the current build, removes it,
 //      and the right one is shown;
-//   5. a support person sees only the message and complaint lines, and no
+//   5. a support person sees only the message and case lines, and no
 //      Versiones;
 //   6. screenshots at 1280 and 390 px, without sideways scrolling.
 //
@@ -365,8 +365,8 @@ function sql(statement) {
   seen = await states(support);
   check(
     Object.keys(seen).sort().join(",") ===
-      "complaints_late,events_failed,messages_late,messages_stopped",
-    `support sees only the message and complaint lines: ${Object.keys(seen).join(",")}`,
+      "cases_late,events_failed,messages_late,messages_stopped",
+    `support sees only the message and case lines: ${Object.keys(seen).join(",")}`,
   );
   check(seen.messages_stopped === "problem", "including the stopped message");
   check((await support.locator("#versiones").count()) === 0, "and no Versiones");

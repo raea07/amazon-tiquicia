@@ -310,6 +310,16 @@ export const supportCasesErrors = {
       "El texto tiene más de cinco números de cuatro cifras. Deje solo los necesarios; escriba los montos con ₡ y punto (₡4.500).",
     en: "The text has more than five four-digit numbers. Keep only the ones needed; write amounts with ₡ and a point (₡4,500).",
   },
+  too_many_numbers_hour: {
+    "es-CR":
+      "En la última hora escribió muchos números de cuatro cifras en notas y respuestas. Escriba este texto sin ellos o espere una hora; los montos con ₡ y punto (₡4.500) no cuentan.",
+    en: "In the last hour you wrote many four-digit numbers in notes and answers. Write this text without them or wait an hour; amounts with ₡ and a point (₡4,500) do not count.",
+  },
+  case_account_deleted: {
+    "es-CR":
+      "La cuenta de este cliente se eliminó: su caso ya no recibe notas ni respuestas. Si la persona vuelve a escribir, registre un contacto nuevo cuando tenga otra cuenta o un pedido nuevo.",
+    en: "This customer's account was deleted: the case takes no more notes or answers. If the person writes again, record a new contact once they have another account or a new order.",
+  },
   too_many_refusals: {
     "es-CR":
       "Por una hora no puede escribir notas ni respuestas: tres textos suyos tenían un código de entrega. Si necesita responder ya, pídaselo a un compañero.",

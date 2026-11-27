@@ -530,6 +530,7 @@ name it here and in the test, and say why in the pull request.
 - `delivery_estimate`
 - `get_product`
 - `get_shop` (a shop's public page: name, description, logo and what it sells; only an active shop has one)
+- `health_ping` (answers `{"ok": true}` and nothing else, for an outside uptime robot that holds only the publishable key)
 - `list_brands` (the brands of the shop's filter)
 - `list_categories`
 - `list_districts`

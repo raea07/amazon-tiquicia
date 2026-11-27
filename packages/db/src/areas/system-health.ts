@@ -17,7 +17,7 @@ export const HEALTH_LINE_KEYS = [
   "messages_stopped",
   "messages_late",
   "events_failed",
-  "complaints_late",
+  "cases_late",
   "invoices",
   "invoice_certificate",
   "refunds_failed",

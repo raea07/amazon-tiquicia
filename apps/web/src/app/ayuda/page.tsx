@@ -1,5 +1,5 @@
 import { brand } from "@yuntera/brand";
-import { COMPLAINT_PROMISE, DEFAULT_RANKING } from "@yuntera/core";
+import { COMPLAINT_PROMISE, DEFAULT_RANKING, REFUND_TIME } from "@yuntera/core";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -78,8 +78,8 @@ export default function HelpPage() {
               nosotros lo contamos desde la entrega, que nunca es menos.
             </li>
             <li>
-              <strong>Reembolso:</strong> en un máximo de 8 días naturales, por el mismo medio con
-              el que pagó.
+              <strong>Reembolso:</strong> en un máximo de {REFUND_TIME}, por el mismo medio con el
+              que pagó.
             </li>
             <li>
               <strong>Garantía:</strong> todo producto tiene al menos 30 días hábiles de garantía

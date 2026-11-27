@@ -1,4 +1,4 @@
-import { format, money } from "@yuntera/core";
+import { format, money, returnRequestedText } from "@yuntera/core";
 import type { MyOrderReturn } from "@yuntera/db";
 
 /**
@@ -18,7 +18,7 @@ export const RETURN_KIND: Record<MyOrderReturn["kind"], string> = {
 export function returnNextStep(item: MyOrderReturn): string {
   switch (item.status) {
     case "requested":
-      return "Recibimos su solicitud. Le respondemos en un máximo de 1 día hábil.";
+      return returnRequestedText(item.kind);
     case "approved":
       return "Aprobada. Le contactaremos para recoger el producto, sin costo para usted. Téngalo listo y completo; cuando llegue a nuestra bodega le reembolsamos por el mismo medio de pago.";
     case "received":

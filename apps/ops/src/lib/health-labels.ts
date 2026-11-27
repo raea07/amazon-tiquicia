@@ -180,29 +180,31 @@ export function healthSentence(line: HealthLine): HealthSentence {
           : `${plural(line.count, "evento no produjo", "eventos no produjeron")} avisos después de varios intentos: alguien no fue avisado. Avise a quien mantiene el sistema.`,
         ...none,
       };
-    case "complaints_late": {
-      const title = "Reclamos sin respuesta";
+    case "cases_late": {
+      // The same late cases as Hoy and the clocks of /casos: 084800 reads the
+      // support desk's own due times. The targets stay in the database.
+      const title = "Casos atrasados";
       if (ok) {
         return {
           title,
-          text: `Ninguno espera respuesta más de ${plural(part(line, "acknowledge_days"), "día hábil", "días hábiles")}.`,
+          text: "Ninguno: cada caso abierto está dentro de su plazo.",
           ...none,
         };
       }
-      const late = part(line, "past_answer");
+      const late = part(line, "past_resolution");
       return {
         title,
         text: [
-          `${plural(line.count, "reclamo sigue", "reclamos siguen")} sin respuesta después de ${plural(part(line, "acknowledge_days"), "día hábil", "días hábiles")}.`,
+          `${plural(line.count, "caso está atrasado", "casos están atrasados")}${line.since ? `; el más antiguo, desde el ${at(line.since)}` : ""}.`,
           late > 0
-            ? `${late === 1 ? "De ellos, 1 pasó" : `De ellos, ${late} pasaron`} el plazo de ${part(line, "answer_days")} días hábiles para la respuesta escrita.`
+            ? `${late === 1 ? "De ellos, 1 pasó" : `De ellos, ${late} pasaron`} el plazo para resolverse.`
             : null,
-          line.count === 1 ? "Respóndalo en Atención." : "Respóndalos en Atención.",
+          line.count === 1 ? "Atiéndalo en Casos." : "Atiéndalos en Casos, el más antiguo primero.",
         ]
           .filter(Boolean)
           .join(" "),
-        href: "/atencion",
-        linkLabel: "Ver los reclamos",
+        href: "/casos",
+        linkLabel: "Ver los casos",
         orders: line.refs,
       };
     }

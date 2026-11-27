@@ -7,9 +7,9 @@
  * the lock; these checks only give a good message first.
  *
  * The promised times are those of docs/06-operations/customer-service.md
- * ("Formal complaint"): acknowledged within 1 working day, a written answer
- * within 5. The exact dates come from the database (my_complaint_receipt),
- * which counts working days on the operations calendar.
+ * ("Formal complaint"), in service-times.ts (COMPLAINT_PROMISE). The exact
+ * dates come from the database (my_complaint_receipt), which counts working
+ * days on the operations calendar.
  */
 
 export const COMPLAINT_CATEGORIES = [
@@ -25,10 +25,6 @@ export type ComplaintCategory = (typeof COMPLAINT_CATEGORIES)[number][0];
 
 export const COMPLAINT_DESCRIPTION_MIN = 10;
 export const COMPLAINT_DESCRIPTION_MAX = 4000;
-
-/** What the help pages promise, in the words of customer-service.md. */
-export const COMPLAINT_PROMISE =
-  "Le confirmamos que lo recibimos en un máximo de 1 día hábil, con un número de referencia, y le respondemos por escrito en un máximo de 5 días hábiles. Reclamar no tiene costo.";
 
 export interface ComplaintInput {
   category: ComplaintCategory;
