@@ -28,6 +28,7 @@ export const SECTIONS = [
   { href: "/comprobantes", label: "Comprobantes", roles: ["finance"] },
   { href: "/cambios-tienda", label: "Cambios de tienda", roles: ["ops", "finance"] },
   { href: "/tarifas", label: "Ofertas en pausa", roles: ["finance", "catalog"] },
+  { href: "/salud", label: "Salud del sistema", roles: ["support", "ops", "finance"] },
   { href: "/personal", label: "Personal", roles: [] },
   { href: "/auditoria", label: "Auditoría", roles: [] },
   { href: "/seguridad", label: "Seguridad", roles: [] },
