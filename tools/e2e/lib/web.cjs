@@ -1076,3 +1076,53 @@ Object.assign(module.exports, {
   offerLogos,
   openShopFromOffer,
 });
+
+// ── Product photos: the gallery and the search thumbnail ──────────────────
+
+const galleryOf = (page) => main(page).getByRole("region", { name: "Fotos de" }).first();
+
+/** Alternative texts of the gallery's photos, in order, and whether each loaded. */
+const galleryPhotos = (page) =>
+  galleryOf(page)
+    .locator("li img")
+    .evaluateAll((imgs) =>
+      imgs.map((img) => ({
+        alt: img.alt,
+        loaded: img.complete && img.naturalWidth > 0,
+        src: img.currentSrc || img.src,
+        srcset: img.srcset,
+        fetchpriority: img.getAttribute("fetchpriority"),
+        loading: img.getAttribute("loading"),
+      })),
+    );
+
+/** Waits for the gallery's counter to say this («Foto 2 de 2»). */
+const waitForGalleryAt = (page, words) =>
+  settledText(galleryOf(page).locator("[aria-live]"), (t) => t.includes(words), {
+    what: "the gallery's counter",
+  });
+
+/** Moves the gallery one photo on with the keyboard's right arrow. */
+async function nextPhotoByKeyboard(page) {
+  await galleryOf(page).getByRole("list").first().focus();
+  await page.keyboard.press("ArrowRight");
+}
+
+/** Chooses a photo by its thumbnail («Ver foto n»). */
+const showPhoto = (page, n) => button(main(page), `Ver foto ${n}`).click();
+
+/** The address of a search result's picture (the result by its title, data). */
+const resultPictureSrc = (page, title) =>
+  withValue(main(page).getByRole("article"), title)
+    .locator("img")
+    .first()
+    .evaluate((img) => img.currentSrc || img.src)
+    .catch(() => "");
+
+Object.assign(module.exports, {
+  galleryPhotos,
+  waitForGalleryAt,
+  nextPhotoByKeyboard,
+  showPhoto,
+  resultPictureSrc,
+});

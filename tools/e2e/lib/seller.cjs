@@ -893,3 +893,169 @@ Object.assign(module.exports, {
   waitForLogoInReview,
   pausedOffers,
 });
+
+// ── Product photos: the queue, the photos of a listing, rejected ones ─────
+
+/** Fills the new-listing form's basics (category: the first in the group whose label starts so). */
+async function fillListingBasics(
+  page,
+  { title, group, bullets, price, weight, length, width, height },
+) {
+  await field(page, "title").fill(title);
+  const category = await field(page, "categorySlug")
+    .locator(`optgroup[label^="${group}"] option`)
+    .first()
+    .getAttribute("value");
+  await field(page, "categorySlug").selectOption(category);
+  await field(page, "bullets").fill(bullets);
+  await field(page, "price").fill(price);
+  await field(page, "weightGrams").fill(weight);
+  await field(page, "lengthCm").fill(length);
+  await field(page, "widthCm").fill(width);
+  await field(page, "heightCm").fill(height);
+}
+
+const queued = (page) => main(page).locator("[data-queued-photo]");
+const photos = (page) => main(page).locator("[data-photo]");
+const rejectedPhotos = (page) => main(page).locator("[data-rejected-photo]");
+
+/** Chooses files with «Elegir fotos» (each { name, mimeType, buffer }). */
+const choosePhotos = (page, files) =>
+  main(page).locator('input[type="file"][multiple]').setInputFiles(files);
+
+/** Waits for the files refused and returns what the page says about them. */
+const refusedPhotos = (page) =>
+  kit.waitForMessage(main(page), "no se pudieron agregar", { roles: "alert" });
+
+/** Waits for the page to say a file chosen again is already in the list. */
+const waitForAlreadyQueued = (page) =>
+  kit.waitForMessage(main(page), "ya está en la lista", { roles: "alert" });
+
+/** How many photos wait in the queue to be uploaded. */
+const queuedCount = (page) => queued(page).count();
+
+/** Waits until `n` photos wait in the queue; returns the first, as one line. */
+async function waitForQueued(page, n) {
+  await queued(page)
+    .nth(n - 1)
+    .waitFor();
+  return text(queued(page).first());
+}
+
+/** Types the alternative text of the n-th queued photo (from 1). */
+const typeQueuedAlt = (page, n, alt) =>
+  main(page).getByLabel(`Texto alternativo de la foto nueva ${n}`).fill(alt);
+
+/** «Guardar como borrador» with photos that have no text: the first error under them. */
+async function saveDraftRefused(page) {
+  await button(main(page), "Guardar como borrador").click();
+  const error = queued(page).getByRole("alert").first();
+  await error.waitFor();
+  return text(error);
+}
+
+/** «Guardar como borrador», and waits for the product list; returns what it says. */
+async function saveDraft(page) {
+  await button(main(page), "Guardar como borrador").click();
+  await page.waitForURL((u) => new URL(u).pathname === "/productos", { timeout: 30000 });
+  return kit.statusText(page);
+}
+
+/** How many photos the listing has (approved, waiting or leaving). */
+const photoCount = (page) => photos(page).count();
+
+/** The n-th photo of the listing (from 0): as one line, its typed text and its id. */
+async function photoAt(page, n) {
+  const photo = photos(page).nth(n);
+  return {
+    text: await text(photo),
+    alt: await photo.locator("input").inputValue(),
+    id: await photo.getAttribute("data-photo"),
+  };
+}
+
+/** The first photo's preview: its address and whether it loads (waits up to 20 s). */
+async function firstPhotoPreview(page) {
+  const img = photos(page).first().locator("img");
+  return {
+    src: await img.getAttribute("src"),
+    loads: await img.evaluate(
+      (el) =>
+        new Promise((resolve) => {
+          const done = () => resolve(el.complete && el.naturalWidth > 0);
+          if (el.complete) done();
+          else {
+            el.addEventListener("load", done, { once: true });
+            el.addEventListener("error", done, { once: true });
+            setTimeout(done, 20000);
+          }
+        }),
+    ),
+  };
+}
+
+/** The photos refused, each as one line (with these words, data, if given: waits for one). */
+async function rejectedPhotoTexts(page, words) {
+  if (words) await withValue(rejectedPhotos(page), words).first().waitFor();
+  return (await rejectedPhotos(page).allInnerTexts()).map(kit.squash);
+}
+
+/** «Quitar de la lista» on the first refused photo, and waits for it to go. */
+async function dismissRejectedPhoto(page) {
+  await button(rejectedPhotos(page).first(), "Quitar de la lista").click();
+  await rejectedPhotos(page).first().waitFor({ state: "detached" });
+}
+
+/** «Subir n fotos», and waits until the listing shows `total` photos. */
+async function uploadQueued(page, n, total) {
+  await button(main(page), `Subir ${n} fotos`).click();
+  await kit.findMessage(main(page), "Fotos subidas", { roles: "status", timeout: 30000 });
+  await photos(page)
+    .nth(total - 1)
+    .waitFor();
+}
+
+/** Types the alternative text of the n-th photo of the listing (from 1). */
+const typePhotoAlt = (page, n, alt) =>
+  main(page).getByLabel(`Texto alternativo de la foto ${n}`, { exact: true }).fill(alt);
+
+/** The alternative text the n-th photo's field holds (from 1). */
+const photoAltTyped = (page, n) =>
+  main(page).getByLabel(`Texto alternativo de la foto ${n}`, { exact: true }).inputValue();
+
+/** «Quitar la foto n», and waits for it to be listed as leaving. */
+async function removePhotoAt(page, n) {
+  await button(main(page), `Quitar la foto ${n}`).click();
+  await kit.findMessage(main(page), "se quitará cuando aprobemos", { roles: "status" });
+  await main(page).locator("[data-leaving-photo]").first().waitFor();
+}
+
+/** «Deshacer» the changes not saved yet. */
+const undoPhotoChanges = (page) => button(main(page), "Deshacer", true).click();
+
+/** The edit page's «Fotos» section, as one line. */
+const photosSection = (page) =>
+  text(main(page).getByRole("region", { name: "Fotos", exact: true }));
+
+Object.assign(module.exports, {
+  fillListingBasics,
+  choosePhotos,
+  refusedPhotos,
+  waitForAlreadyQueued,
+  queuedCount,
+  waitForQueued,
+  typeQueuedAlt,
+  saveDraftRefused,
+  saveDraft,
+  photoCount,
+  photoAt,
+  firstPhotoPreview,
+  rejectedPhotoTexts,
+  dismissRejectedPhoto,
+  uploadQueued,
+  typePhotoAlt,
+  photoAltTyped,
+  removePhotoAt,
+  undoPhotoChanges,
+  photosSection,
+});

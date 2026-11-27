@@ -1875,7 +1875,7 @@ async function publishListing(page, title) {
     title,
   );
   await button(card.first(), "Publicar").click();
-  await card.first().waitFor({ state: "detached" });
+  await card.first().waitFor({ state: "detached", timeout: 30000 });
 }
 
 /** A change to a published product waiting for review (by title, data). */
@@ -1928,4 +1928,101 @@ Object.assign(module.exports, {
   approveEditPausing,
   openLogoReview,
   approveLogo,
+});
+
+// ── Product photos: new listings with photos, photo changes, take-downs ───
+
+/** A new product to review on Catálogo, by its title (data). */
+const newListingCard = (page, title) =>
+  withValue(
+    main(page).getByRole("region", { name: "Productos nuevos" }).getByRole("listitem"),
+    title,
+  ).first();
+
+/** A new product's card: as one line, how many photos it holds and whether the first loaded. */
+async function newListingPhotos(page, title) {
+  const card = newListingCard(page, title);
+  const shots = card.locator("[data-review-photo]");
+  return {
+    text: await text(card),
+    count: await shots.count(),
+    firstLoaded: await shots
+      .first()
+      .locator("img")
+      .evaluate((img) => img.complete && img.naturalWidth > 0),
+  };
+}
+
+/** The photo change of a product waiting for review (by the product's id). */
+const photoChange = (page, productId) => main(page).locator(`[data-photo-change="${productId}"]`);
+
+/** Waits for a product's photo change and returns it as one line. */
+async function photoChangeText(page, productId) {
+  await photoChange(page, productId).waitFor();
+  return text(photoChange(page, productId));
+}
+
+/** The picture staff are shown for one photo of the change: its address and its pixel width. */
+const reviewedPicture = (page, productId, photoId) =>
+  photoChange(page, productId)
+    .locator(`[data-review-photo="${photoId}"]`)
+    .last()
+    .locator("img")
+    .evaluate((img) => ({ src: img.currentSrc || img.src, width: img.naturalWidth }));
+
+/** Rejects one photo of the change (by its alternative text, data) with a reason; waits for it to leave. */
+async function rejectPhoto(page, productId, alt, reason) {
+  const photo = () => withValue(photoChange(page, productId).locator("[data-review-photo]"), alt);
+  await photo().last().locator("summary").click();
+  await field(photo().last(), "note", "textarea").fill(reason);
+  await button(photo().last(), "Rechazar foto").click();
+  // A refused photo is no longer proposed, so it leaves the card.
+  await photo().first().waitFor({ state: "detached" });
+}
+
+/** «Aprobar fotos», and waits until no photo change waits. */
+async function approvePhotos(page, productId) {
+  await button(photoChange(page, productId), "Aprobar fotos").click();
+  await settledText(
+    main(page).getByRole("region", { name: "Fotos de productos publicados" }),
+    /No hay fotos por revisar/,
+    { what: "the photo changes", timeout: 30000 },
+  );
+}
+
+/** From Catálogo, «Retirar fotos»: finds a product by its shop address. */
+async function findPhotosToTakeDown(page, address) {
+  await open(page, "/catalogo");
+  await link(page.getByRole("navigation", { name: "Catálogo" }), "Retirar fotos").click();
+  await page.waitForURL((u) => new URL(u).pathname === "/catalogo/fotos");
+  await main(page).getByLabel("Dirección del producto en la tienda").fill(address);
+  await button(main(page), "Buscar el producto").click();
+}
+
+const takedownPhoto = (page, photoId) => main(page).locator(`[data-takedown-photo="${photoId}"]`);
+
+/** A photo in the shop that can be taken down, as one line, once it shows. */
+async function takedownPhotoText(page, photoId) {
+  await takedownPhoto(page, photoId).waitFor();
+  return text(takedownPhoto(page, photoId));
+}
+
+/** «Retirar esta foto» with a note, and waits for it to leave; returns how many photos are still listed. */
+async function takeDownPhoto(page, photoId, note) {
+  const photo = takedownPhoto(page, photoId);
+  await field(photo, "note", "textarea").fill(note);
+  await button(photo, "Retirar esta foto").click();
+  await photo.waitFor({ state: "detached", timeout: 30000 });
+  return main(page).locator("[data-takedown-photo]").count();
+}
+
+Object.assign(module.exports, {
+  newListingPhotos,
+  photoChangeText,
+  reviewedPicture,
+  rejectPhoto,
+  approvePhotos,
+  findPhotosToTakeDown,
+  takedownPhotoText,
+  takeDownPhoto,
 });
