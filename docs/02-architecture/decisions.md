@@ -1927,8 +1927,11 @@ like the rest of the console. Nothing new is deployed for them.
   administrators all; operations every case with an order; finance
   payments and refunds; catalogue staff content reports. A case outside the
   role answers "not found". Only support and administrators answer, assign,
-  reopen, record contacts and reveal a contact. The table of who sees what,
-  page by page, is in [access control](../03-data/access-control.md).
+  reopen, record contacts and reveal a contact. Atención's queues
+  (`ops_care_queues`) follow the same table: each role lists there only the
+  complaints, returns and reports whose case it may open, with the
+  customer's first name. The table of who sees what, page by page, is in
+  [access control](../03-data/access-control.md).
 - The customer view (`/clientes/[id]`) is reached only from an order or a
   case, only for a customer (someone who ordered, complained or asked for a
   return), and shows the e-mail and phone only after "Mostrar contacto" with
@@ -2048,14 +2051,24 @@ functions answer of a complaint, a return's reason and a report masks the
 customer's own live code as "••••" (`private.mask_shopper_codes`, in
 `ops_case` and `ops_care_queues`); the shopper still reads their own words.
 
-**Consequences.** A refusal in Atención (a complaint's answer, a return
-decision's note) happens inside a trigger, so its audit row is rolled back
-with it and it does not count towards the lock-out; finding a code still
-needs accepted texts, which the allowance bounds (about 250 hours of
-writing on average for one code). A code written as half of a phone number
-or in words passes the guard; a shopper's code inside a phone is masked
-too, so a masked phone can appear. Old answers kept from before `084700`
-are masked when staff read them.
+**Consequences.** The four doors of Atención (a complaint's answer, a
+return decision, a received return and a refund, each with its note) check
+their text themselves, after all their other work has succeeded: a text
+with a code undoes that work, keeps only the refusal on Auditoría and
+answers null, as Casos does, so all the doors share one lock-out and one
+allowance. A text longer than the timeline holds (4000 characters) is
+refused first, with or without a code. (Until the outside review of the
+integration on 27 November 2026, a refusal there was raised inside a
+trigger and rolled back with the call, so it counted nowhere, and a
+too-long text failed after the check with a different error: staff could
+test every code without a trace.) Finding a code therefore needs either
+refusals, three an hour, or accepted texts, twenty numbers an hour (an
+estimate of about 250 hours of writing on average for one code). A code
+written as half of a phone number or in words passes the guard. A
+shopper's code is masked also when typed with slashes, underscores or gaps
+of up to three characters, and inside a phone, so a masked phone can
+appear. Old answers kept from before `084700` are masked when staff read
+them.
 
 **Not verified.** Not tried against a determined person on the hosted
 project.

@@ -204,8 +204,11 @@ async function supportDesk(browser, order) {
     });
     const page = await c.newPage();
     // Here the failures are on purpose: only an unexpected page error counts.
+    // React's error #419 is how the browser hears that the server could not
+    // finish a Suspense boundary, which failOnServer causes on purpose.
     page.on("pageerror", (e) => {
-      if (!deliberate(String(e))) errors.push(`support desk pageerror: ${String(e).slice(0, 200)}`);
+      if (!deliberate(String(e)) && !/Minified React error #419/.test(String(e)))
+        errors.push(`support desk pageerror: ${String(e).slice(0, 200)}`);
     });
     return { c, page };
   };
