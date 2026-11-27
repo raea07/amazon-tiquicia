@@ -501,4 +501,43 @@ describe("the websites never write values into error messages", () => {
     }
     expect(found).toEqual([]);
   });
+
+  it("reads the support desk's and the health page's code too", () => {
+    // Written before the support desk and Salud del sistema were merged in:
+    // the scan must reach their actions, pages and API areas.
+    const scanned = new Set(
+      dirs.flatMap((dir) => files(join(root, dir))).map((f) => f.slice(root.length)),
+    );
+    for (const file of [
+      "apps/ops/src/app/case-actions.ts",
+      "apps/ops/src/app/health-actions.ts",
+      "apps/ops/src/app/casos/[id]/page.tsx",
+      "apps/ops/src/app/clientes/[id]/page.tsx",
+      "apps/ops/src/app/salud/page.tsx",
+      "apps/web/src/app/complaint-actions.ts",
+      "apps/web/src/app/reclamo/page.tsx",
+      "packages/db/src/areas/support-cases.ts",
+      "packages/db/src/areas/system-health.ts",
+      "packages/next-kit/src/version.ts",
+    ]) {
+      expect(scanned.has(file), file).toBe(true);
+    }
+  });
+
+  it("has no error message glued together from a person's data either", () => {
+    const found: string[] = [];
+    for (const dir of dirs) {
+      for (const file of files(join(root, dir))) {
+        const text = readFileSync(file, "utf8");
+        // new Error("…" + value) and new Error(value + "…")
+        for (const match of text.matchAll(/new (?:\w*Error)\(([^()]*\+[^()]*)\)/g)) {
+          const names = (match[1] ?? "").split("+").filter((part) => !/^\s*["'`]/.test(part));
+          if (names.some((name) => PERSONAL.test(name))) {
+            found.push(`${file.slice(root.length)}: ${match[0].slice(0, 80)}`);
+          }
+        }
+      }
+    }
+    expect(found).toEqual([]);
+  });
 });

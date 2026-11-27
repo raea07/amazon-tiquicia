@@ -161,6 +161,171 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
   }
 }
 
+/**
+ * 7. The support desk's pages (wave 9), whose screens hold the most personal
+ * text of all: the web shop's complaint form while text is typed in it, a
+ * case page with the complaint, an internal note and an answer, and the
+ * customer view after "Mostrar contacto" showed the e-mail and phone. On
+ * each, an error in the browser; on the two console pages also a failure on
+ * the server (the function behind the page renamed for a moment, as a broken
+ * deploy would leave it). No report may carry any of those texts, the reason
+ * typed for the reveal, the customer's name, phone, e-mail or address, the
+ * order's delivery code or a query string.
+ */
+async function supportDesk(browser, order) {
+  const { spawnSync } = require("node:child_process");
+  const DATABASE_URL = process.env.DATABASE_URL;
+  if (!DATABASE_URL) throw new Error("DATABASE_URL is not set: run through tools/dev/stack.sh e2e");
+  const sql = (statement) => {
+    const run = spawnSync(
+      "psql",
+      [DATABASE_URL, "-X", "-q", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", statement],
+      { encoding: "utf8" },
+    );
+    if (run.status !== 0) throw new Error(`psql: ${run.stderr}`);
+    return run.stdout.trim();
+  };
+  const web = SITES[0];
+  const ops = SITES[2];
+  const secret = {
+    complaint: "Zafiro del reclamo",
+    note: "Ónix de la nota interna",
+    answer: "Turquesa de la respuesta",
+    reason: "Ámbar del motivo para llamar",
+  };
+  const words = [...Object.values(secret), "nota=", "correo%40", order.pin];
+  const before = arrivals().length;
+  const context = async () => {
+    const c = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      locale: "es-CR",
+      isMobile: true,
+      hasTouch: true,
+    });
+    const page = await c.newPage();
+    // Here the failures are on purpose: only an unexpected page error counts.
+    page.on("pageerror", (e) => {
+      if (!deliberate(String(e))) errors.push(`support desk pageerror: ${String(e).slice(0, 200)}`);
+    });
+    return { c, page };
+  };
+  const signIn = async (page, site) => {
+    await page.goto(`${site.base}/ingresar`, { waitUntil: "networkidle" });
+    await page.fill('main input[name="email"]', site.email);
+    await page.fill('main input[name="password"]', PASSWORD);
+    await page.click('main form button[type="submit"]');
+    await page.waitForURL((u) => !new URL(u).pathname.startsWith("/ingresar"), { timeout: 20_000 });
+  };
+  const browserError = (page, what) =>
+    page.evaluate((w) => {
+      setTimeout(() => {
+        throw new Error(`Prueba en ${w}`);
+      });
+    }, what);
+  // Breaks the function behind a console page while it is reloaded.
+  const failOnServer = async (page, fn, signature) => {
+    sql(`alter function public.${fn}(${signature}) rename to ${fn}_prueba_196`);
+    try {
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByText("Algo falló de nuestro lado").waitFor({ timeout: 15_000 });
+    } finally {
+      sql(`alter function public.${fn}_prueba_196(${signature}) rename to ${fn}`);
+    }
+  };
+
+  // The shopper types a complaint with their delivery code in it; an error
+  // happens while the text is in the form; then it is sent.
+  const shopper = await context();
+  await signIn(shopper.page, web);
+  await shopper.page.goto(`${web.base}/reclamo?pedido=${order.number}`, { waitUntil: "networkidle" });
+  await shopper.page.selectOption('select[name="category"]', "delivery");
+  await shopper.page.fill(
+    'textarea[name="description"]',
+    `${secret.complaint}: el repartidor no llegó. Mi código es ${order.pin}.`,
+  );
+  await browserError(shopper.page, "reclamo");
+  await shopper.page.waitForTimeout(ON ? 2500 : 500);
+  await shopper.page.click('main form button[type="submit"]');
+  await shopper.page.locator('[data-testid="complaint-filed"]').waitFor({ timeout: 30_000 });
+  const caseId = sql(`select k.id from private.cases k join public.complaints c on c.id = k.complaint_id
+    where c.description like '${secret.complaint}%' order by k.created_at desc limit 1`);
+  const userId = sql(`select user_id from private.cases where id = '${caseId}'`);
+  await shopper.c.close();
+
+  // The administrator notes and answers the case, opens it with a query in
+  // its address, and an error happens there; then the server fails.
+  const staff = await context();
+  await signIn(staff.page, ops);
+  await staff.page.goto(`${ops.base}/casos/${caseId}`, { waitUntil: "networkidle" });
+  await staff.page.fill('textarea[name="note"]', `${secret.note}, llamar en la tarde.`);
+  await staff.page.click('button:has-text("Guardar la nota")');
+  await staff.page.waitForSelector("text=Nota guardada. El cliente no la ve.");
+  await staff.page.fill('textarea[name="answer"]', `${secret.answer}: le enviamos el pedido mañana.`);
+  await staff.page.click('button:has-text("Responder"):not(:has-text("cerrar"))');
+  await staff.page.waitForSelector('[data-testid="case-entry-answer"]');
+  await staff.page.goto(`${ops.base}/casos/${caseId}?nota=${encodeURIComponent(secret.note)}`, {
+    waitUntil: "networkidle",
+  });
+  const shownCase = (await staff.page.locator("main").innerText()).replace(/\s+/g, " ");
+  expect(
+    shownCase.includes(secret.note) && shownCase.includes(secret.answer),
+    "support desk: the case page shows the note and the answer",
+  );
+  expect(
+    !shownCase.includes(order.pin) && shownCase.includes("••••"),
+    "support desk: staff read the customer's own delivery code masked",
+  );
+  await browserError(staff.page, "caso");
+  await staff.page.waitForTimeout(ON ? 2500 : 500);
+  await failOnServer(staff.page, "ops_case", "uuid");
+  await staff.page.screenshot({ path: `${SHOTS}/er-ops-case-failed.png`, fullPage: true });
+
+  // The customer view, after "Mostrar contacto": then the browser and the
+  // server fail with the contact on the screen.
+  await staff.page.goto(`${ops.base}/clientes/${userId}`, { waitUntil: "networkidle" });
+  await staff.page.getByLabel("Para qué lo necesita").fill(secret.reason);
+  await staff.page.click('button:has-text("Mostrar contacto")');
+  await staff.page.waitForSelector(`text=Correo: ${web.email}`);
+  await browserError(staff.page, "cliente");
+  await staff.page.waitForTimeout(ON ? 2500 : 500);
+  await failOnServer(staff.page, "ops_customer", "uuid");
+  await staff.c.close();
+
+  if (!ON) return;
+  // Web: the complaint form's browser report. Console: two browser reports and
+  // two from the server.
+  const shop = await waitForEvents(web.project, 1, before);
+  const consoleReports = await waitForEvents(ops.project, 4, before);
+  const fromDesk = [...shop.events, ...consoleReports.events].filter((e) =>
+    /Prueba en (reclamo|caso|cliente)|ops_(case|customer)/.test(JSON.stringify(e.payload)),
+  );
+  expect(
+    shop.events.some((e) => /Prueba en reclamo/.test(e.payload.exception?.values?.[0]?.value || "")),
+    "support desk: the complaint form's error was reported",
+  );
+  expect(
+    consoleReports.events.filter((e) => e.payload.platform === "node").length >= 2,
+    `support desk: the two server failures were reported (${consoleReports.events.length} console reports)`,
+  );
+  log(
+    "support desk:",
+    fromDesk.length,
+    "reports:",
+    fromDesk.map((e) => `${e.payload.platform}: ${e.payload.exception?.values?.[0]?.value}`).join(" | "),
+  );
+  const body = sentText([...shop.mine, ...consoleReports.mine].map((a) => a.body));
+  for (const word of [...FORBIDDEN, ...words]) {
+    expect(!body.includes(word), `support desk: "${word.slice(0, 14)}…" reached the tracker`);
+  }
+  for (const { payload } of [...shop.events, ...consoleReports.events]) {
+    const where =
+      payload.platform === "node"
+        ? `http://host${payload.contexts?.nextjs?.request_path || ""}`
+        : payload.request?.url || "";
+    expect(!/[?#]/.test(where), `support desk: a report names the page with a query: ${where}`);
+  }
+}
+
 (async () => {
   // The order whose delivery code the shopper sees.
   const shopper = await rpcAs("comprador@yuntera.example");
@@ -443,6 +608,7 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
     );
     await context.close();
   }
+  await supportDesk(browser, order);
   await browser.close();
 
   if (errors.length) {
