@@ -1,6 +1,9 @@
 import { appThemeColor, light, semantic } from "@yuntera/brand";
 import type { MetadataRoute } from "next";
 
+/** The driver's bar colour (anil), as in the layout's viewport. */
+const themeColor = light[appThemeColor.field];
+
 /** Lets the app be added to a phone's home screen and opened full-screen. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -11,7 +14,7 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     display: "standalone",
     background_color: semantic.bg,
-    theme_color: light[appThemeColor.field],
+    theme_color: themeColor,
     icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }],
   };
 }
