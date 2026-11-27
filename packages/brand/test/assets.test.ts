@@ -2,9 +2,24 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { assetCopies } from "../lib/asset-map";
-import { brokenImageGrey, pngStats, readPng } from "../lib/png";
+import { brokenImageGrey, type Png, pngStats, readPng } from "../lib/png";
+
+// Every call of readPng in this file is counted, so the last test can prove
+// each PNG is decoded only once. (A counter, not vi.fn's history: vitest
+// clears that history between tests.)
+const watch = vi.hoisted(() => ({ decodes: 0 }));
+vi.mock("../lib/png", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/png")>();
+  return {
+    ...actual,
+    readPng: (file: Buffer) => {
+      watch.decodes += 1;
+      return actual.readPng(file);
+    },
+  };
+});
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const sourceDir = here("../../../docs/brand/system/assets");
@@ -57,10 +72,34 @@ describe("brand assets", () => {
 
   const pngs = copies.filter((copy) => copy.target.endsWith(".png"));
 
+  // Each PNG is read, decoded and measured once, here, and every test below
+  // only looks the result up. Decoding all 66 files takes about a second on an
+  // idle machine and far longer on a loaded one; done inside a test it ran past
+  // the 5 s test timeout, so the hook gets its own generous budget instead.
+  type Decoded = { png: Png; stats: ReturnType<typeof pngStats>; sha256: string; md5: string };
+  const decoded = new Map<string, Decoded>();
+  const lookUp = (target: string): Decoded => {
+    const entry = decoded.get(target);
+    if (!entry) throw new Error(`${target} was not decoded`);
+    return entry;
+  };
+  beforeAll(() => {
+    for (const copy of pngs) {
+      const path = join(assetsDir, copy.target);
+      const png = readPng(readFileSync(path));
+      decoded.set(copy.target, {
+        png,
+        stats: pngStats(png),
+        sha256: hash("sha256", path),
+        md5: hash("md5", path),
+      });
+    }
+  }, 120_000);
+
   it("has no two PNGs alike", () => {
     const seen = new Map<string, string>();
     for (const copy of pngs) {
-      const sha = hash("sha256", join(assetsDir, copy.target));
+      const { sha256: sha } = lookUp(copy.target);
       expect(seen.get(sha), `${copy.target} repeats`).toBeUndefined();
       seen.set(sha, copy.target);
     }
@@ -68,8 +107,10 @@ describe("brand assets", () => {
 
   // The rules of docs/brand/system/src/checkpng.py.
   it.each(pngs.map((copy) => copy.target))("%s is not blank or broken", (target) => {
-    const png = readPng(readFileSync(join(assetsDir, target)));
-    const { mostCommonShare, visibleShare } = pngStats(png);
+    const {
+      png,
+      stats: { mostCommonShare, visibleShare },
+    } = lookUp(target);
     expect(png.width).toBeGreaterThan(0);
     expect(brokenImageGrey(png), "broken-image grey in the corner").toBeLessThanOrEqual(3);
     if (target.startsWith("lockups/")) {
@@ -96,14 +137,24 @@ describe("brand assets", () => {
     for (const copy of pngs) {
       const row = report.get(copy.source);
       expect(row, copy.source).toBeDefined();
-      const png = readPng(readFileSync(join(assetsDir, copy.target)));
-      const { mostCommonShare, visibleShare } = pngStats(png);
+      const {
+        png,
+        md5,
+        stats: { mostCommonShare, visibleShare },
+      } = lookUp(copy.target);
       expect(row?.size).toBe(`${png.width}x${png.height}`);
       expect(row?.mode).toBe(png.colourType === 6 ? "RGBA" : "RGB");
-      expect(row?.md5).toBe(hash("md5", join(assetsDir, copy.target)).slice(0, 8));
+      expect(row?.md5).toBe(md5.slice(0, 8));
       const percent = (text?: string) => Number.parseInt(/(\d+)%/.exec(text ?? "")?.[1] ?? "", 10);
       expect(Math.abs(percent(row?.most) - mostCommonShare * 100)).toBeLessThanOrEqual(1);
       expect(Math.abs(percent(row?.visible) - visibleShare * 100)).toBeLessThanOrEqual(1);
     }
+  });
+
+  // Runs last (vitest keeps file order): fails if a test decodes a PNG again
+  // instead of using the shared result, which is what made the suite slow.
+  it("decodes each PNG exactly once for the whole file", () => {
+    expect(watch.decodes).toBe(pngs.length);
+    expect(decoded.size).toBe(pngs.length);
   });
 });
