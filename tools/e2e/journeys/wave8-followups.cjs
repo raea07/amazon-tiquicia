@@ -16,13 +16,16 @@
 //      grow.
 //
 // Its orders are its own (the demo shopper comprador3, paid in the
-// simulation). Fails on any console error, uncaught exception or 5xx.
+// simulation). Screen steps are in lib/web.cjs and lib/ops.cjs; status words
+// come from lib/words.cjs. Fails on any console error, uncaught exception or
+// 5xx.
 
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
@@ -30,9 +33,10 @@ const DATABASE_URL =
   process.env.DATABASE_URL || "postgres://postgres:postgres@127.0.0.1:5432/yuntera_local";
 const SHOPPER = "comprador3@yuntera.example";
 const PRODUCT = "libreta-tapa-dura-a5";
+const SHOPPER_VIEW = { viewer: "shopper" };
+const STAFF_VIEW = { viewer: "staff" };
 
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 function sql(statement) {
   const run = spawnSync(
@@ -87,16 +91,6 @@ async function as(email) {
       hasTouch: true,
       locale: "es-CR",
     });
-  const signIn = async (page, base, email, next = "") => {
-    await page.goto(`${base}/ingresar${next ? `?siguiente=${encodeURIComponent(next)}` : ""}`, {
-      waitUntil: "networkidle",
-    });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname !== "/ingresar");
-    await page.waitForLoadState("networkidle");
-  };
   const overflow = (page) =>
     page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   const height = async (locator) => (await locator.first().boundingBox())?.height ?? 0;
@@ -148,12 +142,10 @@ async function as(email) {
 
   const shopper = await (await phone()).newPage();
   watch(shopper);
-  await signIn(shopper, WEB, SHOPPER, `/pedidos/${stopped.order_number}`);
+  await web.signIn(shopper, SHOPPER, { next: `/pedidos/${stopped.order_number}` });
   // "load": the page may keep asking for its credit note while the invoice worker is busy.
-  await shopper.goto(`${WEB}/pedidos/${stopped.order_number}`, { waitUntil: "load" });
-  const why = shopper.locator('[data-testid="order-cancel-reason"]');
-  await why.waitFor({ timeout: 30_000 });
-  const said = await text(why);
+  await web.openOrder(shopper, stopped.order_number, "load");
+  const said = await web.cancelReason(shopper, 30_000);
   log("the order page says:", said);
   check(
     said.startsWith("Cancelamos su pedido antes de que saliera de nuestra bodega") &&
@@ -163,24 +155,33 @@ async function as(email) {
       said.includes("haga el pedido de nuevo"),
     "the order page says it never left, that the money goes back, and where to ask why",
   );
-  const all = await text(shopper.locator("main"));
+  const all = await web.mainText(shopper);
   check(
     !all.includes("regresaron sin entregarse") && !all.includes("5521"),
     "the page says nothing of parcels coming back, nor staff's reason",
   );
-  const history = await text(shopper.locator('section[aria-labelledby="historial"]'));
+  const history = await web.orderHistory(shopper);
   check(
     history.includes("Cancelado: el pedido no llegó a salir de nuestra bodega"),
     `the history says the same: ${history.slice(0, 200)}`,
   );
-  // The parcel itself (wave 9 integration): never "Devuelto" for one that never left.
+  // The parcel itself (wave 9 integration): never the words of a parcel that
+  // came back for one that never left.
+  const neverLeft = word("shipment_status", "returned", {
+    ...SHOPPER_VIEW,
+    stoppedBeforeLeaving: true,
+  });
+  const cameBack = word("shipment_status", "returned", SHOPPER_VIEW);
+  // «Devuelto», the word a parcel that came back read before §4.3's words.
+  const cameBackBefore = word("payment_status", "refunded", SHOPPER_VIEW);
   check(
-    all.includes("No salió de la bodega") && !all.includes("Devuelto"),
-    "the parcel says it did not leave the warehouse, not 'Devuelto'",
+    all.includes(neverLeft) && !all.includes(cameBack) && !all.includes(cameBackBefore),
+    `the parcel says «${neverLeft}», not «${cameBack}» nor «${cameBackBefore}»`,
   );
   check(
-    history.includes("Paquete: no salió de nuestra bodega") &&
-      !history.includes("Paquete: devuelto"),
+    history.includes(`Paquete: ${neverLeft.toLowerCase()}`) &&
+      !history.includes(`Paquete: ${cameBack.toLowerCase()}`) &&
+      !history.includes(`Paquete: ${cameBackBefore.toLowerCase()}`),
     "and so does its history line",
   );
   check((await overflow(shopper)) <= 0, "the order page fits 390 px");
@@ -190,12 +191,9 @@ async function as(email) {
   const cancelled = await paidOrder("personal");
   const staff = await (await phone()).newPage();
   watch(staff);
-  await signIn(staff, OPS, "central@yuntera.example");
-  await staff.goto(`${OPS}/pedidos/${cancelled.order_number}`, { waitUntil: "networkidle" });
-  const cancelSection = staff.locator("section", {
-    has: staff.locator("h2", { hasText: "Cancelar el pedido" }),
-  });
-  const formText = await text(cancelSection);
+  await ops.signIn(staff, "central@yuntera.example");
+  await ops.openOrder(staff, cancelled.order_number);
+  const formText = await ops.staffCancelText(staff);
   log("the cancel form says:", formText);
   check(
     formText.includes("Solo lo ve el equipo.") &&
@@ -204,34 +202,24 @@ async function as(email) {
       !formText.includes("El cliente lo ve en su pedido"),
     "the form says the reason stays with the team and what the shopper reads",
   );
-  await cancelSection.screenshot({ path: SHOTS + "/w8f2-console-cancel-hint.png" });
+  await ops.staffCancelForm(staff).screenshot({ path: SHOTS + "/w8f2-console-cancel-hint.png" });
 
   // ── 3. Right after a staff cancellation ───────────────────────────────────
-  await cancelSection
-    .locator('textarea[name="note"]')
-    .fill("Prueba interna: cancelado por el equipo de la ola nueve");
-  await cancelSection.locator('button:has-text("Cancelar pedido")').click();
+  await ops.staffCancelOrder(staff, "Prueba interna: cancelado por el equipo de la ola nueve");
   // The action answers, and the page behind it is drawn again (refresh()).
-  await staff
-    .locator("main header")
-    .first()
-    .filter({ hasText: "Reembolsado" })
-    .waitFor({ timeout: 30_000 });
-  let header = await text(staff.locator("main header").first());
-  check(header.includes("Reembolsado"), `after the action the page reads refunded: ${header}`);
+  const refunded = word("order_status", "refunded", STAFF_VIEW);
+  const confirmed = word("order_status", "confirmed", STAFF_VIEW);
+  await ops.waitForOrderHeaderWith(staff, refunded);
+  let header = await ops.orderHeader(staff);
+  check(header.includes(refunded), `after the action the page reads refunded: ${header}`);
   await staff.reload({ waitUntil: "networkidle" });
-  header = await text(staff.locator("main header").first());
+  header = await ops.orderHeader(staff);
   log("the first reload after the action:", header);
   check(
-    header.includes("Reembolsado") && !header.includes("Confirmado"),
+    header.includes(refunded) && !header.includes(confirmed),
     `the first reload after the action reads refunded: ${header}`,
   );
-  check(
-    (await staff
-      .locator("section", { has: staff.locator("h2", { hasText: "Cancelar el pedido" }) })
-      .count()) === 0,
-    "the cancel form is gone",
-  );
+  check((await ops.staffCancelForms(staff)) === 0, "the cancel form is gone");
   await staff.screenshot({ path: SHOTS + "/w8f3-console-after-cancel.png", fullPage: true });
 
   // What a reload sent while the action is still running shows (not checked:
@@ -240,31 +228,24 @@ async function as(email) {
   // which the browser reports as an error of its own.
   const raced = await paidOrder("carrera");
   const racer = await staff.context().newPage();
-  await racer.goto(`${OPS}/pedidos/${raced.order_number}`, { waitUntil: "networkidle" });
-  const racedSection = racer.locator("section", {
-    has: racer.locator("h2", { hasText: "Cancelar el pedido" }),
-  });
-  await racedSection.locator('textarea[name="note"]').fill("Prueba interna: recarga inmediata");
-  await racedSection.locator('button:has-text("Cancelar pedido")').click();
+  await ops.openOrder(racer, raced.order_number);
+  await ops.staffCancelOrder(racer, "Prueba interna: recarga inmediata");
   await racer.reload({ waitUntil: "networkidle" }).catch(() => undefined);
-  log(
-    "a reload sent while the action runs reads:",
-    await text(racer.locator("main header").first()),
-  );
+  log("a reload sent while the action runs reads:", await ops.orderHeader(racer));
   await racer.close();
   // Whatever it showed, the cancellation finished, and the next load says so.
   let settled = "";
-  for (let i = 0; i < 20 && !settled.includes("Reembolsado"); i += 1) {
+  for (let i = 0; i < 20 && !settled.includes(refunded); i += 1) {
     await staff.waitForTimeout(500);
-    await staff.goto(`${OPS}/pedidos/${raced.order_number}`, { waitUntil: "networkidle" });
-    settled = await text(staff.locator("main header").first());
+    await ops.openOrder(staff, raced.order_number);
+    settled = await ops.orderHeader(staff);
   }
   log("the next load reads:", settled);
-  check(settled.includes("Reembolsado"), `the next load reads refunded: ${settled}`);
+  check(settled.includes(refunded), `the next load reads refunded: ${settled}`);
 
   // ── 4. Two links measured ─────────────────────────────────────────────────
-  await staff.goto(`${OPS}/pedidos/${cancelled.order_number}`, { waitUntil: "networkidle" });
-  const toPayments = staff.locator('a:has-text("Ver en Cobros")');
+  await ops.openOrder(staff, cancelled.order_number);
+  const toPayments = ops.toPaymentsLink(staff);
   const paymentsHeight = await height(toPayments);
   log("'Ver en Cobros' is", paymentsHeight, "px tall");
   check(paymentsHeight >= 44, `'Ver en Cobros' is ${paymentsHeight} px tall, not 44`);
@@ -274,11 +255,10 @@ async function as(email) {
 
   const visitor = await (await phone()).newPage();
   watch(visitor);
-  await visitor.goto(`${WEB}/c/cafe`, { waitUntil: "networkidle" });
-  const crumbs = visitor.locator('nav[aria-label="Ruta"]');
-  const home = await height(crumbs.locator('a:has-text("Inicio")'));
-  const parent = await height(crumbs.locator("a").nth(1));
-  const line = await height(crumbs.locator("ol"));
+  await web.openCategory(visitor, "cafe");
+  const home = await height(web.breadcrumbHome(visitor));
+  const parent = await height(web.breadcrumbParent(visitor));
+  const line = await height(web.breadcrumbLine(visitor));
   log("breadcrumb:", { home, parent, line });
   check(home >= 44, `the breadcrumb's "Inicio" is ${home} px tall, not 44`);
   check(parent >= 44, `the breadcrumb's category is ${parent} px tall, not 44`);

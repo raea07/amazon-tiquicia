@@ -372,7 +372,10 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
         </section>
 
         {order.can_cancel && canSee(staff.staff_role, ["ops", "support"]) ? (
-          <section className="rounded-lg border border-border bg-surface p-5">
+          <section
+            className="rounded-lg border border-border bg-surface p-5"
+            data-testid="staff-cancel"
+          >
             <h2 className="text-lg font-bold">Cancelar el pedido</h2>
             <p className="mt-1 mb-4 text-sm text-ink-muted">
               Libera las existencias y, si ya estaba pagado, lo marca para reembolso.

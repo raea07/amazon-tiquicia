@@ -34,7 +34,10 @@ export async function OrderCases({
         <CaseList cases={cases} now={now} />
       )}
       {canRecord ? (
-        <details className="rounded-lg border border-border bg-surface p-5">
+        <details
+          className="rounded-lg border border-border bg-surface p-5"
+          data-testid="record-contact"
+        >
           <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold">
             Registrar un contacto
           </summary>

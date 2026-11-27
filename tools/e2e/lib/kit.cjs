@@ -503,3 +503,47 @@ async function tryResetCode(page, code) {
 }
 
 Object.assign(module.exports, { trySignIn, signInEmailTyped, askResetAnswer, tryResetCode });
+
+// ── Error pages (next-kit error-reports: the same in the four websites) ────
+
+/** The sign-in form of next-kit, filled but not sent (so something can happen while it is typed). */
+async function typeSignIn(page, email, password) {
+  await field(main(page), "email").fill(email);
+  await field(main(page), "password").fill(password);
+}
+
+/** Sends the sign-in form typed with typeSignIn. */
+const sendSignIn = (page) => button(main(page), "Ingresar", true).click();
+
+/** Waits for a website's error page («Algo falló de nuestro lado»). */
+const waitForErrorPage = (page, timeout = 15_000) =>
+  page.getByRole("heading", { name: "Algo falló de nuestro lado" }).waitFor({ timeout });
+
+/** Whether the error page says the team was told, waiting up to `timeout` ms for it to say so. */
+async function teamToldShown(page, timeout = 0) {
+  const told = (said) => said.includes("Ya le avisamos al equipo de Yuntera.");
+  if (timeout > 0) {
+    await settledText(page.locator("body"), told, { timeout, what: "the error page" }).catch(
+      () => undefined,
+    );
+  }
+  return told(await text(page.locator("body")));
+}
+
+/** «Intentar de nuevo» on the error page; whether the page then loaded again (the drill's words). */
+async function retryErrorPage(page) {
+  await button(page, "Intentar de nuevo").click();
+  return settledText(page.locator("body"), (said) => said.includes("La página volvió a cargar."), {
+    what: "the page tried again",
+  })
+    .then(() => true)
+    .catch(() => false);
+}
+
+Object.assign(module.exports, {
+  typeSignIn,
+  sendSignIn,
+  waitForErrorPage,
+  teamToldShown,
+  retryErrorPage,
+});

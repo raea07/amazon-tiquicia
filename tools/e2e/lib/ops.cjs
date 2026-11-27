@@ -2029,3 +2029,295 @@ Object.assign(module.exports, {
   takedownPhotoText,
   takeDownPhoto,
 });
+
+// ── Wave 9: Casos, a case, the customer view, Hoy's cases line ─────────────
+
+/** Opens Casos (`query` such as "?estado=cerrados"). */
+const openCases = (page, query = "") => open(page, `/casos${query}`);
+
+/** Opens one case. */
+const openCase = (page, id) => open(page, `/casos/${id}`);
+
+/** The list of cases on the page (Casos, an order's cases), as one line. */
+const casesText = (page) => text(testid(main(page), "case-list"));
+
+/** Each case card on the page, as one line. */
+const caseRowTexts = async (page) =>
+  (await testid(main(page), "case-row").allInnerTexts()).map(kit.squash);
+
+/** The links of the case cards on the page, by their address. */
+const caseLinks = (page) =>
+  testid(main(page), "case-row")
+    .locator('a[href^="/casos/"]')
+    .evaluateAll((links) => links.map((a) => a.getAttribute("href")));
+
+/** Writes an internal note on the case page and presses «Guardar la nota». */
+async function writeCaseNote(page, note) {
+  await field(main(page), "note", "textarea").fill(note);
+  await button(main(page), "Guardar la nota").click();
+}
+
+/** The refusal of a note that holds a delivery code, once it shows. */
+const caseNoteRefused = (page) => kit.waitForMessage(main(page), "código de entrega del cliente");
+
+/** The note's confirmation, once it shows. */
+const caseNoteSaved = (page) =>
+  kit.waitForMessage(main(page), "Nota guardada. El cliente no la ve.");
+
+/** «Asignarme el caso», and waits for the page to say who works it. */
+async function assignCaseToMe(page) {
+  await button(main(page), "Asignarme el caso").click();
+  await settledText(main(page), /Usted atiende este caso\./, { what: "the case page" });
+}
+
+/** Chooses a saved answer by its title; returns what it put in the answer. */
+async function useSavedReply(page, title) {
+  await main(page).getByLabel("Usar una respuesta guardada").selectOption({ label: title });
+  return field(main(page), "answer", "textarea").inputValue();
+}
+
+/** Types the answer to the customer. */
+const typeCaseAnswer = (page, answer) => field(main(page), "answer", "textarea").fill(answer);
+
+/** «Responder», and waits for the answer on the timeline. */
+async function answerCase(page) {
+  await button(main(page), "Responder", true).click();
+  await testid(main(page), "case-entry-answer").first().waitFor();
+}
+
+/** «Responder y cerrar», and waits for the closing on the timeline. */
+async function answerAndCloseCase(page) {
+  await button(main(page), "Responder y cerrar").click();
+  await testid(main(page), "case-entry-closed").first().waitFor();
+}
+
+/** The answer on the case's timeline, as one line. */
+const caseAnswerText = (page) => text(testid(main(page), "case-entry-answer"));
+
+/** On an order's page: «Registrar un contacto» with a channel, a topic and a summary; returns the confirmation. */
+async function recordContact(page, { channel, topic, summary }) {
+  const box = testid(main(page), "record-contact");
+  await box.locator("summary").click();
+  await field(box, "channel", "select").selectOption(channel);
+  await field(box, "topic", "select").selectOption(topic);
+  await field(box, "summary", "textarea").fill(summary);
+  await button(box, "Registrar el contacto").click();
+  return kit.waitForMessage(main(page), "Contacto registrado como caso.");
+}
+
+/** From an order's page, «Ver el cliente», and waits for the customer view. */
+async function openCustomerFromOrder(page) {
+  await link(main(page), "Ver el cliente").click();
+  await page.waitForURL((u) => new URL(u).pathname.startsWith("/clientes/"));
+  await page.waitForLoadState("networkidle");
+  await main(page).getByRole("region", { name: "Pedidos" }).waitFor();
+}
+
+/** Opens a customer's view. */
+const openCustomer = (page, id) => open(page, `/clientes/${id}`);
+
+/** «Mostrar contacto» with a reason, and waits until the e-mail `email` shows. */
+async function revealContact(page, reason, email) {
+  await main(page).getByLabel("Para qué lo necesita").fill(reason);
+  await button(main(page), "Mostrar contacto").click();
+  await settledText(main(page), (said) => said.includes(`Correo: ${email}`), {
+    what: "the customer view",
+  });
+}
+
+/** Hoy's line of cases, as one line. */
+const casesDueText = (page) => text(testid(main(page), "cases-due"));
+
+/** Waits for the not-found page (a case the role may not read). */
+const waitForNotFound = (page) =>
+  main(page).getByRole("heading", { name: "No encontramos esa página" }).waitFor();
+
+/** How many links of the console's main navigation lead to `path`. */
+const navigationLinksTo = (page, path) =>
+  sectionsNavigation(page).locator(`a[href="${path}"]`).count();
+
+Object.assign(module.exports, {
+  openCases,
+  openCase,
+  casesText,
+  caseRowTexts,
+  caseLinks,
+  writeCaseNote,
+  caseNoteRefused,
+  caseNoteSaved,
+  assignCaseToMe,
+  useSavedReply,
+  typeCaseAnswer,
+  answerCase,
+  answerAndCloseCase,
+  caseAnswerText,
+  recordContact,
+  openCustomerFromOrder,
+  openCustomer,
+  revealContact,
+  casesDueText,
+  waitForNotFound,
+  navigationLinksTo,
+});
+
+// ── Wave 9: Salud del sistema and Versiones ────────────────────────────────
+
+const openHealth = (page) => open(page, "/salud");
+
+/** Waits for the health page's lines. */
+const waitForHealth = (page) => main(page).locator("[data-health]").first().waitFor();
+
+/** Every line of the health page: its key → its state ("ok", "attention", "problem", "unknown"). */
+const healthStates = (page) =>
+  main(page)
+    .locator("[data-health]")
+    .evaluateAll((rows) =>
+      Object.fromEntries(rows.map((row) => [row.dataset.health, row.dataset.state])),
+    );
+
+/** One line of the health page (by its key), as one line of text. */
+const healthLineText = (page, key) => text(main(page).locator(`[data-health="${key}"]`));
+
+/** The state of the first line (problems come first). */
+const firstHealthState = (page) =>
+  main(page).locator("[data-health]").first().getAttribute("data-state");
+
+/** How many links to `path` a line of the health page has. */
+const healthLineLinksTo = (page, key, path) =>
+  main(page).locator(`[data-health="${key}"]`).locator(`a[href="${path}"]`).count();
+
+/** Follows a line's link by its name (it leads to where the line is fixed). */
+const followHealthLink = (page, key, name) =>
+  link(main(page).locator(`[data-health="${key}"]`), name).click();
+
+/** How many scheduled jobs are listed while the scheduler's history is not available. */
+const jobsListedWithoutHistory = (page) =>
+  main(page).locator('[data-jobs="unavailable"] [data-job]').count();
+
+/** A section of the health page by its heading («Tareas programadas», «Versiones»), as one line. */
+const healthSectionText = (page, name) => text(main(page).getByRole("region", { name }));
+
+/** How many sections of that name the page has. */
+const healthSections = (page, name) => main(page).getByRole("region", { name }).count();
+
+/** The Versiones row of a website or of the database («ops», «web», «database»…), as one line. */
+const versionText = (page, app) => text(main(page).locator(`[data-version="${app}"]`));
+
+/** After following the stopped messages' link: waits for the page to list the one stopped message. */
+const waitForOneStoppedMessage = (page) =>
+  settledText(main(page), /1 mensaje detenido/, { what: "the messages page" });
+
+/** After following the documents' link: waits for the rejected document's message (data). */
+const waitForDocumentMessage = (page, message) =>
+  settledText(main(page), (said) => said.includes(message), { what: "the documents page" });
+
+const storeBuildForm = (page) =>
+  main(page)
+    .locator("form")
+    .filter({ has: page.getByRole("button", { name: "Guardar la versión" }) });
+
+/** Fills the fields of «Registrar una versión» that are given. */
+async function fillStoreBuild(page, { app, platform, version, buildNumber, releasedOn, track }) {
+  const form = storeBuildForm(page);
+  if (app !== undefined) await field(form, "app", "select").selectOption(app);
+  if (platform !== undefined) await field(form, "platform", "select").selectOption(platform);
+  if (version !== undefined) await field(form, "version", "input").fill(version);
+  if (buildNumber !== undefined) await field(form, "buildNumber", "input").fill(buildNumber);
+  if (releasedOn !== undefined) await field(form, "releasedOn", "input").fill(releasedOn);
+  if (track !== undefined) await field(form, "track", "select").selectOption(track);
+}
+
+/** What a field of «Registrar una versión» holds now. */
+const storeBuildValue = (page, name) => field(storeBuildForm(page), name).inputValue();
+
+/** «Guardar la versión». */
+const saveStoreBuild = (page) => button(storeBuildForm(page), "Guardar la versión").click();
+
+/** The refusal of a version that is not three numbers, once it shows. */
+const storeBuildRefused = (page) =>
+  kit.waitForMessage(main(page), "Escriba la versión con tres números");
+
+/** The confirmation of a saved Android build («0.1.0 (4)»), once it shows. */
+const storeBuildSaved = (page, release) =>
+  kit.waitForMessage(main(page), `Guardamos Yuntera ${release} para Android`);
+
+const storeBuildRow = (page, key) => main(page).locator(`[data-store-build="${key}"]`);
+
+/** The current build of an app and platform («shop/android»), as one line, or null when none is listed. */
+async function storeBuildText(page, key) {
+  return (await storeBuildRow(page, key).count()) > 0 ? text(storeBuildRow(page, key)) : null;
+}
+
+/** «Quitar esta versión» on the current build, then «Quitar <release>»; waits for the confirmation. */
+async function removeStoreBuild(page, key, release) {
+  const row = storeBuildRow(page, key);
+  await row.locator("summary").click();
+  await button(row, `Quitar ${release}`).click();
+  return kit.waitForMessage(main(page), `Quitamos Yuntera ${release} para Android`);
+}
+
+/** How many listed builds, current or older, show `value` (a build number such as "(40)"). */
+const storeBuildsShowing = (page, value) =>
+  withValue(main(page).locator("[data-store-build], [data-store-build-old]"), value).count();
+
+Object.assign(module.exports, {
+  openHealth,
+  waitForHealth,
+  healthStates,
+  healthLineText,
+  firstHealthState,
+  healthLineLinksTo,
+  followHealthLink,
+  jobsListedWithoutHistory,
+  healthSectionText,
+  healthSections,
+  versionText,
+  waitForOneStoppedMessage,
+  waitForDocumentMessage,
+  fillStoreBuild,
+  storeBuildValue,
+  saveStoreBuild,
+  storeBuildRefused,
+  storeBuildSaved,
+  storeBuildText,
+  removeStoreBuild,
+  storeBuildsShowing,
+});
+
+// ── Wave 9: an order's staff cancellation and its links ────────────────────
+
+const staffCancel = (page) => testid(main(page), "staff-cancel");
+
+/** The staff-cancel form of an order page, as one line. */
+const staffCancelText = (page) => text(staffCancel(page));
+
+/** The staff-cancel form itself (for its screenshot). */
+const staffCancelForm = (page) => staffCancel(page);
+
+/** How many staff-cancel forms the page shows. */
+const staffCancelForms = (page) => staffCancel(page).count();
+
+/** Cancels the order from the staff-cancel form, with a note; does not wait. */
+async function staffCancelOrder(page, note) {
+  await field(staffCancel(page), "note", "textarea").fill(note);
+  await button(staffCancel(page), "Cancelar pedido").click();
+}
+
+/** Waits until the order page's header says `wanted` (a status word). */
+const waitForOrderHeaderWith = (page, wanted) =>
+  settledText(main(page).locator("header").first(), (said) => said.includes(wanted), {
+    what: "the order page's header",
+    timeout: 30_000,
+  });
+
+/** «Ver en Cobros» on a refunded order (for its size). */
+const toPaymentsLink = (page) => link(main(page), "Ver en Cobros");
+
+Object.assign(module.exports, {
+  staffCancelText,
+  staffCancelForm,
+  staffCancelForms,
+  staffCancelOrder,
+  waitForOrderHeaderWith,
+  toPaymentsLink,
+});

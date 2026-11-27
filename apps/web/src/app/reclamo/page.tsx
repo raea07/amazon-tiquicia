@@ -20,7 +20,9 @@ export default function ComplaintPage({ searchParams }: PageProps<"/reclamo">) {
   return (
     <div className="shell max-w-2xl py-8">
       <h1 className="text-3xl font-bold">Presentar un reclamo</h1>
-      <p className="mt-2 text-ink-muted">{COMPLAINT_PROMISE}</p>
+      <p className="mt-2 text-ink-muted" data-testid="complaint-promise">
+        {COMPLAINT_PROMISE}
+      </p>
       <div className="mt-6 rounded-lg border border-border bg-surface p-5">
         <Suspense fallback={<Skeleton className="h-64" />}>
           <Complaint searchParams={searchParams} />

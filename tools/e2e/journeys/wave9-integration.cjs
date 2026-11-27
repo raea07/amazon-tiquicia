@@ -9,20 +9,22 @@
 //      that then refuses the role, and no page opens for a role its
 //      functions refuse.
 //   2. One answer for "late": with a case made late, Salud del sistema's
-//      "Casos atrasados", Hoy's cases line and the "Atrasado" clocks of
-//      /casos give the same number; the line links to Casos.
+//      "Casos atrasados", Hoy's cases line and the late stamps of /casos
+//      (the word of lib/words.cjs) give the same number; the line links to
+//      Casos.
 //   3. A customer's own delivery code typed into a complaint reaches staff
 //      masked, on the case page and in Atención.
 //
-// Fails on any console error, uncaught exception or 5xx (a "Sin acceso" page
-// is an ordinary answer).
+// Screen steps are in lib/web.cjs and lib/ops.cjs. Fails on any console
+// error, uncaught exception or 5xx (a "Sin acceso" page is an ordinary
+// answer).
 
 const { spawnSync } = require("node:child_process");
 const { chromium } = require("playwright");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error("DATABASE_URL is not set: run through tools/dev/stack.sh e2e");
 const ADMIN = "central@yuntera.example";
@@ -30,7 +32,6 @@ const STAFF = "comprador3@yuntera.example";
 const SHOPPER = "comprador@yuntera.example";
 
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 function sql(statement) {
   const run = spawnSync(
@@ -79,14 +80,6 @@ const PAGES = ["/casos", "/casos/respuestas", "/casos/informe", "/clientes", "/s
     watch(page);
     return page;
   };
-  const signIn = async (page, base, email) => {
-    await page.goto(`${base}/ingresar`, { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname !== "/ingresar");
-    await page.waitForLoadState("networkidle");
-  };
   const fits = async (page, what) =>
     check(
       (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
@@ -115,9 +108,9 @@ const PAGES = ["/casos", "/casos/respuestas", "/casos/informe", "/clientes", "/s
        select id, 'support' from auth.users where email = '${STAFF}'
        on conflict (user_id) do update set role = 'support', active = true`);
   const admin = await phone();
-  await signIn(admin, OPS, ADMIN);
+  await ops.signIn(admin, ADMIN);
   const staff = await phone();
-  await signIn(staff, OPS, STAFF);
+  await ops.signIn(staff, STAFF);
   for (const role of Object.keys(TABLE)) {
     const page = role === "admin" ? admin : staff;
     if (role !== "admin") {
@@ -126,19 +119,18 @@ const PAGES = ["/casos", "/casos/respuestas", "/casos/informe", "/clientes", "/s
       );
     }
     const [casos, salud, open] = TABLE[role];
-    await page.goto(`${OPS}/cuenta`, { waitUntil: "networkidle" });
-    const menu = page.locator("details");
+    await ops.open(page, "/cuenta");
     check(
-      (await menu.locator('a[href="/casos"]').count()) > 0 === casos,
+      (await ops.navigationLinksTo(page, "/casos")) > 0 === casos,
       `${role}: the menu ${casos ? "offers" : "does not offer"} Casos`,
     );
     check(
-      (await menu.locator('a[href="/salud"]').count()) > 0 === salud,
+      (await ops.navigationLinksTo(page, "/salud")) > 0 === salud,
       `${role}: the menu ${salud ? "offers" : "does not offer"} Salud del sistema`,
     );
     for (const path of PAGES) {
       const url = path === "/clientes" ? `/clientes/${customer}` : path;
-      await page.goto(`${OPS}${url}`, { waitUntil: "networkidle" });
+      await ops.open(page, url);
       const refused = new URL(page.url()).pathname === "/sin-acceso";
       check(
         !refused === open.includes(path),
@@ -149,57 +141,59 @@ const PAGES = ["/casos", "/casos/respuestas", "/casos/informe", "/clientes", "/s
     check(!casos || open.includes("/casos"), `${role}: Casos in the menu opens`);
     check(!salud || open.includes("/salud"), `${role}: Salud in the menu opens`);
   }
-  await staff.goto(`${OPS}/sin-acceso`, { waitUntil: "networkidle" });
+  await ops.open(staff, "/sin-acceso");
   await staff.screenshot({ path: SHOTS + "/w9-catalog-refused.png", fullPage: true });
 
   // ── 2. One answer for "late" ──────────────────────────────────────────────
   sql(`update private.cases set first_response_due_at = now() - interval '1 hour'
        where id = '${caseId}'`);
-  await admin.goto(`${OPS}/salud`, { waitUntil: "networkidle" });
-  const line = admin.locator('[data-health="cases_late"]');
-  const said = await text(line);
+  await ops.openHealth(admin);
+  const said = await ops.healthLineText(admin, "cases_late");
   const onHealth = Number(/(\d+) casos? (está|están) atrasados?/.exec(said)?.[1] ?? "0");
   check(onHealth >= 1, `Salud del sistema: "${said.slice(0, 120)}"`);
   check(!/\.\./.test(said), "the line ends each sentence with one full stop");
-  check((await line.locator('a[href="/casos"]').count()) === 1, "the cases line links to Casos");
+  check(
+    (await ops.healthLineLinksTo(admin, "cases_late", "/casos")) === 1,
+    "the cases line links to Casos",
+  );
   await fits(admin, "Salud del sistema");
   await admin.screenshot({ path: SHOTS + "/w9-health-cases-late.png", fullPage: true });
-  await admin.goto(`${OPS}/`, { waitUntil: "networkidle" });
-  const hoy = await text(admin.locator('[data-testid="cases-due"]'));
+  await ops.open(admin, "/");
+  const hoy = await ops.casesDueText(admin);
   const onHoy = Number(/Casos: (\d+) atrasados?/.exec(hoy)?.[1] ?? "-1");
   check(onHoy === onHealth, `Hoy says ${onHoy} late, Salud ${onHealth}`);
-  await admin.goto(`${OPS}/casos`, { waitUntil: "networkidle" });
-  const rows = admin.locator('[data-testid="case-row"]');
-  const total = await rows.count();
+  await ops.openCases(admin);
+  // A late case's stamp (§8.2 point 3), the word of lib/words.cjs.
+  const lateWord = word("cases", "open", { viewer: "staff", clock: "overdue" });
   let late = 0;
-  for (let i = 0; i < total; i++) {
-    if ((await text(rows.nth(i))).includes("Atrasado")) late++;
+  for (const row of await ops.caseRowTexts(admin)) {
+    if (row.includes(lateWord)) late++;
   }
   const listed = Number(sql("select count(*) from private.cases where status = 'open'"));
   if (listed <= 50) {
-    check(late === onHealth, `Casos marks ${late} "Atrasado", Salud ${onHealth}`);
+    check(late === onHealth, `Casos marks ${late} «${lateWord}», Salud ${onHealth}`);
   } else {
     log(`  (Casos lists the first 50 of ${listed} open cases: compared with Hoy only)`);
   }
   await fits(admin, "Casos");
 
   // ── 3. The customer's own code reaches staff masked ───────────────────────
-  await admin.goto(`${OPS}/casos/${caseId}`, { waitUntil: "networkidle" });
-  const onCase = await text(admin.locator("main"));
+  await ops.openCase(admin, caseId);
+  const onCase = await ops.mainText(admin);
   check(
     onCase.includes("le dije •••• por teléfono") && !onCase.includes(code),
     "the case page masks the customer's own delivery code",
   );
   await fits(admin, "the case page");
   await admin.screenshot({ path: SHOTS + "/w9-case-masked.png", fullPage: true });
-  await admin.goto(`${OPS}/atencion`, { waitUntil: "networkidle" });
-  const care = await text(admin.locator("main"));
+  await ops.open(admin, "/atencion");
+  const care = await ops.mainText(admin);
   check(
     care.includes("le dije •••• por teléfono") && !care.includes(`le dije ${code}`),
     "Atención masks it too",
   );
   const shopper = await phone();
-  await signIn(shopper, WEB, SHOPPER);
+  await web.signIn(shopper, SHOPPER);
   check(
     sql(`select description from public.complaints where id = '${complaint}'`).includes(code),
     "the customer's complaint keeps their own words",

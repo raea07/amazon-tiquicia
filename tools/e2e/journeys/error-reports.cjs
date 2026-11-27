@@ -23,8 +23,14 @@
 // personal data that was typed, shown or sent: no e-mail, phone, name,
 // address, delivery code, password, session cookie, query string, header,
 // user or breadcrumb.
+//
+// Screen steps are in lib/kit.cjs (the error pages and the sign-in form are
+// next-kit's, the same in the four websites), lib/web.cjs and lib/ops.cjs.
 
 const { chromium } = require("playwright");
+const kit = require("../lib/kit.cjs");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
 const { readFileSync, existsSync } = require("node:fs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -185,8 +191,8 @@ async function supportDesk(browser, order) {
     if (run.status !== 0) throw new Error(`psql: ${run.stderr}`);
     return run.stdout.trim();
   };
-  const web = SITES[0];
-  const ops = SITES[2];
+  const shop = SITES[0];
+  const console_ = SITES[2];
   const secret = {
     complaint: "Zafiro del reclamo",
     note: "Ónix de la nota interna",
@@ -214,9 +220,8 @@ async function supportDesk(browser, order) {
   };
   const signIn = async (page, site) => {
     await page.goto(`${site.base}/ingresar`, { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', site.email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
+    await kit.typeSignIn(page, site.email, PASSWORD);
+    await kit.sendSignIn(page);
     await page.waitForURL((u) => !new URL(u).pathname.startsWith("/ingresar"), { timeout: 20_000 });
   };
   const browserError = (page, what) =>
@@ -230,7 +235,7 @@ async function supportDesk(browser, order) {
     sql(`alter function public.${fn}(${signature}) rename to ${fn}_prueba_196`);
     try {
       await page.reload({ waitUntil: "networkidle" });
-      await page.getByText("Algo falló de nuestro lado").waitFor({ timeout: 15_000 });
+      await kit.waitForErrorPage(page);
     } finally {
       sql(`alter function public.${fn}_prueba_196(${signature}) rename to ${fn}`);
     }
@@ -239,19 +244,15 @@ async function supportDesk(browser, order) {
   // The shopper types a complaint with their delivery code in it; an error
   // happens while the text is in the form; then it is sent.
   const shopper = await context();
-  await signIn(shopper.page, web);
-  await shopper.page.goto(`${web.base}/reclamo?pedido=${order.number}`, {
-    waitUntil: "networkidle",
+  await signIn(shopper.page, shop);
+  await web.openComplaintForm(shopper.page, order.number);
+  await web.fillComplaint(shopper.page, {
+    category: "delivery",
+    description: `${secret.complaint}: el repartidor no llegó. Mi código es ${order.pin}.`,
   });
-  await shopper.page.selectOption('select[name="category"]', "delivery");
-  await shopper.page.fill(
-    'textarea[name="description"]',
-    `${secret.complaint}: el repartidor no llegó. Mi código es ${order.pin}.`,
-  );
   await browserError(shopper.page, "reclamo");
   await shopper.page.waitForTimeout(ON ? 2500 : 500);
-  await shopper.page.click('main form button[type="submit"]');
-  await shopper.page.locator('[data-testid="complaint-filed"]').waitFor({ timeout: 30_000 });
+  await web.sendComplaint(shopper.page);
   const caseId =
     sql(`select k.id from private.cases k join public.complaints c on c.id = k.complaint_id
     where c.description like '${secret.complaint}%' order by k.created_at desc limit 1`);
@@ -261,21 +262,14 @@ async function supportDesk(browser, order) {
   // The administrator notes and answers the case, opens it with a query in
   // its address, and an error happens there; then the server fails.
   const staff = await context();
-  await signIn(staff.page, ops);
-  await staff.page.goto(`${ops.base}/casos/${caseId}`, { waitUntil: "networkidle" });
-  await staff.page.fill('textarea[name="note"]', `${secret.note}, llamar en la tarde.`);
-  await staff.page.click('button:has-text("Guardar la nota")');
-  await staff.page.waitForSelector("text=Nota guardada. El cliente no la ve.");
-  await staff.page.fill(
-    'textarea[name="answer"]',
-    `${secret.answer}: le enviamos el pedido mañana.`,
-  );
-  await staff.page.click('button:has-text("Responder"):not(:has-text("cerrar"))');
-  await staff.page.waitForSelector('[data-testid="case-entry-answer"]');
-  await staff.page.goto(`${ops.base}/casos/${caseId}?nota=${encodeURIComponent(secret.note)}`, {
-    waitUntil: "networkidle",
-  });
-  const shownCase = (await staff.page.locator("main").innerText()).replace(/\s+/g, " ");
+  await signIn(staff.page, console_);
+  await ops.openCase(staff.page, caseId);
+  await ops.writeCaseNote(staff.page, `${secret.note}, llamar en la tarde.`);
+  await ops.caseNoteSaved(staff.page);
+  await ops.typeCaseAnswer(staff.page, `${secret.answer}: le enviamos el pedido mañana.`);
+  await ops.answerCase(staff.page);
+  await ops.open(staff.page, `/casos/${caseId}?nota=${encodeURIComponent(secret.note)}`);
+  const shownCase = await ops.mainText(staff.page);
   expect(
     shownCase.includes(secret.note) && shownCase.includes(secret.answer),
     "support desk: the case page shows the note and the answer",
@@ -291,10 +285,8 @@ async function supportDesk(browser, order) {
 
   // The customer view, after "Mostrar contacto": then the browser and the
   // server fail with the contact on the screen.
-  await staff.page.goto(`${ops.base}/clientes/${userId}`, { waitUntil: "networkidle" });
-  await staff.page.getByLabel("Para qué lo necesita").fill(secret.reason);
-  await staff.page.click('button:has-text("Mostrar contacto")');
-  await staff.page.waitForSelector(`text=Correo: ${web.email}`);
+  await ops.openCustomer(staff.page, userId);
+  await ops.revealContact(staff.page, secret.reason, shop.email);
   await browserError(staff.page, "cliente");
   await staff.page.waitForTimeout(ON ? 2500 : 500);
   await failOnServer(staff.page, "ops_customer", "uuid");
@@ -303,13 +295,13 @@ async function supportDesk(browser, order) {
   if (!ON) return;
   // Web: the complaint form's browser report. Console: two browser reports and
   // two from the server.
-  const shop = await waitForEvents(web.project, 1, before);
-  const consoleReports = await waitForEvents(ops.project, 4, before);
-  const fromDesk = [...shop.events, ...consoleReports.events].filter((e) =>
+  const shopReports = await waitForEvents(shop.project, 1, before);
+  const consoleReports = await waitForEvents(console_.project, 4, before);
+  const fromDesk = [...shopReports.events, ...consoleReports.events].filter((e) =>
     /Prueba en (reclamo|caso|cliente)|ops_(case|customer)/.test(JSON.stringify(e.payload)),
   );
   expect(
-    shop.events.some((e) =>
+    shopReports.events.some((e) =>
       /Prueba en reclamo/.test(e.payload.exception?.values?.[0]?.value || ""),
     ),
     "support desk: the complaint form's error was reported",
@@ -326,11 +318,11 @@ async function supportDesk(browser, order) {
       .map((e) => `${e.payload.platform}: ${e.payload.exception?.values?.[0]?.value}`)
       .join(" | "),
   );
-  const body = sentText([...shop.mine, ...consoleReports.mine].map((a) => a.body));
+  const body = sentText([...shopReports.mine, ...consoleReports.mine].map((a) => a.body));
   for (const word of [...FORBIDDEN, ...words]) {
     expect(!body.includes(word), `support desk: "${word.slice(0, 14)}…" reached the tracker`);
   }
-  for (const { payload } of [...shop.events, ...consoleReports.events]) {
+  for (const { payload } of [...shopReports.events, ...consoleReports.events]) {
     const where =
       payload.platform === "node"
         ? `http://host${payload.contexts?.nextjs?.request_path || ""}`
@@ -423,15 +415,14 @@ async function supportDesk(browser, order) {
         `${site.app}: the policy names a tracker: ${connect}`,
       );
     }
-    await page.fill('main input[name="email"]', site.email);
-    await page.fill('main input[name="password"]', PASSWORD);
+    await kit.typeSignIn(page, site.email, PASSWORD);
     await page.evaluate((email) => {
       setTimeout(() => {
         throw new Error(`Prueba en ingreso: ${email}, teléfono 8888-1234`);
       });
     }, site.email);
     await sent(1);
-    await page.click('main form button[type="submit"]');
+    await kit.sendSignIn(page);
     await page.waitForURL((u) => !new URL(u).pathname.startsWith("/ingresar"), {
       timeout: 20_000,
     });
@@ -447,7 +438,7 @@ async function supportDesk(browser, order) {
     });
     let shown = "";
     if (site.app === "web") {
-      shown = await page.locator('section:has-text("Su código de entrega") p').first().innerText();
+      shown = await web.deliveryPin(page);
       expect(
         shown.trim() === order.pin,
         `web: the order page should show the delivery code, shows "${shown}"`,
@@ -465,7 +456,7 @@ async function supportDesk(browser, order) {
       `${site.base}/prueba-de-errores?correo=ana.prueba%40example.com&tel=8888-1234`,
       { waitUntil: "networkidle" },
     );
-    const screen = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+    const screen = await kit.pageText(page);
     expect(
       screen.includes("Algo falló de nuestro lado"),
       `${site.app}: error page says "${screen.slice(0, 160)}"`,
@@ -475,17 +466,8 @@ async function supportDesk(browser, order) {
       `${site.app}: the error page shows technical detail`,
     );
     const told = async (where) => {
-      if (ON) {
-        await page
-          .getByText("Ya le avisamos al equipo de Yuntera.")
-          .waitFor({ timeout: 15_000 })
-          .catch(() => undefined);
-      } else {
-        await page.waitForTimeout(500);
-      }
-      const says = (await page.locator("body").innerText()).includes(
-        "Ya le avisamos al equipo de Yuntera.",
-      );
+      if (!ON) await page.waitForTimeout(500);
+      const says = await kit.teamToldShown(page, ON ? 15_000 : 0);
       expect(
         says === ON,
         `${site.app} ${where}: "team told" should appear only with a tracker (${ON ? "on" : "off"})`,
@@ -503,7 +485,7 @@ async function supportDesk(browser, order) {
     // 4. A failure while rendering in the browser: the error page catches it
     // and reports it from there.
     await page.goto(`${site.base}/prueba-de-errores?en=navegador`, { waitUntil: "load" });
-    await page.getByText("Algo falló de nuestro lado").waitFor({ timeout: 15_000 });
+    await kit.waitForErrorPage(page);
     await told("browser failure");
     await sent(3);
 
@@ -511,13 +493,8 @@ async function supportDesk(browser, order) {
     // one fails the first time only.
     const mark = Date.now().toString(36);
     await page.goto(`${site.base}/prueba-de-errores?una-vez=${mark}`, { waitUntil: "load" });
-    await page.getByText("Algo falló de nuestro lado").waitFor({ timeout: 15_000 });
-    await page.getByRole("button", { name: "Intentar de nuevo" }).click();
-    const recovered = await page
-      .getByText("La página volvió a cargar.")
-      .waitFor({ timeout: 15_000 })
-      .then(() => true)
-      .catch(() => false);
+    await kit.waitForErrorPage(page);
+    const recovered = await kit.retryErrorPage(page);
     expect(recovered, `${site.app}: "Intentar de nuevo" did not fetch the page again`);
 
     if (!ON) {

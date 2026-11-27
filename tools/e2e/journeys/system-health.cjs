@@ -18,11 +18,13 @@
 //      Versiones;
 //   6. screenshots at 1280 and 390 px, without sideways scrolling.
 //
-// Needs `tools/dev/stack.sh up <lane>`. Fails on any browser error or 5xx.
+// Screen steps are in lib/ops.cjs. Needs `tools/dev/stack.sh up <lane>`.
+// Fails on any browser error or 5xx.
 
 const { execFileSync, spawnSync } = require("node:child_process");
 const { readFileSync } = require("node:fs");
 const { chromium, request } = require("playwright");
+const ops = require("../lib/ops.cjs");
 
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
@@ -30,14 +32,12 @@ const API = process.env.API_URL || "http://127.0.0.1:54321";
 const API_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_local_development_only";
 const HACIENDA = process.env.HACIENDA_FAKE_URL || "http://127.0.0.1:54325";
-const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const DATABASE_URL =
   process.env.DATABASE_URL || "postgres://postgres:postgres@127.0.0.1:5432/yuntera_local";
 const ADMIN = "central@yuntera.example";
 const SUPPORT = "comprador2@yuntera.example";
 
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 function check(condition, message) {
   if (!condition) throw new Error(`check failed: ${message}`);
   log("ok:", message);
@@ -84,26 +84,17 @@ function sql(statement) {
   async function signIn(email, path, options = desktop) {
     const page = await (await browser.newContext(options)).newPage();
     watch(page);
-    await page.goto(`${OPS}/ingresar?siguiente=${encodeURIComponent(path)}`, {
-      waitUntil: "networkidle",
-    });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
+    await ops.signIn(page, email, { next: path });
     await page.waitForURL((u) => new URL(u).pathname === path, {
       timeout: 30000,
     });
     return page;
   }
-  const states = (page) =>
-    page.$$eval("[data-health]", (rows) =>
-      Object.fromEntries(rows.map((row) => [row.dataset.health, row.dataset.state])),
-    );
 
   // ── 1. Visitors ───────────────────────────────────────────────────────────
   const visitor = await (await browser.newContext(desktop)).newPage();
   watch(visitor);
-  await visitor.goto(`${OPS}/salud`, { waitUntil: "networkidle" });
+  await ops.openHealth(visitor);
   check(new URL(visitor.url()).pathname === "/ingresar", "a visitor is sent to sign in");
   check(
     new URL(visitor.url()).searchParams.get("siguiente") === "/salud",
@@ -152,8 +143,8 @@ function sql(statement) {
 
   // ── 2. Everything in order ────────────────────────────────────────────────
   const admin = await signIn(ADMIN, "/salud");
-  await admin.waitForSelector("[data-health]");
-  let seen = await states(admin);
+  await ops.waitForHealth(admin);
+  let seen = await ops.healthStates(admin);
   log("lines:", JSON.stringify(seen));
   check(Object.keys(seen).length === 14, "an administrator sees every line (14)");
   check(
@@ -161,18 +152,13 @@ function sql(statement) {
     "nothing asks for attention",
   );
   check(
-    (await text(admin.locator('[role="status"]').first())).includes(
-      "Todo en orden en lo que se puede comprobar",
-    ),
+    (await ops.statusText(admin)).includes("Todo en orden en lo que se puede comprobar"),
     "and the page says so",
   );
   check(seen.jobs === "unknown", "the jobs line is unknown without a scheduler, not ok");
+  check((await ops.jobsListedWithoutHistory(admin)) === 7, "seven jobs listed");
   check(
-    (await admin.locator('[data-jobs="unavailable"] [data-job]').count()) === 7,
-    "seven jobs listed",
-  );
-  check(
-    (await text(admin.locator("section:has(#tareas)"))).includes(
+    (await ops.healthSectionText(admin, "Tareas programadas")).includes(
       "Eso no quiere decir que corrieran a tiempo",
     ),
     "and the page says there is no history, not that they ran on time",
@@ -190,15 +176,15 @@ function sql(statement) {
     built || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim()
   ).slice(0, 7);
   for (const app of ["ops", "web", "seller", "field"]) {
-    const row = await text(admin.locator(`[data-version="${app}"]`));
+    const row = await ops.versionText(admin, app);
     check(row.includes(`versión ${head}`), `${app} runs ${head}: "${row}"`);
   }
-  const database = await text(admin.locator('[data-version="database"]'));
+  const database = await ops.versionText(admin, "database");
   check(
     /Último cambio aplicado: 2026112108\d{4}/.test(database),
     `the newest migration: "${database}"`,
   );
-  check(!(await text(admin.locator("main"))).includes("@"), "no e-mail on the page");
+  check(!(await ops.mainText(admin)).includes("@"), "no e-mail on the page");
   await admin.screenshot({
     path: `${SHOTS}/h01-health-good.png`,
     fullPage: true,
@@ -223,8 +209,8 @@ function sql(statement) {
        rejection_source = 'validation', rejected_at = now(), accepted_at = null,
        hacienda_message = 'Rechazado para la prueba de salud del sistema' where id = '${document}'`,
   );
-  await admin.goto(`${OPS}/salud`, { waitUntil: "networkidle" });
-  seen = await states(admin);
+  await ops.openHealth(admin);
+  seen = await ops.healthStates(admin);
   check(seen.messages_stopped === "problem", "the stopped message turns its line");
   check(seen.invoices === "problem", "the rejected document turns its line");
   const others = Object.entries(seen).filter(
@@ -235,62 +221,57 @@ function sql(statement) {
     "and only those two",
   );
   check(
-    (await text(admin.locator('[role="alert"]').first())).includes(
-      "2 comprobaciones necesitan atención",
-    ),
+    (await ops.alertText(admin)).includes("2 comprobaciones necesitan atención"),
     "the page counts them",
   );
-  const stopped = await text(admin.locator('[data-health="messages_stopped"]'));
+  const stopped = await ops.healthLineText(admin, "messages_stopped");
   check(stopped.includes("1 aviso no llegó a la persona"), `in words: "${stopped}"`);
-  const invoices = await text(admin.locator('[data-health="invoices"]'));
+  const invoices = await ops.healthLineText(admin, "invoices");
   check(invoices.includes("1 rechazado por Hacienda"), `in words: "${invoices}"`);
-  check(
-    (await admin.locator("[data-health]").first().getAttribute("data-state")) === "problem",
-    "problems come first",
-  );
+  check((await ops.firstHealthState(admin)) === "problem", "problems come first");
   await admin.screenshot({
     path: `${SHOTS}/h02-health-problems.png`,
     fullPage: true,
   });
-  await admin.click('[data-health="messages_stopped"] a:has-text("Ver los mensajes detenidos")');
+  await ops.followHealthLink(admin, "messages_stopped", "Ver los mensajes detenidos");
   await admin.waitForURL((u) => new URL(u).pathname === "/mensajes");
-  await admin.waitForSelector("text=1 mensaje detenido");
+  await ops.waitForOneStoppedMessage(admin);
   check(true, "the link leads to the stopped message");
-  await admin.goto(`${OPS}/salud`, { waitUntil: "networkidle" });
-  await admin.click('[data-health="invoices"] a:has-text("Ver los comprobantes")');
+  await ops.openHealth(admin);
+  await ops.followHealthLink(admin, "invoices", "Ver los comprobantes");
   await admin.waitForURL((u) => new URL(u).pathname === "/comprobantes");
-  await admin.waitForSelector("text=Rechazado para la prueba de salud del sistema");
+  await ops.waitForDocumentMessage(admin, "Rechazado para la prueba de salud del sistema");
   check(true, "the link leads to the rejected document");
 
   // ── 4. A phone build entered by hand ──────────────────────────────────────
-  await admin.goto(`${OPS}/salud`, { waitUntil: "networkidle" });
+  await ops.openHealth(admin);
   check(
-    (await text(admin.locator("section:has(#versiones)"))).includes(
+    (await ops.healthSectionText(admin, "Versiones")).includes(
       "Todavía no se registró ninguna versión",
     ),
     "no phone build yet",
   );
-  const form = admin.locator('form:has(button:has-text("Guardar la versión"))');
-  await form.locator('select[name="app"]').selectOption("shop");
-  await form.locator('select[name="platform"]').selectOption("android");
-  await form.locator('input[name="version"]').fill("0.1");
-  await form.locator('input[name="buildNumber"]').fill("4");
-  await form.locator('input[name="releasedOn"]').fill("2026-11-23");
-  await form.locator('select[name="track"]').selectOption("internal");
-  await form.locator('button:has-text("Guardar la versión")').click();
-  await admin.waitForSelector("text=Escriba la versión con tres números");
+  await ops.fillStoreBuild(admin, {
+    app: "shop",
+    platform: "android",
+    version: "0.1",
+    buildNumber: "4",
+    releasedOn: "2026-11-23",
+    track: "internal",
+  });
+  await ops.saveStoreBuild(admin);
+  await ops.storeBuildRefused(admin);
   check(
-    (await form.locator('input[name="version"]').inputValue()) === "0.1",
+    (await ops.storeBuildValue(admin, "version")) === "0.1",
     "a wrong version is refused, kept",
   );
-  check((await form.locator('select[name="app"]').inputValue()) === "shop", "and so is the rest");
-  await form.locator('input[name="version"]').fill("0.1.0");
-  await form.locator('button:has-text("Guardar la versión")').click();
-  await admin.waitForSelector("text=Guardamos Yuntera 0.1.0 (4) para Android");
-  const listed = await until("the build to be listed", async () => {
-    const row = admin.locator('[data-store-build="shop/android"]');
-    return (await row.count()) > 0 ? text(row) : null;
-  });
+  check((await ops.storeBuildValue(admin, "app")) === "shop", "and so is the rest");
+  await ops.fillStoreBuild(admin, { version: "0.1.0" });
+  await ops.saveStoreBuild(admin);
+  await ops.storeBuildSaved(admin, "0.1.0 (4)");
+  const listed = await until("the build to be listed", () =>
+    ops.storeBuildText(admin, "shop/android"),
+  );
   check(
     listed.includes("versión 0.1.0 (4), prueba interna desde el 23 de noviembre de 2026"),
     `listed: "${listed}"`,
@@ -302,38 +283,31 @@ function sql(statement) {
 
   // A typo in the build number (40 for 4) on a later day: it shows as the
   // current build until it is removed.
-  await form.locator('select[name="app"]').selectOption("shop");
-  await form.locator('select[name="platform"]').selectOption("android");
-  await form.locator('input[name="version"]').fill("0.1.0");
-  await form.locator('input[name="buildNumber"]').fill("40");
-  await form.locator('input[name="releasedOn"]').fill("2026-11-24");
-  await form.locator('select[name="track"]').selectOption("internal");
-  await form.locator('button:has-text("Guardar la versión")').click();
-  await admin.waitForSelector("text=Guardamos Yuntera 0.1.0 (40) para Android");
+  await ops.fillStoreBuild(admin, {
+    app: "shop",
+    platform: "android",
+    version: "0.1.0",
+    buildNumber: "40",
+    releasedOn: "2026-11-24",
+    track: "internal",
+  });
+  await ops.saveStoreBuild(admin);
+  await ops.storeBuildSaved(admin, "0.1.0 (40)");
   const typo = await until("the typo to be listed", async () => {
-    const row = await text(admin.locator('[data-store-build="shop/android"]'));
+    const row = (await ops.storeBuildText(admin, "shop/android")) ?? "";
     return row.includes("(40)") ? row : null;
   });
   check(typo.includes("versión 0.1.0 (40)"), `the typo shows as the current build: "${typo}"`);
-  const current = admin.locator('[data-store-build="shop/android"]');
-  await current.locator('summary:has-text("Quitar esta versión")').click();
-  await current.locator('button:has-text("Quitar 0.1.0 (40)")').click();
-  await admin.waitForSelector("text=Quitamos Yuntera 0.1.0 (40) para Android");
+  await ops.removeStoreBuild(admin, "shop/android", "0.1.0 (40)");
   const fixed = await until("the right build to be current again", async () => {
-    const row = await text(admin.locator('[data-store-build="shop/android"]'));
+    const row = (await ops.storeBuildText(admin, "shop/android")) ?? "";
     return row.includes("(4),") ? row : null;
   });
   check(
     fixed.includes("versión 0.1.0 (4), prueba interna desde el 23 de noviembre de 2026"),
     `after removing the typo, the right build is current: "${fixed}"`,
   );
-  check(
-    (await admin
-      .locator("[data-store-build], [data-store-build-old]")
-      .filter({ hasText: "(40)" })
-      .count()) === 0,
-    "the typo is no longer listed",
-  );
+  check((await ops.storeBuildsShowing(admin, "(40)")) === 0, "the typo is no longer listed");
   check(
     sql(
       "select string_agg(action, ',' order by id) from private.audit_log where table_name = 'store_builds'",
@@ -347,7 +321,7 @@ function sql(statement) {
 
   // At phone width.
   const small = await signIn(ADMIN, "/salud", phone);
-  await small.waitForSelector("[data-health]");
+  await ops.waitForHealth(small);
   check((await overflow(small)) <= 0, "390 px: no sideways scrolling");
   await small.screenshot({
     path: `${SHOTS}/h04-health-phone.png`,
@@ -361,16 +335,16 @@ function sql(statement) {
      on conflict do nothing`,
   );
   const support = await signIn(SUPPORT, "/salud", phone);
-  await support.waitForSelector("[data-health]");
-  seen = await states(support);
+  await ops.waitForHealth(support);
+  seen = await ops.healthStates(support);
   check(
     Object.keys(seen).sort().join(",") ===
       "cases_late,events_failed,messages_late,messages_stopped",
     `support sees only the message and case lines: ${Object.keys(seen).join(",")}`,
   );
   check(seen.messages_stopped === "problem", "including the stopped message");
-  check((await support.locator("#versiones").count()) === 0, "and no Versiones");
-  check((await support.locator("#tareas").count()) === 0, "and no jobs");
+  check((await ops.healthSections(support, "Versiones")) === 0, "and no Versiones");
+  check((await ops.healthSections(support, "Tareas programadas")) === 0, "and no jobs");
   check((await overflow(support)) <= 0, "390 px: no sideways scrolling");
   await support.screenshot({
     path: `${SHOTS}/h05-health-support.png`,
@@ -382,7 +356,7 @@ function sql(statement) {
     `update public.staff_members set role = 'catalog'
      where user_id = (select id from auth.users where email = '${SUPPORT}')`,
   );
-  await support.goto(`${OPS}/salud`, { waitUntil: "networkidle" });
+  await ops.openHealth(support);
   check(
     new URL(support.url()).pathname === "/sin-acceso",
     "catalogue staff are told it is not theirs",

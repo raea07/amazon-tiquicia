@@ -5,7 +5,7 @@
 //      which the acknowledgement and the written answer are promised. The
 //      footer's link goes to the same form.
 //   2. Support (a demo shopper made support staff for this run) finds the case
-//      in Casos, oldest first with its clock in words, adds an internal note,
+//      in Casos, oldest first with its stamp in words, adds an internal note,
 //      is refused a note holding the order's delivery code, answers with a
 //      saved answer and closes the case.
 //   3. The shopper reads the answer in "Sus consultas" and on the order's
@@ -18,24 +18,25 @@
 //      "not found"; "Hoy" carries the cases line.
 //   6. Every new console page and the shop's form fit 390 px.
 //
-// Fails on any console error, uncaught exception or 5xx (a refused note is an
-// ordinary answer, not an error).
+// Screen steps are in lib/web.cjs and lib/ops.cjs; status words come from
+// lib/words.cjs. Fails on any console error, uncaught exception or 5xx (a
+// refused note is an ordinary answer, not an error).
 
 const { spawnSync } = require("node:child_process");
 const { chromium } = require("playwright");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
-const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const DATABASE_URL =
   process.env.DATABASE_URL || "postgres://postgres:postgres@127.0.0.1:5432/yuntera_local";
 const SHOPPER = "comprador@yuntera.example";
 const SUPPORT = "comprador3@yuntera.example";
 const FINANCE = "comprador2@yuntera.example";
 const ADMIN = "central@yuntera.example";
+const STAFF = { viewer: "staff" };
 
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 function sql(statement) {
   const run = spawnSync(
@@ -70,16 +71,6 @@ function sql(statement) {
       hasTouch: true,
       locale: "es-CR",
     });
-  const signIn = async (page, base, email, next = "") => {
-    await page.goto(`${base}/ingresar${next ? `?siguiente=${encodeURIComponent(next)}` : ""}`, {
-      waitUntil: "networkidle",
-    });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname !== "/ingresar");
-    await page.waitForLoadState("networkidle");
-  };
   const overflow = (page) =>
     page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   const fits = async (page, what) =>
@@ -110,35 +101,27 @@ function sql(statement) {
   // ── 1. The shopper files a complaint from the order's page ────────────────
   const shopper = await (await phone()).newPage();
   watch(shopper);
-  await signIn(shopper, WEB, SHOPPER, `/pedidos/${orderNumber}`);
-  await shopper.goto(`${WEB}/pedidos/${orderNumber}`, { waitUntil: "networkidle" });
-  const footerLink = await shopper
-    .locator('footer a:has-text("Presentar un reclamo")')
-    .getAttribute("href");
+  await web.signIn(shopper, SHOPPER, { next: `/pedidos/${orderNumber}` });
+  await web.openOrder(shopper, orderNumber);
+  const footerLink = await web.footerComplaintHref(shopper);
   check(footerLink === "/reclamo", `the footer links the complaint form (${footerLink})`);
-  await shopper.locator('main a:has-text("Presente un reclamo")').click();
-  await shopper.waitForURL((u) => new URL(u).pathname === "/reclamo");
-  await shopper.waitForLoadState("networkidle");
+  await web.startComplaintFromOrder(shopper);
   check(
-    (await shopper.inputValue('input[name="orderNumber"]')) === orderNumber,
+    (await web.complaintOrderNumber(shopper)) === orderNumber,
     "the form carries the order's number",
   );
-  const promise = await text(shopper.locator("main p").first());
+  const promise = await web.complaintPromise(shopper);
   check(
     promise.includes("1 día hábil") && promise.includes("5 días hábiles"),
     `the form says the promised times: ${promise}`,
   );
-  await shopper.selectOption('select[name="category"]', "delivery");
-  await shopper.fill(
-    'textarea[name="description"]',
-    "El paquete llegó con la caja abierta y faltaba el cargador.",
-  );
+  await web.fillComplaint(shopper, {
+    category: "delivery",
+    description: "El paquete llegó con la caja abierta y faltaba el cargador.",
+  });
   await fits(shopper, "the complaint form");
   await shopper.screenshot({ path: SHOTS + "/sc1-complaint-form.png", fullPage: true });
-  await shopper.click('main form button[type="submit"]');
-  const filed = shopper.locator('[data-testid="complaint-filed"]');
-  await filed.waitFor({ timeout: 30_000 });
-  const filedText = await text(filed);
+  const filedText = await web.sendComplaint(shopper);
   log("filed:", filedText);
   const reference = /reclamo ([0-9A-F]{8})/.exec(filedText)?.[1] ?? "";
   check(reference.length === 8, `the shopper reads the reference (${reference})`);
@@ -155,26 +138,31 @@ function sql(statement) {
   // ── 2. Support works the case ─────────────────────────────────────────────
   const support = await (await phone()).newPage();
   watch(support);
-  await signIn(support, OPS, SUPPORT, "/casos");
-  await support.goto(`${OPS}/casos`, { waitUntil: "networkidle" });
-  const list = await text(support.locator('[data-testid="case-list"]'));
+  await ops.signIn(support, SUPPORT, { next: "/casos" });
+  await ops.openCases(support);
+  const list = await ops.casesText(support);
   check(list.includes(`pedido ${orderNumber}`) && list.includes("María"), "Casos lists the case");
+  // The case's stamp: its state, or its clock when it is near or past its due time.
+  const stamps = [
+    word("cases", "open", STAFF),
+    word("cases", "open", { ...STAFF, clock: "due_soon" }),
+    word("cases", "open", { ...STAFF, clock: "overdue" }),
+  ];
   check(
-    /A tiempo|Vence pronto|Atrasado/.test(list) &&
+    stamps.some((stamp) => list.includes(stamp)) &&
       /Responder: (quedan|atrasado por|a más tardar)/.test(list),
-    "with its clock in words and the time left",
+    "with its stamp in words and the time left",
   );
   await fits(support, "Casos");
   await support.screenshot({ path: SHOTS + "/sc3-cases-list.png", fullPage: true });
 
-  await support.goto(`${OPS}/casos/${caseId}`, { waitUntil: "networkidle" });
+  await ops.openCase(support, caseId);
   check(
-    (await text(support.locator("main"))).includes("el cliente nunca ve esta nota"),
+    (await ops.mainText(support)).includes("el cliente nunca ve esta nota"),
     "the case page says the customer never sees a note",
   );
-  await support.fill('textarea[name="note"]', `El cliente dijo que su código es ${code}.`);
-  await support.click('button:has-text("Guardar la nota")');
-  await support.waitForSelector("text=código de entrega del cliente");
+  await ops.writeCaseNote(support, `El cliente dijo que su código es ${code}.`);
+  await ops.caseNoteRefused(support);
   check(true, "a note with the order's delivery code is refused");
   check(
     sql(`select count(*) from private.audit_log a join auth.users u on u.id = a.actor_id
@@ -182,31 +170,23 @@ function sql(statement) {
            and a.new_row::text not like '%${code}%'`) === "1",
     "the refusal is on the audit trail, without the text or the code",
   );
-  await support.fill(
-    'textarea[name="note"]',
+  await ops.writeCaseNote(
+    support,
     `Nota interna de prueba: revisar el empaque del pedido ${orderNumber}, tel. 8888-${code}.`,
   );
-  await support.click('button:has-text("Guardar la nota")');
-  await support.waitForSelector("text=Nota guardada. El cliente no la ve.");
+  await ops.caseNoteSaved(support);
   check(true, "a note with an order number and a phone number is kept");
-  await support.click('button:has-text("Asignarme el caso")');
-  await support.waitForSelector("text=Usted atiende este caso.");
-  await support
-    .getByLabel("Usar una respuesta guardada")
-    .selectOption({ label: "Dónde está mi pedido" });
-  const prefilled = await support.inputValue('textarea[name="answer"]');
+  await ops.assignCaseToMe(support);
+  const prefilled = await ops.useSavedReply(support, "Dónde está mi pedido");
   check(prefilled.startsWith("Gracias por escribirnos."), "a saved answer fills the answer");
-  await support.fill(
-    'textarea[name="answer"]',
+  await ops.typeCaseAnswer(
+    support,
     "Lamentamos lo de la caja. Le enviamos el cargador que faltaba el lunes, sin costo.",
   );
-  await support.click('button:has-text("Responder y cerrar")');
   // Closed, the page redraws without the answer form: the timeline says it.
-  await support.waitForSelector('[data-testid="case-entry-closed"]');
+  await ops.answerAndCloseCase(support);
   check(
-    (await text(support.locator('[data-testid="case-entry-answer"]'))).includes(
-      "Le enviamos el cargador",
-    ),
+    (await ops.caseAnswerText(support)).includes("Le enviamos el cargador"),
     "the answer is on the timeline",
   );
   check(true, "support answers and closes the case");
@@ -214,8 +194,8 @@ function sql(statement) {
   await support.screenshot({ path: SHOTS + "/sc4-case-answered.png", fullPage: true });
 
   // ── 3. The shopper reads the answer ───────────────────────────────────────
-  await shopper.goto(`${WEB}/cuenta/casos`, { waitUntil: "networkidle" });
-  const mine = await text(shopper.locator("main"));
+  await web.openMyCases(shopper);
+  const mine = await web.mainText(shopper);
   check(
     mine.includes(`Reclamo ${reference}`) && mine.includes("Le enviamos el cargador"),
     "the shopper reads the answer in Sus consultas",
@@ -223,64 +203,55 @@ function sql(statement) {
   check(!mine.includes("Nota interna de prueba"), "and never the internal note");
   await fits(shopper, "Sus consultas");
   await shopper.screenshot({ path: SHOTS + "/sc5-my-cases.png", fullPage: true });
-  await shopper.goto(`${WEB}/pedidos/${orderNumber}`, { waitUntil: "networkidle" });
-  const onOrder = await text(shopper.locator('section[aria-labelledby="consultas"]'));
+  await web.openOrder(shopper, orderNumber);
+  const onOrder = await web.orderCasesText(shopper);
   check(onOrder.includes("Le enviamos el cargador"), "and on the order's page");
   check(
-    !(await text(shopper.locator("main"))).includes("Nota interna de prueba"),
+    !(await web.mainText(shopper)).includes("Nota interna de prueba"),
     "the order page shows no note",
   );
 
   // ── 4. A WhatsApp contact, the customer view and "Mostrar contacto" ───────
-  await support.goto(`${OPS}/pedidos/${orderNumber}`, { waitUntil: "networkidle" });
-  await support.locator('summary:has-text("Registrar un contacto")').click();
-  const form = support.locator('details:has(summary:has-text("Registrar un contacto"))');
-  await form.locator('select[name="channel"]').selectOption("whatsapp");
-  await form.locator('select[name="topic"]').selectOption("payment");
-  await form
-    .locator('textarea[name="summary"]')
-    .fill("Preguntó por WhatsApp si ya salió el reembolso del envío.");
-  await form.locator('button:has-text("Registrar el contacto")').click();
-  await support.waitForSelector("text=Contacto registrado como caso.");
+  await ops.openOrder(support, orderNumber);
+  await ops.recordContact(support, {
+    channel: "whatsapp",
+    topic: "payment",
+    summary: "Preguntó por WhatsApp si ya salió el reembolso del envío.",
+  });
   const contactCase =
     sql(`select id from private.cases where kind = 'contact' and channel = 'whatsapp'
     order by created_at desc limit 1`);
   check(contactCase.length === 36, "the WhatsApp contact is a case of the order");
-  await support.locator('a:has-text("Ver el cliente")').click();
-  await support.waitForURL((u) => new URL(u).pathname.startsWith("/clientes/"));
-  await support.waitForLoadState("networkidle");
-  await support.waitForSelector('section[aria-labelledby="pedidos"]');
+  await ops.openCustomerFromOrder(support);
   const customerPath = new URL(support.url()).pathname;
   check(
     !/@|%40|\+506/.test(support.url()),
     `the customer view's address holds no contact (${customerPath})`,
   );
-  const view = await text(support.locator("main"));
+  const view = await ops.mainText(support);
   check(view.includes("María") && view.includes(orderNumber), "the customer view: name and orders");
   check(!view.includes(SHOPPER), "no e-mail until it is asked for");
-  await support.getByLabel("Para qué lo necesita").fill("Llamar por el cargador que faltaba.");
-  await support.click('button:has-text("Mostrar contacto")');
-  await support.waitForSelector(`text=Correo: ${SHOPPER}`);
+  await ops.revealContact(support, "Llamar por el cargador que faltaba.", SHOPPER);
   check(true, "Mostrar contacto shows the e-mail once a reason is given");
   await fits(support, "the customer view");
   await support.screenshot({ path: SHOTS + "/sc6-customer-view.png", fullPage: true });
 
   const admin = await (await phone()).newPage();
   watch(admin);
-  await signIn(admin, OPS, ADMIN, "/auditoria");
-  await admin.goto(`${OPS}/auditoria`, { waitUntil: "networkidle" });
-  const trail = await text(admin.locator("main"));
+  await ops.signIn(admin, ADMIN, { next: "/auditoria" });
+  await ops.open(admin, "/auditoria");
+  const trail = await ops.mainText(admin);
   check(
     trail.includes("Vio el contacto de un cliente") &&
       trail.includes("Motivo: Llamar por el cargador que faltaba."),
     "Auditoría shows who saw a customer's contact, and why",
   );
   check(!trail.includes(SHOPPER), "and not the contact itself");
-  await admin.goto(`${OPS}/casos/respuestas`, { waitUntil: "networkidle" });
+  await ops.openCases(admin, "/respuestas");
   await fits(admin, "Respuestas guardadas");
   await admin.screenshot({ path: SHOTS + "/sc7-saved-replies.png", fullPage: true });
-  await admin.goto(`${OPS}/casos/informe`, { waitUntil: "networkidle" });
-  const report = await text(admin.locator("main"));
+  await ops.openCases(admin, "/informe");
+  const report = await ops.mainText(admin);
   check(
     report.includes("Primera respuesta a tiempo") && report.includes("Casos reabiertos"),
     "the monthly report shows the measures",
@@ -291,23 +262,17 @@ function sql(statement) {
   // ── 5. Finance sees only its case types ───────────────────────────────────
   const finance = await (await phone()).newPage();
   watch(finance);
-  await signIn(finance, OPS, FINANCE, "/");
-  await finance.goto(`${OPS}/`, { waitUntil: "networkidle" });
+  await ops.signIn(finance, FINANCE, { next: "/" });
+  await ops.open(finance, "/");
   check(
-    /Casos: \d+ atrasados? y \d+ vencen? hoy/.test(
-      await text(finance.locator('[data-testid="cases-due"]')),
-    ),
+    /Casos: \d+ atrasados? y \d+ vencen? hoy/.test(await ops.casesDueText(finance)),
     "Hoy carries the cases line",
   );
-  await finance.goto(`${OPS}/casos`, { waitUntil: "networkidle" });
-  const financeList = await finance
-    .locator('[data-testid="case-row"] a[href^="/casos/"]')
-    .evaluateAll((links) => links.map((a) => a.getAttribute("href")));
+  await ops.openCases(finance);
+  const financeList = await ops.caseLinks(finance);
   check(financeList.includes(`/casos/${contactCase}`), "finance sees the payment contact");
-  await finance.goto(`${OPS}/casos?estado=cerrados`, { waitUntil: "networkidle" });
-  const financeClosed = await finance
-    .locator('[data-testid="case-row"] a[href^="/casos/"]')
-    .evaluateAll((links) => links.map((a) => a.getAttribute("href")));
+  await ops.openCases(finance, "?estado=cerrados");
+  const financeClosed = await ops.caseLinks(finance);
   check(!financeClosed.includes(`/casos/${caseId}`), "but not the delivery complaint");
   await finance.screenshot({ path: SHOTS + "/sc9-finance-cases.png", fullPage: true });
   // The browser reports a 404 document as a console error; that one message is expected here.
@@ -318,11 +283,11 @@ function sql(statement) {
     }
   });
   probe.on("pageerror", (e) => errors.push("pageerror: " + String(e).slice(0, 200)));
-  const hidden = await probe.goto(`${OPS}/casos/${caseId}`, { waitUntil: "networkidle" });
+  const hidden = await ops.openCase(probe, caseId);
   // Inside a streamed page the status may already be sent; what matters is
   // that the case itself is not shown, only the not-found screen.
-  await probe.waitForSelector("text=No encontramos esa página");
-  const probeText = await text(probe.locator("main"));
+  await ops.waitForNotFound(probe);
+  const probeText = await ops.mainText(probe);
   check(
     !probeText.includes("El paquete llegó con la caja abierta"),
     `the complaint's page is not found for finance (status ${hidden?.status()})`,

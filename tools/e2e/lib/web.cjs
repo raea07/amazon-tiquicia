@@ -1126,3 +1126,77 @@ Object.assign(module.exports, {
   showPhoto,
   resultPictureSrc,
 });
+
+// ── Wave 9: the complaint form, «Sus consultas», a category's breadcrumb ────
+
+/** Where the footer's «Presentar un reclamo» leads. */
+const footerComplaintHref = (page) =>
+  link(page.getByRole("contentinfo"), "Presentar un reclamo").getAttribute("href");
+
+/** From an order's page, «Presente un reclamo», and waits for the form. */
+async function startComplaintFromOrder(page) {
+  await claimLink(page).click();
+  await page.waitForURL((u) => new URL(u).pathname === "/reclamo");
+  await page.waitForLoadState("networkidle");
+}
+
+/** Opens the complaint form for an order. */
+const openComplaintForm = (page, orderNumber) =>
+  open(page, `/reclamo?pedido=${encodeURIComponent(orderNumber)}`);
+
+/** The order number the complaint form carries. */
+const complaintOrderNumber = (page) => field(main(page), "orderNumber").inputValue();
+
+/** What the complaint form promises (the times of the acknowledgement and the answer). */
+const complaintPromise = (page) => text(testid(main(page), "complaint-promise"));
+
+/** Chooses what the complaint is about and types it. */
+async function fillComplaint(page, { category, description }) {
+  await field(main(page), "category", "select").selectOption(category);
+  await field(main(page), "description", "textarea").fill(description);
+}
+
+/** «Enviar el reclamo», and returns what the page says once it is filed. */
+async function sendComplaint(page) {
+  await button(main(page), "Enviar el reclamo").click();
+  const filed = testid(main(page), "complaint-filed");
+  await filed.waitFor({ timeout: 30_000 });
+  return text(filed);
+}
+
+/** Opens «Sus consultas» in the account. */
+const openMyCases = (page) => open(page, "/cuenta/casos");
+
+/** The shopper's cases on an order's page, as one line. */
+const orderCasesText = (page) =>
+  text(main(page).getByRole("region", { name: "Sus consultas sobre este pedido" }));
+
+/** Opens a category page. */
+const openCategory = (page, slug) => open(page, `/c/${slug}`);
+
+const breadcrumb = (page) => page.getByRole("navigation", { name: "Ruta" });
+
+/** The breadcrumb's «Inicio» (for its size). */
+const breadcrumbHome = (page) => link(breadcrumb(page), "Inicio");
+
+/** The breadcrumb's second link, the parent category (for its size). */
+const breadcrumbParent = (page) => breadcrumb(page).getByRole("link").nth(1);
+
+/** The breadcrumb's list (for the height of its line). */
+const breadcrumbLine = (page) => breadcrumb(page).getByRole("list").first();
+
+Object.assign(module.exports, {
+  footerComplaintHref,
+  startComplaintFromOrder,
+  openComplaintForm,
+  complaintOrderNumber,
+  complaintPromise,
+  fillComplaint,
+  sendComplaint,
+  openMyCases,
+  orderCasesText,
+  openCategory,
+  breadcrumbHome,
+  breadcrumbParent,
+  breadcrumbLine,
+});
