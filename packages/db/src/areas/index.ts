@@ -32,11 +32,12 @@ import * as peoplePayouts from "./people-payouts";
 import { photosApi, photosErrors } from "./photos";
 import { sellerListingsApi, sellerListingsErrors } from "./seller-listings";
 import { shopperFollowupsApi, shopperFollowupsErrors } from "./shopper-followups";
+import { supportCasesApi, supportCasesErrors } from "./support-cases";
 import type { Caller, Messages } from "./types";
 import { warehouseStockApi, warehouseStockErrors } from "./warehouse-stock";
 import { webFollowupsApi, webFollowupsErrors } from "./web-followups";
 
-// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts, operations, order-followups, warehouse-stock, count-into-location, lock-conflicts and shopper-followups areas name their exports uniquely, so
+// The listings, integrity, limits, followups, payments, invoicing, invoicing-fixes, seller-listings, catalogue, catalogue-followups, native-accounts, operations, order-followups, warehouse-stock, count-into-location, lock-conflicts, shopper-followups and support-cases areas name their exports uniquely, so
 // they are star-exported. The other areas export `errors` and `api`, which
 // would clash with each other, so their schemas and types are re-exported by
 // name.
@@ -106,6 +107,7 @@ export type {
 export * from "./photos";
 export * from "./seller-listings";
 export * from "./shopper-followups";
+export * from "./support-cases";
 export type { Caller, Messages } from "./types";
 export * from "./warehouse-stock";
 export * from "./web-followups";
@@ -133,6 +135,7 @@ export const areaErrors = {
   ...countIntoLocationErrors,
   ...lockConflictErrors,
   ...shopperFollowupsErrors,
+  ...supportCasesErrors,
 } as const satisfies Messages;
 
 export const areaApi = (caller: Caller) => ({
@@ -165,4 +168,5 @@ export const areaApi = (caller: Caller) => ({
   ...orderFollowupsApi(caller),
   // After seller-listings: its cart alternatives carry the delivery date.
   ...shopperFollowupsApi(caller),
+  ...supportCasesApi(caller),
 });

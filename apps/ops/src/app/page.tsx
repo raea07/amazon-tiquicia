@@ -35,9 +35,10 @@ async function Overview() {
   const api = await sessionApi();
   // Changes to published products wait in the same queue as new products, but
   // only catalogue staff may read them.
-  const [o, edits] = await Promise.all([
+  const [o, edits, cases] = await Promise.all([
     api.opsOverview(),
     canSee(staff.staff_role, ["catalog"]) ? api.opsListingEditsForReview() : [],
+    api.opsCasesDue(),
   ]);
   const statuses = Object.entries(o.orders).filter(([, count]) => count > 0);
 
@@ -60,6 +61,11 @@ async function Overview() {
         <h2 id="plazo" className="text-xl font-bold">
           Con plazo
         </h2>
+        <p className="mt-2 text-sm" data-testid="cases-due">
+          Casos: {cases.overdue} {cases.overdue === 1 ? "atrasado" : "atrasados"} y{" "}
+          {cases.due_today} {cases.due_today === 1 ? "vence" : "vencen"} hoy, de {cases.open}{" "}
+          {cases.open === 1 ? "abierto" : "abiertos"}. <More href="/casos">Ver los casos</More>
+        </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Stat
             label="Paquetes atrasados"

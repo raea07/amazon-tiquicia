@@ -52,6 +52,9 @@ async function Account() {
           <Link href="/pedidos" className={buttonClass({ variant: "secondary" })}>
             Ver sus pedidos
           </Link>
+          <Link href="/cuenta/casos" className={buttonClass({ variant: "secondary" })}>
+            Sus consultas
+          </Link>
           <Link href="/cuenta/notificaciones" className={buttonClass({ variant: "secondary" })}>
             Notificaciones
           </Link>

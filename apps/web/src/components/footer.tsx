@@ -48,7 +48,7 @@ export function Footer() {
             </li>
             <li>
               <Link
-                href="/ayuda#reclamos"
+                href="/reclamo"
                 className="inline-flex min-h-11 items-center hover:text-ink hover:underline"
               >
                 Presentar un reclamo

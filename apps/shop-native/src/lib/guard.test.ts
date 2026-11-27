@@ -38,6 +38,7 @@ describe("screens for signed-in shoppers", () => {
     }
     expect(guarded.sort()).toEqual(
       [
+        "cuenta/casos.tsx",
         "cuenta/contrasena.tsx",
         "cuenta/eliminar.tsx",
         "cuenta/notificaciones.tsx",
@@ -45,6 +46,7 @@ describe("screens for signed-in shoppers", () => {
         "pagar.tsx",
         "pedidos/[numero].tsx",
         "pedidos/index.tsx",
+        "reclamo.tsx",
       ].sort(),
     );
   });

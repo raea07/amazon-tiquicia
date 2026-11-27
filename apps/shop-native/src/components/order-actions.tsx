@@ -265,7 +265,7 @@ export function ReturnForm({
               ok:
                 kind === "withdrawal"
                   ? WITHDRAWAL_APPROVED
-                  : "Recibimos su solicitud. Le respondemos en un máximo de 2 días hábiles.",
+                  : "Recibimos su solicitud. Le respondemos en un máximo de 1 día hábil.",
             });
           } catch (error) {
             setResult({ error: messageOf(error) });

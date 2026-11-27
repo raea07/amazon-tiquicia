@@ -87,6 +87,8 @@ export default function RootLayout() {
           <Stack.Screen name="ayuda" options={{ title: "Ayuda" }} />
           <Stack.Screen name="direcciones/nueva" options={{ title: "Nueva dirección" }} />
           <Stack.Screen name="reportar" options={{ title: "Reportar un problema" }} />
+          <Stack.Screen name="reclamo" options={{ title: "Presentar un reclamo" }} />
+          <Stack.Screen name="cuenta/casos" options={{ title: "Sus consultas" }} />
           <Stack.Screen name="cuenta/notificaciones" options={{ title: "Notificaciones" }} />
           <Stack.Screen name="cuenta/contrasena" options={{ title: "Contraseña" }} />
           <Stack.Screen name="cuenta/eliminar" options={{ title: "Eliminar su cuenta" }} />

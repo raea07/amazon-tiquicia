@@ -342,7 +342,7 @@ export async function requestReturn(
     await api.requestReturn({ ...parsed.data, reason: parsed.data.reason || null });
     return parsed.data.kind === "withdrawal"
       ? "Devolución aprobada. Le contactaremos para recoger el producto, sin costo para usted; cuando llegue a nuestra bodega le reembolsamos por el mismo medio de pago."
-      : "Recibimos su solicitud. Le respondemos en un máximo de 2 días hábiles.";
+      : "Recibimos su solicitud. Le respondemos en un máximo de 1 día hábil.";
   });
   return state.error ? { ...state, values } : state;
 }

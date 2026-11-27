@@ -15,6 +15,7 @@
 import { clean, colones, fullDate, longDate } from "../format.ts";
 import { FOLLOWUP_TEMPLATES } from "./followups.ts";
 import { STAFF_CATALOGUE_TEMPLATES } from "./staff-catalogue.ts";
+import { SUPPORT_TEMPLATES } from "./support-cases.ts";
 
 export type Vars = Record<string, unknown>;
 
@@ -486,11 +487,11 @@ export const TEMPLATES: Record<string, Template> = {
     return {
       from: "orders",
       subject: `Recibimos su reclamo ${ref}`,
-      preheader: "Le respondemos en un máximo de 10 días hábiles.",
+      preheader: "Le respondemos por escrito en un máximo de 5 días hábiles.",
       greeting: hello(name),
       paragraphs: [
         `Recibimos su reclamo ${ref}${v.order_number ? ` sobre el pedido ${orderNumber(v)}` : ""}.`,
-        "Una persona del equipo lo revisa y le responde en un máximo de 10 días hábiles. Si necesita agregar algo, responda a este correo.",
+        "Este correo es la confirmación de que lo recibimos. Una persona del equipo lo revisa y le responde por escrito en un máximo de 5 días hábiles; la respuesta también queda en su cuenta. Si necesita agregar algo, responda a este correo.",
       ],
       action: { label: "Ir a su cuenta", url: `${links.shop}/cuenta` },
       note: "Guarde este correo: es el comprobante de que presentó el reclamo.",
@@ -724,6 +725,8 @@ export const TEMPLATES: Record<string, Template> = {
   ...FOLLOWUP_TEMPLATES,
   // The message added with migration 083700 (./staff-catalogue.ts).
   ...STAFF_CATALOGUE_TEMPLATES,
+  // The message added with migration 084700 (./support-cases.ts).
+  ...SUPPORT_TEMPLATES,
 };
 
 export const TEMPLATE_NAMES = Object.keys(TEMPLATES).sort();

@@ -1,6 +1,7 @@
 export * from "./allocation";
 export * from "./cancellation";
 export * from "./cart-summary";
+export * from "./complaints";
 export * from "./cr/compliance";
 export * from "./cr/geo";
 export * from "./cr/iban";

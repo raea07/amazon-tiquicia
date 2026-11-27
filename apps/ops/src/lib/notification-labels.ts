@@ -17,6 +17,7 @@ export const TEMPLATE: Record<string, string> = {
   return_rejected: "Devolución no aprobada",
   complaint_received: "Reclamo recibido",
   complaint_answered: "Reclamo respondido",
+  case_answered: "Caso respondido",
   report_resolved: "Reporte revisado",
   seller_new_order: "Pedido nuevo (tienda)",
   seller_order_cancelled: "Pedido cancelado (tienda)",

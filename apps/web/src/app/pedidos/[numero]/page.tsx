@@ -14,6 +14,7 @@ import {
 } from "@yuntera/core";
 import {
   ApiError,
+  type MyCase,
   type MyOrderReturn,
   type MyOrderReview,
   type OrderDetailWithRecall as OrderDetail,
@@ -38,6 +39,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { CaseAnswers } from "@/components/case-answers";
 import {
   CancelOrderForm,
   ReturnForm,
@@ -99,6 +101,8 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
   const payment: OrderPayment = await api.orderPayment(numero);
   // Which of the shopper's reviews on this order staff hid, and why.
   const reviewStates: MyOrderReview[] = await api.myOrderReviews(numero);
+  // The shopper's complaints, returns and contacts about this order, with the answers.
+  const cases: MyCase[] = await api.myCases(numero);
   const throughGateway = [
     "start",
     "preparing",
@@ -455,6 +459,17 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
             />
           </Suspense>
 
+          {cases.length > 0 ? (
+            <section aria-labelledby="consultas">
+              <h2 id="consultas" className="text-xl font-bold">
+                Sus consultas sobre este pedido
+              </h2>
+              <div className="mt-3">
+                <CaseAnswers cases={cases} showOrder={false} />
+              </div>
+            </section>
+          ) : null}
+
           <section aria-labelledby="historial">
             <h2 id="historial" className="text-xl font-bold">
               Historial
@@ -542,7 +557,10 @@ async function Order({ params, searchParams }: PageProps<"/pedidos/[numero]">) {
 
           <p className="text-sm text-ink-muted">
             ¿Algo no salió bien?{" "}
-            <Link href="/ayuda#reclamos" className={touchLinkClass()}>
+            <Link
+              href={`/reclamo?pedido=${order.order_number}` as Route}
+              className={touchLinkClass()}
+            >
               Presente un reclamo
             </Link>
             .

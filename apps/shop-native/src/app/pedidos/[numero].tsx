@@ -41,6 +41,7 @@ import { Link, Stack as Nav, Redirect, useLocalSearchParams } from "expo-router"
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { OrderStatusBadge, ShipmentStatusBadge } from "@/components/badges";
+import { CaseAnswers } from "@/components/case-answers";
 import {
   GATEWAY_STAGES,
   GatewayPayment,
@@ -170,6 +171,11 @@ export default function OrderScreen() {
     personal: true,
     enabled: order.data !== undefined,
   });
+  // The shopper's complaints, returns and contacts about this order, with the answers.
+  const cases = useApiQuery(["order-cases", number], (api) => api.myCases(number), {
+    personal: true,
+    enabled: order.data !== undefined,
+  });
   // How its payment stands at the gateway; asked again while it changes on its own.
   const payment = useApiQuery(["order-payment", number], (api) => api.orderPayment(number), {
     personal: true,
@@ -185,9 +191,12 @@ export default function OrderScreen() {
   const [pulling, setPulling] = useState(false);
   const readAgain = () => {
     setPulling(true);
-    void Promise.allSettled([order.refetch(), payment.refetch(), returns.refetch()]).finally(() =>
-      setPulling(false),
-    );
+    void Promise.allSettled([
+      order.refetch(),
+      payment.refetch(),
+      returns.refetch(),
+      cases.refetch(),
+    ]).finally(() => setPulling(false));
   };
 
   if (needsSignIn(status)) return <Redirect href={signInPath(`/pedidos/${number}`)} />;
@@ -600,6 +609,13 @@ export default function OrderScreen() {
         </Card>
       ) : null}
 
+      {cases.data && cases.data.length > 0 ? (
+        <Stack gap={2}>
+          <Text variant="heading">Sus consultas sobre este pedido</Text>
+          <CaseAnswers cases={cases.data} showOrder={false} />
+        </Stack>
+      ) : null}
+
       <Stack gap={2}>
         <Text variant="heading">Historial</Text>
         <View style={styles.timeline}>
@@ -618,7 +634,9 @@ export default function OrderScreen() {
         <Text variant="small" tint="muted">
           ¿Algo no salió bien?
         </Text>
-        <TextLink href="/ayuda">Presente un reclamo</TextLink>
+        <TextLink href={`/reclamo?pedido=${o.order_number}`} testID="order-complaint">
+          Presente un reclamo
+        </TextLink>
       </View>
     </Screen>
   );
