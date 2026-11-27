@@ -507,6 +507,54 @@ How the new parts work, in short:
 
 ## How it was checked
 
+**Wave 9, on a development machine on 27 November 2026**, after the four
+streams were merged and their cross-stream work done (lane 16 of
+`tools/dev/stack.sh`; lane 11 for the races), all run after the last change
+to code. Not run: anything on the hosted project, against real Sentry, on
+Vercel or on a phone.
+
+- **Lint and types**: no lint errors (255 warnings and 440 notes, of kinds
+  already there); no type errors in the 20 typecheck tasks.
+- **Unit tests**: 1559 pass in 15 packages; new: the answer times kept equal
+  to the database's targets and to customer-service.md, a stopped parcel's
+  words, the one rule for the build's commit, the messages' answer times,
+  and a scan of the websites' code for error messages built from personal
+  values that now proves it reads the support desk's and the health page's
+  files.
+- **Database tests**: 48 files pass on PostgreSQL 16 (47 migrations), with
+  the stack down; new: `181_support_cases`, `185_system_health`, `191` to
+  `195` (the wave 8 follow-ups) and `196_wave9_integration` (Salud, Hoy and
+  Casos count the same late cases; every function of the wave called as each
+  staff role; a customer's own delivery code masked for staff; the hourly
+  allowance of four-digit numbers; account deletion across the wave).
+  `165_console_operations` no longer finds a random code inside ids and
+  times: it passed 60 times in a row.
+- **API contract tests**: 244 tests in 42 files (37 contract files) pass,
+  twice in a row on the same database; new: `contract.support-cases`,
+  `contract.system-health`, `contract.wave8-followups`,
+  `contract.frozen-callers` (extended), `contract.support-desk-races` (one
+  forced round of J1 and J5) and `contract.wave9-integration` (the client
+  code of the store build `3f251c3` and of the preview's web apps `12ec48c`,
+  taken from git, against the merged database).
+- **Races**: every family A to J at 50 natural and 50 forced rounds on a
+  freshly reset lane 11 with nothing else running: 180 rows, 0 wrong rounds
+  and 0 timeouts everywhere; lock errors only in the documented E5, E5b, E6,
+  E7 and E11. The new family J (the support desk against Atención and
+  account deletion) is 0 in all 22 rows; with `ops_answer_case` taking the
+  case before the complaint, J1 deadlocked in 15 of 100 natural and 100 of
+  100 forced rounds. Table in
+  `/root/yuntera-audit/races-wave9/integration/table.txt`.
+- **Browser journeys**: all 35 pass in one run with the tracker off; new
+  `support-cases`, `system-health`, `error-reports`, `wave8-followups` and
+  `wave9-integration` (who sees what for each staff role, one count of late
+  cases on three pages, a customer's own code masked). `error-reports`
+  passes with the stand-in tracker too, now also failing the case page, the
+  customer view after "Mostrar contacto" and the complaint form: no report
+  carried their text. `tools/e2e/touch-targets.cjs`: no control under 44 px
+  outside running text.
+- **Native journeys**: all 19 pass through the web export; new
+  `shop-complaint` and `shop-stopped-order`.
+
 On a development machine on 24 November 2026, after wave 8 was merged, its
 cross-stream work done and three rounds of outside findings fixed (lane 15 of
 `tools/dev/stack.sh`; lane 12 for the "before" measurements and the
