@@ -189,6 +189,18 @@ export const STATUS_WORDS = {
       resolved: e("ok", "Respondido", "Answered"),
     },
   },
+  /**
+   * A support case (Casos, «Sus consultas»). §8.2 point 3: case states use the
+   * «complaints» words. Open with an answer: «En revisión»; open past or near
+   * its due time: «Atrasado» or «Vence pronto», see statusWord.
+   */
+  cases: {
+    source: { table: "private.cases", column: "status" },
+    words: {
+      open: e("plain", "Por responder", "To answer"),
+      closed: e("ok", "Respondido", "Answered"),
+    },
+  },
   payouts: {
     source: { table: "public.payouts", column: "status" },
     words: {
@@ -513,6 +525,14 @@ export interface StatusWordOptions {
   expired?: boolean;
   /** inbound_status: `received` with a difference reads «Con diferencias». */
   hasDifference?: boolean;
+  /** shipment_status: get_order's `recalled`; `returning` reads «Detenido en la bodega». */
+  recalled?: boolean;
+  /** shipment_status: get_order's `stopped_before_leaving`; `returned` reads «No salió de la bodega». */
+  stoppedBeforeLeaving?: boolean;
+  /** cases: someone answered (`first_response_at`); `open` reads «En revisión». */
+  answered?: boolean;
+  /** cases: the case's clock; `open` with `due_soon` reads «Vence pronto», with `overdue` «Atrasado». */
+  clock?: string;
 }
 
 /** The words that depend on more than the value (the «+ derived» rows of §4.3). */
@@ -523,6 +543,14 @@ const DERIVED = {
   codeLocked: e("err", "Código bloqueado", "Code locked"),
   expiredInvitation: e("ended", "Vencida", "Expired"),
   withDifferences: e("warn", "Con diferencias", "With differences"),
+  // A parcel staff stopped in our warehouse (ops_recall_shipment): the
+  // general words say it came back, which is false for one that never left.
+  heldAtWarehouse: e("warn", "Detenido en la bodega", "Held at the warehouse"),
+  neverLeft: e("ended", "No salió de la bodega", "Never left the warehouse"),
+  // §8.2 point 3: a case's clock is a stamp with its word, never colour alone.
+  caseAnswered: e("half", "En revisión", "In review"),
+  caseDueSoon: e("warn", "Vence pronto", "Due soon"),
+  caseOverdue: e("err", "Atrasado", "Overdue"),
 } as const;
 
 /** Every word a stamp can show for a derived case, for tests and journeys. */
@@ -553,6 +581,17 @@ function entryFor(kind: StatusKind, value: string, opts: StatusWordOptions): Ent
   }
   if (kind === "inbound_status" && value === "received" && opts.hasDifference === true) {
     return DERIVED.withDifferences;
+  }
+  if (kind === "shipment_status" && value === "returning" && opts.recalled === true) {
+    return DERIVED.heldAtWarehouse;
+  }
+  if (kind === "shipment_status" && value === "returned" && opts.stoppedBeforeLeaving === true) {
+    return DERIVED.neverLeft;
+  }
+  if (kind === "cases" && value === "open") {
+    if (opts.clock === "overdue") return DERIVED.caseOverdue;
+    if (opts.clock === "due_soon") return DERIVED.caseDueSoon;
+    if (opts.answered === true) return DERIVED.caseAnswered;
   }
   const entry = spec.byViewer?.[opts.viewer]?.[value] ?? spec.words[value];
   if (!entry) throw new RangeError(`No word for ${kind} ${JSON.stringify(value)}`);

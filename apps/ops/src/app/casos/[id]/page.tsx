@@ -1,7 +1,14 @@
-import { ORDER_STATUS_LABEL, type OrderStatus } from "@yuntera/core";
+import { statusWordOf } from "@yuntera/core";
 import { ApiError, type CaseDetail, type SavedReply } from "@yuntera/db";
 import { sessionApi } from "@yuntera/next-kit/server";
-import { Badge, formatDate, formatDateTime, formatPrice, Skeleton } from "@yuntera/ui";
+import {
+  Badge,
+  formatDate,
+  formatDateTime,
+  formatPrice,
+  Skeleton,
+  touchLinkClass,
+} from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -16,15 +23,15 @@ import {
 } from "@/components/case-forms";
 import {
   CASE_CHANNEL_IN_SENTENCE,
-  CASE_CLOCK,
   CASE_KIND,
   CASE_ROLES,
+  caseStamp,
   caseTopic,
   deadline,
   entryLabel,
   timeLeft,
 } from "@/lib/case-labels";
-import { RETURN_STATUS } from "@/lib/labels";
+import { ORDER_STATUS_STAFF } from "@/lib/labels";
 import { canSee, requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Caso" };
@@ -58,7 +65,7 @@ async function Case({ params }: Pick<PageProps<"/casos/[id]">, "params">) {
     item.can.answer && canSee(staff.staff_role, ["support"]) ? await api.opsSavedReplies() : [];
   await connection();
   const now = Date.now();
-  const clock = CASE_CLOCK[item.clock];
+  const clock = caseStamp(item);
   const left = timeLeft(item, now);
 
   return (
@@ -66,7 +73,7 @@ async function Case({ params }: Pick<PageProps<"/casos/[id]">, "params">) {
       <div className="flex flex-col gap-8">
         <header>
           <p className="text-sm text-ink-muted">
-            <Link href="/casos" className="inline-flex min-h-11 items-center text-link underline">
+            <Link href="/casos" className={touchLinkClass()}>
               Volver a Casos
             </Link>
           </p>
@@ -110,7 +117,7 @@ async function Case({ params }: Pick<PageProps<"/casos/[id]">, "params">) {
               <p className="font-semibold">
                 {item.request.quantity} × {item.request.title}
                 {item.request.status
-                  ? ` · ${RETURN_STATUS[item.request.status]?.label ?? item.request.status}`
+                  ? ` · ${statusWordOf("return_requests", item.request.status, { viewer: "staff" })?.word ?? item.request.status}`
                   : ""}
               </p>
             ) : null}
@@ -211,13 +218,14 @@ async function Case({ params }: Pick<PageProps<"/casos/[id]">, "params">) {
             <p className="mt-2">
               <Link
                 href={`/pedidos/${item.order.order_number}` as Route}
-                className="inline-flex min-h-11 items-center font-semibold text-link underline"
+                className={touchLinkClass("font-semibold")}
               >
                 Pedido {item.order.order_number}
               </Link>
             </p>
             <p className="text-ink-muted">
-              {ORDER_STATUS_LABEL[item.order.status as OrderStatus]?.["es-CR"] ?? item.order.status}{" "}
+              {ORDER_STATUS_STAFF[item.order.status as keyof typeof ORDER_STATUS_STAFF] ??
+                item.order.status}{" "}
               · {item.order.item_count} {item.order.item_count === 1 ? "producto" : "productos"} ·{" "}
               {formatPrice(item.order.total_minor)}
             </p>
@@ -234,10 +242,7 @@ async function Case({ params }: Pick<PageProps<"/casos/[id]">, "params">) {
             </p>
             {item.can.customer ? (
               <p>
-                <Link
-                  href={`/clientes/${item.customer.id}` as Route}
-                  className="inline-flex min-h-11 items-center text-link underline"
-                >
+                <Link href={`/clientes/${item.customer.id}` as Route} className={touchLinkClass()}>
                   Ver el cliente: pedidos, devoluciones y casos
                 </Link>
               </p>

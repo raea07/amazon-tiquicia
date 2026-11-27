@@ -1,4 +1,5 @@
 import { sessionApi } from "@yuntera/next-kit/server";
+import { touchLinkClass } from "@yuntera/ui";
 import type { Route } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
@@ -23,10 +24,7 @@ export async function OrderCases({
   return (
     <div className="mt-3 flex flex-col gap-4">
       <p className="text-sm">
-        <Link
-          href={`/clientes/${customer_id}` as Route}
-          className="inline-flex min-h-11 items-center text-link underline"
-        >
+        <Link href={`/clientes/${customer_id}` as Route} className={touchLinkClass()}>
           Ver el cliente: sus pedidos, devoluciones y casos
         </Link>
       </p>

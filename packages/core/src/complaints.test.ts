@@ -7,6 +7,7 @@ import {
   COMPLAINT_DESCRIPTION_MIN,
   checkComplaint,
   complaintFiledText,
+  myCaseStatusWord,
 } from "./complaints";
 
 const MIGRATIONS = fileURLToPath(new URL("../../../supabase/migrations/", import.meta.url));
@@ -82,5 +83,15 @@ describe("complaintFiledText", () => {
     expect(text).toContain("a más tardar el lunes 7 de diciembre");
     // No second confirmation is promised.
     expect(text.match(/a más tardar/g)).toHaveLength(1);
+  });
+});
+
+describe("myCaseStatusWord", () => {
+  it("says where a shopper's case stands in the case words of status-words.ts", () => {
+    expect(myCaseStatusWord({ status: "open", answers: [] })).toBe("Por responder");
+    expect(myCaseStatusWord({ status: "open", answers: [{}] })).toBe("En revisión");
+    expect(myCaseStatusWord({ status: "closed", answers: [] })).toBe("Respondido");
+    // A value the module does not know is shown as it came.
+    expect(myCaseStatusWord({ status: "archived", answers: [] })).toBe("archived");
   });
 });

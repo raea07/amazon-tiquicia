@@ -1,4 +1,4 @@
-import { MY_CASE_KIND, MY_CASE_STATUS } from "@yuntera/core";
+import { MY_CASE_KIND, myCaseStatusWord } from "@yuntera/core";
 import type { MyCase } from "@yuntera/db";
 import { colors, radius, space } from "@yuntera/expo-kit/theme";
 import { Badge, Card, formatDate, formatDateTime, Stack, Text } from "@yuntera/expo-kit/ui";
@@ -19,7 +19,7 @@ export function CaseAnswers({ cases, showOrder }: { cases: MyCase[]; showOrder: 
               {MY_CASE_KIND[item.kind] ?? "Consulta"} {item.reference}
             </Text>
             <Badge tone={item.status === "closed" ? "success" : "info"}>
-              {MY_CASE_STATUS[item.status] ?? item.status}
+              {myCaseStatusWord(item)}
             </Badge>
             <Text variant="small" tint="muted">
               Desde el {formatDate(item.created_at, { day: "numeric", month: "long" })}

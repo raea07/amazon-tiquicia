@@ -1,6 +1,7 @@
+import { type StatusTone, statusWord, statusWordOf } from "@yuntera/core";
 import type { CaseClock, CaseRow, CaseTargetUnit } from "@yuntera/db";
 import { formatDate, formatDateTime, type Tone } from "@yuntera/ui";
-import { COMPLAINT_CATEGORY, REPORT_REASON, RETURN_KIND, RETURN_STATUS } from "@/lib/labels";
+import { COMPLAINT_CATEGORY, REPORT_REASON, RETURN_KIND } from "@/lib/labels";
 
 /** The roles that work in Casos (each reads its own kinds of case; admin all). */
 export const CASE_ROLES = ["support", "ops", "finance", "catalog"] as const;
@@ -54,13 +55,34 @@ export function caseTopic(row: Pick<CaseRow, "kind" | "topic">): string {
   return table[row.topic] ?? row.topic;
 }
 
-/** The clock in words: status is never colour alone. */
-export const CASE_CLOCK: Record<CaseClock, { label: string; tone: Tone }> = {
-  on_time: { label: "A tiempo", tone: "neutral" },
-  due_soon: { label: "Vence pronto", tone: "warning" },
-  overdue: { label: "Atrasado", tone: "danger" },
-  closed: { label: "Cerrado", tone: "success" },
+/** The badge colour of each sign's tone, until the status stamp replaces the badge. */
+const CASE_TONE: Record<StatusTone, Tone> = {
+  plain: "neutral",
+  half: "info",
+  done: "success",
+  ok: "success",
+  warn: "warning",
+  err: "danger",
+  ended: "neutral",
 };
+
+/**
+ * A case's stamp: its state and its clock in one word from packages/core
+ * (§8.2 point 3, the «complaints» words; «Vence pronto» and «Atrasado» are
+ * warn and err stamps). Status is never colour alone.
+ */
+export function caseStamp(row: Pick<CaseRow, "status" | "clock" | "first_response_at">): {
+  label: string;
+  tone: Tone;
+} {
+  const clock: CaseClock = row.clock;
+  const stamp = statusWord("cases", row.status, {
+    viewer: "staff",
+    answered: row.first_response_at !== null,
+    clock,
+  });
+  return { label: stamp.word, tone: CASE_TONE[stamp.tone] };
+}
 
 /** "3 h 20 min", "2 días", "15 min": a span, rounded down. */
 export function span(ms: number): string {
@@ -129,16 +151,19 @@ export function entryLabel(kind: string, body: string | null, caseKind: string):
       return "Cerró el caso";
     case "reopened":
       return "Volvió a abrir el caso";
-    case "status":
-      if (caseKind === "return") return `Devolución: ${RETURN_STATUS[body ?? ""]?.label ?? body}`;
-      if (caseKind === "report") {
-        return body === "actioned"
-          ? "Reporte: se retiró el contenido"
-          : body === "dismissed"
-            ? "Reporte: descartado"
-            : "Reporte: en revisión";
-      }
-      return `Estado: ${body ?? ""}`;
+    case "status": {
+      // The source row's new status, in the words of packages/core (staff).
+      const kind =
+        caseKind === "return"
+          ? "return_requests"
+          : caseKind === "report"
+            ? "content_reports"
+            : "complaints";
+      const word = statusWordOf(kind, body ?? "", { viewer: "staff" })?.word ?? body ?? "";
+      if (caseKind === "return") return `Devolución: ${word.toLowerCase()}`;
+      if (caseKind === "report") return `Reporte: ${word.toLowerCase()}`;
+      return `Estado: ${word.toLowerCase()}`;
+    }
     default:
       return kind;
   }

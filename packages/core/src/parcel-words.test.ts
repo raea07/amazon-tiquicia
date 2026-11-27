@@ -30,8 +30,8 @@ describe("stoppedParcelLabel", () => {
 
 describe("stoppedParcelHistory", () => {
   it("tells the history of a parcel that never left", () => {
-    expect(stoppedParcelHistory("returning", true)).toBe("Paquete: detenido en nuestra bodega");
-    expect(stoppedParcelHistory("returned", true)).toBe("Paquete: no salió de nuestra bodega");
+    expect(stoppedParcelHistory("returning", true)).toBe("Paquete: detenido en la bodega");
+    expect(stoppedParcelHistory("returned", true)).toBe("Paquete: no salió de la bodega");
     expect(stoppedParcelHistory("packed", true)).toBe(null);
   });
 

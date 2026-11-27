@@ -1,7 +1,7 @@
-import { ORDER_STATUS_LABEL, type OrderStatus } from "@yuntera/core";
+import { statusWordOf } from "@yuntera/core";
 import { ApiError, type CustomerView } from "@yuntera/db";
 import { sessionApi } from "@yuntera/next-kit/server";
-import { Alert, formatDateTime, formatPrice, Skeleton } from "@yuntera/ui";
+import { Alert, formatDateTime, formatPrice, Skeleton, touchLinkClass } from "@yuntera/ui";
 import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,18 +9,17 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { RecordContactForm, RevealContactForm } from "@/components/case-forms";
 import { CaseList } from "@/components/case-list";
-import { COMPLAINT_CATEGORY, RETURN_KIND, RETURN_STATUS } from "@/lib/labels";
+import {
+  COMPLAINT_CATEGORY,
+  COMPLAINT_STATUS,
+  ORDER_STATUS_STAFF,
+  RETURN_KIND,
+} from "@/lib/labels";
 import { canSee, requireStaff } from "@/lib/staff";
 
 export const metadata: Metadata = { title: "Cliente" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const COMPLAINT_STATUS: Record<string, string> = {
-  open: "Sin responder",
-  in_progress: "En curso",
-  resolved: "Resuelto",
-};
 
 /**
  * One customer across their orders, reached from an order or a case (there
@@ -92,13 +91,14 @@ async function Customer({ params }: Pick<PageProps<"/clientes/[id]">, "params">)
               >
                 <Link
                   href={`/pedidos/${order.order_number}` as Route}
-                  className="inline-flex min-h-11 items-center font-semibold text-link underline"
+                  className={touchLinkClass("font-semibold")}
                 >
                   {order.order_number}
                 </Link>
                 <span className="inline-flex items-center text-ink-muted">
-                  {ORDER_STATUS_LABEL[order.status as OrderStatus]?.["es-CR"] ?? order.status} ·{" "}
-                  {formatDateTime(order.placed_at)} · {formatPrice(order.total_minor)}
+                  {ORDER_STATUS_STAFF[order.status as keyof typeof ORDER_STATUS_STAFF] ??
+                    order.status}{" "}
+                  · {formatDateTime(order.placed_at)} · {formatPrice(order.total_minor)}
                 </span>
               </li>
             ))}
@@ -119,8 +119,9 @@ async function Customer({ params }: Pick<PageProps<"/clientes/[id]">, "params">)
                     {RETURN_KIND[item.kind] ?? item.kind}: {item.quantity} × {item.title}
                   </p>
                   <p className="text-ink-muted">
-                    {RETURN_STATUS[item.status]?.label ?? item.status} · pedido {item.order_number}{" "}
-                    · {formatDateTime(item.created_at)}
+                    {statusWordOf("return_requests", item.status, { viewer: "staff" })?.word ??
+                      item.status}{" "}
+                    · pedido {item.order_number} · {formatDateTime(item.created_at)}
                   </p>
                 </li>
               ))}

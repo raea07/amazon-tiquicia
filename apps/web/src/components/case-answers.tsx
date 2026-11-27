@@ -1,4 +1,4 @@
-import { MY_CASE_KIND, MY_CASE_STATUS } from "@yuntera/core";
+import { MY_CASE_KIND, myCaseStatusWord } from "@yuntera/core";
 import type { MyCase } from "@yuntera/db";
 import { Badge, formatDate, formatDateTime } from "@yuntera/ui";
 import type { Route } from "next";
@@ -22,7 +22,7 @@ export function CaseAnswers({ cases, showOrder }: { cases: MyCase[]; showOrder: 
               {MY_CASE_KIND[item.kind] ?? "Consulta"} {item.reference}
             </p>
             <Badge tone={item.status === "closed" ? "success" : "info"}>
-              {MY_CASE_STATUS[item.status] ?? item.status}
+              {myCaseStatusWord(item)}
             </Badge>
           </div>
           <p className="mt-1 text-ink-muted">

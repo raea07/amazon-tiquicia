@@ -343,7 +343,48 @@ describe("statusWord", () => {
     expect(
       statusWord("payment_status", "pending", { viewer: "staff", paymentMethod: "card" }).word,
     ).toBe("Esperando el pago");
-    expect(Object.keys(DERIVED_STATUS_WORDS)).toHaveLength(6);
+    expect(Object.keys(DERIVED_STATUS_WORDS)).toHaveLength(11);
+  });
+
+  it("gives a stopped parcel and a case's clock their derived words (§8.2 point 3)", () => {
+    const shopper = { viewer: "shopper" } as const;
+    expect(statusWord("shipment_status", "returning", { ...shopper, recalled: true })).toEqual({
+      sign: "attention",
+      tone: "warn",
+      glyph: "!",
+      word: "Detenido en la bodega",
+    });
+    expect(statusWord("shipment_status", "returning", { ...shopper, recalled: false }).word).toBe(
+      "Vuelve a la bodega",
+    );
+    expect(
+      statusWord("shipment_status", "returned", { ...shopper, stoppedBeforeLeaving: true }).word,
+    ).toBe("No salió de la bodega");
+    expect(statusWord("shipment_status", "returned", { ...shopper, recalled: true }).word).toBe(
+      "Devuelto a la bodega",
+    );
+    const staff = { viewer: "staff" } as const;
+    expect(statusWord("cases", "open", staff).word).toBe("Por responder");
+    expect(statusWord("cases", "open", { ...staff, answered: true }).word).toBe("En revisión");
+    expect(statusWord("cases", "open", { ...staff, clock: "due_soon" }).tone).toBe("warn");
+    expect(statusWord("cases", "open", { ...staff, clock: "due_soon" }).word).toBe("Vence pronto");
+    expect(statusWord("cases", "open", { ...staff, answered: true, clock: "overdue" })).toEqual({
+      sign: "attention",
+      tone: "err",
+      glyph: "!",
+      word: "Atrasado",
+    });
+    expect(statusWord("cases", "closed", { ...staff, clock: "overdue" }).word).toBe("Respondido");
+    // The case words are the «complaints» words of §4.3.
+    expect(statusWord("cases", "open", staff).word).toBe(
+      statusWord("complaints", "open", staff).word,
+    );
+    expect(statusWord("cases", "open", { ...staff, answered: true }).word).toBe(
+      statusWord("complaints", "in_progress", staff).word,
+    );
+    expect(statusWord("cases", "closed", staff).word).toBe(
+      statusWord("complaints", "resolved", staff).word,
+    );
   });
 
   it("statusWordOf takes a value read at run time and answers null for an unknown one", () => {

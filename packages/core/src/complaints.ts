@@ -12,6 +12,8 @@
  * days on the operations calendar.
  */
 
+import { statusWordOf } from "./status-words";
+
 export const COMPLAINT_CATEGORIES = [
   ["delivery", "La entrega"],
   ["product", "El producto"],
@@ -91,8 +93,13 @@ export const MY_CASE_KIND: Record<string, string> = {
   contact: "Consulta",
 };
 
-/** Where a shopper's case stands, in words (never colour alone). */
-export const MY_CASE_STATUS: Record<string, string> = {
-  open: "En curso",
-  closed: "Resuelto",
-};
+/**
+ * Where a shopper's case stands, in words (never colour alone): the «cases»
+ * words of status-words.ts (decision 59), «En revisión» once it has an answer.
+ */
+export function myCaseStatusWord(item: { status: string; answers: readonly unknown[] }): string {
+  return (
+    statusWordOf("cases", item.status, { viewer: "shopper", answered: item.answers.length > 0 })
+      ?.word ?? item.status
+  );
+}
