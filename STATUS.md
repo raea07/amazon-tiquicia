@@ -1005,14 +1005,23 @@ D2 in the decisions and the Android release in the store documents" is done
   without the holidays under Operación, and working hours 08:00 to 17:00
   are an assumption until you publish the service hours (question D56).
   The staff order page shows the delivery phone to staff without the
-  audited "Mostrar contacto" the customer view uses (question D55).
+  audited "Mostrar contacto" the customer view uses (question D55). A case
+  the role may not see shows "not found" but answers HTTP 200 (the page
+  draws it inside a streamed part).
 - **System health limits.** A message that will never be resent keeps its
   line red, because `/mensajes` has no way to set one aside. Failed
   sign-ins from the phone apps are not counted (they sign in without the
-  websites' server).
+  websites' server). After a phone build is removed on the Versiones panel,
+  the form above it still shows its earlier success message until the page
+  is reloaded.
 - **Error reports from the phone apps** wait for store version 0.2.0 (a
   native module). Source maps are not uploaded, so a report names the
-  built file, not the source line.
+  built file, not the source line. Checked in Chromium only; the page that
+  replaces the whole layout on a failure (`global-error`) only by a unit
+  test.
+- **Nothing of wave 9 has run** on the hosted project, against real Sentry,
+  on Vercel or on a phone. It was checked on this machine only (see "How it
+  was checked").
 - **The Régimen Simplificado notice** on the listings of sellers in that
   regime (compliance §3). No screen of the shop reads `sellers.tax_regime`.
   It is needed only if owner decision D27 admits such sellers.
