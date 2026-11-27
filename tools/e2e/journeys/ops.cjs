@@ -5,13 +5,13 @@
 // browser logs an error, or when any response is a 5xx.
 
 const { chromium, request } = require("playwright");
+const ops = require("../lib/ops.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const BASE = process.env.OPS_URL || "http://127.0.0.1:3002";
+const BASE = ops.BASE;
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 async function rpcAs(email, calls) {
   const ctx = await request.newContext();
@@ -74,28 +74,17 @@ async function rpcAs(email, calls) {
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const signIn = async (page, email, expectPath) => {
-    await page.goto(BASE + "/ingresar", { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname === expectPath);
-  };
+  const signIn = (page, email, expectPath) => ops.signInLandingOn(page, email, expectPath);
 
   // 1. Visitors and non-staff are kept out
   const c0 = await browser.newContext({ locale: "es-CR" });
   const p0 = await c0.newPage();
   watch(p0);
-  await p0.goto(BASE + "/pedidos", { waitUntil: "networkidle" });
+  await ops.open(p0, "/pedidos");
   log("visitor on /pedidos ->", p0.url().replace(BASE, ""));
   await signIn(p0, "comprador@yuntera.example", "/sin-acceso");
-  log(
-    "shopper lands on:",
-    await text(p0.locator("main h2:visible, main h1:visible").first()),
-    "| nav links:",
-    await p0.locator('nav[aria-label="Secciones"] a').count(),
-  );
-  await p0.goto(BASE + "/despacho", { waitUntil: "networkidle" });
+  log("shopper lands on:", await ops.firstHeading(p0), "| nav links:", await ops.sectionLinks(p0));
+  await ops.open(p0, "/despacho");
   log("shopper on /despacho ->", new URL(p0.url()).pathname);
   await c0.close();
 
@@ -106,143 +95,92 @@ async function rpcAs(email, calls) {
   const page = await context.newPage();
   watch(page);
   await signIn(page, "central@yuntera.example", "/");
-  await page.waitForSelector("main h2:visible");
-  log("nav:", await text(page.locator('nav[aria-label="Secciones"]')));
-  log("overview:", (await text(page.locator("main:visible"))).slice(0, 420));
+  await ops.waitForSummary(page);
+  log("nav:", await ops.sectionsNav(page));
+  log("overview:", (await ops.mainText(page)).slice(0, 420));
   await page.screenshot({ path: SHOTS + "/o1-overview.png", fullPage: true });
 
   // 2. Orders: find the pending transfer, confirm it
-  await page.goto(BASE + "/pedidos?estado=pending_payment", { waitUntil: "networkidle" });
-  log("pending payment rows:", await page.locator("main:visible tbody tr").count());
-  await page.locator("main:visible tbody tr a").first().click();
-  await page.waitForSelector('main h1:visible:has-text("Pedido YT-")');
+  await ops.open(page, "/pedidos?estado=pending_payment");
+  log("pending payment rows:", await ops.tableRows(page));
+  await ops.openFirstOrder(page);
   log(
     "order:",
-    await text(page.locator("main h1:visible")),
+    await ops.heading(page),
     "| PIN visible to staff:",
-    await page.locator("text=/código de entrega: \\d{4}/").count(),
+    await ops.deliveryCodesShown(page),
   );
-  const pay = page.locator('section:visible:has-text("Confirmar la transferencia")');
-  await pay.locator('button[type="submit"]').click(); // empty -> browser validation
-  await page.waitForTimeout(300);
-  await pay.locator('input[name="bankReference"]').fill("BNCR-2026-000777");
-  await pay.locator('button[type="submit"]').click();
-  await page.waitForSelector("main:visible >> text=Pedido confirmado");
-  log("after confirming:", await text(page.locator("main:visible header").first()));
+  await ops.confirmTransfer(page, "BNCR-2026-000777");
+  log("after confirming:", await ops.orderHeader(page));
   await page.screenshot({ path: SHOTS + "/o2-order.png", fullPage: true });
 
   // 3. Search
   // Sent by POST, so the shopper's name never reaches the address bar (WEB-4).
-  await page.goto(BASE + "/pedidos", { waitUntil: "networkidle" });
-  await page.fill("main:visible #q", "Andrés");
-  await page.click('main:visible button:has-text("Buscar pedidos")');
-  await page.waitForSelector("main:visible >> text=Quitar la búsqueda");
+  await ops.open(page, "/pedidos");
+  await ops.searchOrders(page, "Andrés");
   if (/Andr/i.test(decodeURIComponent(page.url()))) throw new Error("the name went into the URL");
-  log('search "Andrés" rows:', await page.locator("main:visible tbody tr").count());
+  log('search "Andrés" rows:', await ops.tableRows(page));
 
   // 4. Catalogue review: reject needs a reason, typed text survives the error
-  await page.goto(BASE + "/catalogo", { waitUntil: "networkidle" });
-  const card = page.locator("main:visible ul > li").first();
-  log("listing to review:", (await text(card)).slice(0, 110));
-  await card.locator('textarea[name="note"]').fill("no");
-  await card.locator('button:has-text("Rechazar")').click();
-  await card.locator('[role="alert"]').waitFor();
-  log(
-    "reject without reason:",
-    await text(card.locator('[role="alert"]')),
-    "| note kept:",
-    await card.locator('textarea[name="note"]').inputValue(),
-  );
+  await ops.open(page, "/catalogo");
+  log("listing to review:", (await ops.firstReviewCard(page)).slice(0, 110));
+  const rejected = await ops.rejectFirstListing(page, "no");
+  log("reject without reason:", rejected.refusal, "| note kept:", rejected.kept);
   // The listing's shop is still being verified, so it cannot go on sale yet.
-  await card.locator('textarea[name="note"]').fill("");
-  await card.locator('button:has-text("Publicar")').click();
-  await card.locator('[role="alert"]', { hasText: "todavía no está verificada" }).waitFor();
-  log("publish before the shop is verified:", await text(card.locator('[role="alert"]')));
+  log("publish before the shop is verified:", await ops.publishFirstListingRefused(page));
 
   // 5. Seller verification
-  await page.goto(BASE + "/vendedores", { waitUntil: "networkidle" });
-  const seller = page.locator("main:visible ul.grid > li").first();
-  log("pending seller:", (await text(seller)).slice(0, 150));
-  await seller.locator('textarea[name="note"]').fill("Coincide con Hacienda.");
-  await seller.locator('button:has-text("Verificar y activar")').click();
-  await page.waitForSelector("main:visible >> text=Ningún vendedor en este estado");
-  await page.goto(BASE + "/vendedores?estado=active", { waitUntil: "networkidle" });
-  log("active sellers now:", await page.locator("main:visible ul.grid > li").count());
+  await ops.open(page, "/vendedores");
+  log("pending seller:", (await ops.firstSeller(page)).slice(0, 150));
+  await ops.verifyFirstSeller(page, "Coincide con Hacienda.");
+  await ops.open(page, "/vendedores?estado=active");
+  log("active sellers now:", await ops.sellerCount(page));
   await page.screenshot({ path: SHOTS + "/o3-sellers.png", fullPage: true });
 
   // With the shop verified, its listing can be published.
-  await page.goto(BASE + "/catalogo", { waitUntil: "networkidle" });
-  await page.locator('main:visible ul > li button:has-text("Publicar")').first().click();
-  await page.waitForSelector("main:visible >> text=No hay productos por revisar");
+  await ops.open(page, "/catalogo");
+  await ops.publishFirstListing(page);
   log("after verifying the shop and approving: queue empty");
 
   // 6. Dispatch: plan the day
-  await page.goto(BASE + "/despacho", { waitUntil: "networkidle" });
-  log("dispatch headings:", await page.locator("main:visible h2").allInnerTexts());
-  const routesBefore = await page
-    .locator('main:visible section[aria-labelledby="rutas"] > ul > li')
-    .count();
+  await ops.open(page, "/despacho");
+  log("dispatch headings:", await ops.sectionHeadings(page));
+  const routesBefore = await ops.dispatchRouteCount(page);
   await page.screenshot({ path: SHOTS + "/o4-dispatch.png", fullPage: true });
-  await page.click('main:visible button:has-text("Proponer y crear rutas")');
-  await page.waitForFunction(
-    (n) => document.querySelectorAll('main section[aria-labelledby="rutas"] > ul > li').length > n,
-    routesBefore,
-  );
-  log(
-    "ready after planning:",
-    await text(page.locator('main:visible section[aria-labelledby="listos"]')),
-  );
-  const routes = page.locator('main:visible section[aria-labelledby="rutas"] > ul > li');
+  await ops.planRoutes(page);
+  log("ready after planning:", await ops.dispatchReady(page));
   log(
     "routes before/after:",
     routesBefore,
     "/",
-    await routes.count(),
+    await ops.dispatchRouteCount(page),
     "| newest:",
-    (await text(routes.last())).slice(0, 170),
+    (await ops.newestRoute(page)).slice(0, 170),
   );
   await page.screenshot({ path: SHOTS + "/o5-dispatch-after.png", fullPage: true });
 
   // 7. Care: return decision + refund, complaint answer
-  await page.goto(BASE + "/atencion", { waitUntil: "networkidle" });
-  log("care headings:", await page.locator("main:visible h2").allInnerTexts());
-  const ret = page.locator('main:visible section[aria-labelledby="devoluciones"] li').first();
-  log("return:", (await text(ret)).slice(0, 210));
-  await ret.locator('button:has-text("Aprobar")').click();
-  // Since 21 November 2026 the refund waits until the product is back.
-  await page.waitForSelector('main:visible button:has-text("Registrar que llegó a bodega")');
-  await ret.locator('select[name="condition"]').selectOption("damaged");
-  await ret.locator('button:has-text("Registrar que llegó a bodega")').click();
-  await page.waitForSelector("main:visible >> text=/Registrar reembolso de/");
+  await ops.open(page, "/atencion");
+  log("care headings:", await ops.sectionHeadings(page));
+  log("return:", (await ops.firstReturnText(page)).slice(0, 210));
+  await ops.approveAndReceiveFirstReturn(page, "damaged");
   await page.screenshot({ path: SHOTS + "/o6-care.png", fullPage: true });
-  await page.locator('main:visible button:has-text("Registrar reembolso de")').first().click();
-  await page.waitForSelector("main:visible >> text=No hay devoluciones pendientes");
+  await ops.refundFirstReturn(page);
   log("return approved and refunded: queue empty");
-  const complaint = page.locator('main:visible section[aria-labelledby="reclamos"] li').first();
-  await complaint
-    .locator('textarea[name="note"]')
-    .fill("Le pedimos disculpas; ajustamos el horario de esa ruta.");
-  await complaint.locator('button:has-text("Responder y cerrar")').click();
-  await page.waitForSelector("main:visible >> text=No hay reclamos abiertos");
+  await ops.answerFirstComplaint(page, "Le pedimos disculpas; ajustamos el horario de esa ruta.");
   log("complaint answered and closed");
 
   // 8. Settlements, drivers, audit
-  await page.goto(BASE + "/liquidaciones", { waitUntil: "networkidle" });
-  log(
-    "settlements:",
-    await page.locator("main:visible h2").allInnerTexts(),
-    "| closed rows:",
-    await page.locator("main:visible tbody tr").count(),
-  );
-  await page.goto(BASE + "/repartidores", { waitUntil: "networkidle" });
-  const drv = page.locator("main:visible tbody tr").last();
-  log("driver row:", (await text(drv)).slice(0, 150));
-  await page.goto(BASE + "/auditoria", { waitUntil: "networkidle" });
+  await ops.open(page, "/liquidaciones");
+  log("settlements:", await ops.sectionHeadings(page), "| closed rows:", await ops.tableRows(page));
+  await ops.open(page, "/repartidores");
+  log("driver row:", (await ops.tableRow(page, "last")).slice(0, 150));
+  await ops.open(page, "/auditoria");
   log(
     "audit rows:",
-    await page.locator("main:visible tbody tr").count(),
+    await ops.tableRows(page),
     "| first:",
-    (await text(page.locator("main:visible tbody tr").first())).slice(0, 150),
+    (await ops.tableRow(page)).slice(0, 150),
   );
   await page.screenshot({ path: SHOTS + "/o7-audit.png" });
   await context.close();
@@ -258,7 +196,7 @@ async function rpcAs(email, calls) {
   watch(m);
   await signIn(m, "central@yuntera.example", "/");
   for (const path of ["/", "/despacho", "/pedidos", "/atencion"]) {
-    await m.goto(BASE + path, { waitUntil: "networkidle" });
+    await ops.open(m, path);
     log(
       `mobile ${path} overflow px:`,
       await m.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),

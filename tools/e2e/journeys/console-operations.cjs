@@ -17,15 +17,15 @@
 
 const { chromium, request } = require("playwright");
 const { ownRoute } = require("../lib/own-route.cjs");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
+const field = require("../lib/field.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
-const FIELD = process.env.FIELD_URL || "http://127.0.0.1:3003";
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 /** Calls database functions as a demo user (or a visitor, with no email), as an app does. */
 async function rpcAs(email, calls) {
@@ -66,14 +66,6 @@ const crDay = (days = 0) =>
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const signIn = async (page, base, email) => {
-    await page.goto(base + "/ingresar", { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname !== "/ingresar");
-    await page.waitForLoadState("networkidle");
-  };
   const overflow = (page) =>
     page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 
@@ -83,70 +75,42 @@ const crDay = (days = 0) =>
   });
   const staff = await staffContext.newPage();
   watch(staff);
-  await signIn(staff, OPS, "central@yuntera.example");
+  await ops.signIn(staff, "central@yuntera.example");
 
-  // Submits a form and waits for its new outcome (its own message, or the page's notice
-  // once the form that sent it is gone).
-  const submit = async (scope, button) => {
-    const outcomes = () =>
-      staff.locator(
-        '[data-catalogue-outcome] [role="status"], main [role="status"], main [role="alert"]',
-      );
-    const before = (await outcomes().allInnerTexts()).join("|");
-    await scope.locator(`button:has-text("${button}")`).last().click();
-    const deadline = Date.now() + 15000;
-    let now = "";
-    while (Date.now() < deadline) {
-      await staff.waitForTimeout(250);
-      now = (await outcomes().allInnerTexts()).join("|");
-      if (now && now !== before) break;
-    }
-    const all = await outcomes().allInnerTexts();
-    return (all.find((t) => !before.includes(t)) ?? all.at(-1) ?? "").replace(/\s+/g, " ").trim();
-  };
   const go = async (path) => {
-    await staff.goto(OPS + path, { waitUntil: "networkidle" });
+    await ops.open(staff, path);
   };
 
   // The shopper, signed in, with a product in the cart.
   const shopperContext = await browser.newContext({ locale: "es-CR" });
   const shopper = await shopperContext.newPage();
   watch(shopper);
-  await signIn(shopper, WEB, "comprador@yuntera.example");
-  await shopper.goto(WEB + "/p/libreta-tapa-dura-a5", { waitUntil: "networkidle" });
-  await shopper
-    .locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")')
-    .click();
-  await shopper.waitForSelector("text=Agregado al carrito");
+  await web.signIn(shopper, "comprador@yuntera.example");
+  await web.open(shopper, "/p/libreta-tapa-dura-a5");
+  await web.addToCart(shopper);
 
   // ── 1. The section ──────────────────────────────────────────────────────────
   await go("/operacion");
-  const nav = await staff.locator('nav[aria-label="Operación"] a').allInnerTexts();
+  const nav = await ops.operationsNav(staff);
   log("operations pages:", nav);
   check(
     nav.includes("Zonas de entrega") && nav.includes("Rutas detenidas") && nav.length === 7,
     "the operations section does not list its pages (with the settings for an administrator)",
   );
-  check(
-    (await staff.locator('header a[href="/operacion"]').count()) > 0,
-    "the console's navigation has no Operación",
-  );
+  check((await ops.headerOperationsLinks(staff)) > 0, "the console's navigation has no Operación");
 
   // ── 2. A zone switched off: checkout refuses the address; then on again ────
-  const core = () => staff.locator('li[data-zone="gam-core"]');
-  log("gam-core:", (await text(core())).slice(0, 220));
-  await core().locator("summary", { hasText: "Apagar la zona" }).click();
-  const warning = await text(core().locator("details[open] p").first());
+  log("gam-core:", (await ops.zoneText(staff, "gam-core")).slice(0, 220));
+  const warning = await ops.openZoneSwitchOff(staff, "gam-core");
   log("before switching off:", warning);
   check(/pedidos abiertos/i.test(warning), "switching a zone off does not say its open orders");
-  const off = await submit(core(), "Apagar la zona");
+  const off = await ops.switchZoneOff(staff, "gam-core");
   log("switched off:", off);
   check(off.includes("apagada"), `zone not switched off: ${off}`);
-  await core().locator('button:has-text("Encender la zona")').waitFor();
   await staff.screenshot({ path: SHOTS + "/co1-zone-off.png", fullPage: true });
 
-  await shopper.goto(WEB + "/pagar", { waitUntil: "networkidle" });
-  const pay = await text(shopper.locator("main"));
+  await web.open(shopper, "/pagar");
+  const pay = await web.mainText(shopper);
   log("checkout with the zone off:", pay.slice(0, 260));
   check(
     pay.includes("Por ahora no entregamos en sus direcciones guardadas"),
@@ -154,112 +118,88 @@ const crDay = (days = 0) =>
   );
   await shopper.screenshot({ path: SHOTS + "/co2-checkout-zone-off.png", fullPage: true });
 
-  const on = await submit(core(), "Encender la zona");
+  const on = await ops.switchZoneOn(staff, "gam-core");
   log("switched on:", on);
   check(on.includes("encendida"), `zone not switched on: ${on}`);
-  await shopper.goto(WEB + "/pagar", { waitUntil: "networkidle" });
-  const radio = shopper.locator('input[name="addressId"]').first();
+  await web.open(shopper, "/pagar");
+  const radio = await web.firstCheckoutAddress(shopper);
   check(
-    (await radio.count()) === 1 && !(await radio.isDisabled()),
+    radio.count === 1 && !radio.disabled,
     "checkout does not offer the address again once the zone is on",
   );
 
   // Amounts in colones as people type them: "1.500,00" is ₡1 500, céntimos are
   // refused, and after a refusal the weekday boxes stay as they were ticked.
   await go("/operacion");
-  const newZone = staff.locator('section[aria-labelledby="nueva-zona"]');
-  await newZone.locator('input[name="zoneId"]').fill("zona-prueba-co");
-  await newZone.locator('input[name="name"]').fill("Zona de prueba");
-  await newZone.locator('input[name="deliveryWeekdays"][value="1"]').uncheck();
-  await newZone.locator('input[name="shippingFee"]').fill("1500,50");
-  const cents = await submit(newZone, "Crear zona");
+  const cents = await ops.createZone(staff, {
+    id: "zona-prueba-co",
+    name: "Zona de prueba",
+    unticked: [1],
+    fee: "1500,50",
+  });
   log("fee with céntimos:", cents);
   check(cents.includes("sin céntimos"), `a fee with céntimos was not refused: ${cents}`);
   check(
-    !(await newZone.locator('input[name="deliveryWeekdays"][value="1"]').isChecked()) &&
-      (await newZone.locator('input[name="deliveryWeekdays"][value="2"]').isChecked()),
+    !(await ops.weekdayTicked(staff, 1)) && (await ops.weekdayTicked(staff, 2)),
     "the weekday boxes did not stay as ticked after a refusal",
   );
-  await newZone.locator('input[name="shippingFee"]').fill("1.500,00");
-  const createdZone = await submit(newZone, "Crear zona");
+  const createdZone = await ops.createZone(staff, { fee: "1.500,00" });
   log("zone created:", createdZone);
   check(createdZone.includes("Envío ₡1 500"), `"1.500,00" was not read as ₡1 500: ${createdZone}`);
-  const testZone = staff.locator('li[data-zone="zona-prueba-co"]');
-  await testZone.waitFor();
+  await ops.waitForZone(staff, "zona-prueba-co");
   check(
-    (await testZone.locator('button:has-text("Encender la zona")').count()) === 0 &&
-      (await text(testZone)).includes("asígnele antes al menos un distrito"),
+    (await ops.zoneSwitchOnOffered(staff, "zona-prueba-co")) === 0 &&
+      (await ops.zoneText(staff, "zona-prueba-co")).includes("asígnele antes al menos un distrito"),
     "a zone with no districts is offered to be switched on",
   );
-  await testZone.locator("summary", { hasText: "Borrar la zona" }).click();
   check(
-    (await submit(testZone, "Borrar la zona")).includes("Zona borrada"),
+    (await ops.deleteZone(staff, "zona-prueba-co")).includes("Zona borrada"),
     "the test zone was not deleted",
   );
 
   // Two members of staff editing the same zone: the second save from a stale form
   // is refused, the page then shows the current values, and saving again works.
   await go("/operacion");
-  const extendedA = staff.locator('li[data-zone="gam-extended"]');
-  await extendedA.locator("summary", { hasText: "Cambiar «GAM extendida»" }).click();
+  await ops.openZoneChange(staff, "gam-extended");
   const other = await staffContext.newPage();
   watch(other);
-  await other.goto(OPS + "/operacion", { waitUntil: "networkidle" });
-  const extendedB = other.locator('li[data-zone="gam-extended"]');
-  await extendedB.locator("summary", { hasText: "Cambiar «GAM extendida»" }).click();
-  await extendedB.locator('input[name="name"]').fill("GAM extendida B");
-  await extendedB.locator('button:has-text("Guardar la zona")').click();
-  await other.waitForSelector('li[data-zone="gam-extended"] h3:has-text("GAM extendida B")');
+  await ops.open(other, "/operacion");
+  await ops.openZoneChange(other, "gam-extended");
+  await ops.typeZoneName(other, "gam-extended", "GAM extendida B");
+  await ops.saveZoneNow(other, "gam-extended", "GAM extendida B");
   await other.close();
-  const revisionBefore = await extendedA.locator('input[name="revision"]').first().inputValue();
-  await extendedA.locator('input[name="name"]').fill("GAM extendida");
-  const stale = await submit(extendedA, "Guardar la zona");
+  const revisionBefore = await ops.zoneRevision(staff, "gam-extended");
+  await ops.typeZoneName(staff, "gam-extended", "GAM extendida");
+  const stale = await ops.saveZone(staff, "gam-extended");
   log("stale edit:", stale);
   check(stale.includes("Otra persona cambió"), `a stale edit was not refused: ${stale}`);
-  await staff.waitForFunction(
-    (before) =>
-      document.querySelector('li[data-zone="gam-extended"] input[name="revision"]')?.value !==
-      before,
-    revisionBefore,
-  );
+  await ops.waitForZoneRevision(staff, "gam-extended", revisionBefore);
+  const shownName = await ops.zoneNameShown(staff, "gam-extended");
   check(
-    (await text(extendedA.locator("h3"))) === "GAM extendida B",
+    shownName.heading === "GAM extendida B",
     "after a stale edit the page does not show the current name",
   );
-  check(
-    (await extendedA.locator('input[name="name"]').inputValue()) === "GAM extendida",
-    "after a stale edit what was typed was lost",
-  );
-  const retried = await submit(extendedA, "Guardar la zona");
+  check(shownName.typed === "GAM extendida", "after a stale edit what was typed was lost");
+  const retried = await ops.saveZone(staff, "gam-extended");
   log("saved again:", retried);
   check(retried.includes("guardada"), `saving again after a stale edit failed: ${retried}`);
 
   // ── 3. A district moved to another zone, and back ──────────────────────────
   await go("/operacion/distritos?canton=115");
-  const mercedes = staff.locator('li[data-district="11503"]');
-  log("district before:", await text(mercedes));
-  await mercedes.locator('input[type="checkbox"]').check();
-  await staff.locator('select[name="destino"]').selectOption("gam-extended");
-  await Promise.all([
-    staff.waitForURL((u) => new URL(u).searchParams.get("destino") === "gam-extended"),
-    staff.locator('button:has-text("Revisar el cambio")').click(),
-  ]);
-  await staff.waitForLoadState("networkidle");
-  const preview = await text(staff.locator('section[aria-labelledby="revisar"]'));
+  log("district before:", await ops.districtText(staff, "11503"));
+  await ops.previewDistrictMove(staff, "11503", "gam-extended");
+  const preview = await ops.districtPreview(staff);
   log("preview:", preview);
   check(
     preview.includes("1 distrito pasa") && preview.includes("Direcciones guardadas: 0"),
     "the move is not previewed with what it touches",
   );
   await staff.screenshot({ path: SHOTS + "/co3-district-preview.png", fullPage: true });
-  const moved = await submit(
-    staff.locator('section[aria-labelledby="revisar"]'),
-    "Confirmar el cambio",
-  );
+  const moved = await ops.confirmDistrictMove(staff);
   log("moved:", moved);
   check(moved.includes("GAM extendida"), `district not moved: ${moved}`);
   await go("/operacion/distritos?canton=115");
-  const after = await text(staff.locator('li[data-district="11503"]'));
+  const after = await ops.districtText(staff, "11503");
   log("district after:", after);
   check(after.includes("GAM extendida"), "the district does not show its new zone");
   const [districts] = await rpcAs(null, [["list_districts", {}]]);
@@ -269,10 +209,7 @@ const crDay = (days = 0) =>
   );
   // And back, the same way.
   await go("/operacion/distritos?canton=115&distrito=11503&destino=gam-core");
-  const back = await submit(
-    staff.locator('section[aria-labelledby="revisar"]'),
-    "Confirmar el cambio",
-  );
+  const back = await ops.confirmDistrictMove(staff);
   log("moved back:", back);
   check(back.includes("GAM central"), `district not moved back: ${back}`);
 
@@ -287,8 +224,7 @@ const crDay = (days = 0) =>
     const context = await browser.newContext({ locale: "es-CR" });
     const page = await context.newPage();
     watch(page);
-    await page.goto(WEB + "/p/libreta-tapa-dura-a5", { waitUntil: "networkidle" });
-    const line = await text(page.locator('aside[aria-label="Comprar"] dd.text-success').first());
+    const line = await web.productArrival(page, "libreta-tapa-dura-a5");
     await context.close();
     return line;
   };
@@ -296,18 +232,12 @@ const crDay = (days = 0) =>
   const shownBefore = await shopPromise();
   log("product promised for:", promised, "| shown:", shownBefore);
   await go("/operacion/feriados");
-  const addForm = staff.locator('section[aria-labelledby="nuevo-feriado"]');
-  await addForm.locator('input[name="day"]').fill(promised);
-  await addForm.locator('input[name="name"]').fill("Feriado de prueba");
-  const blocked = await submit(addForm, "Agregar el feriado");
+  const blocked = await ops.tryHoliday(staff, { day: promised, name: "Feriado de prueba" });
   log("first try:", blocked);
   if (!blocked.includes("Feriado agregado")) {
     // Orders are promised that day: the page says how many; confirmed, it is added.
     check(blocked.includes("con entrega prometida"), `holiday refused: ${blocked}`);
-    await addForm.locator('input[name="day"]').fill(promised);
-    await addForm.locator('input[name="name"]').fill("Feriado de prueba");
-    await addForm.locator('input[name="confirm"]').check();
-    const confirmed = await submit(addForm, "Agregar el feriado");
+    const confirmed = await ops.addHoliday(staff, { day: promised, name: "Feriado de prueba" });
     log("confirmed:", confirmed);
     check(confirmed.includes("Feriado agregado"), `holiday not added: ${confirmed}`);
   }
@@ -319,115 +249,99 @@ const crDay = (days = 0) =>
   check(shownAfter !== shownBefore, "the product page still shows the old date");
   // The undo: removed again, the date is back.
   await go("/operacion/feriados");
-  const row = staff.locator(`li[data-holiday="${promised}"]`);
-  await row.locator("summary", { hasText: "Quitar este feriado" }).click();
-  const removed = await submit(row, "Quitar el feriado");
+  const removed = await ops.removeHoliday(staff, promised);
   log("removed:", removed);
   check(removed.includes("ya no es feriado"), `holiday not removed: ${removed}`);
   check((await promiseOf()) === promised, "the promise is not back once the holiday is removed");
 
   // ── 5. A closure opened, and ended early ───────────────────────────────────
   await go("/operacion/cierres");
-  const closeForm = staff.locator('section[aria-labelledby="nuevo-cierre"]');
-  await closeForm.locator('select[name="zoneId"]').selectOption("gam-extended");
-  await closeForm.locator('input[name="startsOn"]').fill(crDay(0));
-  await closeForm.locator('input[name="endsOn"]').fill(crDay(2));
-  await closeForm.locator('select[name="reason"]').selectOption("road_closed");
-  const opened = await submit(closeForm, "Guardar el cierre");
+  const opened = await ops.saveClosure(staff, {
+    zone: "gam-extended",
+    startsOn: crDay(0),
+    endsOn: crDay(2),
+    reason: "road_closed",
+  });
   log("closure:", opened);
   check(opened.includes("Cierre guardado"), `closure not opened: ${opened}`);
-  const closure = staff.locator('section[aria-labelledby="cierres"] li[data-closure]').first();
+  const closure = ops.firstClosure(staff);
   await closure.waitFor();
-  const closureText = await text(closure);
+  const closureText = await ops.text(closure);
   log("closure listed:", closureText.slice(0, 200));
   check(
     closureText.includes("GAM extendida") && closureText.includes("En curso"),
     "the closure is not listed as under way",
   );
   // Overlapping: refused, not merged.
-  await closeForm.locator('select[name="zoneId"]').selectOption("gam-extended");
-  await closeForm.locator('input[name="startsOn"]').fill(crDay(1));
-  await closeForm.locator('input[name="endsOn"]').fill(crDay(3));
-  await closeForm.locator('select[name="reason"]').selectOption("weather");
-  const overlap = await submit(closeForm, "Guardar el cierre");
+  const overlap = await ops.saveClosure(staff, {
+    zone: "gam-extended",
+    startsOn: crDay(1),
+    endsOn: crDay(3),
+    reason: "weather",
+  });
   log("overlapping closure:", overlap);
   check(
     overlap.includes("ya tiene un cierre"),
     `an overlapping closure was not refused: ${overlap}`,
   );
   await staff.screenshot({ path: SHOTS + "/co5-closure.png", fullPage: true });
-  await closure.locator("summary", { hasText: "Terminar el cierre ahora" }).click();
-  const ended = await submit(closure, "Terminar el cierre");
+  const ended = await ops.endFirstClosure(staff);
   log("ended:", ended);
   check(ended.includes("Cierre"), `closure not ended: ${ended}`);
   await go("/operacion/cierres");
   check(
-    (await staff.locator('section[aria-labelledby="cierres"] li[data-closure]').count()) === 0,
+    (await ops.openClosureCount(staff)) === 0,
     "the closure ended early is still listed as open",
   );
   // It had not started, so it was cancelled; the way back is on the same screen.
-  const cancelledRow = staff.locator('section[aria-labelledby="cancelados"] li[data-closure]');
-  check((await cancelledRow.count()) === 1, "the cancelled closure is not offered to close again");
-  const reclosed = await submit(cancelledRow.first(), "Volver a cerrar");
+  check(
+    (await ops.cancelledClosureCount(staff)) === 1,
+    "the cancelled closure is not offered to close again",
+  );
+  const reclosed = await ops.closeAgain(staff);
   log("closed again:", reclosed);
   check(
     reclosed.includes("Cierre guardado"),
     `the cancelled closure was not closed again: ${reclosed}`,
   );
   await go("/operacion/cierres");
-  const reopened = staff.locator('section[aria-labelledby="cierres"] li[data-closure]').first();
-  await reopened.locator("summary", { hasText: "Terminar el cierre ahora" }).click();
-  const endedAgain = await submit(reopened, "Terminar el cierre");
+  const endedAgain = await ops.endFirstClosure(staff);
   log("ended again:", endedAgain);
   check(endedAgain.includes("Cierre cancelado"), `the closure was not ended again: ${endedAgain}`);
 
   // ── 6. Settings: an operational one changed, a protected one read-only ─────
   await go("/operacion/ajustes");
-  const complaints = staff.locator('li[data-setting="max_open_complaints_per_account"]');
-  log("setting before:", (await text(complaints)).slice(0, 160));
-  await complaints.locator("summary").click();
-  await complaints.locator('input[name="value"]').fill("6");
-  const unconfirmed = await submit(complaints, "Guardar el nuevo valor");
+  const complaints = "max_open_complaints_per_account";
+  log("setting before:", (await ops.settingText(staff, complaints)).slice(0, 160));
+  const unconfirmed = await ops.changeSettingUnconfirmed(staff, complaints, "6");
   log("without the confirmation:", unconfirmed);
   check(unconfirmed.includes("Marque la casilla"), "a setting changed without confirming");
-  await complaints.locator('input[name="value"]').fill("6");
-  await complaints.locator('input[name="confirm"]').check();
-  const saved = await submit(complaints, "Guardar el nuevo valor");
+  const saved = await ops.confirmSetting(staff, complaints, "6");
   log("setting saved:", saved);
   check(saved.includes("Ajuste guardado"), `setting not saved: ${saved}`);
   await go("/operacion/ajustes");
   check(
-    (await text(staff.locator('li[data-setting="max_open_complaints_per_account"]'))).includes(
-      "Valor: 6",
-    ),
+    (await ops.settingText(staff, complaints)).includes("Valor: 6"),
     "the new value is not shown",
   );
-  const mode = staff.locator('li[data-setting="payments_mode"]');
-  const modeText = await text(mode);
+  const modeText = await ops.settingText(staff, "payments_mode");
   log("payments mode:", modeText);
   check(
     modeText.includes("Protegido") &&
       modeText.includes("procedimiento de despliegue") &&
-      (await mode.locator("input, button, form").count()) === 0,
+      (await ops.settingControls(staff, "payments_mode")) === 0,
     "the payments mode is not read-only",
   );
   await staff.screenshot({ path: SHOTS + "/co6-settings.png", fullPage: true });
   // Put back.
-  const again = staff.locator('li[data-setting="max_open_complaints_per_account"]');
-  await again.locator("summary").click();
-  await again.locator('input[name="value"]').fill("5");
-  await again.locator('input[name="confirm"]').check();
   check(
-    (await submit(again, "Guardar el nuevo valor")).includes("Ajuste guardado"),
+    (await ops.changeSetting(staff, complaints, "5")).includes("Ajuste guardado"),
     "the setting was not put back",
   );
 
   // ── 7. A warehouse location, offered in the warehouse's receiving form ─────
   await go("/operacion/ubicaciones");
-  const sjo = staff.locator('section[data-warehouse="SJO1"]');
-  await sjo.locator('input[name="code"]').first().fill("c-09-01-a");
-  await sjo.locator('select[name="kind"]').selectOption("storage");
-  const created = await submit(sjo, "Crear la ubicación");
+  const created = await ops.createLocation(staff, "SJO1", { code: "c-09-01-a", kind: "storage" });
   log("location:", created);
   check(created.includes("C-09-01-A"), `location not created: ${created}`);
   await staff.screenshot({ path: SHOTS + "/co7-locations.png", fullPage: true });
@@ -458,9 +372,9 @@ const crDay = (days = 0) =>
     });
   const warehouse = await (await phone()).newPage();
   watch(warehouse);
-  await signIn(warehouse, FIELD, "bodega@yuntera.example");
-  await warehouse.goto(FIELD + "/bodega", { waitUntil: "networkidle" });
-  const bins = await warehouse.locator('select[name="locationId"] option').allInnerTexts();
+  await field.signIn(warehouse, "bodega@yuntera.example");
+  await field.open(warehouse, "/bodega");
+  const bins = await field.receivingLocations(warehouse);
   log(
     "receiving form offers:",
     bins.length,
@@ -471,16 +385,12 @@ const crDay = (days = 0) =>
   await warehouse.screenshot({ path: SHOTS + "/co8-warehouse-offers.png", fullPage: true });
   // Switched off: no longer offered.
   await go("/operacion/ubicaciones");
-  const shelf = staff.locator('li[data-location="C-09-01-A"]');
-  await shelf.locator("summary", { hasText: "Desactivar" }).click();
-  const switched = await submit(shelf, "Desactivar la ubicación");
+  const switched = await ops.switchLocationOff(staff, "C-09-01-A");
   log("location off:", switched);
   check(switched.includes("desactivada"), `location not switched off: ${switched}`);
-  await warehouse.goto(FIELD + "/bodega", { waitUntil: "networkidle" });
+  await field.open(warehouse, "/bodega");
   check(
-    !(await warehouse.locator('select[name="locationId"] option').allInnerTexts()).includes(
-      "C-09-01-A",
-    ),
+    !(await field.receivingLocations(warehouse)).includes("C-09-01-A"),
     "the warehouse still offers a location that is off",
   );
 
@@ -491,29 +401,32 @@ const crDay = (days = 0) =>
   log("own route:", JSON.stringify(own));
   check(own.stops.length === 2, `the journey's route has ${own.stops.length} stops, not 2`);
   await go("/operacion/rutas");
-  const route = staff.locator(`li[data-route="${own.code}"]`);
-  log("route:", (await text(route)).slice(0, 220));
-  const closeEarly = route.locator("summary", { hasText: "Cerrar la ruta" });
-  check((await closeEarly.count()) === 0, "a route with stops out offers to be closed");
+  log("route:", (await ops.routeText(staff, own.code)).slice(0, 220));
+  check(
+    (await ops.routeCloseOffered(staff, own.code)) === 0,
+    "a route with stops out offers to be closed",
+  );
   for (const tracking of own.stops.map((s) => s.tracking)) {
-    const stop = route.locator(`li[data-stop="${tracking}"]`);
-    await stop.locator("summary", { hasText: "Quitar de la ruta" }).click();
-    await stop.locator('textarea[name="reason"]').fill("El camión se varó y no puede seguir.");
-    const result = await submit(stop, "Quitar la parada");
+    const result = await ops.removeStop(
+      staff,
+      own.code,
+      tracking,
+      "El camión se varó y no puede seguir.",
+    );
     log(`removed ${tracking}:`, result);
     check(result.includes(`Parada ${tracking} quitada`), `stop ${tracking} not removed: ${result}`);
     await go("/operacion/rutas");
   }
   await staff.screenshot({ path: SHOTS + "/co9-route-stops-removed.png", fullPage: true });
-  await route.locator("summary", { hasText: "Cerrar la ruta" }).click();
-  await route
-    .locator('textarea[name="reason"]')
-    .fill("Camión varado; paradas devueltas a despacho.");
-  const closed = await submit(route, "Cerrar la ruta");
+  const closed = await ops.closeRoute(
+    staff,
+    own.code,
+    "Camión varado; paradas devueltas a despacho.",
+  );
   log("route closed:", closed);
   check(closed.includes(`Ruta ${own.code} cerrada`), `route not closed: ${closed}`);
   await go("/despacho");
-  const ready = await text(staff.locator('section[aria-labelledby="listos"]'));
+  const ready = await ops.dispatchReady(staff);
   check(
     ready.includes(own.stops[0].tracking),
     "the parcel taken off the route is not waiting for a route",
@@ -526,9 +439,9 @@ const crDay = (days = 0) =>
     })
   ).newPage();
   watch(driver);
-  await signIn(driver, FIELD, "repartidor@yuntera.example");
-  await driver.goto(FIELD + "/ruta", { waitUntil: "networkidle" });
-  const day = await text(driver.locator("main"));
+  await field.signIn(driver, "repartidor@yuntera.example");
+  await field.open(driver, "/ruta");
+  const day = await field.mainText(driver);
   log("driver:", day.slice(0, 300));
   check(
     day.includes("Omitida") && day.includes("Central quitó esta parada"),
@@ -543,23 +456,26 @@ const crDay = (days = 0) =>
   if (theirs && theirs.shopper !== "comprador@yuntera.example") {
     owner = await (await browser.newContext({ locale: "es-CR" })).newPage();
     watch(owner);
-    await signIn(owner, WEB, theirs.shopper);
+    await web.signIn(owner, theirs.shopper);
   }
-  await owner.goto(`${WEB}/pedidos/${theirs?.orderNumber}`, { waitUntil: "networkidle" });
-  const parcel = await text(owner.locator("main"));
+  await web.openOrder(owner, theirs?.orderNumber);
+  const parcel = await web.mainText(owner);
   log("shopper's order:", parcel.slice(0, 300));
   check(
-    parcel.includes("Entrega reprogramada") &&
+    parcel.includes(
+      word("shipment_status", "delivery_failed", { viewer: "shopper", attemptCount: 0 }),
+    ) &&
       parcel.includes("Reprogramamos la entrega") &&
       !parcel.includes("No pudimos entregarlo") &&
-      !parcel.includes("Entrega fallida"),
+      !parcel.includes(word("shipment_status", "delivery_failed", { viewer: "shopper" })),
     "the shopper is told the delivery failed after staff removed the stop",
   );
   // The order's heading agrees: its only parcel is not on its way any more.
-  const heading = await text(owner.locator("main h1").locator(".."));
+  const heading = await web.orderHeadingBlock(owner);
   log("shopper's order heading:", heading);
   check(
-    heading.includes("Entrega reprogramada") && !heading.includes("En camino"),
+    heading.includes(word("order_summary", "rescheduled", { viewer: "shopper" })) &&
+      !heading.includes(word("order_status", "shipped", { viewer: "shopper" })),
     `the order's heading still says it is on its way: ${heading}`,
   );
   await owner.screenshot({ path: SHOTS + "/co10b-shopper-rescheduled.png", fullPage: true });
@@ -576,7 +492,7 @@ const crDay = (days = 0) =>
     ["/operacion/rutas", "co16-mobile-routes"],
     ["/operacion/ajustes", "co17-mobile-settings"],
   ]) {
-    await mobile.goto(OPS + path, { waitUntil: "networkidle" });
+    await ops.open(mobile, path);
     await mobile.evaluate(() => {
       for (const details of document.querySelectorAll("main details")) details.open = true;
     });

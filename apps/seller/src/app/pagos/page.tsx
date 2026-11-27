@@ -67,7 +67,7 @@ async function Payouts() {
         <h2 id="saldo" className="sr-only">
           Su saldo
         </h2>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-3" data-testid="balances">
           <Stat
             label="Disponible"
             value={formatPrice(money.available_minor)}

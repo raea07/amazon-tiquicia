@@ -236,7 +236,10 @@ function ReviewCard({ review }: { review: OpsReview }) {
           </CatalogueForm>
         ) : (
           <details>
-            <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link">
+            <summary
+              className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-link"
+              data-testid="review-hide"
+            >
               Ocultar la reseña
             </summary>
             <div className="mt-2">

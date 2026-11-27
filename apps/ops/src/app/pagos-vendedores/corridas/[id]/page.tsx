@@ -63,7 +63,7 @@ async function Run({ params }: Pick<PageProps<"/pagos-vendedores/corridas/[id]">
         </p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3" data-testid="run-figures">
         <Stat
           label="Por transferir"
           value={formatPrice(total(scheduled))}
@@ -130,7 +130,7 @@ async function Run({ params }: Pick<PageProps<"/pagos-vendedores/corridas/[id]">
 function FailForm({ payout, returned }: { payout: Payout; returned: boolean }) {
   return (
     <details className="text-sm">
-      <summary className="cursor-pointer py-3 font-semibold text-link">
+      <summary className="cursor-pointer py-3 font-semibold text-link" data-testid="payout-failed">
         {returned ? "El banco devolvió esta transferencia" : "No se pudo pagar"}
       </summary>
       <div className="mt-3">

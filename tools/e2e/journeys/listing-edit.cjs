@@ -7,13 +7,13 @@
 // browser logs an error, or when any response is a 5xx.
 
 const { chromium } = require("playwright");
+const web = require("../lib/web.cjs");
+const seller = require("../lib/seller.cjs");
+const ops = require("../lib/ops.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const SELLER = process.env.SELLER_URL || "http://127.0.0.1:3001";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
-const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
+const WEB = web.BASE;
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 const PRODUCT = "/p/laptop-14-nimbo-libro";
 const NEW_TITLE = "Laptop Nimbo Libro 14 pulgadas, 8 GB de memoria";
@@ -36,14 +36,6 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const signIn = async (page, base, email) => {
-    await page.goto(base + "/ingresar", { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname === "/");
-    await page.waitForSelector("main h1:visible, main h2:visible");
-  };
   const overflow = (page) =>
     page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 
@@ -58,16 +50,16 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
     await shopper?.context().close();
     shopper = await (await browser.newContext({ locale: "es-CR" })).newPage();
     watch(shopper);
-    await shopper.goto(WEB + PRODUCT, { waitUntil: "networkidle" });
-    return text(shopper.locator("main h1"));
+    await web.open(shopper, PRODUCT);
+    return web.heading(shopper);
   };
 
   const sellerContext = await browser.newContext({
     viewport: { width: 1280, height: 900 },
     locale: "es-CR",
   });
-  const seller = await sellerContext.newPage();
-  watch(seller);
+  const vendor = await sellerContext.newPage();
+  watch(vendor);
   const staffContext = await browser.newContext({
     viewport: { width: 1280, height: 900 },
     locale: "es-CR",
@@ -80,69 +72,52 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
   log("shop title at the start:", oldTitle);
 
   // 1. The seller opens the product from the list and finds the edit page
-  await signIn(seller, SELLER, "vendedor@yuntera.example");
-  if (!(await seller.locator("main h1:visible").innerText()).includes("TecnoCasa")) {
-    await seller.selectOption("#shop", { label: "TecnoCasa" });
-    await seller.click('header button:has-text("Cambiar")');
-    await seller.waitForSelector('main h1:visible:has-text("TecnoCasa")');
-  }
-  await seller.goto(SELLER + "/productos", { waitUntil: "networkidle" });
-  const row = seller.locator("main:visible tbody tr", { hasText: oldTitle });
-  log("row in the list:", (await text(row)).slice(0, 110));
-  await row.locator('a:has-text("Editar")').click();
-  // (The title has a double quote in it, so it is matched as text, not inside a selector.)
-  await seller.locator("main h1:visible", { hasText: oldTitle }).waitFor();
-  const editUrl = seller.url();
-  log("edit page state:", await text(seller.locator('main:visible [role="status"]').first()));
-  await seller.screenshot({ path: SHOTS + "/le1-edit-published.png", fullPage: true });
+  await seller.signInHome(vendor, "vendedor@yuntera.example");
+  await seller.chooseShop(vendor, "TecnoCasa");
+  await seller.open(vendor, "/productos");
+  log("row in the list:", (await seller.productRowText(vendor, oldTitle)).all.slice(0, 110));
+  await seller.openEdit(vendor, oldTitle);
+  const editUrl = vendor.url();
+  log("edit page state:", await seller.statusText(vendor));
+  await vendor.screenshot({ path: SHOTS + "/le1-edit-published.png", fullPage: true });
 
   // sending it back unchanged is not an edit
-  await seller.click('main:visible button:has-text("Enviar cambios a revisión")');
-  await seller.locator('main:visible form [role="alert"]').first().waitFor();
-  log("unchanged:", await text(seller.locator('main:visible form [role="alert"]').first()));
+  await seller.sendForReview(vendor);
+  log("unchanged:", await seller.editFormError(vendor));
 
   // a form that comes back with an error keeps everything the seller chose, the category too
-  const category = seller.locator('main:visible select[name="categorySlug"]');
-  const startCategory = await category.inputValue();
-  const otherCategory = await category.evaluate(
-    (select, current) => [...select.options].find((o) => o.value && o.value !== current)?.value,
-    startCategory,
-  );
-  await category.selectOption(otherCategory);
-  await seller.fill('main:visible input[name="title"]', "abc");
-  await seller.click('main:visible button:has-text("Enviar cambios a revisión")');
-  await seller
-    .locator('main:visible form [role="alert"]', { hasText: "al menos 5 letras" })
-    .waitFor();
-  const keptCategory = await category.inputValue();
-  const keptTitle = await seller.locator('main:visible input[name="title"]').inputValue();
+  const { current: startCategory, other: otherCategory } = await seller.categoryChoice(vendor);
+  await seller.chooseCategory(vendor, otherCategory);
+  await seller.typeTitle(vendor, "abc");
+  await seller.sendForReview(vendor);
+  await seller.editFormError(vendor, "al menos 5 letras");
+  const { category: keptCategory, title: keptTitle } = await seller.editTyped(vendor);
   log("after an error, category:", startCategory, "->", keptCategory, "| title:", keptTitle);
   check(keptCategory === otherCategory, `the chosen category was lost: ${keptCategory}`);
   check(keptTitle === "abc", `the typed title was lost: ${keptTitle}`);
   // start the real edit from what is published
-  await seller.goto(editUrl, { waitUntil: "networkidle" });
+  await vendor.goto(editUrl, { waitUntil: "networkidle" });
 
   // the way back to the list is a full-size touch target
-  const back = await seller.locator('main:visible a:has-text("← Productos")').boundingBox();
+  const back = await seller.backToProducts(vendor).boundingBox();
   log("back link height px:", back?.height);
   check((back?.height ?? 0) >= 44, `the back link is ${back?.height} px high`);
 
   // 2. The seller changes the title; it goes to review and the listing stays as it is
-  await seller.fill('main:visible input[name="title"]', NEW_TITLE);
-  await seller.click('main:visible button:has-text("Enviar cambios a revisión")');
-  await seller.waitForSelector("main:visible >> text=Publicado; sus cambios están en revisión");
-  log("after sending:", (await text(seller.locator("main:visible header").first())).slice(0, 120));
-  const proposal = await text(seller.locator("main:visible dl").first());
+  await seller.typeTitle(vendor, NEW_TITLE);
+  await seller.sendForReview(vendor);
+  await seller.waitForEditInReview(vendor);
+  log("after sending:", (await seller.editHeader(vendor)).slice(0, 120));
+  const proposal = await seller.editProposal(vendor);
   log("seller sees old and new:", proposal.slice(0, 200));
   check(proposal.includes(oldTitle) && proposal.includes(NEW_TITLE), "seller: no before/after");
-  await seller.screenshot({ path: SHOTS + "/le2-edit-in-review.png", fullPage: true });
-  await seller.goto(SELLER + "/productos", { waitUntil: "networkidle" });
-  const state = await text(
-    seller.locator("main:visible tbody tr", { hasText: oldTitle }).locator("td").nth(1),
-  );
+  await vendor.screenshot({ path: SHOTS + "/le2-edit-in-review.png", fullPage: true });
+  await seller.open(vendor, "/productos");
+  const { state } = await seller.productRowText(vendor, oldTitle);
   log("state in the list:", state);
   check(
-    state.includes("Publicado") && state.includes("Cambios en revisión"),
+    state.includes(word("product_status", "active", { viewer: "seller" })) &&
+      state.includes("Cambios en revisión"),
     "list: state missing",
   );
 
@@ -152,17 +127,11 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
   check(stillOld === oldTitle, `the shop changed before approval: ${stillOld}`);
 
   // 4. Catalogue staff see it apart from new products, old and new side by side
-  await signIn(staff, OPS, "central@yuntera.example");
-  log(
-    "dashboard counts it:",
-    (await text(staff.locator("main:visible >> text=Productos por revisar >> xpath=..")))
-      .replace(/\s+/g, " ")
-      .slice(0, 80),
-  );
-  await staff.goto(OPS + "/catalogo", { waitUntil: "networkidle" });
-  log("catalogue sections:", await staff.locator("main:visible h2").allInnerTexts());
-  const edit = staff.locator('main:visible section[aria-labelledby="cambios"] article').first();
-  const card = await text(edit);
+  await ops.signInHome(staff, "central@yuntera.example");
+  log("dashboard counts it:", (await ops.reviewFigure(staff)).slice(0, 80));
+  await ops.open(staff, "/catalogo");
+  log("catalogue sections:", await ops.sectionHeadings(staff));
+  const card = await ops.firstEditCard(staff);
   log("edit card:", card.slice(0, 260));
   check(
     card.includes("Cambio a un producto publicado"),
@@ -176,9 +145,7 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
   );
   check(card.includes(oldTitle) && card.includes(NEW_TITLE), "staff: old or new title missing");
   check(
-    !(await text(staff.locator('main:visible section[aria-labelledby="nuevos"]'))).includes(
-      NEW_TITLE,
-    ),
+    !(await ops.newProducts(staff)).includes(NEW_TITLE),
     "staff: the edit is listed among new products",
   );
   await staff.screenshot({ path: SHOTS + "/le3-review-before-after.png", fullPage: true });
@@ -192,53 +159,44 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
   });
   const m = await phone.newPage();
   watch(m);
-  await signIn(m, OPS, "central@yuntera.example");
-  await m.goto(OPS + "/catalogo", { waitUntil: "networkidle" });
+  await ops.signInHome(m, "central@yuntera.example");
+  await ops.open(m, "/catalogo");
   log("mobile /catalogo overflow px:", await overflow(m));
   check((await overflow(m)) <= 0, "ops /catalogo scrolls sideways on a phone");
   await m.screenshot({ path: SHOTS + "/le4-review-mobile.png", fullPage: true });
 
   // 5. Approved: the shop shows the new title at once
-  await edit.locator('button:has-text("Aprobar cambio")').click();
-  await staff.waitForSelector(
-    'main:visible section[aria-labelledby="cambios"] >> text=No hay cambios por revisar',
-  );
+  await ops.approveFirstEdit(staff);
   const nowNew = await shopTitle();
   log("shop after approval:", nowNew);
   check(nowNew === NEW_TITLE, `the shop does not show the approved title: ${nowNew}`);
   await shopper.screenshot({ path: SHOTS + "/le5-shop-new-title.png" });
 
   // 6. A second edit is rejected, and the seller reads why
-  await seller.goto(editUrl, { waitUntil: "networkidle" });
+  await vendor.goto(editUrl, { waitUntil: "networkidle" });
   log(
     "seller after approval:",
-    await text(seller.locator("main h1:visible")),
+    await seller.heading(vendor),
     "|",
-    (await text(seller.locator('main:visible [role="status"]').first())).slice(0, 50),
+    (await seller.statusText(vendor)).slice(0, 50),
   );
-  await seller.fill('main:visible input[name="title"]', REFUSED_TITLE);
-  await seller.click('main:visible button:has-text("Enviar cambios a revisión")');
-  await seller.waitForSelector("main:visible >> text=Publicado; sus cambios están en revisión");
+  await seller.typeTitle(vendor, REFUSED_TITLE);
+  await seller.sendForReview(vendor);
+  await seller.waitForEditInReview(vendor);
 
-  await staff.goto(OPS + "/catalogo", { waitUntil: "networkidle" });
-  const second = staff.locator('main:visible section[aria-labelledby="cambios"] article').first();
-  await second.locator('button:has-text("Rechazar cambio")').click(); // no reason yet
-  await second.locator('[role="alert"]').waitFor();
-  log("reject without a reason:", await text(second.locator('[role="alert"]')));
-  await second.locator('textarea[name="note"]').fill(REASON);
-  await second.locator('button:has-text("Rechazar cambio")').click();
-  await staff.waitForSelector(
-    'main:visible section[aria-labelledby="cambios"] >> text=No hay cambios por revisar',
-  );
+  await ops.open(staff, "/catalogo");
+  // no reason yet
+  log("reject without a reason:", await ops.rejectFirstEditWithoutReason(staff));
+  await ops.rejectFirstEdit(staff, REASON);
 
-  await seller.goto(editUrl, { waitUntil: "networkidle" });
-  const refusal = await text(seller.locator('main:visible [role="alert"]').first());
+  await vendor.goto(editUrl, { waitUntil: "networkidle" });
+  const refusal = await seller.alertText(vendor);
   log("seller reads:", refusal.slice(0, 200));
   check(refusal.includes(REASON), "seller: the reason for the rejection is not shown");
-  await seller.screenshot({ path: SHOTS + "/le6-edit-rejected.png", fullPage: true });
-  await seller.goto(SELLER + "/productos", { waitUntil: "networkidle" });
+  await vendor.screenshot({ path: SHOTS + "/le6-edit-rejected.png", fullPage: true });
+  await seller.open(vendor, "/productos");
   check(
-    (await text(seller.locator("main:visible tbody tr", { hasText: NEW_TITLE }))).includes(REASON),
+    (await seller.productRowText(vendor, NEW_TITLE)).all.includes(REASON),
     "list: the rejected edit's reason is not shown",
   );
   const afterRefusal = await shopTitle();
@@ -265,25 +223,12 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
   const archivedBefore = await shopper.request.get(WEB + ARCHIVED);
   log("product to archive, before:", archivedBefore.status());
   check(archivedBefore.status() === 200, "the product to archive was not in the shop");
-  await seller.goto(SELLER + "/productos", { waitUntil: "networkidle" });
-  await seller
-    .locator("main:visible tbody tr", { hasText: "Teclado" })
-    .locator('a:has-text("Editar")')
-    .click();
-  await seller.waitForSelector('main h1:visible:has-text("Teclado")');
-  const archive = seller.locator('main:visible section[aria-labelledby="archivar"]');
-  await archive.locator('input[name="confirma"]').check();
-  await archive.locator('button:has-text("Archivar producto")').click();
-  await seller.waitForSelector("main:visible >> text=Este producto está archivado");
-  log(
-    "seller after archiving:",
-    (await text(seller.locator("main:visible header").first())).slice(0, 90),
-  );
-  check(
-    (await seller.locator('main:visible input[name="title"]').count()) === 0,
-    "an archived product can still be edited",
-  );
-  await seller.screenshot({ path: SHOTS + "/le8-archived.png", fullPage: true });
+  await seller.open(vendor, "/productos");
+  await seller.openEdit(vendor, "Teclado");
+  await seller.archiveProduct(vendor);
+  log("seller after archiving:", (await seller.editHeader(vendor)).slice(0, 90));
+  check((await seller.titleFields(vendor)) === 0, "an archived product can still be edited");
+  await vendor.screenshot({ path: SHOTS + "/le8-archived.png", fullPage: true });
 
   const archivedAfter = await shopper.request.get(WEB + ARCHIVED);
   const archivedPage = await archivedAfter.text();
@@ -297,20 +242,16 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
     archivedAfter.status() === 404,
     `the archived product still answers ${archivedAfter.status()}`,
   );
-  await shopper.goto(WEB + "/buscar?q=teclado", { waitUntil: "networkidle" });
-  const found = await shopper.locator("article h3").allInnerTexts();
+  await web.open(shopper, "/buscar?q=teclado");
+  const found = await web.cardTitles(shopper);
   log('search "teclado" finds:', found);
   check(
     !found.some((title) => title.includes("Teclado")),
     "search still lists the archived product",
   );
-  await seller.goto(SELLER + "/productos", { waitUntil: "networkidle" });
-  const archivedRow = seller.locator("main:visible tbody tr", { hasText: "Teclado" });
-  log("archived row:", (await text(archivedRow.locator("td").nth(1))).slice(0, 40));
-  check(
-    (await archivedRow.locator('a:has-text("Editar")').count()) === 0,
-    "list: archived is editable",
-  );
+  await seller.open(vendor, "/productos");
+  log("archived row:", (await seller.productRowText(vendor, "Teclado")).state.slice(0, 40));
+  check((await seller.editOffered(vendor, "Teclado")) === 0, "list: archived is editable");
 
   log("\nERRORS:", errors.length ? errors : "none");
   await browser.close();

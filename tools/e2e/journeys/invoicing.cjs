@@ -14,16 +14,19 @@
 // or 5xx, like the other journeys.
 
 const { chromium, request } = require("playwright");
+const web = require("../lib/web.cjs");
+const seller = require("../lib/seller.cjs");
+const ops = require("../lib/ops.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const SELLER = process.env.SELLER_URL || "http://127.0.0.1:3001";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
+const WEB = web.BASE;
+const SELLER = seller.BASE;
+const OPS = ops.BASE;
 const FAKE = process.env.HACIENDA_FAKE_URL || "http://127.0.0.1:54325";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const SHOPPER = "comprador@yuntera.example";
 const CEDULA = "109870654";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 function check(condition, message) {
   if (!condition) throw new Error(`check failed: ${message}`);
@@ -75,9 +78,7 @@ async function until(what, fn, seconds = 60) {
     await page.goto(`${base}/ingresar?siguiente=${encodeURIComponent(path)}`, {
       waitUntil: "networkidle",
     });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
+    await kit.fillSignIn(page, email, PASSWORD);
     await page.waitForURL((u) => new URL(u).pathname === path.split("?")[0], { timeout: 30000 });
     return page;
   }
@@ -99,47 +100,35 @@ async function until(what, fn, seconds = 60) {
 
   // ── 1. Checkout with a factura in the shopper's name ────────────────────
   const shopper = await signIn(WEB, SHOPPER, "/carrito");
-  await shopper.goto(`${WEB}/p/libreta-tapa-dura-a5`, { waitUntil: "networkidle" });
-  await shopper
-    .locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")')
-    .click();
-  await shopper.waitForSelector("text=Agregado al carrito");
-  await shopper.goto(`${WEB}/pagar`, { waitUntil: "networkidle" });
-  await shopper.waitForSelector("text=Resumen del pedido");
-  check(!(await shopper.locator("#factura").isChecked()), "the factura box starts unticked");
-  check(
-    (await shopper.locator('input[name="facturaNumero"]').count()) === 0,
-    "and asks for nothing",
-  );
-  await shopper.check("#factura");
-  await shopper.selectOption('select[name="facturaTipo"]', "fisica");
-  await shopper.fill('input[name="facturaNumero"]', "12345");
-  await shopper.fill('input[name="facturaNombre"]', "María Pérez Rojas");
-  await shopper.fill('input[name="facturaCorreo"]', "maria@example.com");
-  await shopper.check('input[name="paymentMethod"][value="sinpe_movil"]');
+  await web.open(shopper, "/p/libreta-tapa-dura-a5");
+  await web.addToCart(shopper);
+  await web.openCheckout(shopper);
+  const offer = await web.facturaOffer(shopper);
+  check(!offer.ticked, "the factura box starts unticked");
+  check(offer.numberFields === 0, "and asks for nothing");
+  await web.askForFactura(shopper, {
+    kind: "fisica",
+    number: "12345",
+    name: "María Pérez Rojas",
+    email: "maria@example.com",
+  });
+  await web.choosePayment(shopper, "sinpe_movil");
   await shopper.screenshot({ path: `${SHOTS}/i01-checkout-factura.png`, fullPage: true });
-  await shopper.click('button:has-text("Confirmar pedido")');
-  await shopper.waitForSelector('main [role="alert"]');
-  const refusal = await text(shopper.locator('main [role="alert"]').first());
+  await web.confirmOrder(shopper);
+  const refusal = await web.firstAlert(shopper);
   check(/cédula física tiene 9 dígitos/.test(refusal), `a wrong cédula is refused: "${refusal}"`);
   check(shopper.url().includes("/pagar"), "and no order is placed");
-  check(
-    (await shopper.inputValue('input[name="facturaNombre"]')) === "María Pérez Rojas",
-    "the name is kept",
-  );
-  check(await shopper.locator("#factura").isChecked(), "and the choice");
-  check(
-    await shopper.locator('input[name="paymentMethod"][value="sinpe_movil"]').isChecked(),
-    "and the payment method",
-  );
-  await shopper.fill('input[name="facturaNumero"]', "1-0987-0654");
-  await shopper.click('button:has-text("Confirmar pedido")');
+  const kept = await web.checkoutKept(shopper, "sinpe_movil");
+  check(kept.name === "María Pérez Rojas", "the name is kept");
+  check(kept.factura, "and the choice");
+  check(kept.method, "and the payment method");
+  await web.typeFacturaNumber(shopper, "1-0987-0654");
+  await web.confirmOrder(shopper);
   await shopper.waitForURL((u) => /^\/pedidos\/YT-/.test(new URL(u).pathname), { timeout: 30000 });
   const orderPath = new URL(shopper.url()).pathname;
   const orderNumber = orderPath.split("/").pop();
   log("order:", orderNumber);
-  await shopper.click('button:visible:has-text("Simular pago")');
-  await shopper.waitForSelector("text=Su código de entrega", { timeout: 15000 });
+  await web.simulatePayment(shopper);
 
   // ── 2. Signed, sent, accepted, downloadable ─────────────────────────────
   const factura = await until("the factura to be accepted by the fake", async () =>
@@ -153,11 +142,10 @@ async function until(what, fn, seconds = 60) {
     `its clave is the platform's: ${factura.clave}`,
   );
   await until("the order page to show it accepted", async () => {
-    await shopper.goto(`${WEB}${orderPath}`, { waitUntil: "load" });
-    await shopper.waitForSelector('h1:visible:has-text("Pedido")');
-    return (await text(shopper.locator("main:visible"))).includes("Aceptado por Hacienda");
+    await web.openOrderPath(shopper, orderPath);
+    return (await web.mainText(shopper)).includes("Aceptado por Hacienda");
   });
-  const invoices = await text(shopper.locator("section:has(#comprobantes)"));
+  const invoices = await web.orderDocuments(shopper);
   check(invoices.includes("Factura electrónica"), "the order shows a factura electrónica");
   check(invoices.includes("a nombre de María Pérez Rojas"), "in her name");
   check(
@@ -166,10 +154,8 @@ async function until(what, fn, seconds = 60) {
   );
   await shopper.screenshot({ path: `${SHOTS}/i02-order-invoice.png`, fullPage: true });
 
-  await shopper.click('a:has-text("Ver comprobante")');
-  await shopper.waitForURL(/\/comprobantes\//);
-  await shopper.waitForSelector('h1:visible:has-text("Factura electrónica")');
-  const view = await text(shopper.locator("main"));
+  await web.openDocument(shopper);
+  const view = await web.mainText(shopper);
   check(
     view.includes(factura.clave.replace(/(.{10})(?=.)/g, "$1 ")),
     "the readable page shows the clave",
@@ -224,15 +210,13 @@ async function until(what, fn, seconds = 60) {
   const theirs = await fetchIn(other, `${invoicePath}/xml`);
   expectingNotFound = false;
   check(theirs.status === 404, "another shopper cannot download it");
-  await other.goto(`${WEB}${invoicePath}`, { waitUntil: "networkidle" });
-  check((await text(other.locator("main"))).includes("No encontramos"), "nor open it");
+  await web.open(other, invoicePath);
+  check((await web.mainText(other)).includes("No encontramos"), "nor open it");
 
   const shopperPhone = await signIn(WEB, SHOPPER, invoicePath, phone);
-  await shopperPhone.waitForSelector('h1:visible:has-text("Factura electrónica")');
+  await web.waitForDocument(shopperPhone);
   check((await overflow(shopperPhone)) <= 0, "the document page fits 390 px");
-  const download = await shopperPhone
-    .locator('a:has-text("Descargar el comprobante")')
-    .boundingBox();
+  const download = await web.downloadLink(shopperPhone).boundingBox();
   check(
     download && download.height >= 44,
     `download links are at least 44 px tall (${download && download.height})`,
@@ -240,42 +224,33 @@ async function until(what, fn, seconds = 60) {
   await shopperPhone.screenshot({ path: `${SHOTS}/i04-invoice-phone.png`, fullPage: true });
 
   // ── 3. The seller sees the platform's factura for its fees ──────────────
-  const seller = await signIn(SELLER, "sendero@yuntera.example", "/pagos");
+  const sellerPage = await signIn(SELLER, "sendero@yuntera.example", "/pagos");
   const feeRow = await until("the fee factura in the statements", async () => {
-    await seller.goto(`${SELLER}/pagos`, { waitUntil: "networkidle" });
-    const row = seller
-      .locator(`section:has(#facturas) li:has-text("pedido ${orderNumber}")`)
-      .first();
-    return (await row.count()) > 0 && (await text(row)).includes("Aceptado por Hacienda")
-      ? row
-      : null;
+    await seller.open(sellerPage, "/pagos");
+    const row = await seller.feeInvoiceRow(sellerPage, orderNumber);
+    return row?.includes("Aceptado por Hacienda") ? row : null;
   });
-  check(
-    (await text(feeRow)).includes("Factura electrónica"),
-    "a factura electrónica for the order's fees",
-  );
-  await seller.screenshot({ path: `${SHOTS}/i05-seller-invoices.png`, fullPage: true });
-  await feeRow.locator('a:has-text("Ver")').click();
-  await seller.waitForURL(/\/comprobantes\//);
-  await seller.waitForSelector('h1:visible:has-text("Factura electrónica")');
-  const feeView = await text(seller.locator("main:visible"));
+  check(feeRow.includes("Factura electrónica"), "a factura electrónica for the order's fees");
+  await sellerPage.screenshot({ path: `${SHOTS}/i05-seller-invoices.png`, fullPage: true });
+  await seller.openFeeInvoice(sellerPage, orderNumber);
+  const feeView = await seller.mainText(sellerPage);
   check(feeView.includes("Comisión por venta"), "with the commission");
   check(feeView.includes("Cédula jurídica"), "made out to the shop's legal identification");
   check(
     feeView.includes("Compensación contra la liquidación de ventas"),
     "paid by netting from the payout",
   );
-  const sellerXml = await fetchIn(seller, `${new URL(seller.url()).pathname}/xml`);
+  const sellerXml = await fetchIn(sellerPage, `${new URL(sellerPage.url()).pathname}/xml`);
   check(
     sellerXml.status === 200 && sellerXml.body.includes("<FacturaElectronica "),
     "the seller downloads it",
   );
   expectingNotFound = true;
-  const notTheirs = await fetchIn(seller, `${invoicePath}/xml`);
+  const notTheirs = await fetchIn(sellerPage, `${invoicePath}/xml`);
   expectingNotFound = false;
   check(notTheirs.status === 404, "but not the shopper's factura");
   const sellerPhone = await signIn(SELLER, "sendero@yuntera.example", "/pagos", phone);
-  await sellerPhone.waitForSelector("#facturas");
+  await seller.waitForFeeInvoices(sellerPhone);
   check((await overflow(sellerPhone)) <= 0, "the statements fit 390 px");
   await sellerPhone.screenshot({ path: `${SHOTS}/i06-seller-phone.png`, fullPage: true });
 
@@ -288,13 +263,8 @@ async function until(what, fn, seconds = 60) {
       cause: "La identificación del receptor no coincide con el padrón.",
     },
   ]);
-  await shopper.goto(`${WEB}${orderPath}`, { waitUntil: "load" });
-  await shopper.waitForSelector('h1:visible:has-text("Pedido")');
-  await shopper.click('button:visible:has-text("Cancelar pedido")');
-  // The page redraws with the order cancelled: the button (and its form) are gone.
-  await shopper
-    .locator('button:visible:has-text("Cancelar pedido")')
-    .waitFor({ state: "detached", timeout: 20000 });
+  await web.openOrderPath(shopper, orderPath);
+  await web.cancelOrder(shopper);
   const rejectedNote = await until("the shopper's credit note to be rejected", async () =>
     (await documents()).find(
       (d) =>
@@ -311,22 +281,17 @@ async function until(what, fn, seconds = 60) {
 
   const finance = await signIn(OPS, "central@yuntera.example", "/comprobantes");
   const rejectedRow = await until("finance to see the rejection", async () => {
-    await finance.goto(`${OPS}/comprobantes`, { waitUntil: "networkidle" });
-    const row = finance.locator("section:has(#rechazados) li").first();
-    return (await row.count()) > 0 ? row : null;
+    await ops.open(finance, "/comprobantes");
+    return ops.firstRejected(finance);
   });
-  const reason = await text(rejectedRow);
+  const reason = rejectedRow;
   check(
     reason.includes("La identificación del receptor no coincide con el padrón."),
     `finance reads Hacienda's reason: "${reason.slice(0, 160)}"`,
   );
   check(reason.includes(rejectedNote.clave.slice(21, 41)), "for that credit note");
   await finance.screenshot({ path: `${SHOTS}/i07-ops-rejected.png`, fullPage: true });
-  await rejectedRow.locator('button:has-text("Emitir reemplazo")').click();
-  // The new document's own page, which says what it replaces.
-  await finance.waitForURL(/\/comprobantes\/[0-9a-f-]{36}\?emitido=1$/, { timeout: 20000 });
-  await finance.waitForSelector("text=que reemplaza al rechazado");
-  const done = await text(finance.locator("text=que reemplaza al rechazado").first());
+  const done = await ops.replaceFirstRejected(finance);
   const newNumber = /comprobante (\d{20})/.exec(done)?.[1];
   check(newNumber && newNumber !== rejectedNote.clave.slice(21, 41), `a new number: ${newNumber}`);
   const replacement = await until("the replacement to be accepted", async () =>
@@ -334,16 +299,12 @@ async function until(what, fn, seconds = 60) {
   );
   check(replacement.clave !== rejectedNote.clave, "a new clave too");
   await until("the rejection to leave the list", async () => {
-    await finance.goto(`${OPS}/comprobantes`, { waitUntil: "networkidle" });
-    return (await text(finance.locator("section:has(#rechazados)"))).includes(
-      "No hay comprobantes rechazados",
-    );
+    await ops.open(finance, "/comprobantes");
+    return (await ops.rejectedText(finance)).includes("No hay comprobantes rechazados");
   });
-  await finance.goto(`${OPS}/comprobantes?estado=accepted`, { waitUntil: "networkidle" });
-  await finance.locator(`a:has-text("${newNumber}")`).first().click();
-  await finance.waitForURL(/\/comprobantes\/[0-9a-f-]{36}$/);
-  await finance.waitForSelector('h1:visible:has-text("Nota de crédito electrónica")');
-  const replacementView = await text(finance.locator("main:visible"));
+  await ops.open(finance, "/comprobantes?estado=accepted");
+  await ops.openDocumentNumbered(finance, newNumber, "Nota de crédito electrónica");
+  const replacementView = await ops.mainText(finance);
   check(
     replacementView.includes("Sustituye comprobante electrónico rechazado"),
     "it references the rejected one (código 16)",
@@ -354,15 +315,14 @@ async function until(what, fn, seconds = 60) {
   );
   await finance.screenshot({ path: `${SHOTS}/i08-ops-replacement.png`, fullPage: true });
   const financePhone = await signIn(OPS, "central@yuntera.example", "/comprobantes", phone);
-  await financePhone.waitForSelector("#por-dia");
+  await ops.waitForDailyTotals(financePhone);
   check((await overflow(financePhone)) <= 0, "the finance page fits 390 px");
   await financePhone.screenshot({ path: `${SHOTS}/i09-ops-phone.png`, fullPage: true });
 
   // ── 5. The shopper sees the credit note, and the factura voided ─────────
   const final = await until("the order page to show the credit note", async () => {
-    await shopper.goto(`${WEB}${orderPath}`, { waitUntil: "load" });
-    await shopper.waitForSelector('h1:visible:has-text("Pedido")');
-    const section = await text(shopper.locator("section:has(#comprobantes)"));
+    await web.openOrderPath(shopper, orderPath);
+    const section = await web.orderDocuments(shopper);
     return section.includes("Nota de crédito electrónica") &&
       section.includes("Anulado con nota de crédito")
       ? section
@@ -373,20 +333,16 @@ async function until(what, fn, seconds = 60) {
   await shopper.screenshot({ path: `${SHOTS}/i10-order-credit-note.png`, fullPage: true });
 
   // ── 6. Free delivery (over the zone's threshold): nothing of Yuntera's to invoice ──
-  await shopper.goto(`${WEB}/p/laptop-14-nimbo-libro`, { waitUntil: "networkidle" });
-  await shopper
-    .locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")')
-    .click();
-  await shopper.waitForSelector("text=Agregado al carrito");
-  await shopper.goto(`${WEB}/pagar`, { waitUntil: "networkidle" });
-  await shopper.waitForSelector("text=Resumen del pedido");
+  await web.open(shopper, "/p/laptop-14-nimbo-libro");
+  await web.addToCart(shopper);
+  await web.openCheckout(shopper);
   check(
-    (await text(shopper.locator('aside[aria-label="Resumen del pedido"]'))).includes("Gratis"),
+    (await web.checkoutSummaryText(shopper)).includes("Gratis"),
     "this order has free delivery",
   );
-  check((await shopper.locator("#factura").count()) === 0, "so no factura is offered");
+  check((await web.facturaOffer(shopper)).offered === 0, "so no factura is offered");
   check(
-    (await text(shopper.locator("main:visible"))).includes("Este pedido tiene entrega gratis"),
+    (await web.mainText(shopper)).includes("Este pedido tiene entrega gratis"),
     "and the checkout says why",
   );
   await shopper.screenshot({ path: `${SHOTS}/i11-checkout-free-delivery.png`, fullPage: true });

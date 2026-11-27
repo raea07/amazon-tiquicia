@@ -16,10 +16,11 @@
 
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
+const field = require("../lib/field.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
-const FIELD = process.env.FIELD_URL || "http://127.0.0.1:3003";
+const WEB = web.BASE;
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
@@ -29,7 +30,6 @@ const SHOPPER = "comprador2@yuntera.example";
 const PRODUCT = "libreta-tapa-dura-a5";
 
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 function sql(statement) {
   const run = spawnSync(
@@ -84,16 +84,6 @@ async function as(email) {
       hasTouch: true,
       locale: "es-CR",
     });
-  const signIn = async (page, base, email, next = "") => {
-    await page.goto(`${base}/ingresar${next ? `?siguiente=${encodeURIComponent(next)}` : ""}`, {
-      waitUntil: "networkidle",
-    });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname !== "/ingresar");
-    await page.waitForLoadState("networkidle");
-  };
   const overflow = (page) =>
     page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   /** The height of a link, as a finger meets it. */
@@ -116,11 +106,9 @@ async function as(email) {
 
   const shopper = await (await phone()).newPage();
   watch(shopper);
-  await signIn(shopper, WEB, SHOPPER, `/pedidos/${placed.order_number}`);
-  await shopper.goto(`${WEB}/pedidos/${placed.order_number}`, { waitUntil: "networkidle" });
-  const why = shopper.locator('[data-testid="order-cancel-reason"]');
-  await why.waitFor({ timeout: 30_000 });
-  const said = await text(why);
+  await web.signIn(shopper, SHOPPER, { next: `/pedidos/${placed.order_number}` });
+  await web.openOrder(shopper, placed.order_number);
+  const said = await web.cancelReason(shopper);
   log("the order page says:", said);
   check(
     said.startsWith("Cancelamos su pedido porque no recibimos el pago a tiempo") &&
@@ -128,13 +116,12 @@ async function as(email) {
       said.includes("haga el pedido de nuevo"),
     "the order page says why it was cancelled, that nothing was charged, and to order again",
   );
-  const history = await text(shopper.locator('section[aria-labelledby="historial"]'));
+  const history = await web.orderHistory(shopper);
   check(
     history.includes("Cancelado: no recibimos el pago a tiempo"),
     `the history says why: ${history.slice(0, 200)}`,
   );
-  const claim = shopper.locator('a:has-text("Presente un reclamo")');
-  const claimHeight = await height(claim);
+  const claimHeight = await height(web.claimLink(shopper));
   log("'Presente un reclamo' is", claimHeight, "px tall");
   check(claimHeight >= 44, `'Presente un reclamo' is ${claimHeight} px tall, not 44`);
   check((await overflow(shopper)) <= 0, "the order page fits 390 px");
@@ -143,21 +130,16 @@ async function as(email) {
   // ── 2. The back links at the top of pages ─────────────────────────────────
   const worker = await (await phone()).newPage();
   watch(worker);
-  await signIn(worker, FIELD, "bodega@yuntera.example");
-  await worker.goto(`${FIELD}/bodega/ubicaciones`, { waitUntil: "networkidle" });
-  const toWarehouse = worker.locator("a[data-back-link]", { hasText: "← Bodega" });
-  const firstLocation = await worker
-    .locator('a[href^="/bodega/ubicacion?codigo="]')
-    .first()
-    .getAttribute("href");
+  await field.signIn(worker, "bodega@yuntera.example");
+  await field.open(worker, "/bodega/ubicaciones");
+  const toWarehouse = field.backToWarehouse(worker);
+  const firstLocation = await field.firstLocationHref(worker);
   const warehouseHeight = await height(toWarehouse);
   // The line around it stays one line of text: the link's extra height is outside it,
   // so nothing under it moves.
-  const lineHeight = await height(worker.locator("p:has(> a[data-back-link])"));
-  await worker.goto(`${FIELD}${firstLocation}`, { waitUntil: "networkidle" });
-  const locationsHeight = await height(
-    worker.locator("a[data-back-link]", { hasText: "← Ubicaciones" }),
-  );
+  const lineHeight = await height(field.lineAround(toWarehouse));
+  await field.open(worker, firstLocation);
+  const locationsHeight = await height(field.backToLocations(worker));
   log("back links:", { warehouseHeight, locationsHeight, lineHeight });
   check(warehouseHeight >= 44, `'← Bodega' is ${warehouseHeight} px tall, not 44`);
   check(locationsHeight >= 44, `'← Ubicaciones' is ${locationsHeight} px tall, not 44`);
@@ -169,9 +151,9 @@ async function as(email) {
 
   const staff = await (await phone()).newPage();
   watch(staff);
-  await signIn(staff, OPS, "central@yuntera.example");
-  await staff.goto(`${OPS}/pedidos/${placed.order_number}`, { waitUntil: "networkidle" });
-  const ordersHeight = await height(staff.locator("a[data-back-link]", { hasText: "← Pedidos" }));
+  await ops.signIn(staff, "central@yuntera.example");
+  await ops.openOrder(staff, placed.order_number);
+  const ordersHeight = await height(ops.backToOrders(staff));
   log("'← Pedidos' is", ordersHeight, "px tall");
   check(ordersHeight >= 44, `'← Pedidos' is ${ordersHeight} px tall, not 44`);
   await staff.screenshot({ path: SHOTS + "/cr3-console-order-back-link.png" });
@@ -181,17 +163,12 @@ async function as(email) {
   await visitorContext.addCookies([{ name: "yt_cp", value: "10101", url: WEB }]);
   const visitor = await visitorContext.newPage();
   watch(visitor);
-  await visitor.goto(`${WEB}/p/${PRODUCT}`, { waitUntil: "networkidle" });
-  await visitor
-    .locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")')
-    .click();
-  await visitor.waitForSelector("text=Agregado al carrito");
+  await web.open(visitor, `/p/${PRODUCT}`);
+  await web.addToCart(visitor);
   sql(`update public.offers set status = 'paused' where id = '${offer.offer_id}'`);
   try {
-    await visitor.goto(`${WEB}/carrito`, { waitUntil: "networkidle" });
-    const summary = visitor.locator('aside[aria-label="Resumen"]');
-    await summary.locator('[data-testid="cart-nothing-to-buy"]').waitFor({ timeout: 30_000 });
-    const shown = await text(summary);
+    await web.open(visitor, "/carrito");
+    const shown = await web.cartNothingToBuy(visitor);
     log("the summary says:", shown);
     check(
       !shown.includes("Total") && !shown.includes("Llega el") && !shown.includes("₡"),
@@ -203,7 +180,7 @@ async function as(email) {
       "the summary says what to do once, and speaks of no total",
     );
     const title = sql(`select title from public.products where slug = '${PRODUCT}'`);
-    const page = await text(visitor.locator("main"));
+    const page = await web.mainText(visitor);
     check(
       page.includes(title) && !page.includes("Producto no disponible"),
       "the paused line still names its product, so the shopper knows what to remove",

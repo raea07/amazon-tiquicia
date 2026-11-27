@@ -1,0 +1,71 @@
+{
+  "app": "field",
+  "rows": [
+    {
+      "shot": "f1-route.png",
+      "template": "T16",
+      "reference": "ruta.html",
+      "width": 390
+    },
+    {
+      "shot": "cf3-driver-header.png",
+      "template": "T16",
+      "reference": "ruta.html",
+      "width": 390
+    },
+    {
+      "shot": "f3-route-done.png",
+      "template": "T16",
+      "reference": "ruta.html",
+      "width": 390
+    },
+    {
+      "shot": "f2-stop.png",
+      "template": "T16",
+      "reference": "ruta-parada.html",
+      "width": 390
+    },
+    {
+      "shot": "fu5-stop-district.png",
+      "template": "T16",
+      "reference": "ruta-parada.html",
+      "width": 390
+    },
+    {
+      "shot": "f4-warehouse.png",
+      "template": "T6",
+      "reference": "bodega-tareas.html",
+      "width": 390
+    },
+    {
+      "shot": "f5-pick.png",
+      "template": "T17",
+      "reference": "bodega.html",
+      "width": 390
+    },
+    {
+      "shot": "fu6-pick-wrong.png",
+      "template": "T17",
+      "reference": "bodega.html",
+      "width": 390
+    },
+    {
+      "shot": "fu7-pick-right.png",
+      "template": "T17",
+      "reference": "bodega.html",
+      "width": 390
+    },
+    {
+      "shot": "warehouse-stock-location.png",
+      "template": "T17",
+      "reference": "bodega.html",
+      "width": 390
+    },
+    {
+      "shot": "count-into-location-counted.png",
+      "template": "T17",
+      "reference": "bodega.html",
+      "width": 390
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "app": "seller",
+  "rows": [
+    {
+      "shot": "s1-dashboard.png",
+      "template": "T6",
+      "reference": "vende-inicio.html",
+      "width": 1280
+    },
+    {
+      "shot": "s2-listings.png",
+      "template": "T7",
+      "reference": "vende-productos.html",
+      "width": 1280
+    },
+    {
+      "shot": "s3-inventory.png",
+      "template": "T7",
+      "reference": "vende-productos.html",
+      "width": 1280
+    },
+    {
+      "shot": "s6-payouts.png",
+      "template": "T7",
+      "reference": "vende-productos.html",
+      "width": 1280
+    },
+    {
+      "shot": "s7-orders.png",
+      "template": "T7",
+      "reference": "vende-productos.html",
+      "width": 1280
+    },
+    {
+      "shot": "pa1-seller-balances.png",
+      "template": "T7",
+      "reference": "vende-productos.html",
+      "width": 1280
+    },
+    {
+      "shot": "pa9-mobile-seller-pagos.png",
+      "template": "T7",
+      "reference": "vende-productos.html",
+      "width": 390
+    },
+    {
+      "shot": "s4-new-listing.png",
+      "template": "T10",
+      "reference": "vende-publicar.html",
+      "width": 1280
+    },
+    {
+      "shot": "s8-mobile-new-shop.png",
+      "template": "T10",
+      "reference": "vende-publicar.html",
+      "width": 390
+    },
+    {
+      "shot": "pp1-new-listing-photos.png",
+      "template": "T10",
+      "reference": "vende-publicar.html",
+      "width": 1280
+    },
+    {
+      "shot": "pp5-seller-photos-390.png",
+      "template": "T10",
+      "reference": "vende-publicar.html",
+      "width": 390
+    },
+    {
+      "shot": "le1-edit-published.png",
+      "template": "T10",
+      "reference": "vende-publicar.html",
+      "width": 1280
+    },
+    {
+      "shot": "le7-edit-mobile.png",
+      "template": "T10",
+      "reference": "vende-publicar.html",
+      "width": 390
+    },
+    {
+      "shot": "sl3-variant-retired.png",
+      "template": "T10",
+      "reference": "vende-publicar.html",
+      "width": 1280
+    },
+    {
+      "shot": "sl3b-variants-390.png",
+      "template": "T10",
+      "reference": "vende-publicar.html",
+      "width": 390
+    },
+    {
+      "shot": "i05-seller-invoices.png",
+      "template": "T9",
+      "reference": "vende-comprobante.html",
+      "width": 1280
+    },
+    {
+      "shot": "i06-seller-phone.png",
+      "template": "T9",
+      "reference": "vende-comprobante.html",
+      "width": 390
+    },
+    {
+      "shot": "l1-team-invited.png",
+      "template": "T11",
+      "reference": "vende-invitaciones.html",
+      "width": 390
+    },
+    {
+      "shot": "l2-invitation.png",
+      "template": "T8",
+      "reference": "vende-invitaciones.html",
+      "width": 390
+    },
+    {
+      "shot": "n08-seller-settings-phone.png",
+      "template": "T11",
+      "reference": "cuenta.html",
+      "width": 390
+    }
+  ]
+}

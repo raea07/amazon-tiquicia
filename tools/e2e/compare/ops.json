@@ -1,0 +1,185 @@
+{
+  "app": "ops",
+  "rows": [
+    {
+      "shot": "o1-overview.png",
+      "template": "T6",
+      "reference": "central-resumen.html",
+      "width": 1280
+    },
+    {
+      "shot": "o2-order.png",
+      "template": "T9",
+      "reference": "central-pedido.html",
+      "width": 1280
+    },
+    {
+      "shot": "n03-ops-order-messages.png",
+      "template": "T9",
+      "reference": "central-pedido.html",
+      "width": 1280
+    },
+    {
+      "shot": "o3-sellers.png",
+      "template": "T7",
+      "reference": "consola.html",
+      "width": 1280
+    },
+    {
+      "shot": "o4-dispatch.png",
+      "template": "T7",
+      "reference": "consola.html",
+      "width": 1280
+    },
+    {
+      "shot": "o7-audit.png",
+      "template": "T7",
+      "reference": "consola.html",
+      "width": 1280
+    },
+    {
+      "shot": "pe1-staff.png",
+      "template": "T7",
+      "reference": "consola.html",
+      "width": 1280
+    },
+    {
+      "shot": "pe6-mobile-personal.png",
+      "template": "T7",
+      "reference": "consola.html",
+      "width": 390
+    },
+    {
+      "shot": "n04-ops-dead-letters.png",
+      "template": "T7",
+      "reference": "consola.html",
+      "width": 1280
+    },
+    {
+      "shot": "n09-ops-messages-phone.png",
+      "template": "T7",
+      "reference": "consola.html",
+      "width": 390
+    },
+    {
+      "shot": "pa6-ops-run.png",
+      "template": "T7",
+      "reference": "consola.html",
+      "width": 1280
+    },
+    {
+      "shot": "i07-ops-rejected.png",
+      "template": "T7",
+      "reference": "consola.html",
+      "width": 1280
+    },
+    {
+      "shot": "o6-care.png",
+      "template": "T8",
+      "reference": "central-atencion.html",
+      "width": 1280
+    },
+    {
+      "shot": "o8-mobile.png",
+      "template": "T8",
+      "reference": "central-atencion.html",
+      "width": 390
+    },
+    {
+      "shot": "p08-review.png",
+      "template": "T8",
+      "reference": "central-atencion.html",
+      "width": 1280
+    },
+    {
+      "shot": "p12-review-phone.png",
+      "template": "T8",
+      "reference": "central-atencion.html",
+      "width": 390
+    },
+    {
+      "shot": "pp3-staff-new-listing.png",
+      "template": "T8",
+      "reference": "central-catalogo.html",
+      "width": 1280
+    },
+    {
+      "shot": "pp6-staff-photo-change.png",
+      "template": "T8",
+      "reference": "central-catalogo.html",
+      "width": 1280
+    },
+    {
+      "shot": "le3-review-before-after.png",
+      "template": "T8",
+      "reference": "central-catalogo.html",
+      "width": 1280
+    },
+    {
+      "shot": "le4-review-mobile.png",
+      "template": "T8",
+      "reference": "central-catalogo.html",
+      "width": 390
+    },
+    {
+      "shot": "cc8-mobile-review-queue.png",
+      "template": "T8",
+      "reference": "central-catalogo.html",
+      "width": 390
+    },
+    {
+      "shot": "sl7-edit-pauses-offers.png",
+      "template": "T8",
+      "reference": "central-catalogo.html",
+      "width": 1280
+    },
+    {
+      "shot": "sl7b-edit-pauses-offers-390.png",
+      "template": "T8",
+      "reference": "central-catalogo.html",
+      "width": 390
+    },
+    {
+      "shot": "sl5-logo-review.png",
+      "template": "T8",
+      "reference": "central-catalogo.html",
+      "width": 1280
+    },
+    {
+      "shot": "sl5b-logo-review-390.png",
+      "template": "T8",
+      "reference": "central-catalogo.html",
+      "width": 390
+    },
+    {
+      "shot": "cc8b-mobile-logos.png",
+      "template": "T8",
+      "reference": "central-catalogo.html",
+      "width": 390
+    },
+    {
+      "shot": "cc1-categories.png",
+      "template": "T11",
+      "reference": "central-feriados.html",
+      "width": 1280
+    },
+    {
+      "shot": "co4-holiday.png",
+      "template": "T11",
+      "reference": "central-feriados.html",
+      "width": 1280
+    },
+    {
+      "shot": "cf1-holiday-counts.png",
+      "template": "T11",
+      "reference": "central-feriados.html",
+      "width": 1280
+    },
+    {
+      "shot": "co13-mobile-holidays.png",
+      "template": "T11",
+      "reference": "central-feriados.html",
+      "width": 390
+    }
+  ]
+}

@@ -20,10 +20,13 @@ const { spawnSync } = require("node:child_process");
 const { createHash, verify, X509Certificate } = require("node:crypto");
 const path = require("node:path");
 const { chromium, request } = require("playwright");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
+const kit = require("../lib/kit.cjs");
 
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
+const WEB = web.BASE;
+const OPS = ops.BASE;
 const FAKE = process.env.HACIENDA_FAKE_URL || "http://127.0.0.1:54325";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const DATABASE_URL =
@@ -45,7 +48,6 @@ const SHOPPER = "comprador@yuntera.example";
 const CEDULA = "109870654";
 
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 function check(condition, message) {
   if (!condition) throw new Error(`check failed: ${message}`);
   log("ok:", message);
@@ -161,9 +163,7 @@ const EMAIL = "o'brien+factura@example.com";
     await page.goto(`${base}/ingresar?siguiente=${encodeURIComponent(target)}`, {
       waitUntil: "networkidle",
     });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
+    await kit.fillSignIn(page, email, PASSWORD);
     await page.waitForURL((u) => new URL(u).pathname === target.split("?")[0], { timeout: 30000 });
     return page;
   }
@@ -196,24 +196,20 @@ const EMAIL = "o'brien+factura@example.com";
 
   // ── 2. The shopper asks for a factura in a hostile name, and pays ────────
   const shopper = await signIn(WEB, SHOPPER, "/carrito");
-  await shopper.goto(`${WEB}/p/libreta-tapa-dura-a5`, { waitUntil: "networkidle" });
-  await shopper
-    .locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")')
-    .click();
-  await shopper.waitForSelector("text=Agregado al carrito");
-  await shopper.goto(`${WEB}/pagar`, { waitUntil: "networkidle" });
-  await shopper.waitForSelector("text=Resumen del pedido");
-  await shopper.check("#factura");
-  await shopper.selectOption('select[name="facturaTipo"]', "fisica");
-  await shopper.fill('input[name="facturaNumero"]', CEDULA);
-  await shopper.fill('input[name="facturaNombre"]', RECEIVER);
-  await shopper.fill('input[name="facturaCorreo"]', EMAIL);
-  await shopper.check('input[name="paymentMethod"][value="sinpe_movil"]');
-  await shopper.click('button:has-text("Confirmar pedido")');
+  await web.open(shopper, "/p/libreta-tapa-dura-a5");
+  await web.addToCart(shopper);
+  await web.openCheckout(shopper);
+  await web.askForFactura(shopper, {
+    kind: "fisica",
+    number: CEDULA,
+    name: RECEIVER,
+    email: EMAIL,
+  });
+  await web.choosePayment(shopper, "sinpe_movil");
+  await web.confirmOrder(shopper);
   await shopper.waitForURL((u) => /^\/pedidos\/YT-/.test(new URL(u).pathname), { timeout: 30000 });
   const orderPath = new URL(shopper.url()).pathname;
-  await shopper.click('button:visible:has-text("Simular pago")');
-  await shopper.waitForSelector("text=Su código de entrega", { timeout: 15000 });
+  await web.simulatePayment(shopper);
 
   // ── 3. What the fake of Hacienda received ───────────────────────────────
   const received = await until(
@@ -279,29 +275,23 @@ const EMAIL = "o'brien+factura@example.com";
 
   // ── 4. The pages show it as text ────────────────────────────────────────
   await until("the order page to show the factura", async () => {
-    await shopper.goto(`${WEB}${orderPath}`, { waitUntil: "load" });
-    await shopper.waitForSelector('h1:visible:has-text("Pedido")');
-    return (await text(shopper.locator("section:has(#comprobantes)"))).includes(
-      "Aceptado por Hacienda",
-    );
+    await web.openOrderPath(shopper, orderPath);
+    return (await web.orderDocuments(shopper)).includes("Aceptado por Hacienda");
   });
   check(
-    (await text(shopper.locator("section:has(#comprobantes)"))).includes(
-      `a nombre de ${clean(RECEIVER, 100)}`,
-    ),
+    (await web.orderDocuments(shopper)).includes(`a nombre de ${clean(RECEIVER, 100)}`),
     "the order page names the receiver as typed",
   );
-  await shopper.click('a:has-text("Ver comprobante")');
-  await shopper.waitForSelector('h1:visible:has-text("Factura electrónica")');
-  const view = await text(shopper.locator("main"));
+  await web.openDocument(shopper);
+  const view = await web.mainText(shopper);
   check(view.includes(clean(RECEIVER, 100)), "the document page shows the name as text");
   check(view.includes(clean(ISSUER_NAME, 100)), "and the issuer's name");
   await shopper.screenshot({ path: `${SHOTS}/ie01-invoice-hostile-text.png`, fullPage: true });
 
   const finance = await signIn(OPS, "central@yuntera.example", "/comprobantes");
-  await finance.waitForSelector("#por-dia");
+  await ops.waitForDailyTotals(finance);
   check(
-    (await text(finance.locator("main"))).includes(clean(RECEIVER, 100)),
+    (await ops.mainText(finance)).includes(clean(RECEIVER, 100)),
     "the console lists it under the name as typed",
   );
   await finance.screenshot({ path: `${SHOTS}/ie02-ops-hostile-text.png`, fullPage: true });

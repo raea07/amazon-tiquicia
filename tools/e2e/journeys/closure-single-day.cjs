@@ -15,13 +15,12 @@
 
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
-const { settledText } = require("../lib/settle.cjs");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
+const WEB = web.BASE;
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
-const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const DATABASE_URL =
   process.env.DATABASE_URL || "postgres://postgres:postgres@127.0.0.1:5432/yuntera_local";
 const REFRESH_KEY = process.env.SHOP_REFRESH_KEY || "local-development-only";
@@ -85,53 +84,19 @@ const calendar = () =>
   });
   const staff = await staffContext.newPage();
   watch(staff);
-  await staff.goto(OPS + "/ingresar", { waitUntil: "networkidle" });
-  await staff.fill('main input[name="email"]', "central@yuntera.example");
-  await staff.fill('main input[name="password"]', PASSWORD);
-  await staff.click('main form button[type="submit"]');
-  await staff.waitForURL((u) => new URL(u).pathname !== "/ingresar");
-  const go = async (path) => {
-    await staff.goto(OPS + path, { waitUntil: "networkidle" });
-  };
-  // Submits a form and waits for its new outcome (its own message, or the page's
-  // notice once the form that sent it is gone).
-  const submit = async (scope, button) => {
-    const outcomes = () =>
-      staff.locator(
-        '[data-catalogue-outcome] [role="status"], main [role="status"], main [role="alert"]',
-      );
-    const before = (await outcomes().allInnerTexts()).join("|");
-    await scope.locator(`button:has-text("${button}")`).last().click();
-    const deadline = Date.now() + 15000;
-    let now = "";
-    while (Date.now() < deadline) {
-      await staff.waitForTimeout(250);
-      now = (await outcomes().allInnerTexts()).join("|");
-      if (now && now !== before) break;
-    }
-    const all = await outcomes().allInnerTexts();
-    return (all.find((t) => !before.includes(t)) ?? all.at(-1) ?? "").replace(/\s+/g, " ").trim();
-  };
-
+  await ops.signIn(staff, "central@yuntera.example");
   // ── A visitor of the shop, delivering in Carmen, with the notebook in the cart ─
   const shopContext = await browser.newContext({ locale: "es-CR" });
   await shopContext.addCookies([{ name: "yt_cp", value: DISTRICT, url: WEB }]);
   const shop = await shopContext.newPage();
   watch(shop);
-  await shop.goto(`${WEB}/p/${PRODUCT}`, { waitUntil: "networkidle" });
-  await shop.locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")').click();
-  await shop.waitForSelector("text=Agregado al carrito");
+  await web.open(shop, `/p/${PRODUCT}`);
+  await web.addToCart(shop);
   /** The date the product page and the cart show now (each read fresh). */
   const shopDates = async () => {
     // Each page streams its date into the prepared shell: wait for the date itself.
-    await shop.goto(`${WEB}/p/${PRODUCT}`, { waitUntil: "load" });
-    const pageDate = shop.locator('aside[aria-label="Comprar"] dd.text-success').first();
-    await pageDate.waitFor({ timeout: 30_000 });
-    const page = await text(pageDate);
-    await shop.goto(`${WEB}/carrito`, { waitUntil: "load" });
-    const cartDate = shop.locator('aside[aria-label="Resumen"] p.text-success').first();
-    await cartDate.waitFor({ timeout: 30_000 });
-    const cart = await text(cartDate);
+    const page = await web.productArrival(shop, PRODUCT);
+    const cart = await web.cartArrival(shop);
     return { page, cart };
   };
 
@@ -149,16 +114,16 @@ const calendar = () =>
   );
 
   // ── 1. One day closed with the console's own form ──────────────────────────
-  await go("/operacion/cierres");
-  const form = staff.locator('section[aria-labelledby="nuevo-cierre"]');
-  await form.locator('select[name="zoneId"]').selectOption(ZONE);
-  await form.locator('input[name="startsOn"]').fill(day);
-  await form.locator('input[name="endsOn"]').fill(day);
-  await form.locator('select[name="reason"]').selectOption("weather");
-  const opened = await submit(form, "Guardar el cierre");
+  await ops.openClosures(staff);
+  const opened = await ops.saveClosure(staff, {
+    zone: ZONE,
+    startsOn: day,
+    endsOn: day,
+    reason: "weather",
+  });
   log("closed:", opened);
   check(opened.startsWith("Cierre guardado."), "the form closes the zone for that day");
-  const row = staff.locator('section[aria-labelledby="cierres"] li[data-closure]').first();
+  const row = ops.firstClosure(staff);
   await row.waitFor();
   const rowText = await text(row);
   log("listed:", rowText.slice(0, 200));
@@ -180,10 +145,8 @@ const calendar = () =>
   check(shownDuring.cart !== shownBefore.cart, "the cart gives another date at once");
 
   // ── 2. The day opened again from the page ───────────────────────────────────
-  await go("/operacion/cierres");
-  const listed = staff.locator('section[aria-labelledby="cierres"] li[data-closure]').first();
-  await listed.locator("summary", { hasText: "Terminar el cierre ahora" }).click();
-  const ended = await submit(listed, "Terminar el cierre");
+  await ops.openClosures(staff);
+  const ended = await ops.endFirstClosure(staff);
   log("ended:", ended);
   check(ended.startsWith("Cierre cancelado"), "ending a closure that has not started cancels it");
   check(
@@ -219,12 +182,9 @@ const calendar = () =>
     "the shop skips it too",
   );
 
-  await go("/operacion/cierres");
-  const singles = staff.locator('section[aria-labelledby="dias-sueltos"]');
-  await settledText(singles.locator("h2"), "Días cerrados uno por uno (1)", {
-    what: "the single days' heading",
-  });
-  const single = singles.locator("li").first();
+  await ops.openClosures(staff);
+  await ops.waitForSingleDays(staff, 1);
+  const single = ops.firstSingleDay(staff);
   const singleText = await text(single);
   log("single day:", singleText);
   check(singleText.includes("GAM"), "the single day names its zone");
@@ -240,9 +200,9 @@ const calendar = () =>
   });
   const phone = await phoneContext.newPage();
   watch(phone);
-  await phone.goto(OPS + "/operacion/cierres", { waitUntil: "networkidle" });
-  const phoneSingle = phone.locator('section[aria-labelledby="dias-sueltos"] li').first();
-  await phoneSingle.locator("summary").click();
+  await ops.openClosures(phone);
+  const phoneSingle = ops.firstSingleDay(phone);
+  await ops.showSingleDay(phoneSingle);
   const width = await phone.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
@@ -260,15 +220,11 @@ const calendar = () =>
   await phoneContext.close();
 
   // The administrator opens the day again from the page.
-  await single.locator("summary").click();
-  const reopened = await submit(single, "Abrir ese día");
+  const reopened = await ops.reopenSingleDay(staff, single);
   log("opened:", reopened);
   check(reopened.startsWith("Día abierto de nuevo"), "the page opens the single day again");
-  await go("/operacion/cierres");
-  check(
-    (await staff.locator('section[aria-labelledby="dias-sueltos"]').count()) === 0,
-    "no single day is listed any more",
-  );
+  await ops.openClosures(staff);
+  check((await ops.singleDaysShown(staff)) === 0, "no single day is listed any more");
   check(
     JSON.stringify(await promiseNow()) === JSON.stringify(before),
     "the delivery promise is back once the day is open",

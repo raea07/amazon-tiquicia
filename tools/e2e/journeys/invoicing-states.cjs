@@ -24,17 +24,19 @@
 
 const { spawnSync } = require("node:child_process");
 const { chromium } = require("playwright");
+const web = require("../lib/web.cjs");
+const ops = require("../lib/ops.cjs");
+const kit = require("../lib/kit.cjs");
 
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
+const WEB = web.BASE;
+const OPS = ops.BASE;
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const DATABASE_URL =
   process.env.DATABASE_URL || "postgres://postgres:postgres@127.0.0.1:5432/yuntera_local";
 const SHOPPER = "comprador@yuntera.example";
 
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 function check(condition, message) {
   if (!condition) throw new Error(`check failed: ${message}`);
   log("ok:", message);
@@ -90,9 +92,7 @@ const mode = (value) =>
     await page.goto(`${base}/ingresar?siguiente=${encodeURIComponent(target)}`, {
       waitUntil: "networkidle",
     });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
+    await kit.fillSignIn(page, email, PASSWORD);
     await page.waitForURL((u) => new URL(u).pathname === target.split("?")[0], { timeout: 30000 });
     return page;
   }
@@ -112,34 +112,26 @@ const mode = (value) =>
   const shopper = await signIn(WEB, SHOPPER, "/carrito");
   const finance = await signIn(OPS, "central@yuntera.example", "/comprobantes");
   const states = async () => {
-    await finance.goto(`${OPS}/comprobantes`, { waitUntil: "networkidle" });
-    return text(finance.locator("main"));
+    await ops.open(finance, "/comprobantes");
+    return ops.mainText(finance);
   };
   const invoicesOf = async (orderPath) => {
-    await shopper.goto(`${WEB}${orderPath}`, { waitUntil: "load" });
-    await shopper.waitForSelector('h1:visible:has-text("Pedido")');
-    const section = shopper.locator("section:has(#comprobantes)");
-    return (await section.count()) > 0 ? text(section) : "";
+    await web.openOrderPath(shopper, orderPath);
+    return web.orderDocumentsIfAny(shopper);
   };
   async function order(slug, method, factura) {
-    await shopper.goto(`${WEB}/p/${slug}`, { waitUntil: "load" });
-    await shopper.waitForSelector(
-      'aside[aria-label="Comprar"] button:has-text("Agregar al carrito")',
-    );
-    await shopper
-      .locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")')
-      .click();
-    await shopper.waitForSelector("text=Agregado al carrito");
-    await shopper.goto(`${WEB}/pagar`, { waitUntil: "networkidle" });
-    await shopper.waitForSelector("text=Resumen del pedido");
+    await web.open(shopper, `/p/${slug}`, "load");
+    await web.addToCart(shopper);
+    await web.openCheckout(shopper);
     if (factura) {
-      await shopper.check("#factura");
-      await shopper.selectOption('select[name="facturaTipo"]', "fisica");
-      await shopper.fill('input[name="facturaNumero"]', "109870654");
-      await shopper.fill('input[name="facturaNombre"]', "María Pérez Rojas");
+      await web.askForFactura(shopper, {
+        kind: "fisica",
+        number: "109870654",
+        name: "María Pérez Rojas",
+      });
     }
-    await shopper.check(`input[name="paymentMethod"][value="${method}"]`);
-    await shopper.click('button:has-text("Confirmar pedido")');
+    await web.choosePayment(shopper, method);
+    await web.confirmOrder(shopper);
     await shopper.waitForURL((u) => /^\/pedidos\/YT-/.test(new URL(u).pathname), {
       timeout: 30000,
     });
@@ -177,8 +169,7 @@ const mode = (value) =>
   check(page.includes("Este ambiente simula los pagos"), "console: payments here are simulated");
 
   const simulated = await order("libreta-tapa-dura-a5", "sinpe_movil", true);
-  await shopper.click('button:visible:has-text("Simular pago")');
-  await shopper.waitForSelector("text=Su código de entrega", { timeout: 15000 });
+  await web.simulatePayment(shopper);
   let section = await invoicesOf(simulated);
   check(section.includes(SIMULATED_PAID), "order page: a simulated payment gets no document");
   check(!section.includes(ISSUES), "and does not say Yuntera issues one");
@@ -198,12 +189,8 @@ const mode = (value) =>
   // Cancelled after it was paid: its refund's job ends too, and the console
   // still counts one payment, not two jobs.
   const simulatedNumber = simulated.split("/").pop();
-  await shopper.goto(`${WEB}${simulated}`, { waitUntil: "load" });
-  await shopper.waitForSelector('h1:visible:has-text("Pedido")');
-  await shopper.click('button:visible:has-text("Cancelar pedido")');
-  await shopper
-    .locator('button:visible:has-text("Cancelar pedido")')
-    .waitFor({ state: "detached", timeout: 20000 });
+  await web.openOrderPath(shopper, simulated);
+  await web.cancelOrder(shopper);
   await until(
     "the refund's invoice job to end without a document",
     async () =>
@@ -220,8 +207,7 @@ const mode = (value) =>
   );
 
   const free = await order("laptop-14-nimbo-libro", "sinpe_movil", false);
-  await shopper.click('button:visible:has-text("Simular pago")');
-  await shopper.waitForSelector("text=Su código de entrega", { timeout: 15000 });
+  await web.simulatePayment(shopper);
   section = await invoicesOf(free);
   check(section.includes(FREE), "order page, free delivery: Yuntera issues no document");
   check(!section.includes(ISSUES), "and does not also say it issues one for the delivery");
@@ -334,14 +320,14 @@ const mode = (value) =>
     "order page: the simulated payment still says it gets none",
   );
   const shopperPhone = await signIn(WEB, SHOPPER, simulated, phone);
-  await shopperPhone.waitForSelector("#comprobantes");
+  await web.waitForOrderDocuments(shopperPhone);
   check((await overflow(shopperPhone)) <= 0, "the order page fits 390 px");
   await shopperPhone.screenshot({
     path: `${SHOTS}/is06-order-simulated-phone.png`,
     fullPage: true,
   });
   const financePhone = await signIn(OPS, "central@yuntera.example", "/comprobantes", phone);
-  await financePhone.waitForSelector("#por-dia");
+  await ops.waitForDailyTotals(financePhone);
   check((await overflow(financePhone)) <= 0, "the console's page fits 390 px");
   await financePhone.screenshot({ path: `${SHOTS}/is07-ops-phone.png`, fullPage: true });
 
@@ -360,8 +346,7 @@ const mode = (value) =>
   // documented, and it is not called real money.
   setting("invoicing_issuer", "ready", "false");
   await order("libreta-tapa-dura-a5", "sinpe_movil", false);
-  await shopper.click('button:visible:has-text("Simular pago")');
-  await shopper.waitForSelector("text=Su código de entrega", { timeout: 15000 });
+  await web.simulatePayment(shopper);
   page = await until("the console to count the rehearsal payment waiting", async () => {
     const p = await states();
     return p.includes(

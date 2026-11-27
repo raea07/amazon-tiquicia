@@ -298,7 +298,10 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
         </section>
 
         {awaitingTransfer && canSee(staff.staff_role, ["finance"]) ? (
-          <section className="rounded-lg border border-warning bg-surface p-5">
+          <section
+            className="rounded-lg border border-warning bg-surface p-5"
+            data-testid="confirm-transfer"
+          >
             <h2 className="text-lg font-bold">Confirmar la transferencia</h2>
             <p className="mt-1 mb-4 text-sm text-ink-muted">
               Solo después de ver el dinero en la cuenta del banco, por el monto exacto y con el

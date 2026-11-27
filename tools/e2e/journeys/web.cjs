@@ -5,8 +5,9 @@
 // browser logs an error, or when any response is a 5xx.
 
 const { chromium } = require("playwright");
+const web = require("../lib/web.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const BASE = process.env.WEB_URL || "http://127.0.0.1:3000";
+const BASE = web.BASE;
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const log = (...a) => console.log(...a);
 (async () => {
@@ -27,159 +28,94 @@ const log = (...a) => console.log(...a);
   });
 
   // 1. Home
-  await page.goto(BASE + "/", { waitUntil: "networkidle" });
-  log("home title:", await page.title());
-  log("home h1:", await page.locator("h1").first().innerText());
-  log("home product cards:", await page.locator("article").count());
-  log(
-    "header cart/account:",
-    (await page.locator('nav[aria-label="Su cuenta"]').innerText()).replace(/\s+/g, " "),
-  );
+  await web.open(page, "/");
+  const home = await web.homeSummary(page);
+  log("home title:", home.title);
+  log("home h1:", home.heading);
+  log("home product cards:", home.cards);
+  log("header cart/account:", await web.accountNav(page));
   await page.screenshot({ path: SHOTS + "/01-home.png", fullPage: true });
 
   // 2. Search with a typo
-  await page.fill("#q", "licuadra");
-  await page.keyboard.press("Enter");
-  await page.waitForURL(/buscar/);
-  await page.waitForSelector("article");
-  log('search "licuadra":', await page.locator("article h3").allInnerTexts());
+  await web.search(page, "licuadra");
+  log('search "licuadra":', await web.cardTitles(page));
 
   // 3. Search "laptop" – the laptop must come before the backpack
-  await page.goto(BASE + "/buscar?q=laptop", { waitUntil: "networkidle" });
+  await web.open(page, "/buscar?q=laptop");
   log(
     'search "laptop":',
-    (await page.locator("article h3").allInnerTexts()).map((t) => t.slice(0, 40)),
+    (await web.cardTitles(page)).map((t) => t.slice(0, 40)),
   );
   await page.screenshot({ path: SHOTS + "/02-search.png", fullPage: true });
 
   // 4. Product page with two offers
-  await page.goto(BASE + "/p/audifonos-inalambricos-nimbo-aire", { waitUntil: "networkidle" });
-  log("pdp h1:", await page.locator("h1").innerText());
-  log(
-    "buy box:",
-    (await page.locator('aside[aria-label="Comprar"]').innerText())
-      .replace(/\s+/g, " ")
-      .slice(0, 260),
-  );
-  log("other offers:", await page.locator("#otras-ofertas ~ ul > li").count());
-  log("reviews listed:", await page.locator("#resenas li").count());
+  await web.open(page, "/p/audifonos-inalambricos-nimbo-aire");
+  const product = await web.productSummary(page);
+  log("pdp h1:", product.heading);
+  log("buy box:", product.buyBox.slice(0, 260));
+  log("other offers:", product.otherOffers);
+  log("reviews listed:", product.reviews);
   await page.screenshot({ path: SHOTS + "/03-product.png", fullPage: true });
 
   // 5. Add to cart
-  await page.locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")').click();
-  await page.waitForSelector("text=Agregado al carrito");
-  await page.goto(BASE + "/p/cafe-molido-tarrazu-340g", { waitUntil: "networkidle" });
-  await page.locator('aside[aria-label="Comprar"] select').selectOption("2");
-  await page.locator('aside[aria-label="Comprar"] button:has-text("Agregar al carrito")').click();
-  await page.waitForSelector("text=Agregado al carrito");
+  await web.addToCart(page);
+  await web.open(page, "/p/cafe-molido-tarrazu-340g");
+  await web.addToCart(page, { quantity: 2 });
 
   // 6. Cart
-  await page.goto(BASE + "/carrito", { waitUntil: "networkidle" });
-  log("cart lines:", await page.locator("main ul > li").count());
-  log(
-    "cart summary:",
-    (await page.locator('aside[aria-label="Resumen"]').innerText())
-      .replace(/\s+/g, " ")
-      .slice(0, 220),
-  );
+  await web.open(page, "/carrito");
+  const cart = await web.cartSummary(page);
+  log("cart lines:", cart.lines);
+  log("cart summary:", cart.summary.slice(0, 220));
   await page.screenshot({ path: SHOTS + "/04-cart.png", fullPage: true });
 
   // 7. Checkout requires sign-in
-  await page.click("text=Continuar con la compra");
+  await web.continueToCheckout(page);
   await page.waitForURL(/ingresar/);
   log("redirected to sign-in:", page.url().replace(BASE, ""));
-  await page.fill('main input[name="email"]', "comprador@yuntera.example");
-  await page.fill('main input[name="password"]', "wrong-password");
-  await page.click('main form button[type="submit"]');
-  await page.waitForSelector('main form [role="alert"]');
-  log(
-    "wrong password message:",
-    await page.locator('main form [role="alert"]').first().innerText(),
-  );
-  log("email kept after the error:", await page.inputValue('main input[name="email"]'));
-  log(
-    "password cleared after the error:",
-    (await page.inputValue('main input[name="password"]')) === "",
-  );
-  await page.fill('main input[name="password"]', PASSWORD);
-  await page.click('main form button[type="submit"]');
+  await web.fillSignInForm(page, "comprador@yuntera.example", "wrong-password");
+  const refused = await web.signInError(page);
+  log("wrong password message:", refused.message);
+  log("email kept after the error:", refused.email);
+  log("password cleared after the error:", refused.passwordCleared);
+  await web.fillSignInForm(page, "comprador@yuntera.example", PASSWORD);
   await page.waitForURL((u) => new URL(u).pathname === "/pagar");
-  await page.waitForSelector("text=Resumen del pedido");
-  log(
-    "checkout summary:",
-    (await page.locator('aside[aria-label="Resumen del pedido"]').innerText())
-      .replace(/\s+/g, " ")
-      .slice(0, 330),
-  );
-  log(
-    "payment methods preselected:",
-    await page.locator('input[name="paymentMethod"]:checked').count(),
-  );
+  const checkout = await web.checkoutSummary(page);
+  log("checkout summary:", checkout.summary.slice(0, 330));
+  log("payment methods preselected:", checkout.preselected);
   await page.screenshot({ path: SHOTS + "/05-checkout.png", fullPage: true });
 
   // 8. Confirm without choosing a payment method -> browser validation blocks it
-  await page.click('button:has-text("Confirmar pedido")');
+  await web.confirmOrder(page);
   await page.waitForTimeout(300);
   log("still on checkout without payment method:", page.url().includes("/pagar"));
 
   // 9. Pay by SINPE
-  await page.check('input[name="paymentMethod"][value="sinpe_movil"]');
-  await page.click('button:has-text("Confirmar pedido")');
-  await page.waitForURL((u) => /^\/pedidos\/YT-/.test(new URL(u).pathname));
-  await page.waitForSelector('h1:visible:has-text("Pedido YT-")');
+  await web.choosePayment(page, "sinpe_movil");
+  await web.confirmOrder(page);
+  const orderHeading = await web.waitForOrderPage(page);
   const orderUrl = page.url();
   log("order page:", orderUrl.replace(BASE, ""));
-  log("order h1:", await page.locator("h1:visible").innerText());
-  log(
-    "stale pages kept hidden:",
-    (await page.locator("h1").count()) - (await page.locator("h1:visible").count()),
-  );
-  log(
-    "payment box:",
-    (await page.locator('section:visible:has-text("Falta el pago")').innerText())
-      .replace(/\s+/g, " ")
-      .slice(0, 200),
-  );
+  log("order h1:", orderHeading);
+  log("stale pages kept hidden:", await web.hiddenHeadings(page));
+  log("payment box:", (await web.paymentDue(page)).slice(0, 200));
   await page.screenshot({ path: SHOTS + "/06-order-pending.png", fullPage: true });
 
   // 10. Simulate payment
-  await page.click('button:visible:has-text("Simular pago")');
-  await page.waitForSelector("text=Su código de entrega", { timeout: 15000 });
-  log(
-    "after payment header:",
-    (
-      await page
-        .locator("main:visible header, main:visible h1")
-        .first()
-        .innerText()
-        .catch(() => "?")
-    )
-      .replace(/\s+/g, " ")
-      .slice(0, 120),
-  );
-  log(
-    "PIN shown:",
-    /^\d{4}$/.test(
-      (
-        await page.locator('section:visible:has-text("Su código de entrega") p').first().innerText()
-      ).trim(),
-    ),
-  );
+  await web.simulatePayment(page);
+  log("after payment header:", (await web.orderHeading(page)).slice(0, 120));
+  log("PIN shown:", /^\d{4}$/.test(await web.deliveryPin(page)));
   await page.screenshot({ path: SHOTS + "/07-order-paid.png", fullPage: true });
 
   // 11. Cart is empty afterwards; orders list
-  await page.goto(BASE + "/pedidos", { waitUntil: "networkidle" });
-  log("orders listed:", await page.locator("main ul > li").count());
+  await web.open(page, "/pedidos");
+  log("orders listed:", await web.orderCount(page));
   await page.screenshot({ path: SHOTS + "/07b-orders.png", fullPage: true });
-  log("cart badge:", (await page.locator('a[href="/carrito"]').innerText()).replace(/\s+/g, " "));
+  log("cart badge:", await web.cartBadge(page));
 
   // 12. Someone else's order -> not found
-  const other = await page.goto(BASE + "/pedidos/YT-100012", { waitUntil: "networkidle" });
-  log(
-    "other shopper order ->",
-    other.status(),
-    await page.locator("main h1:visible, main h2:visible").first().innerText(),
-  );
+  const other = await web.open(page, "/pedidos/YT-100012");
+  log("other shopper order ->", other.status(), await web.firstHeading(page));
 
   // 13. Mobile viewport
   const phone = await browser.newContext({
@@ -190,11 +126,11 @@ const log = (...a) => console.log(...a);
     hasTouch: true,
   });
   const m = await phone.newPage();
-  await m.goto(BASE + "/", { waitUntil: "networkidle" });
+  await web.open(m, "/");
   const overflow = await m.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   log("mobile horizontal overflow px:", overflow);
   await m.screenshot({ path: SHOTS + "/08-mobile-home.png", fullPage: false });
-  await m.goto(BASE + "/p/laptop-14-nimbo-libro", { waitUntil: "networkidle" });
+  await web.open(m, "/p/laptop-14-nimbo-libro");
   log(
     "mobile pdp overflow px:",
     await m.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),

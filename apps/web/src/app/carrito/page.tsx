@@ -198,7 +198,7 @@ async function Cart() {
             </p>
 
             {quote.promise ? (
-              <p className="mt-3 text-sm font-semibold text-success">
+              <p className="mt-3 text-sm font-semibold text-success" data-testid="cart-arrival">
                 Llega el {formatDate(quote.promise.latest)}
               </p>
             ) : null}

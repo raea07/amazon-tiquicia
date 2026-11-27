@@ -16,15 +16,16 @@
 // browser logs an error, or when any response is a 5xx.
 
 const { chromium } = require("playwright");
+const web = require("../lib/web.cjs");
+const seller = require("../lib/seller.cjs");
+const ops = require("../lib/ops.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
-const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
-const SELLER = process.env.SELLER_URL || "http://127.0.0.1:3001";
-const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
+const WEB = web.BASE;
+const SELLER = seller.BASE;
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
-const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 
 const TITLE = "Cafetera de goteo Nimbo 12 tazas con jarra de vidrio";
 const SLUG = "/p/cafetera-de-goteo-nimbo-12-tazas-con-jarra-de-vidrio";
@@ -50,14 +51,6 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
     page.on("response", (r) => {
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
-  };
-  const signIn = async (page, base, email) => {
-    await page.goto(`${base}/ingresar`, { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname === "/");
-    await page.waitForSelector("main h1:visible, main h2:visible");
   };
   const overflow = (page) =>
     page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -163,8 +156,8 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
     viewport: { width: 1280, height: 900 },
     locale: "es-CR",
   });
-  const seller = await sellerContext.newPage();
-  watch(seller);
+  const vendor = await sellerContext.newPage();
+  watch(vendor);
   const staffContext = await browser.newContext({
     viewport: { width: 1280, height: 900 },
     locale: "es-CR",
@@ -176,44 +169,27 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
     await shopper?.context().close();
     shopper = await (await browser.newContext({ locale: "es-CR", viewport })).newPage();
     watch(shopper);
-    await shopper.goto(WEB + path, { waitUntil: "networkidle" });
+    await web.open(shopper, path);
     return shopper;
   };
-  /** Alternative texts of the gallery's photos, in order, and whether each loaded. */
-  const gallery = async (page) =>
-    page.locator('main section[aria-roledescription="carrusel"] li img').evaluateAll((imgs) =>
-      imgs.map((img) => ({
-        alt: img.alt,
-        loaded: img.complete && img.naturalWidth > 0,
-        src: img.currentSrc || img.src,
-        srcset: img.srcset,
-      })),
-    );
 
   // 1. A new listing with two photos, as a draft
-  await signIn(seller, SELLER, "vendedor@yuntera.example");
-  if (!(await seller.locator("main h1:visible").innerText()).includes("TecnoCasa")) {
-    await seller.selectOption("#shop", { label: "TecnoCasa" });
-    await seller.click('header button:has-text("Cambiar")');
-    await seller.waitForSelector('main h1:visible:has-text("TecnoCasa")');
-  }
-  await seller.goto(`${SELLER}/productos/nuevo`, { waitUntil: "networkidle" });
-  await seller.fill('input[name="title"]', TITLE);
-  const hogar = await seller
-    .locator('select[name="categorySlug"] optgroup[label^="Hogar"] option')
-    .first()
-    .getAttribute("value");
-  await seller.selectOption('select[name="categorySlug"]', hogar);
-  await seller.fill('textarea[name="bullets"]', "12 tazas\nJarra de vidrio");
-  await seller.fill('input[name="price"]', "25 000");
-  await seller.fill('input[name="weightGrams"]', "1800");
-  await seller.fill('input[name="lengthCm"]', "30");
-  await seller.fill('input[name="widthCm"]', "20");
-  await seller.fill('input[name="heightCm"]', "35");
+  await seller.signInHome(vendor, "vendedor@yuntera.example");
+  await seller.chooseShop(vendor, "TecnoCasa");
+  await seller.open(vendor, "/productos/nuevo");
+  await seller.fillListingBasics(vendor, {
+    title: TITLE,
+    group: "Hogar",
+    bullets: "12 tazas\nJarra de vidrio",
+    price: "25 000",
+    weight: "1800",
+    length: "30",
+    width: "20",
+    height: "35",
+  });
 
   // Three files that are not photos it can use, and two that are.
-  const chooser = seller.locator('main:visible input[type="file"][multiple]');
-  await chooser.setInputFiles([
+  await seller.choosePhotos(vendor, [
     {
       name: "enorme.jpg",
       mimeType: "image/jpeg",
@@ -232,11 +208,7 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
       buffer: Buffer.from("Esto es texto, no una foto."),
     },
   ]);
-  const refusals = seller.locator('main:visible [role="alert"]', {
-    hasText: "no se pudieron agregar",
-  });
-  await refusals.waitFor();
-  const refused = await text(refusals);
+  const refused = await seller.refusedPhotos(vendor);
   log("refused files:", refused);
   check(
     refused.includes("enorme.jpg") && refused.includes("25 MB"),
@@ -247,75 +219,41 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
     refused.includes("notas.jpg") && refused.includes("no es una foto"),
     "a text file renamed to .jpg was not refused",
   );
-  check(
-    (await seller.locator("main:visible [data-queued-photo]").count()) === 0,
-    "a refused file was queued",
-  );
+  check((await seller.queuedCount(vendor)) === 0, "a refused file was queued");
 
-  await chooser.setInputFiles([
+  await seller.choosePhotos(vendor, [
     jpeg("cafetera-frente.jpg", photo1),
     jpeg("cafetera-jarra.jpg", photo2),
   ]);
-  await seller.locator("main:visible [data-queued-photo]").nth(1).waitFor();
-  log("queued:", await text(seller.locator("main:visible [data-queued-photo]").first()));
+  log("queued:", await seller.waitForQueued(vendor, 2));
   // Text is required before anything is sent.
-  await seller.click('main:visible button:has-text("Guardar como borrador")');
-  await seller.locator('main:visible [data-queued-photo] [role="alert"]').first().waitFor();
-  log(
-    "without text:",
-    await text(seller.locator('main:visible [data-queued-photo] [role="alert"]').first()),
-  );
-  await seller.getByLabel("Texto alternativo de la foto nueva 1").fill(ALT_1);
-  await seller.getByLabel("Texto alternativo de la foto nueva 2").fill(ALT_2);
-  await seller.screenshot({ path: `${SHOTS}/pp1-new-listing-photos.png`, fullPage: true });
-  await seller.click('main:visible button:has-text("Guardar como borrador")');
-  await seller.waitForURL((u) => new URL(u).pathname === "/productos", { timeout: 30000 });
-  log("after saving:", await text(seller.locator('main:visible [role="status"]').first()));
+  log("without text:", await seller.saveDraftRefused(vendor));
+  await seller.typeQueuedAlt(vendor, 1, ALT_1);
+  await seller.typeQueuedAlt(vendor, 2, ALT_2);
+  await vendor.screenshot({ path: `${SHOTS}/pp1-new-listing-photos.png`, fullPage: true });
+  log("after saving:", await seller.saveDraft(vendor));
 
   // 2. The draft's edit page: two photos waiting, in order, then sent to review
-  const row = seller.locator("main:visible tbody tr", { hasText: TITLE });
-  await row.locator('a:has-text("Editar")').click();
-  await seller.locator("main h1:visible", { hasText: TITLE }).waitFor();
-  const editUrl = seller.url();
+  await seller.openEdit(vendor, TITLE);
+  const editUrl = vendor.url();
   const productId = new URL(editUrl).pathname.split("/").pop();
-  const managed = seller.locator("main:visible [data-photo]");
-  check((await managed.count()) === 2, `the draft has ${await managed.count()} photos, not 2`);
-  log("photo 1:", await text(managed.first()));
-  check(
-    (await managed.first().locator("input").inputValue()) === ALT_1,
-    "the first photo is not the first one chosen",
-  );
-  check(
-    (await text(managed.first())).includes("Se revisa con el producto"),
-    "draft photo state not shown",
-  );
+  const photoCount = await seller.photoCount(vendor);
+  check(photoCount === 2, `the draft has ${photoCount} photos, not 2`);
+  const firstPhoto = await seller.photoAt(vendor, 0);
+  log("photo 1:", firstPhoto.text);
+  check(firstPhoto.alt === ALT_1, "the first photo is not the first one chosen");
+  check(firstPhoto.text.includes("Se revisa con el producto"), "draft photo state not shown");
   // Waiting photos are shown through the seller centre's own address, under the
-  // seller's session; sellers cannot sign links to them.
-  const previewSrc = await managed.first().locator("img").getAttribute("src");
+  // seller's session; sellers cannot sign links to them. The preview is fetched
+  // from storage by the seller centre, which on a hosted deployment can take a
+  // few seconds; the helper waits for it rather than reading it once.
+  const preview = await seller.firstPhotoPreview(vendor);
+  const previewSrc = preview.src;
   check(previewSrc?.startsWith("/fotos/"), `preview is not the seller centre's: ${previewSrc}`);
-  // The preview is fetched from storage by the seller centre, which on a hosted
-  // deployment can take a few seconds; wait for it rather than reading it once.
-  check(
-    await managed
-      .first()
-      .locator("img")
-      .evaluate(
-        (img) =>
-          new Promise((resolve) => {
-            const done = () => resolve(img.complete && img.naturalWidth > 0);
-            if (img.complete) done();
-            else {
-              img.addEventListener("load", done, { once: true });
-              img.addEventListener("error", done, { once: true });
-              setTimeout(done, 20000);
-            }
-          }),
-      ),
-    "the seller cannot see the waiting photo",
-  );
+  check(preview.loads, "the seller cannot see the waiting photo");
   const viaVisitor = await fetch(SELLER + previewSrc);
   check(viaVisitor.status === 404, `a visitor opened the preview: ${viaVisitor.status}`);
-  await seller.screenshot({ path: `${SHOTS}/pp2-draft-photos.png`, fullPage: true });
+  await vendor.screenshot({ path: `${SHOTS}/pp2-draft-photos.png`, fullPage: true });
 
   // The waiting files are not retrievable by anyone who only knows where they are.
   const waitingPath = decodeURIComponent(previewSrc.replace(/^\/fotos\//, ""));
@@ -436,43 +374,25 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
   });
   check(finished.body?.state === "pending", `fake photo finish: ${JSON.stringify(finished.body)}`);
 
-  await seller.reload({ waitUntil: "networkidle" });
-  await seller.click('main:visible button:has-text("Guardar y enviar a revisión")');
-  const sent = seller.locator('main:visible [role="status"]', {
-    hasText: "En revisión; todavía no está publicado",
-  });
-  await sent.waitFor();
-  log("sent:", await text(sent));
+  await vendor.reload({ waitUntil: "networkidle" });
+  await seller.sendDraftForReview(vendor);
+  log("sent:", await seller.editStatus(vendor));
 
   // 3. Staff publish the listing: the photos are approved with it, the fake one is refused
-  await signIn(staff, OPS, "central@yuntera.example");
-  await staff.goto(`${OPS}/catalogo`, { waitUntil: "networkidle" });
-  const card = staff.locator("main li", { hasText: TITLE }).first();
-  const reviewPhotos = card.locator("[data-review-photo]");
-  check(
-    (await reviewPhotos.count()) === 3,
-    `staff see ${await reviewPhotos.count()} photos, not 3`,
-  );
-  check(
-    await reviewPhotos
-      .first()
-      .locator("img")
-      .evaluate((img) => img.complete && img.naturalWidth > 0),
-    "staff cannot see the first waiting photo",
-  );
-  log("staff see:", (await text(card)).slice(0, 220));
+  await ops.signInHome(staff, "central@yuntera.example");
+  await ops.open(staff, "/catalogo");
+  const card = await ops.newListingPhotos(staff, TITLE);
+  check(card.count === 3, `staff see ${card.count} photos, not 3`);
+  check(card.firstLoaded, "staff cannot see the first waiting photo");
+  log("staff see:", card.text.slice(0, 220));
   await staff.screenshot({ path: `${SHOTS}/pp3-staff-new-listing.png`, fullPage: true });
-  await card.locator('button:has-text("Publicar")').click();
   // Once published the listing leaves the queue (and its message with it).
-  await staff
-    .locator("main li", { hasText: TITLE })
-    .first()
-    .waitFor({ state: "detached", timeout: 30000 });
+  await ops.publishListing(staff, TITLE);
   log("published: the listing left the queue");
 
   // 4. The shop shows both photos, in order, with their text, from the public bucket
   let shop = await openShop(SLUG);
-  let shown = await gallery(shop);
+  let shown = await web.galleryPhotos(shop);
   log(
     "shop gallery:",
     shown.map((p) => `${p.alt} [${p.loaded ? "ok" : "not loaded"}]`).join(" | "),
@@ -491,29 +411,13 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
     "a photo is not from the public bucket",
   );
   check(shown[0]?.srcset.includes("400w") && shown[0]?.srcset.includes("1600w"), "no srcset");
-  const first = shop.locator('main section[aria-roledescription="carrusel"] li img').first();
-  check((await first.getAttribute("fetchpriority")) === "high", "first photo is not prioritised");
-  check(
-    (await shop
-      .locator('main section[aria-roledescription="carrusel"] li img')
-      .nth(1)
-      .getAttribute("loading")) === "lazy",
-    "second photo is not lazy",
-  );
+  check(shown[0]?.fetchpriority === "high", "first photo is not prioritised");
+  check(shown[1]?.loading === "lazy", "second photo is not lazy");
   // keyboard: arrow right moves to the second photo
-  await shop.locator('main section[aria-roledescription="carrusel"] ul').focus();
-  await shop.keyboard.press("ArrowRight");
-  await shop
-    .locator('main section[aria-roledescription="carrusel"] [aria-live]', {
-      hasText: "Foto 2 de 2",
-    })
-    .waitFor();
-  await shop.locator('main button[aria-label^="Ver foto 1"]').click();
-  await shop
-    .locator('main section[aria-roledescription="carrusel"] [aria-live]', {
-      hasText: "Foto 1 de 2",
-    })
-    .waitFor();
+  await web.nextPhotoByKeyboard(shop);
+  await web.waitForGalleryAt(shop, "Foto 2 de 2");
+  await web.showPhoto(shop, 1);
+  await web.waitForGalleryAt(shop, "Foto 1 de 2");
   // the fake photo's file never reached the public bucket
   const fakePath = files[0].path;
   check(
@@ -523,7 +427,7 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
 
   // On a phone: right-sized photo, nothing moves sideways, and the search shows the thumbnail.
   shop = await openShop(SLUG, { width: 390, height: 844 });
-  shown = await gallery(shop);
+  shown = await web.galleryPhotos(shop);
   log("phone picks:", shown[0]?.src.split("/").pop(), "| sideways:", await overflow(shop));
   check(
     !shown[0]?.src.endsWith("/1600.jpg") || (await shop.evaluate(() => devicePixelRatio)) > 2,
@@ -535,71 +439,54 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
     width: 390,
     height: 844,
   });
-  const thumb = shop
-    .locator("main article", { hasText: "Cafetera de goteo Nimbo" })
-    .locator("img")
-    .first();
-  const thumbSrc = await thumb.evaluate((img) => img.currentSrc || img.src).catch(() => "");
+  const thumbSrc = await web.resultPictureSrc(shop, "Cafetera de goteo Nimbo");
   log("search thumbnail:", thumbSrc.split("/").slice(-2).join("/"));
   check(thumbSrc.includes("/storage/v1/object/public/product-photos/"), "search shows no photo");
 
   // 5. The seller sees the rejected fake with its reason, then changes the published photos
-  await seller.goto(editUrl, { waitUntil: "networkidle" });
-  const rejected = seller.locator("main:visible [data-rejected-photo]");
-  check((await rejected.count()) === 1, "the rejected photo is not shown to the seller");
-  log("rejected:", await text(rejected.first()));
+  await vendor.goto(editUrl, { waitUntil: "networkidle" });
+  const rejected = await seller.rejectedPhotoTexts(vendor);
+  check(rejected.length === 1, "the rejected photo is not shown to the seller");
+  log("rejected:", rejected[0]);
   check(
-    (await text(rejected.first())).includes("no es una imagen que podamos abrir"),
+    (rejected[0] ?? "").includes("no es una imagen que podamos abrir"),
     "the rejection has no reason",
   );
-  await rejected.first().locator('button:has-text("Quitar de la lista")').click();
-  await seller.locator("main:visible [data-rejected-photo]").waitFor({ state: "detached" });
+  await seller.dismissRejectedPhoto(vendor);
 
-  const approvedBefore = await managed.first().getAttribute("data-photo");
+  const approvedNow = await seller.photoAt(vendor, 0);
+  const approvedBefore = approvedNow.id;
   check(
-    (await text(managed.first())).includes("Aprobada"),
+    approvedNow.text.includes(word("product_photos", "approved", { viewer: "seller" })),
     "the approved photo state is not shown",
   );
-  await seller
-    .locator('main:visible input[type="file"][multiple]')
-    .setInputFiles([jpeg("cafetera-botones.jpg", photo3), jpeg("cafetera-caja.jpg", photo4)]);
-  await seller.locator("main:visible [data-queued-photo]").nth(1).waitFor();
+  await seller.choosePhotos(vendor, [
+    jpeg("cafetera-botones.jpg", photo3),
+    jpeg("cafetera-caja.jpg", photo4),
+  ]);
+  await seller.waitForQueued(vendor, 2);
   // The same file again is not queued twice.
-  await seller
-    .locator('main:visible input[type="file"][multiple]')
-    .setInputFiles([jpeg("cafetera-botones.jpg", photo3)]);
-  await seller.locator('main:visible [role="alert"]', { hasText: "ya está en la lista" }).waitFor();
+  await seller.choosePhotos(vendor, [jpeg("cafetera-botones.jpg", photo3)]);
+  await seller.waitForAlreadyQueued(vendor);
+  check((await seller.queuedCount(vendor)) === 2, "the same file was queued twice");
+  await seller.typeQueuedAlt(vendor, 1, ALT_3);
+  await seller.typeQueuedAlt(vendor, 2, ALT_4);
+  await seller.uploadQueued(vendor, 2, 4);
   check(
-    (await seller.locator("main:visible [data-queued-photo]").count()) === 2,
-    "the same file was queued twice",
-  );
-  await seller.getByLabel("Texto alternativo de la foto nueva 1").fill(ALT_3);
-  await seller.getByLabel("Texto alternativo de la foto nueva 2").fill(ALT_4);
-  await seller.click('main:visible button:has-text("Subir 2 fotos")');
-  await seller
-    .locator('main:visible [role="status"]', { hasText: "Fotos subidas" })
-    .waitFor({ timeout: 30000 });
-  await seller.locator("main:visible [data-photo]").nth(3).waitFor();
-  check(
-    (await text(seller.locator("main:visible [data-photo]").nth(2))).includes("En revisión"),
+    (await seller.photoAt(vendor, 2)).text.includes(
+      word("product_photos", "pending", { viewer: "seller" }),
+    ),
     "a new photo of a published listing is not waiting",
   );
   // Text typed but not saved on another photo survives removing one.
   const UNSAVED = "Texto escrito y todavía sin guardar";
-  await seller.getByLabel("Texto alternativo de la foto 2", { exact: true }).fill(UNSAVED);
-  await seller.click('main:visible button:has-text("Quitar la foto 1")');
-  await seller
-    .locator('main:visible [role="status"]', { hasText: "se quitará cuando aprobemos" })
-    .waitFor();
-  await seller.locator("main:visible [data-leaving-photo]").waitFor();
-  const kept = await seller
-    .getByLabel("Texto alternativo de la foto 1", { exact: true })
-    .inputValue();
+  await seller.typePhotoAlt(vendor, 2, UNSAVED);
+  await seller.removePhotoAt(vendor, 1);
+  const kept = await seller.photoAltTyped(vendor, 1);
   check(kept === UNSAVED, `unsaved text was lost when a photo was removed: ${kept}`);
-  await seller.click('main:visible button:has-text("Deshacer")');
+  await seller.undoPhotoChanges(vendor);
   check(
-    (await seller.getByLabel("Texto alternativo de la foto 1", { exact: true }).inputValue()) ===
-      ALT_2,
+    (await seller.photoAltTyped(vendor, 1)) === ALT_2,
     "undo did not bring back the saved text",
   );
 
@@ -626,19 +513,16 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
     p_height: 1200,
   });
   check(mixedDone.body?.state === "pending", `mixed finish: ${JSON.stringify(mixedDone.body)}`);
-  await seller.reload({ waitUntil: "networkidle" });
-  log(
-    "seller after the change:",
-    (await text(seller.locator('main:visible section[aria-labelledby="fotos"]'))).slice(0, 300),
-  );
-  await seller.setViewportSize({ width: 390, height: 844 });
-  await seller.screenshot({ path: `${SHOTS}/pp5-seller-photos-390.png`, fullPage: true });
-  check((await overflow(seller)) <= 0, "the seller's photo page scrolls sideways at 390 px");
-  await seller.setViewportSize({ width: 1280, height: 900 });
+  await vendor.reload({ waitUntil: "networkidle" });
+  log("seller after the change:", (await seller.photosSection(vendor)).slice(0, 300));
+  await vendor.setViewportSize({ width: 390, height: 844 });
+  await vendor.screenshot({ path: `${SHOTS}/pp5-seller-photos-390.png`, fullPage: true });
+  check((await overflow(vendor)) <= 0, "the seller's photo page scrolls sideways at 390 px");
+  await vendor.setViewportSize({ width: 1280, height: 900 });
 
   // The shop still shows the approved two.
   shop = await openShop(SLUG);
-  shown = await gallery(shop);
+  shown = await web.galleryPhotos(shop);
   log("shop while the change waits:", shown.map((p) => p.alt).join(" | "));
   check(
     shown.length === 2 && shown[0]?.alt === ALT_1 && shown[1]?.alt === ALT_2,
@@ -649,10 +533,10 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
   const otherContext = await browser.newContext({ locale: "es-CR" });
   const other = await otherContext.newPage();
   watch(other);
-  await signIn(other, SELLER, "cafetal@yuntera.example");
+  await seller.signInHome(other, "cafetal@yuntera.example");
   await other.goto(editUrl, { waitUntil: "networkidle" });
   // The page streams, so "not found" arrives as the page's content rather than its status.
-  const otherSees = await text(other.locator("main:visible").first());
+  const otherSees = await seller.mainText(other);
   check(
     otherSees.includes("No encontramos esa página") && !otherSees.includes(TITLE),
     `another seller opened the edit page: ${otherSees.slice(0, 80)}`,
@@ -714,38 +598,23 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
   await otherContext.close();
 
   // 7. Staff: reject the photo with the other brand's box, approve the rest
-  await staff.goto(`${OPS}/catalogo`, { waitUntil: "networkidle" });
-  const change = staff.locator(`[data-photo-change="${productId}"]`);
-  await change.waitFor();
-  log("change for review:", (await text(change)).slice(0, 260));
-  check((await text(change)).includes("Se quita"), "the removal is not shown");
-  const mixedCard = change.locator(`[data-review-photo="${mixed.body.photo_id}"]`).last();
-  const mixedPreview = await mixedCard
-    .locator("img")
-    .evaluate((img) => ({ src: img.currentSrc || img.src, width: img.naturalWidth }));
+  await ops.open(staff, "/catalogo");
+  const change = await ops.photoChangeText(staff, productId);
+  log("change for review:", change.slice(0, 260));
+  check(change.includes("Se quita"), "the removal is not shown");
+  const mixedPreview = await ops.reviewedPicture(staff, productId, mixed.body.photo_id);
   check(
     mixedPreview.src.includes("/1600.jpg") && mixedPreview.width === 1600,
     `staff are not shown the largest copy: ${mixedPreview.src.split("?")[0].split("/").pop()}`,
   );
   await staff.screenshot({ path: `${SHOTS}/pp6-staff-photo-change.png`, fullPage: true });
-  const boxed = change.locator("[data-review-photo]", { hasText: ALT_4 }).last();
-  await boxed.locator("summary").click();
-  await boxed.locator('textarea[name="note"]').fill(REASON);
-  await boxed.locator('button:has-text("Rechazar foto")').click();
-  // A refused photo is no longer proposed, so it leaves the card.
-  await change.locator("[data-review-photo]", { hasText: ALT_4 }).waitFor({ state: "detached" });
-  await change.locator('button:has-text("Aprobar fotos")').click();
-  await staff.waitForSelector(
-    'main section[aria-labelledby="fotos"] >> text=No hay fotos por revisar',
-    {
-      timeout: 30000,
-    },
-  );
+  await ops.rejectPhoto(staff, productId, ALT_4, REASON);
+  await ops.approvePhotos(staff, productId);
   log("approved: the photo change left the queue");
 
   // 8. The shop shows the new set: the second photo first, then the third
   shop = await openShop(SLUG);
-  shown = await gallery(shop);
+  shown = await web.galleryPhotos(shop);
   log(
     "shop after approval:",
     shown.map((p) => `${p.alt} [${p.loaded ? "ok" : "not loaded"}]`).join(" | "),
@@ -787,45 +656,33 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
   await shop.screenshot({ path: `${SHOTS}/pp7-shop-new-set.png`, fullPage: true });
 
   // 9. The seller reads why the fourth photo was refused
-  await seller.goto(editUrl, { waitUntil: "networkidle" });
-  const reason = seller.locator("main:visible [data-rejected-photo]", { hasText: ALT_4 });
-  await reason.waitFor();
-  log("seller reads:", await text(reason));
-  check((await text(reason)).includes(REASON), "the seller does not see the rejection reason");
-  await seller.screenshot({ path: `${SHOTS}/pp8-seller-rejected-reason.png`, fullPage: true });
+  await vendor.goto(editUrl, { waitUntil: "networkidle" });
+  const reason = (await seller.rejectedPhotoTexts(vendor, ALT_4)).find((t) => t.includes(ALT_4));
+  log("seller reads:", reason);
+  check(reason?.includes(REASON), "the seller does not see the rejection reason");
+  await vendor.screenshot({ path: `${SHOTS}/pp8-seller-rejected-reason.png`, fullPage: true });
 
   // 10. Staff take down a photo that is already in the shop
-  await staff.goto(`${OPS}/catalogo`, { waitUntil: "networkidle" });
-  await staff.click('nav[aria-label="Catálogo"] a:has-text("Retirar fotos")');
-  await staff.waitForURL((u) => new URL(u).pathname === "/catalogo/fotos");
-  await staff.getByLabel("Dirección del producto en la tienda").fill(WEB + SLUG);
-  await staff.click('main button:has-text("Buscar el producto")');
-  const live = staff.locator(`[data-takedown-photo="${mixed.body.photo_id}"]`);
-  await live.waitFor();
-  check((await text(live)).includes("En la tienda"), "the photo is not shown as in the shop");
-  await live.locator('textarea[name="note"]').fill(TAKE_DOWN);
-  await live.locator('button:has-text("Retirar esta foto")').click();
-  await live.waitFor({ state: "detached", timeout: 30000 });
-  check(
-    (await staff.locator("main [data-takedown-photo]").count()) === 2,
-    "the other photos are not listed any more",
-  );
+  await ops.findPhotosToTakeDown(staff, WEB + SLUG);
+  const live = await ops.takedownPhotoText(staff, mixed.body.photo_id);
+  check(live.includes("En la tienda"), "the photo is not shown as in the shop");
+  const stillListed = await ops.takeDownPhoto(staff, mixed.body.photo_id, TAKE_DOWN);
+  check(stillListed === 2, "the other photos are not listed any more");
   await staff.screenshot({ path: `${SHOTS}/pp9-staff-take-down.png`, fullPage: true });
   for (const size of sizes) {
     const gone = await storage("GET", `/object/public/product-photos/${mixedTemplate}${size}.jpg`);
     check(gone.json?.code === "NoSuchKey", `a taken-down file is still served: ${size}`);
   }
   shop = await openShop(SLUG);
-  shown = await gallery(shop);
+  shown = await web.galleryPhotos(shop);
   log("shop after the take-down:", shown.map((p) => p.alt).join(" | "));
   check(
     shown.length === 2 && !shown.some((p) => p.alt === ALT_MIX),
     "the shop still shows the photo",
   );
-  await seller.goto(editUrl, { waitUntil: "networkidle" });
-  const down = seller.locator("main:visible [data-rejected-photo]", { hasText: ALT_MIX });
-  await down.waitFor();
-  check((await text(down)).includes(TAKE_DOWN), "the seller does not see why it was taken down");
+  await vendor.goto(editUrl, { waitUntil: "networkidle" });
+  const down = (await seller.rejectedPhotoTexts(vendor, ALT_MIX)).find((t) => t.includes(ALT_MIX));
+  check(down?.includes(TAKE_DOWN), "the seller does not see why it was taken down");
 
   await painter.context().close();
   await browser.close();

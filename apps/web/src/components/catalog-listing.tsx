@@ -257,7 +257,11 @@ function BrandFilter({
         </button>
       </form>
       {query.brand ? (
-        <p className="flex flex-wrap items-center gap-2" aria-live="polite">
+        <p
+          className="flex flex-wrap items-center gap-2"
+          aria-live="polite"
+          data-testid="brand-filter-summary"
+        >
           <span>
             Mostrando {resultCount} {resultCount === 1 ? "producto" : "productos"} de{" "}
             <span className="font-semibold">{current?.name ?? "esa marca"}</span>

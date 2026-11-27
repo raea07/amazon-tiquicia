@@ -76,7 +76,10 @@ async function Day({ searchParams }: Pick<PageProps<"/ruta">, "searchParams">) {
             aria-labelledby={`ruta-${route.code}`}
             className="flex flex-col gap-4"
           >
-            <div className="rounded-lg border border-border bg-surface p-5">
+            <div
+              className="rounded-lg border border-border bg-surface p-5"
+              data-testid="route-summary"
+            >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 id={`ruta-${route.code}`} className="text-xl font-bold">
                   Ruta {route.code}

@@ -16,6 +16,8 @@
 const { createHmac } = require("node:crypto");
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
+const ops = require("../lib/ops.cjs");
+const web = require("../lib/web.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const BASE = process.env.OPS_URL || "http://127.0.0.1:3002";
 const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
@@ -28,7 +30,6 @@ const DATABASE_URL =
 const ADMIN = "central@yuntera.example";
 const COLLEAGUE = "colega-soporte@yuntera.example";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 const check = (ok, what) => {
   if (!ok) throw new Error(`check failed: ${what}`);
 };
@@ -100,23 +101,10 @@ async function api(method, path, data, token) {
   return { status: r.status(), body };
 }
 
-/**
- * Waits until React has taken over the visible page's form (or the page). The
- * framework keeps the previous page in the document, hidden, during a
- * navigation, so only what is visible counts.
- */
-function hydrated(page) {
-  return page.waitForFunction(() => {
-    const main = [...document.querySelectorAll("main")].find((m) => m.checkVisibility());
-    const el = main?.querySelector("form") ?? main;
-    return el && Object.keys(el).some((key) => key.startsWith("__react"));
-  });
-}
-
 /** Opens a page and waits until React has taken over its forms. */
 async function go(page, url) {
   await page.goto(url, { waitUntil: "load" });
-  await hydrated(page);
+  await ops.hydrated(page);
 }
 const path = (page) => new URL(page.url()).pathname;
 /** Waits briefly for a redirect that streams in after the page loaded. */
@@ -159,24 +147,17 @@ async function settle(page, expected) {
   };
   const signIn = async (page, email) => {
     await go(page, BASE + "/ingresar");
-    await page.fill('main:visible input[name="email"]', email);
-    await page.fill('main:visible input[name="password"]', PASSWORD);
-    await page.click('main:visible form button[type="submit"]');
+    await ops.fillSignIn(page, email, PASSWORD);
   };
   /** Enrols an authenticator on /dos-pasos and returns its secret. */
   const enrol = async (page) => {
-    await page.click('main:visible button:has-text("Empezar")');
-    const secretBox = page.locator("main:visible [data-secret]");
-    await secretBox.waitFor();
-    const secret = await secretBox.getAttribute("data-secret");
+    const { secret, qr } = await ops.startEnrolment(page);
     check(/^[A-Z2-7]{32}$/.test(secret), "a 32-character secret is shown as text");
-    const qr = await page.locator('main:visible img[alt^="Código QR"]').getAttribute("src");
     check(
       qr.startsWith("data:image/svg+xml;base64,"),
       "the QR code is drawn locally, as an inline SVG",
     );
-    await page.fill('main:visible input[name="code"]', await freshCode(secret));
-    await page.click('main:visible button:has-text("Activar la verificación")');
+    await ops.activateTwoStep(page, await freshCode(secret));
     return secret;
   };
 
@@ -185,25 +166,14 @@ async function settle(page, expected) {
   await signIn(admin.page, ADMIN);
   await admin.page.waitForURL((u) => new URL(u).pathname === "/");
   await go(admin.page, BASE + "/cuenta");
-  log(
-    "account page:",
-    (await text(admin.page.locator('main:visible section[aria-labelledby="dos-pasos"]'))).slice(
-      0,
-      120,
-    ),
-  );
-  await admin.page.click('main:visible a:has-text("Activar la verificación")');
-  await admin.page.waitForURL((u) => new URL(u).pathname === "/dos-pasos");
-  await hydrated(admin.page);
+  log("account page:", (await ops.twoStepSection(admin.page)).slice(0, 120));
+  await ops.openTwoStep(admin.page);
   const adminSecret = await enrol(admin.page);
   await admin.page.waitForURL((u) => new URL(u).searchParams.get("estado") === "activada");
-  log("enrolled:", await text(admin.page.locator('main:visible [role="status"]').first()));
+  log("enrolled:", await ops.statusText(admin.page));
   await admin.page.screenshot({ path: SHOTS + "/m1-enrolled.png", fullPage: true });
   await go(admin.page, BASE + "/cuenta");
-  log(
-    "badge now:",
-    await text(admin.page.locator('main:visible section[aria-labelledby="dos-pasos"] h2 + *')),
-  );
+  log("badge now:", await ops.twoStepBadge(admin.page));
 
   // With the setting still off, the factor protects the account against
   // someone who has only the password and calls the API directly: the token
@@ -223,32 +193,20 @@ async function settle(page, expected) {
   check(step.status === 200, "what the second-step screen needs still answers");
 
   // 2. Out and back in: the password alone leads to the second step.
-  await admin.page.click('header button:has-text("Salir")');
+  await ops.signOut(admin.page);
   await admin.page.waitForURL((u) => new URL(u).pathname === "/ingresar");
   await signIn(admin.page, ADMIN);
   await admin.page.waitForURL((u) => new URL(u).pathname === "/verificar");
-  log(
-    "after password:",
-    path(admin.page),
-    "| nav links:",
-    await admin.page.locator('nav[aria-label="Secciones"] a').count(),
-  );
+  log("after password:", path(admin.page), "| nav links:", await ops.navLinks(admin.page));
   await go(admin.page, BASE + "/pedidos");
   log("orders before the second step ->", await settle(admin.page, "/verificar"));
   check(path(admin.page) === "/verificar", "nothing else opens before the second step");
-  await admin.page.fill('main:visible input[name="code"]', "000000");
-  await admin.page.click('main:visible button:has-text("Verificar")');
-  log("wrong code:", await text(admin.page.locator('main:visible [role="alert"]')));
+  await ops.verifyCode(admin.page, "000000");
+  log("wrong code:", await ops.alertText(admin.page));
   await admin.page.screenshot({ path: SHOTS + "/m2-wrong-code.png", fullPage: true });
-  await admin.page.fill('main:visible input[name="code"]', await freshCode(adminSecret));
-  await admin.page.click('main:visible button:has-text("Verificar")');
+  await ops.verifyCode(admin.page, await freshCode(adminSecret));
   await admin.page.waitForURL((u) => new URL(u).pathname === "/pedidos");
-  log(
-    "after the second step:",
-    path(admin.page),
-    "| nav links:",
-    await admin.page.locator('nav[aria-label="Secciones"] a').count(),
-  );
+  log("after the second step:", path(admin.page), "| nav links:", await ops.navLinks(admin.page));
 
   // 3. The setting goes on (only in this journey's database). A new colleague
   //    signs in: enrolment comes before anything else.
@@ -284,12 +242,7 @@ async function settle(page, expected) {
   });
   await signIn(colleague.page, COLLEAGUE);
   await colleague.page.waitForURL((u) => new URL(u).pathname === "/dos-pasos");
-  log(
-    "colleague lands on:",
-    path(colleague.page),
-    "|",
-    await text(colleague.page.locator('main:visible [role="status"]').first()),
-  );
+  log("colleague lands on:", path(colleague.page), "|", await ops.statusText(colleague.page));
   log(
     "mobile /dos-pasos overflow px:",
     await colleague.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
@@ -300,17 +253,17 @@ async function settle(page, expected) {
     "colleague on /atencion ->",
     await settle(colleague.page, "/dos-pasos"),
     "| nav links:",
-    await colleague.page.locator('nav[aria-label="Secciones"] a').count(),
+    await ops.navLinks(colleague.page),
   );
   check(path(colleague.page) === "/dos-pasos", "enrolment before anything else");
-  await hydrated(colleague.page);
+  await ops.hydrated(colleague.page);
   const colleagueSecret = await enrol(colleague.page);
   await colleague.page.waitForURL((u) => new URL(u).pathname === "/atencion");
   log(
     "colleague after enrolling:",
     path(colleague.page),
     "|",
-    (await text(colleague.page.locator("main:visible h1:visible"))).slice(0, 40),
+    (await ops.heading(colleague.page)).slice(0, 40),
   );
   check(colleagueSecret !== adminSecret, "each enrolment has its own secret");
 
@@ -319,20 +272,15 @@ async function settle(page, expected) {
 
   // 4. The administrator recovers the colleague (lost phone) from the staff screen.
   await go(admin.page, BASE + "/seguridad");
-  const card = admin.page.locator("main:visible li", { hasText: COLLEAGUE });
-  log("colleague on the staff screen:", (await text(card)).slice(0, 120));
-  check(
-    (await admin.page
-      .locator("main:visible li", { hasText: "(usted)" })
-      .locator("button")
-      .count()) === 0,
-    "no reset button on one's own card",
+  log(
+    "colleague on the staff screen:",
+    (await ops.securityCardText(admin.page, COLLEAGUE)).slice(0, 120),
   );
-  await card.locator('button:has-text("Reiniciar su verificación")').click();
-  log("reset:", await text(card.locator('[role="status"]')));
+  check((await ops.ownCardButtons(admin.page)) === 0, "no reset button on one's own card");
+  log("reset:", await ops.resetTwoStep(admin.page, COLLEAGUE));
   await admin.page.screenshot({ path: SHOTS + "/m4-reset.png", fullPage: true });
   await go(admin.page, BASE + "/auditoria");
-  log("audit:", (await text(admin.page.locator("main:visible tbody tr").first())).slice(0, 140));
+  log("audit:", (await ops.tableRow(admin.page)).slice(0, 140));
 
   // The session on the lost phone ends at once, not when its token expires:
   // the token is refused by the database and the open page goes to sign-in.
@@ -352,12 +300,11 @@ async function settle(page, expected) {
 
   // 5. The administrator's own session still works, at the second-factor level.
   await go(admin.page, BASE + "/");
-  await admin.page.locator("main:visible h2:visible").first().waitFor();
   log(
     "admin overview:",
     path(admin.page),
     "| headings:",
-    (await admin.page.locator("main:visible h2:visible").allInnerTexts()).slice(0, 3),
+    (await ops.summaryHeadings(admin.page)).slice(0, 3),
   );
   await admin.context.close();
 
@@ -387,10 +334,7 @@ async function settle(page, expected) {
   log("delete_my_account with the password only:", deletion.status, deletion.body?.message);
   check(deletion.body?.message === "second_factor_required", "deletion needs the second step");
   const shopper = await newPage();
-  await go(shopper.page, WEB + "/ingresar");
-  await shopper.page.fill('main:visible input[name="email"]', SHOPPER);
-  await shopper.page.fill('main:visible input[name="password"]', PASSWORD);
-  await shopper.page.click('main:visible form button[type="submit"]');
+  await web.submitSignIn(shopper.page, SHOPPER, PASSWORD);
   await shopper.page.waitForURL((u) => new URL(u).pathname === "/verificar");
   for (const page of ["/cuenta", "/cuenta/eliminar"]) {
     await shopper.page.goto(WEB + page, { waitUntil: "load" });

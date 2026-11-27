@@ -41,14 +41,17 @@ export function ReturnStatusList({
   return (
     <ul className="flex flex-col gap-2 text-sm">
       {returns.map((item) => (
-        <li key={item.id} className="rounded-md bg-surface-muted p-3">
+        <li key={item.id} className="rounded-md bg-surface-muted p-3" data-testid="return-request">
           <p className="font-semibold">
             {KIND[item.kind]} de {item.quantity} {item.quantity === 1 ? "unidad" : "unidades"}
           </p>
           <p className="mt-1">{nextStep(item)}</p>
           {item.can_withdraw ? (
             <details className="mt-2">
-              <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-link">
+              <summary
+                className="flex min-h-11 cursor-pointer items-center font-semibold text-link"
+                data-testid="return-withdraw"
+              >
                 ¿La abrió por error? Retirar la solicitud
               </summary>
               <div className="mt-2">

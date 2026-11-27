@@ -253,7 +253,7 @@ async function Board({ searchParams }: Pick<PageProps<"/despacho">, "searchParam
       </section>
 
       {failed.length > 0 ? (
-        <section aria-labelledby="fallidas">
+        <section aria-labelledby="fallidas" data-testid="dispatch-failed">
           <h2 id="fallidas" className="text-xl font-bold">
             {failed.every((shipment) =>
               isRescheduledShipment(shipment.status, shipment.attempt_count),

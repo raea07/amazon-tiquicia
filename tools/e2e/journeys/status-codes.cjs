@@ -9,6 +9,7 @@
 // not arrive where it should, when the browser logs an error, or on any 5xx.
 
 const { chromium } = require("playwright");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
 const SELLER = process.env.SELLER_URL || "http://127.0.0.1:3001";
@@ -202,15 +203,14 @@ async function rpcAs(email) {
     page.on("response", (r) => {
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
+    // The sign-in form is next-kit's, the same in the four apps.
     await page.goto(base + "/ingresar", { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
+    await kit.fillSignIn(page, email, PASSWORD);
     await page.waitForURL((u) => new URL(u).pathname !== "/ingresar");
     for (const path of paths) {
       await page.goto(base + path, { waitUntil: "networkidle" });
       // The drivers' and warehouse app shows its not-found screen without a <main>.
-      const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+      const text = await kit.pageText(page);
       const shown = text.includes(expected) && !text.includes("Algo salió mal");
       log(
         `${new URL(base).port} ${email.split("@")[0].padEnd(10)} ${path.padEnd(52)}`,
@@ -241,7 +241,7 @@ async function rpcAs(email) {
     "in a browser: status",
     missing.status(),
     "|",
-    (await m.locator("main").innerText()).replace(/\s+/g, " ").slice(0, 60),
+    (await kit.mainText(m)).slice(0, 60),
     "| overflow px:",
     await m.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
   );

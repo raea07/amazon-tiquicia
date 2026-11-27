@@ -84,6 +84,7 @@ async function Sellers({ searchParams }: Pick<PageProps<"/vendedores">, "searchP
               <li
                 key={seller.id}
                 className="rounded-lg border border-border bg-surface p-5 text-sm"
+                data-testid="seller-card"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-lg font-bold">{seller.trade_name}</h2>

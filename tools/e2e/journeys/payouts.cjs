@@ -7,6 +7,9 @@
 // browser logs an error, or when any response is a 5xx.
 
 const { chromium, request } = require("playwright");
+const seller = require("../lib/seller.cjs");
+const ops = require("../lib/ops.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const SELLER = process.env.SELLER_URL || "http://127.0.0.1:3001";
 const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
@@ -14,7 +17,6 @@ const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
 const log = (...a) => console.log(...a);
-const text = async (loc) => (await loc.innerText()).replace(/\s+/g, " ").trim();
 const expect = (condition, message) => {
   if (!condition) throw new Error("expected: " + message);
 };
@@ -57,28 +59,18 @@ async function rpcAs(email, fn, args = {}) {
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const signIn = async (page, base, email) => {
-    await page.goto(base + "/ingresar", { waitUntil: "networkidle" });
-    await page.fill('main input[name="email"]', email);
-    await page.fill('main input[name="password"]', PASSWORD);
-    await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => new URL(u).pathname === "/");
-    await page.waitForSelector("main h1:visible, main h2:visible");
-  };
   // The three balances on the seller's money screen, as the text of each tile.
   const balances = async (page) => {
-    const tiles = await page
-      .locator('main:visible section[aria-labelledby="saldo"] .grid > div')
-      .allInnerTexts();
+    const { tiles, owed } = await seller.balanceTiles(page);
     const amount = (label) => {
       const tile = tiles.find((t) => t.trim().startsWith(label)) || "";
       return lines(tile)[1] || "";
     };
     return {
       available: amount("Disponible"),
-      pending: amount("Pendiente"),
+      pending: amount("Pendiente"), // not a status word: the label of a balance tile
       inTransit: amount("En tránsito"),
-      owed: await text(page.locator('main:visible section[aria-labelledby="saldo"] > p').first()),
+      owed,
     };
   };
 
@@ -88,64 +80,47 @@ async function rpcAs(email, fn, args = {}) {
     locale: "es-CR",
     acceptDownloads: true,
   });
-  const seller = await sellerContext.newPage();
-  watch(seller);
-  await signIn(seller, SELLER, "vendedor@yuntera.example");
-  if (!(await text(seller.locator("main h1:visible"))).includes("TecnoCasa")) {
-    await seller.selectOption("#shop", { label: "TecnoCasa" });
-    await seller.click('header button:has-text("Cambiar")');
-    await seller.waitForSelector('main h1:visible:has-text("TecnoCasa")');
-  }
-
-  await seller.goto(SELLER + "/pagos", { waitUntil: "networkidle" });
-  const before = await balances(seller);
+  const vendor = await sellerContext.newPage();
+  watch(vendor);
+  await seller.signInHome(vendor, "vendedor@yuntera.example");
+  await seller.chooseShop(vendor, "TecnoCasa");
+  await seller.open(vendor, "/pagos");
+  const before = await balances(vendor);
   log("seller balances before:", JSON.stringify(before));
   expect(
     before.available.startsWith("₡") && before.available !== "₡0",
     "TecnoCasa has money available",
   );
   expect(before.inTransit === "₡0", "and nothing in transit yet");
-  log(
-    "hold explained:",
-    (await text(seller.locator('main:visible section[aria-labelledby="cuando"]'))).slice(0, 260),
-  );
-  log("history:", await text(seller.locator('main:visible section[aria-labelledby="historial"]')));
-  await seller.screenshot({ path: SHOTS + "/pa1-seller-balances.png", fullPage: true });
+  log("hold explained:", (await seller.whenPaid(vendor)).slice(0, 260));
+  log("history:", await seller.payoutHistory(vendor));
+  await vendor.screenshot({ path: SHOTS + "/pa1-seller-balances.png", fullPage: true });
 
   // 2. The seller asks for a new payout account
-  await seller.goto(SELLER + "/cuenta", { waitUntil: "networkidle" });
-  const bank = seller.locator('main:visible section:has(h2:has-text("Dónde le pagamos"))');
-  log("current account:", (await text(bank.locator("dl").first())).slice(0, 120));
-  expect(
-    (await text(bank.locator("dl").first())).includes("•••• 6789"),
-    "the current account is masked",
-  );
-
+  await seller.open(vendor, "/cuenta");
+  const current = await seller.payoutAccount(vendor);
+  log("current account:", current.slice(0, 120));
+  expect(current.includes("•••• 6789"), "the current account is masked");
   // A wrong digit is caught while typing, before anything is sent.
-  await bank.locator('input[name="iban"]').fill("CR23 0151 0841 0026 0123 46");
-  await bank.locator('[role="alert"]').waitFor();
-  log("wrong digit:", await text(bank.locator('[role="alert"]')));
-  expect(
-    (await text(bank.locator('[role="alert"]'))).includes("no coinciden"),
-    "the form says the digits do not add up",
+  const wrongDigit = await seller.typeWrongIban(vendor, "CR23 0151 0841 0026 0123 46");
+  log("wrong digit:", wrongDigit);
+  expect(wrongDigit.includes("no coinciden"), "the form says the digits do not add up");
+  await seller.typeIban(vendor, "cr23 0151 0841 0026 0123 45", NEW_IBAN_GROUPED);
+  log(
+    "SINPE Móvil offered again:",
+    await seller.typeHolder(vendor, "TecnoCasa de Costa Rica S.A."),
   );
-  await bank.locator('input[name="iban"]').fill("cr23 0151 0841 0026 0123 45");
-  await bank.locator(`text=Cuenta válida: ${NEW_IBAN_GROUPED}`).waitFor();
-  await bank.locator('input[name="holderName"]').fill("TecnoCasa de Costa Rica S.A.");
-  log("SINPE Móvil offered again:", await bank.locator('input[name="sinpe"]').inputValue());
-  await seller.screenshot({ path: SHOTS + "/pa2-seller-request-form.png", fullPage: true });
-  await bank.locator('button[type="submit"]').click();
-  await bank.locator("text=Cambio de cuenta en revisión").waitFor();
-  const afterRequest = await text(bank);
+  await vendor.screenshot({ path: SHOTS + "/pa2-seller-request-form.png", fullPage: true });
+  const afterRequest = await seller.askPayoutAccount(vendor);
   log("after asking:", afterRequest.slice(0, 420));
   expect(afterRequest.includes("•••• 2345"), "the request shows the new account masked");
   expect(afterRequest.includes("•••• 6789"), "and the current account has not changed");
-  const sellerPage = await text(seller.locator("main:visible"));
+  const sellerPage = await seller.mainText(vendor);
   expect(
     !sellerPage.includes(NEW_IBAN) && !sellerPage.includes(NEW_IBAN_GROUPED),
     "the seller's screen never shows a whole account number",
   );
-  await seller.screenshot({ path: SHOTS + "/pa3-seller-request-sent.png", fullPage: true });
+  await vendor.screenshot({ path: SHOTS + "/pa3-seller-request-sent.png", fullPage: true });
 
   // 3. Finance: the request, with the number to call and the account in full
   const opsContext = await browser.newContext({
@@ -153,49 +128,33 @@ async function rpcAs(email, fn, args = {}) {
     locale: "es-CR",
     acceptDownloads: true,
   });
-  const ops = await opsContext.newPage();
-  watch(ops);
-  await signIn(ops, OPS, "central@yuntera.example");
-  await ops.goto(OPS + "/pagos-vendedores", { waitUntil: "networkidle" });
-  const card = ops.locator('main:visible section[aria-labelledby="cuentas"] ul > li').first();
-  const cardText = await text(card);
+  const staff = await opsContext.newPage();
+  watch(staff);
+  await ops.signInHome(staff, "central@yuntera.example");
+  await ops.open(staff, "/pagos-vendedores");
+  const cardText = await ops.firstAccountChangeText(staff);
   log("request in finance's queue:", cardText.slice(0, 460));
   expect(cardText.includes("TecnoCasa"), "the request names the shop");
   expect(cardText.includes(NEW_IBAN_GROUPED), "finance sees the requested account in full");
   expect(cardText.includes("•••• 6789"), "and the current one masked");
   expect(cardText.includes("2234-0202"), "with the phone already on file to call");
-  await ops.screenshot({ path: SHOTS + "/pa4-ops-request.png", fullPage: true });
-
+  await staff.screenshot({ path: SHOTS + "/pa4-ops-request.png", fullPage: true });
   // A rejection has to be explained; what was typed survives the refusal.
-  await card.locator('textarea[name="note"]').fill("no");
-  await card.locator('button:has-text("Rechazar")').click();
-  await card.locator('[role="alert"]').waitFor();
-  log("reject without a reason:", await text(card.locator('[role="alert"]')));
-  await card.locator('textarea[name="note"]').fill("");
-  await card.locator('button:has-text("Aprobar la cuenta nueva")').click();
-  await ops.waitForSelector("main:visible >> text=No hay cambios de cuenta por resolver");
+  log("reject without a reason:", await ops.rejectAccountChangeRefused(staff, "no"));
   // The card is gone with its form, so the page itself confirms the decision.
-  const confirmation = ops.locator(
-    'main:visible section[aria-labelledby="cuentas"] [role="status"]',
-  );
-  await confirmation.first().waitFor();
-  const confirmed = await text(confirmation.first());
+  const confirmed = await ops.approveAccountChange(staff);
   log("approved: the queue is empty;", confirmed);
   expect(confirmed.includes("Cuenta aprobada"), "finance is told the account was approved");
 
   // 4. Preview: an earlier cut-off pays less; today's pays three shops
-  const preview = ops.locator('main:visible section[aria-labelledby="corte"]');
-  const today = await preview.locator('input[name="corte"]').inputValue();
+  const today = await ops.cutoffDate(staff);
   const earlier = new Date(Date.parse(today + "T00:00:00Z") - 12 * 86400000)
     .toISOString()
     .slice(0, 10);
-  await preview.locator('input[name="corte"]').fill(earlier);
-  await preview.locator('button:has-text("Ver este corte")').click();
-  await ops.waitForURL((u) => new URL(u).searchParams.get("corte") === earlier);
-  await ops.waitForSelector('main:visible section[aria-labelledby="corte"] .grid');
-  const earlierTotal = lines(await preview.locator(".grid > div").first().innerText())[1];
-  await ops.goto(OPS + "/pagos-vendedores", { waitUntil: "networkidle" });
-  const todayTiles = await preview.locator(".grid > div").allInnerTexts();
+  await ops.previewCutoff(staff, earlier);
+  const earlierTotal = lines((await ops.cutoffTiles(staff))[0])[1];
+  await ops.open(staff, "/pagos-vendedores");
+  const todayTiles = await ops.cutoffTiles(staff);
   log(
     "cut-off",
     earlier,
@@ -208,7 +167,7 @@ async function rpcAs(email, fn, args = {}) {
     earlierTotal !== lines(todayTiles[0])[1],
     "an earlier cut-off pays a different (smaller) total",
   );
-  const rows = await preview.locator("tbody tr").allInnerTexts();
+  const rows = await ops.cutoffRows(staff);
   for (const row of rows) log("  preview:", row.replace(/\s+/g, " "));
   const tecnoRow = rows.find((row) => row.includes("TecnoCasa")) || "";
   expect(tecnoRow.includes("Se paga"), "TecnoCasa would be paid");
@@ -217,31 +176,21 @@ async function rpcAs(email, fn, args = {}) {
     (rows.find((row) => row.includes("Higuer")) || "").includes("Disponible menor al mínimo"),
     "a shop with nothing available is listed with the reason",
   );
-  await ops.screenshot({ path: SHOTS + "/pa5-ops-preview.png", fullPage: true });
+  await staff.screenshot({ path: SHOTS + "/pa5-ops-preview.png", fullPage: true });
 
   // 5. Create the run and open it
-  await preview.locator('button:has-text("Crear la corrida de pagos")').click();
-  await ops.waitForURL((u) => new URL(u).pathname.startsWith("/pagos-vendedores/corridas/"));
-  await ops.waitForSelector('main h1:visible:has-text("Corrida PV-")');
-  const runUrl = ops.url();
-  const runCode = (await text(ops.locator("main h1:visible"))).replace("Corrida ", "");
-  log("run:", runCode, "|", (await text(ops.locator("main:visible .grid").first())).slice(0, 160));
-  const payoutCards = ops.locator('main:visible section[aria-labelledby="pagos"] ul > li');
-  expect((await payoutCards.count()) === 3, "three shops are paid in this run");
-  const tecno = ops.locator(
-    'main:visible section[aria-labelledby="pagos"] ul > li:has(h3:has-text("TecnoCasa"))',
-  );
-  const tecnoText = await text(tecno);
+  const runCode = await ops.createRun(staff);
+  const runUrl = staff.url();
+  log("run:", runCode, "|", (await ops.runFigures(staff)).slice(0, 160));
+  expect((await ops.runPayoutCount(staff)) === 3, "three shops are paid in this run");
+  const tecnoText = await ops.runPayoutText(staff, "TecnoCasa");
   log("TecnoCasa's payout:", tecnoText.slice(0, 260));
   expect(tecnoText.includes(NEW_IBAN_GROUPED), "the transfer list has the account in full");
   expect(tecnoText.includes(`YUNTERA ${runCode}-`), "and the text for the transfer's description");
-  await ops.screenshot({ path: SHOTS + "/pa6-ops-run.png", fullPage: true });
+  await staff.screenshot({ path: SHOTS + "/pa6-ops-run.png", fullPage: true });
 
   // 6. The CSV for the bank: a real download, never cached, finance only
-  const [download] = await Promise.all([
-    ops.waitForEvent("download"),
-    ops.click('main:visible a:has-text("Descargar la lista para el banco")'),
-  ]);
+  const download = await ops.downloadBankList(staff);
   log("downloaded file:", download.suggestedFilename());
   expect(
     download.suggestedFilename() === `transferencias-${runCode}.csv`,
@@ -267,7 +216,7 @@ async function rpcAs(email, fn, args = {}) {
         body: (await response.text()).slice(0, 400),
       };
     }, runUrl + "/transferencias");
-  const asFinance = await fetchList(ops);
+  const asFinance = await fetchList(staff);
   log("csv:", asFinance.status, asFinance.type, "| cache-control:", asFinance.cache);
   expect(asFinance.status === 200 && asFinance.type.startsWith("text/csv"), "finance gets a CSV");
   expect(asFinance.cache.includes("no-store"), "that is never cached");
@@ -293,11 +242,11 @@ async function rpcAs(email, fn, args = {}) {
   const supportContext = await browser.newContext({ locale: "es-CR" });
   const support = await supportContext.newPage();
   watch(support);
-  await signIn(support, OPS, "comprador2@yuntera.example");
+  await ops.signInHome(support, "comprador2@yuntera.example");
   // Asked from a second tab that is not watched for console errors: the browser
   // logs every refused request as one, and this refusal is the expected answer.
   const probe = await supportContext.newPage();
-  await probe.goto(OPS + "/sin-acceso", { waitUntil: "networkidle" });
+  await ops.open(probe, "/sin-acceso");
   const asSupport = await fetchList(probe);
   await probe.close();
   log("csv as support staff:", asSupport.status, asSupport.body.slice(0, 60));
@@ -308,35 +257,21 @@ async function rpcAs(email, fn, args = {}) {
   await supportContext.close();
 
   // 7. Record one payment, and one transfer the bank refused
-  await tecno.locator('input[name="bankReference"]').fill("12");
-  await tecno.locator('button:has-text("Registrar como pagado")').click();
-  await tecno.locator('[role="alert"]').waitFor();
-  log("too short a reference:", await text(tecno.locator('[role="alert"]')));
-  await tecno.locator('input[name="bankReference"]').fill(BANK_REFERENCE);
-  await tecno.locator('button:has-text("Registrar como pagado")').click();
-  await ops.waitForSelector(`main:visible >> text=Comprobante ${BANK_REFERENCE}`);
-  log(
-    "TecnoCasa after paying:",
-    (await text(tecno)).slice(0, 80),
-    "…",
-    (await text(tecno)).slice(-150),
+  log("too short a reference:", await ops.recordPaidRefused(staff, "TecnoCasa", "12"));
+  await ops.recordPaid(staff, "TecnoCasa", BANK_REFERENCE);
+  const paidText = await ops.runPayoutText(staff, "TecnoCasa");
+  log("TecnoCasa after paying:", paidText.slice(0, 80), "…", paidText.slice(-150));
+  expect(
+    paidText.includes(word("payouts", "paid", { viewer: "staff" })),
+    "the payout is marked paid",
   );
-  expect((await text(tecno)).includes("Pagado"), "the payout is marked paid");
-
-  const cafetal = ops.locator(
-    'main:visible section[aria-labelledby="pagos"] ul > li:has(h3:has-text("Cafetal"))',
-  );
-  await cafetal.locator('summary:has-text("No se pudo pagar")').click();
-  await cafetal.locator('textarea[name="note"]').fill("El banco rechazó la cuenta: está cerrada.");
-  await cafetal.locator('button:has-text("Marcar como no pagado")').click();
-  await ops.waitForSelector('main:visible li:has(h3:has-text("Cafetal")) >> text=No se pagó');
-  log("Cafetal after the refusal:", (await text(cafetal)).slice(-140));
-  log("run now:", (await text(ops.locator("main:visible .grid").first())).slice(0, 170));
-  await ops.screenshot({ path: SHOTS + "/pa7-ops-run-after.png", fullPage: true });
-
+  await ops.recordNotPaid(staff, "Cafetal", "El banco rechazó la cuenta: está cerrada.");
+  log("Cafetal after the refusal:", (await ops.runPayoutText(staff, "Cafetal")).slice(-140));
+  log("run now:", (await ops.runFigures(staff)).slice(0, 170));
+  await staff.screenshot({ path: SHOTS + "/pa7-ops-run-after.png", fullPage: true });
   // The refused amount is available again, so the same cut-off offers it once more.
-  await ops.goto(OPS + "/pagos-vendedores", { waitUntil: "networkidle" });
-  const again = await preview.locator("tbody tr").allInnerTexts();
+  await ops.open(staff, "/pagos-vendedores");
+  const again = await ops.cutoffRows(staff);
   expect(
     (again.find((row) => row.includes("Cafetal")) || "").includes("Se paga"),
     "the failed payout is payable again",
@@ -345,24 +280,20 @@ async function rpcAs(email, fn, args = {}) {
     (again.find((row) => row.includes("TecnoCasa")) || "").includes("Disponible menor al mínimo"),
     "and the paid shop has nothing left to pay",
   );
-  log(
-    "runs:",
-    (
-      await text(ops.locator('main:visible section[aria-labelledby="corridas"] tbody tr').first())
-    ).slice(0, 150),
-  );
+  log("runs:", (await ops.firstRun(staff)).slice(0, 150));
 
   // 8. The seller sees the payment, a smaller balance and the new account
-  await seller.goto(SELLER + "/pagos", { waitUntil: "networkidle" });
-  const after = await balances(seller);
+  await seller.open(vendor, "/pagos");
+  const after = await balances(vendor);
   log("seller balances after:", JSON.stringify(after));
   expect(after.available === "₡0", "what was available has been paid");
   expect(after.pending === before.pending, "what is pending has not moved");
   expect(after.owed !== before.owed, "and the total owed went down");
-  const history = await text(seller.locator('main:visible section[aria-labelledby="historial"]'));
+  const history = await seller.payoutHistory(vendor);
   log("seller history:", history);
   expect(
-    history.includes("Pagado") && history.includes(BANK_REFERENCE),
+    history.includes(word("payouts", "paid", { viewer: "seller" })) &&
+      history.includes(BANK_REFERENCE),
     "the payout is there with the bank's reference",
   );
   expect(history.includes(before.available), "for the amount that was available");
@@ -370,9 +301,9 @@ async function rpcAs(email, fn, args = {}) {
     history.includes("•••• 2345") && !history.includes(NEW_IBAN_GROUPED),
     "to the new account, masked",
   );
-  await seller.screenshot({ path: SHOTS + "/pa8-seller-paid.png", fullPage: true });
-  await seller.goto(SELLER + "/cuenta", { waitUntil: "networkidle" });
-  const account = await text(bank);
+  await vendor.screenshot({ path: SHOTS + "/pa8-seller-paid.png", fullPage: true });
+  await seller.open(vendor, "/cuenta");
+  const account = await seller.payoutSectionText(vendor);
   log("seller account:", account.slice(0, 200));
   expect(
     account.includes("•••• 2345") && account.includes("Último cambio de cuenta aprobado"),
