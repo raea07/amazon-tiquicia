@@ -206,8 +206,9 @@ A summary; the migration is authoritative.
 | See delivery fees and dates in a quote                                        | Read the fee schedule, zones or calendar themselves                                                     |
 | Get a delivery estimate and a checkout quote                                  | Place an order                                                                                          |
 | Report a listing, review or shop that is public, giving an e-mail address     | Read the report queue; report something that does not exist or is not public                            |
+| Ask whether the database answers (`health_ping`, for an uptime check)         | Learn anything else from it: it answers `{"ok": true}` only                                             |
 
-Everything in this table is what the ten functions [listed
+Everything in this table is what the eighteen functions [listed
 below](#what-each-role-may-execute) return; a visitor can reach nothing else.
 One gap: `get_product` and `shop_path_exists` still open the product page of a
 listing created by a seller who has since been suspended, if a visitor has its
@@ -360,6 +361,65 @@ Migration `084600` re-creates `cart_alternatives` with an optional district
 and grants it again to visitors and signed-in users, as before; the new
 `private.refund_announcement` is granted to no app role. Migration `084400`
 changes no grant.
+
+## Support desk and system health
+
+Migrations `20261121084700_support_cases.sql` and
+`20261121084800_system_health.sql` (wave 9) add the support desk and Salud
+del sistema to the console, and `20261121085000_wave8_followups.sql`
+redefines six functions without changing who may call them. Every function
+below is granted to `authenticated` only, except `health_ping`; each checks
+the caller's role again inside, and the tables it reads (`private.cases`,
+`private.case_entries`, `private.case_targets`, `private.saved_replies`,
+`private.case_number_checks`, `private.store_builds`) have no grant to any
+API role.
+
+| Change                    | Function                                                                      | Who may call it                                                                                                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cases: read               | `ops_cases`, `ops_cases_due`, `ops_case`                                      | Any active staff role, filtered by table 4.1: support and admin every case, ops cases with an order, finance payment cases, catalog content reports; others' cases answer `case_not_found` |
+| Cases: work               | `ops_add_case_note`                                                           | Support, ops, finance, admin, on a case they read                                                                                                                                          |
+|                           | `ops_answer_case`, `ops_assign_case`, `ops_reopen_case`, `ops_record_contact` | Support and admin                                                                                                                                                                          |
+| Cases of an order         | `ops_order_cases`                                                             | Support, ops, finance, admin                                                                                                                                                               |
+| Report and targets        | `ops_case_report`, `ops_case_targets`                                         | Support and admin                                                                                                                                                                          |
+| Saved answers             | `ops_saved_replies` (read); `ops_save_reply`, `ops_delete_reply` (change)     | Read: support and admin. Change: admin only, audited                                                                                                                                       |
+| Customer view             | `ops_customer`                                                                | Support, ops, finance, admin; only for a customer (an order, a complaint or a return)                                                                                                      |
+|                           | `ops_customer_contact`                                                        | Support and admin, with a reason of 10 to 300 characters written on the audit trail                                                                                                        |
+| The shopper's own cases   | `my_cases`, `my_complaint_receipt`                                            | The signed-in shopper, their own cases only; never a note                                                                                                                                  |
+| What Atención reads       | `ops_care_queues` (re-created in `084700`)                                    | As before (support, ops, finance, catalog, admin); a customer's own live delivery code in their words now comes masked                                                                     |
+| System health             | `ops_system_health`                                                           | Any active staff role; each role gets only its lines (below)                                                                                                                               |
+| Versions and phone builds | `ops_versions`, `ops_set_store_build`, `ops_remove_store_build`               | Admin only; every entry and removal audited                                                                                                                                                |
+| Uptime                    | `health_ping`                                                                 | Visitors and signed-in users; answers `{"ok": true}` and nothing else                                                                                                                      |
+
+`085000` re-creates `cart_lines`, `get_order` and `cancel_order` (public) and
+`private.price_items`, `wms_receive_returned_shipment` and
+`private.settle_gateway_refund` with the same arguments and grants;
+`private.reword_old_cancel_reasons` is granted to no app role.
+
+### Who sees what: Casos and Salud del sistema
+
+For each staff role: whether the navigation offers the entry, which pages
+open (any other sends the person to "Sin acceso"), and which health lines
+`ops_system_health` returns. The navigation never offers a page that then
+refuses the role, and no page opens for a role its functions refuse. The
+SQL side is checked by `supabase/tests/196_wave9_integration.sql` (every
+function of the table above called as each role); the pages and the menu by
+the browser journey `wave9-integration` (the administrator, and a demo
+shopper made each other role in turn).
+
+| Role      | Menu: Casos | Menu: Salud del sistema | Pages that open                                                                                                            | Health lines                                                                                                   |
+| --------- | ----------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `admin`   | Yes         | Yes                     | `/casos`, `/casos/[id]`, `/casos/respuestas` (and edits them), `/casos/informe`, `/clientes/[id]`, `/salud` with Versiones | All 14, the failed sign-ins on the websites included                                                           |
+| `support` | Yes         | Yes                     | `/casos`, `/casos/[id]`, `/casos/respuestas` (reads), `/casos/informe`, `/clientes/[id]`, `/salud`                         | Messages stopped, messages late, events without messages, cases late                                           |
+| `ops`     | Yes         | Yes                     | `/casos`, `/casos/[id]` (cases with an order; notes), `/clientes/[id]` (no contact), `/salud`                              | Scheduled jobs, unpaid orders past their expiry, paid orders not handed to the warehouse, stuck routes         |
+| `finance` | Yes         | Yes                     | `/casos`, `/casos/[id]` (payment cases; notes), `/clientes/[id]` (no contact), `/salud`                                    | Invoices, the signing certificate, failed gateway refunds, payments failed in the last hour, payment work late |
+| `catalog` | Yes         | No                      | `/casos`, `/casos/[id]` (content reports; reads only)                                                                      | None (the function answers no line, and the menu has no entry)                                                 |
+
+Inside Casos the links to "Respuestas guardadas" and "Informe del mes" show
+only to support and administrators, and a case page offers each button only
+when its function would accept it (`ops_case` answers `can`). One difference
+remains between two doors: in Atención operations staff may answer a
+complaint (`ops_resolve_complaint`, `081700`), while in Casos only support
+and administrators answer.
 
 ## Access that ends at once
 
