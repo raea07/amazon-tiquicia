@@ -966,9 +966,8 @@ D2 in the decisions and the Android release in the store documents" is done
   website and shopper app with English, then store version 0.2.0; the
   seller website and app; the staff console and the driver and warehouse
   apps; then removing the old token names. The driver and warehouse apps
-  have the haptics library installed, but no screen vibrates yet and their
-  Android builds remove its VIBRATE permission until a later stage wires
-  the haptics. Dates and times on screen still use today's short forms
+  have the haptics library installed, but no screen vibrates yet; it asks
+  for no permission the apps did not already have. Dates and times on screen still use today's short forms
   («27 nov, 10:31 a. m.»); the new date helpers come with the shared
   components. Not checked: the fonts on a real phone, screen readers, real
   mail programs and English screens.

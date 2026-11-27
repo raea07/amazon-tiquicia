@@ -1995,11 +1995,10 @@ beside today's names:
   embed the same fonts, use the new icons and splash, and expo-kit adds
   `theme`, `themeDark`, `useTheme()` and `ThemeProvider` beside today's
   exports. `expo-haptics` (driver and warehouse apps) and `axe-core` were
-  installed. expo-haptics declares Android's `VIBRATE` permission; no screen
-  vibrates yet and no build may gain a permission in this stage, so
-  `VIBRATE` joins the permissions expo-kit removes from every app. The change
-  that wires the haptics (§20.1 step 2c) declares it in that app's
-  `androidPermissions` and records it for the store listing.
+  installed. expo-haptics declares Android's `VIBRATE` permission, which
+  every app already asked for: Expo's own Android manifest template lists it
+  (the seller app's permission test has recorded it since before the
+  rebuild), so the resolved permissions of all four apps are unchanged.
 - `packages/core` adds `status-words.ts` (decision 59), `formatDay`,
   `formatTime`, `formatQuantity`, its own `formatPrice` and
   `deliveryStripSentence`; no screen uses the date, quantity, price or strip
@@ -2013,9 +2012,8 @@ app switches its stylesheet (web) or wraps its root in `ThemeProvider`
 (phone) in the next stages.
 
 **Not verified.** The fonts on a real phone, the new icons on a real home
-screen, an Android build's merged manifest (the removal of `VIBRATE` is
-checked in the resolved app config, the same way the biometric removal
-was), screen readers, real mail programs and English screens.
+screen, an Android build's merged manifest (the permissions are checked in
+the configuration Expo resolves, not in a prebuild), screen readers, real mail programs and English screens.
 The phone apps get the fonts and icons only with a new store build; the
 tester build 0.1.0 (4) is unchanged.
 
