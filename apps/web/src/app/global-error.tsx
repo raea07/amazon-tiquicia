@@ -6,15 +6,15 @@ import "./globals.css";
 /** Shown when the shop's frame itself fails. Never a code or a stack. */
 export default function GlobalError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   return (
     <GlobalErrorDocument
       error={error}
-      reset={reset}
+      retry={retry}
       advice="Si estaba pagando, revise “Sus pedidos” antes de intentarlo otra vez: no le cobraremos dos veces."
     />
   );

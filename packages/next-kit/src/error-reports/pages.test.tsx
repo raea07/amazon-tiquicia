@@ -22,12 +22,12 @@ describe("the error pages", () => {
     expect(html).not.toMatch(/digest|stack|Error:|at \w+ \(/i);
   });
 
-  it("say the team was told only when this build reports errors", () => {
+  it("say the team was told only when the report was handed to the tracker", () => {
     const off = renderToStaticMarkup(<ErrorScreen advice={ADVICE} told={false} />);
     expect(off).not.toContain(TEAM_TOLD);
     const on = renderToStaticMarkup(<ErrorScreen advice={ADVICE} told />);
     expect(on).toContain("Ya le avisamos al equipo de Yuntera.");
-    // With the tracker off (as in the tests), the default is not to claim it.
+    // The default, until useReportError says the report was handed over, is not to claim it.
     expect(renderToStaticMarkup(<ErrorScreen advice={ADVICE} />)).not.toContain(TEAM_TOLD);
   });
 
@@ -36,7 +36,7 @@ describe("the error pages", () => {
       digest: "1234",
     });
     const html = renderToStaticMarkup(
-      <GlobalErrorDocument error={error} reset={() => undefined} advice={ADVICE} />,
+      <GlobalErrorDocument error={error} retry={() => undefined} advice={ADVICE} />,
     );
     expect(html).toMatch(/^<html lang="es-CR" class="font-test">(<head><\/head>)?<body /);
     expect(html).toContain("Algo falló de nuestro lado");

@@ -92,7 +92,7 @@ describe("redactText: each rule", () => {
 
   it("leaves nothing of the drill's made-up data (the error-reports journey's error)", () => {
     expect(redactText(DRILL_MESSAGE)).toBe(
-      "Prueba de errores: pedido de [email], teléfono [phone], cédula [number], código de entrega [code], token [token]",
+      "Prueba de errores: pedido de [email], teléfono [phone]. Cédula [number]. Código de entrega [code]. token [token]",
     );
   });
 
@@ -155,6 +155,131 @@ describe("redactText: each rule", () => {
   });
 });
 
+describe("redactText: numbers at the end of a sentence, and other common forms", () => {
+  // Each kind of number, followed by what ends a sentence or a clause. A full
+  // stop right after the last digit once let all of these through.
+  const ENDINGS = [".", ".)", ").", ",", ";", "!", "?", ":", "", ". Fin", ".\nFin"];
+  const KINDS: Array<[string, string]> = [
+    ["8888-8888", "[phone]"],
+    ["8888 8888", "[phone]"],
+    ["88888888", "[phone]"],
+    ["+506 8888-8888", "[phone]"],
+    ["00506 2222 3333", "[phone]"],
+    ["88 88 88 88", "[phone]"],
+    ["8888 12 34", "[phone]"],
+    ["2222-33-44", "[phone]"],
+    ["1-0234-0567", "[number]"],
+    ["102340567", "[number]"],
+    ["1-234-567", "[number]"],
+    ["3-101-123456", "[number]"],
+    ["4111 1111 1111 1111", "[number]"],
+    ["190.10.20.30", "[ip]"],
+  ];
+  for (const [value, mark] of KINDS) {
+    it(`removes ${value} whatever follows it`, () => {
+      for (const end of ENDINGS) {
+        expect(redactText(`Llame al ${value}${end}`), JSON.stringify(end)).toBe(
+          `Llame al ${mark}${end}`,
+        );
+        expect(redactText(`(${value}${end}`), JSON.stringify(end)).toBe(`(${mark}${end}`);
+      }
+    });
+  }
+
+  it("leaves a date, a version and an amount alone", () => {
+    for (const text of [
+      "el 2026-11-27.",
+      "el 2026-11-27T10:20:30Z",
+      "versión 11.12.0.",
+      "@sentry/core@11.12.0",
+      "1.2.3.4.5",
+      "total 125000.",
+    ]) {
+      expect(redactText(text), text).toBe(text);
+    }
+  });
+
+  it("removes the delivery code under the names the code and the data give it", () => {
+    for (const [text, expected] of [
+      ['{"delivery_pin":4821}', '{"delivery_pin":[code]}'],
+      ["delivery_pin: 4821", "delivery_pin: [code]"],
+      ["deliveryPin=4821", "deliveryPin=[code]"],
+      ["codigoEntrega: 1234", "codigoEntrega: [code]"],
+      ["codigo_de_entrega=4821.", "codigo_de_entrega=[code]."],
+      ["delivery_code 739204", "delivery_code [code]"],
+      // Far from the word, with an order number in between.
+      [
+        "Código de entrega para el pedido YT-2026-000123: 4821",
+        "Código de entrega para el pedido YT-[number]: [code]",
+      ],
+    ] as const) {
+      expect(redactText(text), text).toBe(expected);
+    }
+  });
+
+  it("removes e-mail addresses written for an address bar", () => {
+    expect(redactText("ana%40example.com")).toBe("[email]");
+    expect(redactText("correo=ana%40example.com&x")).toBe("correo=[email]&x");
+    expect(redactText("mailto:ana%40example.com")).toBe("mailto:[email]");
+    expect(pathOnly("/pedidos/ana%40example.com")).toBe("/pedidos/[email]");
+  });
+
+  it("removes a short opaque bearer token", () => {
+    expect(redactText("Authorization: Bearer abc123def456ghi")).toBe(
+      "Authorization: [filtered] [token]",
+    );
+    expect(redactText("sent Bearer abc123def456ghi to the API")).toBe(
+      "sent Bearer [token] to the API",
+    );
+  });
+});
+
+describe("redactText: long input", () => {
+  it("takes a moment, not seconds, on a long or hostile string", () => {
+    for (const unit of [
+      "1.",
+      "a.",
+      "1 ",
+      "a",
+      "/",
+      "http://",
+      "a@",
+      '"x',
+      "eyJ",
+      "%40",
+      "x.y@z.",
+    ]) {
+      for (const length of [4_000, 1_000_000]) {
+        const text = unit.repeat(Math.ceil(length / unit.length)).slice(0, length);
+        const started = performance.now();
+        redactText(text);
+        const took = performance.now() - started;
+        expect(took, `${JSON.stringify(unit)} × ${length}: ${took.toFixed(1)} ms`).toBeLessThan(50);
+      }
+    }
+  });
+
+  it("drops what the cut left half-read, instead of sending it", () => {
+    // The cut falls inside an e-mail address, a phone number and a quoted
+    // name; what is kept is short enough, after the rules, for the cut
+    // place to come into view.
+    const filler = `"${"x".repeat(60)}" `.repeat(70);
+    for (const tail of [
+      PERSON.email,
+      `tel ${PERSON.phone}`,
+      `"${PERSON.name}"`,
+      `?correo=${PERSON.email}`,
+    ]) {
+      for (let shift = 0; shift < tail.length; shift += 1) {
+        const text = `${filler.slice(0, 4000 - shift)}${tail} fin`;
+        const out = redactText(text);
+        for (const word of FORBIDDEN) expect(out, `${tail} at ${shift}`).not.toContain(word);
+        expect(out, `${tail} at ${shift}`).not.toMatch(/ana\.|8888|Prueba|example/);
+      }
+    }
+  });
+});
+
 describe("scrubEvent: real-shaped events leave with none of the personal data", () => {
   const cases: Array<[string, () => TrackerEvent]> = [
     ["a checkout with an address and a phone", checkoutEvent],
@@ -177,7 +302,10 @@ describe("scrubEvent: real-shaped events leave with none of the personal data", 
 
   it("drops cookies, every header, the body, the query, the user and the breadcrumbs", () => {
     const event = scrubEvent(checkoutEvent(), OPTIONS);
-    expect(event?.request).toEqual({ url: "https://yuntera.example/pagar", method: "POST" });
+    expect(event?.request).toEqual({
+      url: "https://yuntera.example/pagar",
+      method: "POST",
+    });
     expect(event?.user).toBeUndefined();
     expect(event?.breadcrumbs).toBeUndefined();
     expect(event?.extra).toBeUndefined();
@@ -200,6 +328,47 @@ describe("scrubEvent: real-shaped events leave with none of the personal data", 
     });
   });
 
+  it("redacts every kept string: the transaction, the fingerprint, a frame's function, the type", () => {
+    const event = scrubEvent(
+      {
+        transaction: `/buscar/${PERSON.email}?q=${PERSON.name}`,
+        fingerprint: [`cliente ${PERSON.email}`, "{{ default }}"],
+        exception: {
+          values: [
+            {
+              type: `Error ${PERSON.email}`,
+              value: "x",
+              stacktrace: {
+                frames: [{ function: `pedido ${PERSON.email}`, lineno: 1 }],
+              },
+            },
+          ],
+        },
+      },
+      OPTIONS,
+    );
+    expectClean(event);
+    expect(event?.transaction).toBe("/buscar/[email]");
+    expect(event?.fingerprint?.[0]).toBe("cliente [email]");
+    expect(event?.exception?.values?.[0]?.type).toBe("Error [email]");
+    expect(event?.exception?.values?.[0]?.stacktrace?.frames?.[0]?.function).toBe("pedido [email]");
+  });
+
+  it("keeps a message's template, never the text formatted from its parameters", () => {
+    const event = scrubEvent(
+      {
+        logentry: {
+          message: "Pedido de %s listo",
+          formatted: `Pedido de ${PERSON.name} listo`,
+          params: [PERSON.name],
+        },
+      },
+      OPTIONS,
+    );
+    expect(event?.message).toBe("Pedido de %s listo");
+    expectClean(event);
+  });
+
   it("keeps a role from the fixed list only, and no other tag", () => {
     const event = scrubEvent(staffCustomerEvent(), { ...OPTIONS, app: "ops" });
     expect(event?.tags).toEqual({ app: "ops", role: "staff" });
@@ -215,7 +384,9 @@ describe("scrubEvent: real-shaped events leave with none of the personal data", 
   it("keeps a database error's short code, never its detail", () => {
     const original = databaseError();
     const event = scrubEvent(
-      { exception: { values: [{ type: "ApiError", value: original.message }] } },
+      {
+        exception: { values: [{ type: "ApiError", value: original.message }] },
+      },
       { ...OPTIONS, original },
     );
     expect(event?.tags).toEqual({ app: "web", db_code: "insufficient_stock" });
@@ -225,12 +396,22 @@ describe("scrubEvent: real-shaped events leave with none of the personal data", 
 
   it("names the database function only for an answer of the wrong shape", () => {
     expect(
-      databaseFacts({ name: "ApiError", code: "invalid_response", detail: "get_product" }),
+      databaseFacts({
+        name: "ApiError",
+        code: "invalid_response",
+        detail: "get_product",
+      }),
     ).toEqual({
       db_code: "invalid_response",
       db_function: "get_product",
     });
-    expect(databaseFacts({ name: "ApiError", code: "price_changed", detail: "125000" })).toEqual({
+    expect(
+      databaseFacts({
+        name: "ApiError",
+        code: "price_changed",
+        detail: "125000",
+      }),
+    ).toEqual({
       db_code: "price_changed",
     });
     expect(databaseFacts({ name: "TypeError", code: "x" })).toEqual({});
@@ -267,7 +448,10 @@ describe("scrubEvent: real-shaped events leave with none of the personal data", 
         code_file: "https://yuntera.example/_next/static/chunks/a.js",
       },
     ]);
-    expect(event?.sdk).toEqual({ name: "sentry.javascript.nextjs", version: "11.12.0" });
+    expect(event?.sdk).toEqual({
+      name: "sentry.javascript.nextjs",
+      version: "11.12.0",
+    });
   });
 });
 

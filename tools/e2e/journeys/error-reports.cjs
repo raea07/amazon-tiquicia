@@ -7,7 +7,10 @@
 // driver's route), makes an error happen in the browser on purpose, and opens
 // /prueba-de-errores, a page that fails on the server on purpose (it exists
 // only on this machine and in the lanes) and shows the website's error page,
-// at 390 px wide.
+// at 390 px wide. Then it makes a page fail while rendering in the browser
+// (/prueba-de-errores?en=navegador), and checks that "Intentar de nuevo"
+// fetches a page that failed once on the server again
+// (/prueba-de-errores?una-vez=<mark>).
 //
 // With the tracker off (every ordinary lane): the error page does not claim
 // the team was told, the security policy names no tracker, and the browser
@@ -160,7 +163,9 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
   const shopper = await rpcAs("comprador@yuntera.example");
   let order = null;
   for (const o of await shopper("my_orders")) {
-    const detail = await shopper("get_order", { p_order_number: o.order_number });
+    const detail = await shopper("get_order", {
+      p_order_number: o.order_number,
+    });
     if (detail.delivery_pin) {
       order = { number: o.order_number, pin: String(detail.delivery_pin) };
       break;
@@ -217,7 +222,9 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
     const before = arrivals().length;
 
     // 1. Sign-in: an error while the e-mail and the password are in the form.
-    const signIn = await page.goto(`${site.base}/ingresar`, { waitUntil: "networkidle" });
+    const signIn = await page.goto(`${site.base}/ingresar`, {
+      waitUntil: "networkidle",
+    });
     const csp = signIn.headers()["content-security-policy"] || "";
     const connect = (csp.split("; ").find((d) => d.startsWith("connect-src")) || "").trim();
     if (ON) {
@@ -240,13 +247,19 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
     }, site.email);
     await sent(1);
     await page.click('main form button[type="submit"]');
-    await page.waitForURL((u) => !new URL(u).pathname.startsWith("/ingresar"), { timeout: 20_000 });
+    await page.waitForURL((u) => !new URL(u).pathname.startsWith("/ingresar"), {
+      timeout: 20_000,
+    });
     for (const cookie of await context.cookies()) {
       if (cookie.value.length >= 12) FORBIDDEN.push(cookie.value.slice(0, 24));
     }
 
-    // 2. The page with the most personal data, and an error on it.
-    if (site.page) await page.goto(site.base + site.page, { waitUntil: "networkidle" });
+    // 2. The page with the most personal data, and an error on it. The
+    // address carries a query, which must not reach the tracker.
+    const dataPage = site.page || new URL(page.url()).pathname;
+    await page.goto(`${site.base}${dataPage}?correo=ana.prueba%40example.com`, {
+      waitUntil: "networkidle",
+    });
     let shown = "";
     if (site.app === "web") {
       shown = await page.locator('section:has-text("Su código de entrega") p').first().innerText();
@@ -276,14 +289,55 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
       !/digest|Error:|stack|\bat \w+/.test(screen),
       `${site.app}: the error page shows technical detail`,
     );
-    expect(
-      screen.includes("Ya le avisamos al equipo de Yuntera.") === ON,
-      `${site.app}: "team told" should appear only with a tracker (${ON ? "on" : "off"})`,
-    );
+    const told = async (where) => {
+      if (ON) {
+        await page
+          .getByText("Ya le avisamos al equipo de Yuntera.")
+          .waitFor({ timeout: 15_000 })
+          .catch(() => undefined);
+      } else {
+        await page.waitForTimeout(500);
+      }
+      const says = (await page.locator("body").innerText()).includes(
+        "Ya le avisamos al equipo de Yuntera.",
+      );
+      expect(
+        says === ON,
+        `${site.app} ${where}: "team told" should appear only with a tracker (${ON ? "on" : "off"})`,
+      );
+    };
+    await told("server failure");
     const wide = await page.evaluate(() => document.documentElement.scrollWidth);
     expect(wide <= 390, `${site.app}: the error page is ${wide} px wide at 390`);
-    await page.screenshot({ path: `${SHOTS}/er-${site.app}-error-page.png`, fullPage: true });
+    await page.screenshot({
+      path: `${SHOTS}/er-${site.app}-error-page.png`,
+      fullPage: true,
+    });
     log(`${site.app}: error page:`, screen.slice(0, 200));
+
+    // 4. A failure while rendering in the browser: the error page catches it
+    // and reports it from there.
+    await page.goto(`${site.base}/prueba-de-errores?en=navegador`, {
+      waitUntil: "networkidle",
+    });
+    await page.getByText("Algo falló de nuestro lado").waitFor({ timeout: 15_000 });
+    await told("browser failure");
+    await sent(3);
+
+    // 5. "Intentar de nuevo" fetches the page from the server again: this
+    // one fails the first time only.
+    const mark = Date.now().toString(36);
+    await page.goto(`${site.base}/prueba-de-errores?una-vez=${mark}`, {
+      waitUntil: "networkidle",
+    });
+    await page.getByText("Algo falló de nuestro lado").waitFor({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Intentar de nuevo" }).click();
+    const recovered = await page
+      .getByText("La página volvió a cargar.")
+      .waitFor({ timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    expect(recovered, `${site.app}: "Intentar de nuevo" did not fetch the page again`);
 
     if (!ON) {
       await page.waitForTimeout(1500);
@@ -295,15 +349,15 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
       continue;
     }
 
-    // 4. What arrived: the two browser errors and the server's.
-    const { mine, events } = await waitForEvents(site.project, 3, before);
+    // 6. What arrived: the three browser errors and the server's two.
+    const { mine, events } = await waitForEvents(site.project, 5, before);
     log(
       `${site.app}: ${events.length} reports arrived:`,
       events
         .map((e) => `${e.payload.platform}: ${e.payload.exception?.values?.[0]?.value}`)
         .join(" | "),
     );
-    expect(events.length >= 3, `${site.app}: expected 3 reports, ${events.length} arrived`);
+    expect(events.length >= 5, `${site.app}: expected 5 reports, ${events.length} arrived`);
     const body = sentText(mine.map((a) => a.body));
     for (const word of FORBIDDEN) {
       expect(!body.includes(word), `${site.app}: "${word.slice(0, 12)}…" reached the tracker`);
@@ -337,10 +391,37 @@ async function waitForEvents(project, count, since, timeout = 20_000) {
       expect(!payload.request?.headers, `${site.app}: report has request headers`);
       const value = payload.exception?.values?.[0]?.value || "";
       expect(value.startsWith("Prueba"), `${site.app}: unexpected report "${value.slice(0, 80)}"`);
+      // Which page failed, without its query (the browser's reports too).
+      const url = payload.request?.url || "";
+      expect(
+        url.startsWith(site.base) && !/[?#]/.test(url),
+        `${site.app}: report names the page as "${url}"`,
+      );
+      // None of these was handled by the page's code.
+      const mechanism = payload.exception?.values?.[0]?.mechanism || {};
+      expect(
+        mechanism.handled === false,
+        `${site.app}: report marked handled (${JSON.stringify(mechanism)})`,
+      );
     }
+    const browserPaths = events
+      .filter((e) => e.payload.platform === "javascript")
+      .map((e) => new URL(e.payload.request?.url || site.base).pathname);
+    expect(
+      browserPaths.includes(dataPage) && browserPaths.includes("/prueba-de-errores"),
+      `${site.app}: browser reports name the pages ${JSON.stringify(browserPaths)}`,
+    );
+    expect(
+      events.some(
+        (e) =>
+          e.payload.platform === "javascript" &&
+          e.payload.exception?.values?.[0]?.mechanism?.type === "auto.browser.error_page",
+      ),
+      `${site.app}: the error page did not report the browser failure`,
+    );
     const server = events.find((e) => e.payload.platform === "node")?.payload;
     expect(
-      /^Prueba de errores: pedido de \[email\], teléfono \[phone\], cédula \[number\], código de entrega \[code\], token \[token\] \(vez [0-9a-z]+\)$/.test(
+      /^Prueba de errores: pedido de \[email\], teléfono \[phone\]\. Cédula \[number\]\. Código de entrega \[code\]\. token \[token\] \(vez [0-9a-z]+\)$/.test(
         server?.exception?.values?.[0]?.value || "",
       ),
       `${site.app}: the server's report reads "${server?.exception?.values?.[0]?.value}"`,

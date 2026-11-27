@@ -27,20 +27,29 @@ out until someone allows it.
 | The error's type and message, with personal data removed (below)                                                       | Cookies and every request header (so no session, no browser name, no address it came from)                            |
 | The stack: file, function, line, column                                                                                | The request body and the form fields; a Server Action's arguments                                                     |
 | Which website (`app` tag), environment (`production`, `preview`, `local`) and commit (the release)                     | Query strings and fragments of any address                                                                            |
-| The page's path without its query, and the route pattern (`/pedidos/[numero]`)                                         | The user: no id, no e-mail, no IP address (Sentry is also told never to infer one)                                    |
+| The page's address without its query (browser and server), and on the server the route pattern (`/pedidos/[numero]`)   | The user: no id, no e-mail, no IP address (Sentry is also told never to infer one)                                    |
 | For a database error: its short code (`insufficient_stock`) and, for an answer of the wrong shape, the function's name | A database error's detail text and the text of its cause                                                              |
 | The runtime (Node.js version)                                                                                          | Breadcrumbs: clicks, typed text, console lines, visited addresses                                                     |
 |                                                                                                                        | Source lines and local variables of the stack; extra data; every other context; screenshots, session replay, feedback |
 |                                                                                                                        | Performance traces, profiles, sessions, reports about dropped events                                                  |
 
 Every string that is kept goes through `redactText`, which replaces:
-e-mail addresses; Costa Rican phone numbers (8 digits starting 2, 4–8, with or
-without +506); identity numbers, bank accounts and card numbers (any run of 9
-or more digits, IBAN `CR…`); a 4- to 6-digit number next to the word
-_código_, _pin_ or _code_ (the delivery code is 4 digits today); IP addresses;
-JSON Web Tokens, the project's keys, `Bearer …`, and `password=…`-style
-pairs; UUIDs and other long random strings; and any quoted text except a short
-lower-case identifier (`reading 'name'` stays, `"Ana Pérez"` does not).
+e-mail addresses, also as written in an address (`ana%40example.com`); Costa
+Rican phone numbers (8 digits starting 2, 4–8, with or without +506, written
+whole, 4+4, 4+2+2 or in pairs); identity numbers, bank accounts and card
+numbers (any run of 9 or more digits, a short cédula such as `1-234-567`,
+IBAN `CR…`); a 4- to 6-digit number up to 60 characters after, or just
+before, the word for the delivery code (_código de entrega_, _codigoEntrega_,
+_pin_, _delivery_pin_, _deliveryPin_, _code_; the code is 4 digits today); IP
+addresses; JSON Web Tokens, the project's keys, `Bearer …`, and
+`password=…`-style pairs; UUIDs and other long random strings; and any quoted
+text except a short lower-case identifier (`reading 'name'` stays,
+`"Ana Pérez"` does not). A number ends where a digit no longer follows, so a
+full stop, comma or bracket after it does not hide it. Only the first 4,000
+characters of a string are read (8 times the 500 kept), and the word or number
+the cut falls on is dropped; every rule is bounded, so a long message costs
+milliseconds, not seconds (a unit test holds each hostile pattern of 1 MB
+under 50 ms).
 
 **What cannot be recognised.** A name or a street address written into an
 error message without quotes cannot be told apart from ordinary words. Nothing
@@ -84,8 +93,11 @@ script, frame or image comes from Sentry, and there is no tunnel route.
 ## Switching it off at once
 
 - **In seconds, without a deployment:** Sentry → the project → Settings →
-  Client Keys (DSN) → disable the key. Sentry then refuses every report from
-  that website. The browser still loads the SDK until the next deployment.
+  Client Keys (DSN) → disable the key (?). Sentry then refuses every report
+  from that website. The browser still loads the SDK until the next
+  deployment, and the error page still says "Ya le avisamos al equipo de
+  Yuntera." (the page cannot see that Sentry refused the report), so follow
+  this with the complete switch-off below.
 - **Completely:** remove `NEXT_PUBLIC_SENTRY_DSN` from the Vercel project and
   redeploy. The website then loads no tracker code at all.
 
@@ -95,16 +107,30 @@ Only projects whose names start with `yuntera` (decision 57).
 
 1. Four projects, platform Next.js: `yuntera-web`, `yuntera-seller`,
    `yuntera-ops`, `yuntera-field`.
-2. In each project: Settings → Security & Privacy → Data Scrubbing: keep the
-   default scrubbing on, add the additional sensitive fields `email`,
-   `correo`, `phone`, `telefono`, `cedula`, `address`, `direccion`, `senas`,
-   `pin`, `delivery_code`, `password`, `token`; and switch on the setting that
-   stops storing IP addresses. (If the organisation has the same settings,
-   they apply on top.)
-3. In each project: Alerts → an issue alert "a new issue is created" → send an
-   e-mail to the owner.
-4. Optional, to protect the free quota: Client Keys (DSN) → rate limit, for
-   example 300 events per hour per website.
+2. In each project: Project Settings → Security & Privacy → section "DATA
+   SCRUBBING". Keep "Data Scrubber" (?) and "Use Default Scrubbers" (?) on. In
+   "Additional Sensitive Fields" add `email`, `correo`, `phone`, `telefono`,
+   `cedula`, `address`, `direccion`, `senas`, `pin`, `delivery_pin`,
+   `delivery_code`, `password`, `token`. Switch on "Prevent Storing of IP
+   Addresses" (?). (If the organisation has the same settings, they apply on
+   top.) Sentry's documentation names the section and "Additional Sensitive
+   Fields"; the other labels marked (?) were not seen in the account.
+3. In each project: Alerts → an issue alert "a new issue is created" (?) →
+   send an e-mail to the owner.
+4. Required, to protect the shared free quota (5,000 errors a month for all
+   four projects together; the DSN is public, so anyone can post with it):
+   - In each project: Project Settings → Inbound Filters (?) → "Allowed
+     Domains" (?): list that website's own hosts, production and preview,
+     one by one. Do not enter `*.vercel.app`: it would let every website
+     on Vercel through. Sentry then refuses browser reports from any other
+     site.
+     It checks only requests that carry an `Origin` or `Referer` header, so
+     it does not cover a script posting directly.
+   - Settings → Spike Protection (?): switch it on for the four projects
+     ("Enable All" (?)). It cuts a sudden storm from one project.
+   - A rate limit per client key (Client Keys (DSN) → Configure) is, by
+     Sentry's documentation (read 27 November 2026), only on the Business
+     and Enterprise plans, so it is not available on the free plan.
 5. One uptime monitor (the free plan has one): method POST, address
    `https://<project-ref>.supabase.co/rest/v1/rpc/health_ping`, headers
    `apikey: <the project's publishable key>` and
@@ -145,7 +171,7 @@ cron monitor, 30 days of history; the Team plan is $26 a month billed yearly.
 These websites send **error events only**: no spans, replays, profiles,
 sessions or client reports, so only the error count is used. Identical errors
 in a row from one browser or server are sent once. Whether 5,000 a month is
-enough at pilot volume is an estimate; the rate limit in step 4 caps a storm.
+enough at pilot volume is an estimate; the filters in step 4 limit a storm.
 
 To switch tracing on later (it uses the plan's span quota):
 
@@ -186,7 +212,10 @@ with gzip:
 The SDK itself is 25 KB compressed, 18% of the home page's first load, above
 the 15% limit, so it is never part of the first load: it is fetched once the
 page has loaded and the browser is idle (`client.ts`). Errors that happen
-before it arrives are kept and sent when it starts. The 4 KB added either way
+before it arrives are kept (up to 20) and sent, marked unhandled as the SDK's
+own handlers would mark them, when it starts. An error thrown before the
+website's own start-up script runs (while the page's first scripts are still
+arriving) is not caught by any scheme that loads later. The 4 KB added either way
 are the error pages and the start-up check. (The SDK's own browser start-up
 for Next.js would have added 82 KB, because it always brings tracing code; the
 client is therefore put together from named parts in `browser-sdk.ts`.)
@@ -208,6 +237,18 @@ client is therefore put together from named parts in `browser-sdk.ts`.)
   nothing is sent.
 - Each website serves `/prueba-de-errores`, a page that fails on purpose
   (only on this machine and in the lanes; a plain 404 on any deployment).
+  `?en=navegador` makes it fail while rendering in the browser instead;
+  `?una-vez=<mark>` makes it fail once and then work, which the journey uses
+  to check that "Intentar de nuevo" fetches the page again.
+
+**The error pages.** "Intentar de nuevo" calls the framework's `retry`, which
+fetches the page from the server again, so a passing failure is fixed by the
+button. The sentence "Ya le avisamos al equipo de Yuntera." appears only once
+the report was handed to the SDK: in the browser, when the SDK has started
+and taken the error (not while it loads, not if it could not load, not past
+the 20 kept errors); for an error from the server, when this build reports
+errors (the server reported it). Whether Sentry then accepted it (a disabled
+key, a blocked address) cannot be seen from the page.
 
 **Known limits.**
 

@@ -48,6 +48,17 @@ export function init(options: Options) {
     scope.setTags(initialScope.tags ?? {});
   }
   scope.setClient(client);
+  // Which page failed: its address without the query or fragment (the
+  // server's reports carry the same). Set before beforeSend, which keeps
+  // only the path (scrubEvent, pathOnly).
+  client.addEventProcessor((event) => {
+    event.request = { url: pageAddress(window.location) };
+    return event;
+  });
   client.init();
   return client;
 }
+
+/** The page's address without its query string and fragment. */
+export const pageAddress = (location: Pick<Location, "origin" | "pathname">): string =>
+  `${location.origin}${location.pathname}`;

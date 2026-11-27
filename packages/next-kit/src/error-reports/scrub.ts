@@ -59,7 +59,12 @@ export interface TrackerEvent {
   extra?: Record<string, unknown>;
   contexts?: Record<string, Record<string, unknown> | undefined>;
   breadcrumbs?: unknown[];
-  sdk?: { name?: string; version?: string; integrations?: string[]; packages?: unknown[] };
+  sdk?: {
+    name?: string;
+    version?: string;
+    integrations?: string[];
+    packages?: unknown[];
+  };
   debug_meta?: { images?: Array<Record<string, unknown>> };
   modules?: Record<string, string>;
   sdkProcessingMetadata?: Record<string, unknown>;
@@ -70,7 +75,12 @@ export interface TrackerException {
   type?: string;
   value?: string;
   module?: string;
-  mechanism?: { type?: string; handled?: boolean; synthetic?: boolean; [key: string]: unknown };
+  mechanism?: {
+    type?: string;
+    handled?: boolean;
+    synthetic?: boolean;
+    [key: string]: unknown;
+  };
   stacktrace?: { frames?: TrackerFrame[]; [key: string]: unknown };
   [key: string]: unknown;
 }
@@ -97,55 +107,87 @@ export const MAX_FRAMES = 60;
 
 // ── Text ──────────────────────────────────────────────────────────────────
 
+/**
+ * How much of a string the rules read: the start of it, a few times what is
+ * kept. Every rule is bounded, so this keeps one long message (a large value
+ * in an error, a long validation error) from costing more than a moment on
+ * the server or in the page.
+ */
+const WINDOW_FACTOR = 8;
+
+/**
+ * Where a number may start and end: not right after a digit (or a digit and
+ * one separator), and not right before one. A full stop, comma or bracket
+ * after the last digit ends the number ("Llame al 8888-1234."), but a full
+ * stop followed by a digit does not ("1.2.3.4.5" is one run).
+ */
+const N0 = String.raw`(?<!\d[\s.-]?)`;
+const N1 = String.raw`(?![\s.-]?\d)`;
+const num = (body: string) => new RegExp(`${N0}(?:${body})${N1}`, "g");
+
+/**
+ * The words a delivery code is written next to, in text and in field names:
+ * "código de entrega", "codigoEntrega", "delivery_pin", "deliveryPin", "PIN",
+ * "code". Matched anywhere a letter or digit does not come right before it,
+ * so an underscore or a quote is a boundary too.
+ */
+const CODE_WORD = String.raw`(?<![\p{L}\p{N}])(?:delivery[\s_-]?(?:pin|code)|c[oó]digo(?:[\s_-]*(?:de[\s_-]*)?entrega)?|pin|code)`;
+
 const RULES: Array<[RegExp, string]> = [
   // Query strings and fragments of any address: a search, a sign-in link's
   // token, an e-mail confirmation. The path stays.
-  [/(https?:\/\/[^\s/?#"'<>]+(?:\/[^\s?#"'<>]*)?)[?#][^\s"'<>]*/gi, "$1"],
-  [/((?<![\w])\/[^\s?#"'<>]*)[?#][^\s"'<>]*/g, "$1"],
+  [/(?<![\w/])(https?:\/\/[^\s/?#"'<>]{1,253}(?:\/[^\s?#"'<>]*)?)[?#][^\s"'<>]*/gi, "$1"],
+  [/((?<![\w/])\/[^\s?#"'<>]*)[?#][^\s"'<>]*/g, "$1"],
   // The user name and password some addresses carry (https://user:pass@host).
-  [/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@"'<>]+@/gi, "$1"],
+  [/\b([a-z][a-z0-9+.-]{0,30}:\/\/)[^\s/@"'<>]+@/gi, "$1"],
   // Tokens and keys: JSON Web Tokens, the project's keys, "Bearer …", and any
   // name=value pair whose name says it is a secret.
-  [/eyJ[\w-]{5,}\.[\w-]{5,}\.[\w-]*/g, "[token]"],
+  [/(?<![\w-])eyJ[\w-]{5,}\.[\w-]{5,}\.[\w-]*/g, "[token]"],
   [/\bsb_(?:publishable|secret)_[\w-]+/gi, "[key]"],
   [/\b(bearer|basic)\s+[\w.~+/=-]{8,}/gi, "$1 [token]"],
   [
     /\b(password|passwd|contrase(?:ñ|n)a|clave|secret|token|api[_-]?key|apikey|authorization|cookie|session|dsn|pin)(["']?\s*[:=]\s*["']?)[^\s"',;&]+/gi,
     "$1$2[filtered]",
   ],
-  // E-mail addresses.
+  // E-mail addresses, also written for an address bar (ana%40example.com).
+  // Bounded as the standard bounds them: 64 characters before the @, 63 per
+  // part of the domain.
   [
-    /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}(?![\p{L}\p{N}-])/gu,
+    /[\p{L}\p{N}._%+-]{1,64}(?:@|%40)[\p{L}\p{N}-]{1,63}(?:\.[\p{L}\p{N}-]{1,63}){0,8}\.\p{L}{2,24}(?![\p{L}\p{N}-])/giu,
     "[email]",
   ],
   // Long random strings: ids, hashes, keys (a UUID is one). An account's id is
-  // personal; none of these helps to read an error.
+  // personal; none of these helps to read an error. A long string is read
+  // once, from its start.
   [/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "[id]"],
-  [/(?<![\w/-])(?=[\w.-]*\d)(?=[\w.-]*[a-zA-Z])[\w.-]{32,}(?![\w-])/g, "[token]"],
+  [/(?<![\w./-])(?=[\w.-]*\d)(?=[\w.-]*[a-zA-Z])[\w.-]{32,}(?![\w-])/g, "[token]"],
   // IP addresses.
-  [/(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])/g, "[ip]"],
+  [/(?<!\d\.?)(?:\d{1,3}\.){3}\d{1,3}(?!\.?\d)/g, "[ip]"],
   [/(?<![\w:])(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}(?![\w:])/gi, "[ip]"],
   // Costa Rican phone numbers: 8 digits starting 2, 4, 5, 6, 7 or 8, with or
-  // without +506 and a dash or space in the middle. With the country code
-  // first, so the long-number rule below does not take it.
-  [/(?<![\d.])(?:\+|00)?506[\s-]?[245678]\d{3}[\s.-]?\d{4}(?![\d.])/g, "[phone]"],
+  // without +506. Written whole, as 4 and 4, as 4, 2 and 2, or as pairs. With
+  // the country code first, so the long-number rule below does not take it.
+  [num(String.raw`(?:\+|00)?506[\s-]?[245678](?:[\s.-]?\d){7}`), "[phone]"],
   // Identity numbers, bank accounts and cards: any run of 9 or more digits,
   // with or without separators (cédula 1-0234-0567, jurídica 3-101-123456,
-  // DIMEX and NITE, IBAN CR05 0152…, card numbers).
+  // DIMEX and NITE, IBAN CR05 0152…, card numbers), and a cédula written
+  // short (1-234-567).
   [/\bCR\d{2}(?:[\s-]?\d){18}\b/gi, "[number]"],
-  [/(?<![\d.])\d(?:[\s.-]?\d){8,}(?![\d.])/g, "[number]"],
-  [/(?<![\d.])[245678]\d{3}[\s.-]?\d{4}(?![\d.])/g, "[phone]"],
-  // A delivery code: a number of 4 to 6 digits next to the word for it, on
-  // either side. (The code is 4 digits today; 6 covers a longer one.) After
-  // the phone and identity rules, so their digits are not taken for a code.
+  [num(String.raw`\d(?:[\s.-]?\d){8,}`), "[number]"],
+  [num(String.raw`[1-9]-\d{3,4}-\d{3,4}`), "[number]"],
   [
-    /\b(c(?:ó|o)digo(?:\s+de\s+entrega)?|pin|delivery[\s_-]*code|code)\b([^\d\n]{0,25}?)(?<!\d)\d{4,6}(?!\d)/giu,
-    "$1$2[code]",
+    num(
+      // Not a date written 2026-11-27: the 4, 2 and 2 form skips one.
+      String.raw`[245678]\d{3}[\s.-]?\d{4}|[245678]\d[\s.-]\d{2}[\s.-]\d{2}[\s.-]\d{2}|(?!(?:19|20)\d{2}-[01]\d-[0-3]\d)[245678]\d{3}[\s.-]\d{2}[\s.-]\d{2}`,
+    ),
+    "[phone]",
   ],
-  [
-    /(?<!\d)\d{4,6}(?!\d)(?=[^\d\n]{0,25}?\b(?:c(?:ó|o)digo|pin|delivery[\s_-]*code|code)\b)/giu,
-    "[code]",
-  ],
+  // A delivery code: a number of 4 to 6 digits after the word for it (within
+  // 60 characters, whatever lies between) or just before it. (The code is 4
+  // digits today; 6 covers a longer one.) After the phone and identity rules,
+  // so their digits are not taken for a code.
+  [new RegExp(String.raw`(?<=${CODE_WORD}[^\n]{0,60}?)(?<!\d)\d{4,6}(?!\d)`, "giu"), "[code]"],
+  [new RegExp(String.raw`(?<!\d)\d{4,6}(?!\d)(?=[^\d\n]{0,25}?${CODE_WORD})`, "giu"), "[code]"],
 ];
 
 /**
@@ -156,7 +198,7 @@ const RULES: Array<[RegExp, string]> = [
  * without quotes cannot be recognised; no code of the websites does that
  * (scrub.test.ts checks their error messages).
  */
-const QUOTED = /(["“'‘«])([^"“”'‘’«»\n]{1,300})(["”'’»])/g;
+const QUOTED = /(["“'‘«])([^"“”'‘’«»\n]+)(["”'’»])/g;
 const IDENTIFIER = /^[a-z_$][\w$.-]{0,39}$/;
 const quoted = (text: string) =>
   text.replace(QUOTED, (_all, open: string, inner: string, close: string) =>
@@ -167,14 +209,25 @@ const quoted = (text: string) =>
 
 /**
  * Removes from a string what may identify a person, and shortens it. Safe on
- * any input; non-strings become empty strings.
+ * any input; non-strings become empty strings. Only the start of a long
+ * string is read (WINDOW_FACTOR times what is kept); the last, possibly cut,
+ * word or number of that start is dropped, and so is text after a quote that
+ * the cut left open, so nothing cut in half escapes a rule.
  */
 export function redactText(input: unknown, max = MAX_TEXT): string {
   if (typeof input !== "string") return "";
-  let text = input;
+  const window = Math.max(max, 64) * WINDOW_FACTOR;
+  const cut = input.length > window;
+  let text = cut
+    ? input
+        .slice(0, window)
+        .replace(/\S+$/u, "")
+        .replace(/[\d\s.()+-]+$/u, "")
+    : input;
   for (const [pattern, replacement] of RULES) text = text.replace(pattern, replacement);
   text = quoted(text);
-  return text.length > max ? `${text.slice(0, max)}…` : text;
+  if (cut) text = text.replace(/["“'‘«][^"“”'‘’«»\n]*$/u, "[text]");
+  return cut || text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 /** An address without its query string, fragment, user name or password. */
@@ -195,13 +248,22 @@ const DB_FUNCTION = /^[a-z][a-z0-9_]{1,62}$/;
  * the original exception (packages/db's ApiError); its `detail` (an offer id,
  * a new total) and its cause's text never leave.
  */
-export function databaseFacts(original: unknown): { db_code?: string; db_function?: string } {
+export function databaseFacts(original: unknown): {
+  db_code?: string;
+  db_function?: string;
+} {
   if (!original || typeof original !== "object") return {};
-  const error = original as { name?: unknown; code?: unknown; detail?: unknown };
+  const error = original as {
+    name?: unknown;
+    code?: unknown;
+    detail?: unknown;
+  };
   if (error.name !== "ApiError" || typeof error.code !== "string" || !DB_CODE.test(error.code)) {
     return {};
   }
-  const facts: { db_code?: string; db_function?: string } = { db_code: error.code };
+  const facts: { db_code?: string; db_function?: string } = {
+    db_code: error.code,
+  };
   if (
     error.code === "invalid_response" &&
     typeof error.detail === "string" &&
@@ -344,7 +406,10 @@ export function scrubEvent(event: TrackerEvent, options: ScrubOptions): TrackerE
   // Which SDK sent it (name and version only), and the build ids that let
   // the tracker match uploaded source maps later.
   if (event.sdk?.name) {
-    out.sdk = { name: redactText(event.sdk.name, 100), version: redactText(event.sdk.version, 50) };
+    out.sdk = {
+      name: redactText(event.sdk.name, 100),
+      version: redactText(event.sdk.version, 50),
+    };
   }
   const images = event.debug_meta?.images;
   if (Array.isArray(images)) {

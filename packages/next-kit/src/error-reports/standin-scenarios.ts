@@ -39,6 +39,22 @@ export async function serverScenarios(app: ReportingApp) {
     async () => sdk,
   );
   expect(started).toBe(true);
+  // The options the real SDK runs with: nothing collected, nothing traced,
+  // no breadcrumbs, no source lines and no local variables.
+  const options = sdk.getClient()?.getOptions() as Record<string, unknown> | undefined;
+  expect(options?.dataCollection).toMatchObject({
+    userInfo: false,
+    cookies: false,
+    httpHeaders: false,
+    urlQueryParams: false,
+    stackFrameVariables: false,
+    frameContextLines: 0,
+  });
+  expect(options?.sendDefaultPii).toBeFalsy();
+  expect(options?.tracesSampleRate).toBeUndefined();
+  expect(options?.maxBreadcrumbs).toBe(0);
+  const beforeBreadcrumb = options?.beforeBreadcrumb as ((b: unknown) => unknown) | undefined;
+  expect(beforeBreadcrumb?.({ message: PERSON.phone })).toBe(null);
 
   /** Fills the scope as instrumentation would, then lets `fail` throw. */
   const onPage = async (
@@ -60,8 +76,14 @@ export async function serverScenarios(app: ReportingApp) {
         address: PERSON.address,
         password: PERSON.password,
       });
-      scope.setContext("customer", { name: PERSON.name, cedula: PERSON.cedula });
-      scope.addBreadcrumb({ category: "console", message: `Dirección ${PERSON.address}` });
+      scope.setContext("customer", {
+        name: PERSON.name,
+        cedula: PERSON.cedula,
+      });
+      scope.addBreadcrumb({
+        category: "console",
+        message: `Dirección ${PERSON.address}`,
+      });
       scope.addBreadcrumb({ category: "ui.input", message: PERSON.phone });
       scope.setSDKProcessingMetadata({
         normalizedRequest: {
@@ -70,7 +92,11 @@ export async function serverScenarios(app: ReportingApp) {
           headers: requestHeaders,
           cookies: { "sb-access-token": PERSON.jwt },
           query_string: `correo=${PERSON.email}`,
-          data: { phone: PERSON.phone, address: PERSON.address, password: PERSON.password },
+          data: {
+            phone: PERSON.phone,
+            address: PERSON.address,
+            password: PERSON.password,
+          },
         },
       });
       try {
