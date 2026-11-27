@@ -25,4 +25,5 @@ export * from "./search";
 export * from "./sellers";
 export * from "./sentence";
 export * from "./shop-logos";
+export * from "./status-words";
 export * from "./strip";

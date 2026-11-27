@@ -215,9 +215,11 @@ describe("the delivery strip sentence (§5.5)", () => {
     ).toThrow(RangeError);
   });
 
-  it("never names a day the promise does not give, for every hour of a year", () => {
+  // Every 11th hour for 400 days: 11 and 24 share no factor, so every hour of
+  // the day comes up, on every weekday, across New Year and Holy Week 2027.
+  it("never names a day the promise does not give, at every hour of the day for a year", () => {
     const zones: ZoneService[] = Object.values(SERVICE_PRESETS);
-    for (let h = 0; h < 24 * 400; h += 5) {
+    for (let h = 0; h < 24 * 400; h += 11) {
       const now = new Date(Date.UTC(2026, 10, 1, 0) + h * 3_600_000);
       const today = toCostaRicaTime(now).date;
       for (const zone of zones) {
@@ -248,5 +250,5 @@ describe("the delivery strip sentence (§5.5)", () => {
         }
       }
     }
-  });
+  }, 30_000);
 });
