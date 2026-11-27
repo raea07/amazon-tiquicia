@@ -1924,9 +1924,10 @@ apps get it with store version 0.2.0, because it is a native module.
 
 **Consequences.** The removal of personal data is code that needs its own
 tests (an event with a name, a phone, an e-mail, an address or a delivery
-code must leave without them). Source maps are uploaded by a token kept
-outside the repository. The phone apps need a new store build before they
-report anything. The free plan's limits (5,000 errors a month, one user)
+code must leave without them). Source maps are not uploaded at first, so
+an error report names built files, not source lines; uploading them later
+needs a token kept outside the repository. The phone apps need a new store
+build before they report anything. The free plan's limits (5,000 errors a month, one user)
 are enough until a second developer joins; the paid plan's price is in the
 research.
 
