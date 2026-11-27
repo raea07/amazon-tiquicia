@@ -518,7 +518,26 @@ end $$;
 
 -- Three cash orders, packed in SJO1; route one with parcels P and Q, route
 -- two with parcel R, both assigned to repartidor and not started.
-select pg_temp.count(pg_temp.fx(102), current_setting('t.sendero')::uuid, 5);
+-- The walk of section 3 can end with any of a1, a2 and b1 sold out or counted
+-- to zero (its clean-up puts offers back on sale but counts nothing in), so
+-- each of the three is set to 5 free units right before it is bought.
+create function pg_temp.stock_to(p_sku uuid, p_seller uuid, p_free integer) returns void
+language plpgsql as $$
+declare
+  v_free integer := coalesce((select on_hand - reserved from public.stock_levels
+                              where warehouse_id = current_setting('t.wh')::uuid and sku_id = p_sku
+                                and seller_id = p_seller), 0);
+begin
+  if v_free <> p_free then
+    perform pg_temp.count(p_sku, p_seller, p_free - v_free);
+  end if;
+  assert (select available_quantity from public.offers where sku_id = p_sku and seller_id = p_seller) = p_free,
+    format('route: fixture, %s free units of %s', p_free, p_sku);
+end;
+$$;
+select pg_temp.stock_to(pg_temp.fx(101), current_setting('t.sendero')::uuid, 5);
+select pg_temp.stock_to(pg_temp.fx(102), current_setting('t.sendero')::uuid, 5);
+select pg_temp.stock_to(pg_temp.fx(103), current_setting('t.sendero')::uuid, 5);
 create function pg_temp.packed(p_key text, p_offer uuid) returns uuid
 language plpgsql as $$
 declare
