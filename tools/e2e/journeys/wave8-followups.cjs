@@ -173,6 +173,15 @@ async function as(email) {
     history.includes("Cancelado: el pedido no llegó a salir de nuestra bodega"),
     `the history says the same: ${history.slice(0, 200)}`,
   );
+  // The parcel itself (wave 9 integration): never "Devuelto" for one that never left.
+  check(
+    all.includes("No salió de la bodega") && !all.includes("Devuelto"),
+    "the parcel says it did not leave the warehouse, not 'Devuelto'",
+  );
+  check(
+    history.includes("Paquete: no salió de nuestra bodega") && !history.includes("Paquete: devuelto"),
+    "and so does its history line",
+  );
   check((await overflow(shopper)) <= 0, "the order page fits 390 px");
   await shopper.screenshot({ path: SHOTS + "/w8f1-shopper-stopped.png", fullPage: true });
 

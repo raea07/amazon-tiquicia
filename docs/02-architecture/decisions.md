@@ -62,9 +62,17 @@ its own entry, not something that happens by drift.
 | 53  | [A cancelled order says why from the reasons the database writes; staff's note stays internal](#53-a-cancelled-order-says-why-from-the-reasons-the-database-writes-staffs-note-stays-internal)                             |
 | 54  | [Back links and short links are 44 px tall without moving the layout](#54-back-links-and-short-links-are-44-px-tall-without-moving-the-layout)                                                                             |
 | 55  | [A cart line names its product even when its offer is paused](#55-a-cart-line-names-its-product-even-when-its-offer-is-paused)                                                                                             |
-| 56  | [Support and system tools live inside the staff console](#56-support-and-system-tools-live-inside-the-staff-console)                                                                                                       | Decided; not built                       |
-| 57  | [Error and outage alerts go through the existing Sentry account, with personal data removed](#57-error-and-outage-alerts-go-through-the-existing-sentry-account-with-personal-data-removed)                                | Decided; not built                       |
+| 56  | [Support and system tools live inside the staff console](#56-support-and-system-tools-live-inside-the-staff-console)                                                                                                       | Built; not on the preview yet            |
+| 57  | [Error and outage alerts go through the existing Sentry account, with personal data removed](#57-error-and-outage-alerts-go-through-the-existing-sentry-account-with-personal-data-removed)                                | Built; not on the preview yet            |
 | 58  | [The look is Carreta, added beside today's names and switched app by app](#58-the-look-is-carreta-added-beside-todays-names-and-switched-app-by-app)                                                                       | Decided; not built                       |
+| 59  | [The delivery code never reaches staff through the support desk, in either direction](#59-the-delivery-code-never-reaches-staff-through-the-support-desk-in-either-direction)                                              | Built; not on the preview yet            |
+| 60  | [Case targets live only in the database; the shopper's words follow them by a test](#60-case-targets-live-only-in-the-database-the-shoppers-words-follow-them-by-a-test)                                                   | Built; not on the preview yet            |
+| 61  | [An answer reaches the shopper in their account; a message only says it is there](#61-an-answer-reaches-the-shopper-in-their-account-a-message-only-says-it-is-there)                                                      | Built; not on the preview yet            |
+| 62  | [health_ping answers nothing but ok](#62-healthping-answers-nothing-but-ok)                                                                                                                                                | Built; not on the preview yet            |
+| 63  | [A parcel stopped before it left has its own reason and its own words](#63-a-parcel-stopped-before-it-left-has-its-own-reason-and-its-own-words)                                                                           | Built; not on the preview yet            |
+| 64  | [A cart line of a product the caller may not see is its id alone](#64-a-cart-line-of-a-product-the-caller-may-not-see-is-its-id-alone)                                                                                     | Built; not on the preview yet            |
+| 65  | [One build commit with one rule, given at deploy time](#65-one-build-commit-with-one-rule-given-at-deploy-time)                                                                                                            | Built; not on the preview yet            |
+| 66  | [One rule for a late case, read by Salud, Hoy and Casos](#66-one-rule-for-a-late-case-read-by-salud-hoy-and-casos)                                                                                                         | Built; not on the preview yet            |
 
 ---
 
@@ -1902,10 +1910,45 @@ now.
 
 **Consequences.** They use the console's sign-in, staff roles, second
 factor and audit, and every read and write goes through database functions
-like the rest of the console. Nothing new is deployed for them. Their
-functions, tests and screens are still to be written.
+like the rest of the console. Nothing new is deployed for them.
 
-**Not verified.** Nothing: decided, not built.
+**Built in wave 9** (migrations `084700` and `084800`, merged on
+27 November 2026, not on the hosted preview yet):
+
+- Casos (`/casos`, `/casos/[id]`): every complaint, return request and
+  content report opens a case by trigger, and the migration opens one for
+  each that existed. Staff record a WhatsApp, phone or e-mail contact as a
+  case ("Registrar un contacto"). A case has internal notes the customer
+  never sees, answers (from saved answers, `/casos/respuestas`),
+  assignment, reopening and a clock in words; `/casos/informe` is the
+  monthly report. A return or a report is decided in Atención and its case
+  closes then.
+- Who reads which case follows table 4.1 of the research: support and
+  administrators all; operations every case with an order; finance
+  payments and refunds; catalogue staff content reports. A case outside the
+  role answers "not found". Only support and administrators answer, assign,
+  reopen, record contacts and reveal a contact. The table of who sees what,
+  page by page, is in [access control](../03-data/access-control.md).
+- The customer view (`/clientes/[id]`) is reached only from an order or a
+  case, only for a customer (someone who ordered, complained or asked for a
+  return), and shows the e-mail and phone only after "Mostrar contacto" with
+  a reason, which Auditoría shows.
+- Salud del sistema (`/salud`): one line per check for each role, each
+  with the page where it is fixed, never a name; for administrators the
+  commit of each web app, the newest migration and the phone builds
+  recorded by hand.
+- The web shop's `/reclamo` and the shopper app's complaint screen, and
+  "Sus consultas" where shoppers read staff's answers.
+- Account deletion erases the text of the person's cases (notes and
+  answers), closes their open recorded contacts, and the desk then writes
+  nothing more on them.
+
+**Not verified.** Nothing of it has run on the hosted project. Working days
+are Monday to Friday without holidays and working hours 08:00 to 17:00, an
+assumption until the service hours are published (owner question D56).
+Whether the complaint form meets the legal minimum is for the lawyer. A
+case the role may not see answers "not found" with HTTP 200 (the console's
+pages draw it inside a streamed part).
 
 ## 57. Error and outage alerts go through the existing Sentry account, with personal data removed
 
@@ -1931,8 +1974,27 @@ build before they report anything. The free plan's limits (5,000 errors a month,
 are enough until a second developer joins; the paid plan's price is in the
 research.
 
-**Not verified.** Nothing: decided, not built. Whether the free plan's
-limits hold at pilot volume is an estimate.
+**Built in wave 9** (no migration; merged on 27 November 2026, not on the
+hosted preview yet): `@sentry/nextjs` 11.12.0 in the four websites, without
+`withSentryConfig` (no build telemetry, no upload). It is off unless
+`NEXT_PUBLIC_SENTRY_DSN` is set when a website is built: then nothing is
+loaded and nothing is sent. The browser part loads after the page is
+usable. Every report is rebuilt from an allow-list
+(`packages/next-kit/src/error-reports/scrub.ts`): cookies, headers, bodies,
+query strings, the user and breadcrumbs are dropped, and e-mails, phones,
+identity and card numbers, delivery codes and tokens are removed from what
+is kept. A name or an address written into an error message cannot be
+recognised, so a unit test forbids error messages built from personal
+values in the websites' code. A report's release names the build's commit
+by the rule of decision 65. The error pages say the team was told only
+when the report reached the tracker's code. The uptime check calls the
+database's `health_ping` (decision 62), because the preview's websites sit
+behind Vercel's login.
+
+**Not verified.** Nothing has been sent to real Sentry: no project exists
+and no address is set. Behaviour on Vercel was not checked. Whether the
+free plan's limits hold at pilot volume is an estimate. The phone apps wait
+for store version 0.2.0; source maps are not uploaded.
 
 ## 58. The look is Carreta, added beside today's names and switched app by app
 
@@ -1963,3 +2025,172 @@ driver and warehouse apps.
 **Not verified.** Decided, not built: no app uses it yet. Not checked: the
 fonts on a real phone, screen readers, real mail programs and English
 screens.
+
+## 59. The delivery code never reaches staff through the support desk, in either direction
+
+**Context.** Staff must never read a delivery code (decision 12's rule).
+The support desk adds free text in both directions: staff write notes and
+answers, and shoppers write complaints, return reasons and reports that
+staff read.
+
+**Decision.** Staff texts: a note, an answer, a contact summary, an answer
+written in Atención and the note on a return decision are refused when
+they hold a live code of the case's order or of the customer's orders still
+to be delivered, read through separators, other scripts' digits and
+invisible characters. Each refusal is on Auditoría without the text; three
+in an hour lock the writer out; a text with more than five four-digit
+numbers is refused. Since the integration of wave 9, every four-digit
+number a writer puts in any of those texts also counts against an hourly
+allowance of 20 (`private.case_number_checks`, counts only), because the
+lock-out alone bounded only the refusals: a writer could test five guesses
+in each of any number of accepted texts. Shopper texts: what the staff
+functions answer of a complaint, a return's reason and a report masks the
+customer's own live code as "••••" (`private.mask_shopper_codes`, in
+`ops_case` and `ops_care_queues`); the shopper still reads their own words.
+
+**Consequences.** A refusal in Atención (a complaint's answer, a return
+decision's note) happens inside a trigger, so its audit row is rolled back
+with it and it does not count towards the lock-out; finding a code still
+needs accepted texts, which the allowance bounds (about 250 hours of
+writing on average for one code). A code written as half of a phone number
+or in words passes the guard; a shopper's code inside a phone is masked
+too, so a masked phone can appear. Old answers kept from before `084700`
+are masked when staff read them.
+
+**Not verified.** Not tried against a determined person on the hosted
+project.
+
+## 60. Case targets live only in the database; the shopper's words follow them by a test
+
+**Context.** customer-service.md sets response targets; the support desk
+needs them to compute due dates, and the shopper's screens and messages
+promise them in words.
+
+**Decision.** The targets are rows of `private.case_targets` and every due
+date is computed there (`private.case_due`), on the operations calendar.
+The apps never compute a due date: they show the dates the database gives.
+The words shoppers read ("en un máximo de 1 día hábil") come from one
+table in `packages/core/src/service-times.ts`; a test keeps it equal to the
+migration's rows and to the "Response targets" table of customer-service.md,
+and the message templates' words equal to it.
+
+**Consequences.** Changing a target takes a migration, the core table and
+the document together; the console cannot edit targets. A return for a
+damaged, wrong or warranty item promises an answer in 2 working hours; the
+store build of `3f251c3` still says 2 working days, which is longer, never
+shorter, than the target.
+
+**Not verified.** Whether staff can meet the targets is for the pilot.
+
+## 61. An answer reaches the shopper in their account; a message only says it is there
+
+**Context.** An answer may hold what a person wrote about an order; e-mail
+and push travel through outside providers.
+
+**Decision.** The answer's text is shown only in the shopper's account ("Sus
+consultas" and the order's page). A complaint's answer also updates the
+complaint, so Atención and the register agree, and emits the existing
+`complaint.answered`; any other case plans `case_answered`, whose e-mail
+and push say an answer is waiting, never the answer.
+
+**Consequences.** The shopper must sign in to read an answer. No message
+carries the answer text, so a deleted account's erased answers are not
+left in a provider's logs.
+
+**Not verified.** No message is sent for real until the provider is set
+up.
+
+## 62. health_ping answers nothing but ok
+
+**Context.** An outside uptime check must know whether the API and the
+database answer, holding only the publishable key; the preview's websites
+sit behind Vercel's login.
+
+**Decision.** `public.health_ping()` is the one function of wave 9 a
+visitor may call. It answers `{"ok": true}` and nothing else: no version,
+count or name.
+
+**Consequences.** It says the database answers, not that every part works;
+Salud del sistema says the rest, to staff.
+
+**Not verified.** Not called against the hosted Data API yet.
+
+## 63. A parcel stopped before it left has its own reason and its own words
+
+**Context.** An order whose parcels staff all stopped in the warehouse
+(`ops_recall_shipment`) was cancelled at check-in as if the parcels had come
+back, and the parcel read "Devuelto".
+
+**Decision.** `085000` cancels such an order for "Los paquetes no salieron
+de la bodega" and `get_order` says of each parcel and history line whether
+it was stopped before it ever left (`stopped_before_leaving`, new and
+optional). The shopper's pages then say "No salió de la bodega" and
+"Paquete: no salió de nuestra bodega" (`packages/core/src/parcel-words.ts`).
+The console and the drivers' and warehouse screens keep their own words.
+
+**Consequences.** A parcel that went out and came back keeps "Devuelto" and
+the old reason. The store build of `3f251c3` ignores the new field and
+still shows "Devuelto".
+
+**Not verified.** Not on the hosted preview or a phone yet.
+
+## 64. A cart line of a product the caller may not see is its id alone
+
+**Context.** The outside attack of 27 November 2026 found that `cart_lines`
+gave the shop, price, stock and delivery method of an active offer of a
+product that is not public.
+
+**Decision.** `085000`: a line is filled only when the caller may see the
+product, by the product page's own rule (`private.product_page_open`);
+otherwise it is its id, `buyable` false, `available` 0 and every other
+column null, the answer of a made-up id. `checkout_quote` counts the
+handling days of the lines it can sell only.
+
+**Consequences.** The columns stay as they were, so the store build of
+`3f251c3` and the web apps of `12ec48c` read the same shape (checked by
+contract tests with their own code).
+
+**Not verified.** Not on the hosted preview yet.
+
+## 65. One build commit with one rule, given at deploy time
+
+**Context.** System health and the error reports each named the build's
+commit in their own way, and the hosted websites are uploaded with
+`vercel deploy --prod` from the repository root, without a Git connection:
+the upload has no `.git` folder, and Vercel's documentation describes
+`VERCEL_GIT_COMMIT_SHA` as the commit a deployment was triggered by, which a
+CLI upload without Git does not have as far as is known.
+
+**Decision.** One value, `YUNTERA_BUILD_COMMIT`, read once when a website is
+built (`packages/next-kit/build-commit.mjs`) and inlined into its server and
+browser code: a value given at deploy time wins, then
+`VERCEL_GIT_COMMIT_SHA`, else "unknown". No guess from `git`. The runbook's
+deploy command passes `git rev-parse HEAD` for the build and for the
+running server. The Versiones panel and the error reports' release read
+the same value.
+
+**Consequences.** For a deployment without the value the Versiones panel
+says "el despliegue no indicó de qué versión es" and a release ends in
+`@unknown`, never a wrong commit. The
+commit is in the browser code (it is not a secret); `/api/version` still
+answers only the console.
+
+**Not verified.** Not deployed to Vercel yet.
+
+## 66. One rule for a late case, read by Salud, Hoy and Casos
+
+**Context.** Salud del sistema had a line about complaints waiting too long
+that computed its own due dates, while the support desk stores due times
+on each case.
+
+**Decision.** The health page's line is "Casos atrasados": the open cases
+the caller's role reads whose next due time has passed, by the desk's own
+rule (`private.case_next_due`), the rule of the "Hoy" line and of the
+"Atrasado" clock on `/casos`; it links to Casos. Past the first-response
+time asks for attention, past the resolution time is a problem.
+
+**Consequences.** For one database state the three pages give one number
+(suite `196` and the `wave9-integration` journey check it). Only support and
+administrators get the line, as before.
+
+**Not verified.** Not on the hosted preview yet.

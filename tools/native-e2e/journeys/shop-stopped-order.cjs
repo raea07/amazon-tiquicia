@@ -149,6 +149,14 @@ async function as(email) {
     !screen.includes("regresaron sin entregarse") && !screen.includes("6632"),
     "nothing of parcels coming back, nor staff's reason",
   );
+  // The parcel itself (wave 9 integration): never "Devuelto" for one that never left.
+  check(
+    screen.includes("No salió de la bodega") &&
+      screen.includes("Paquete: no salió de nuestra bodega") &&
+      !screen.includes("Devuelto") &&
+      !screen.includes("Paquete: devuelto"),
+    "the parcel and its history say it did not leave the warehouse",
+  );
   check(
     (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
     "no sideways scrolling at 390 px",
