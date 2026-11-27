@@ -55,7 +55,7 @@ function pngSize(file) {
   return { width: head.readUInt32BE(16), height: head.readUInt32BE(20) };
 }
 
-const escape = (value) =>
+const escapeHtml = (value) =>
   String(value).replace(
     /[&<>"]/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
@@ -76,20 +76,20 @@ for (const app of chosen) {
     const cell = (file, name, label) => {
       if (!existsSync(file)) {
         missing.push(`${label} ${name}`);
-        return `<td class="none">No ${label} shot: ${escape(name)}</td>`;
+        return `<td class="none">No ${label} shot: ${escapeHtml(name)}</td>`;
       }
       copyFileSync(file, join(out, "img", `${label}-${name}`));
       const size = pngSize(file);
-      return `<td><p>${escape(name)}${size ? ` · ${size.width} × ${size.height}` : ""}</p><img src="img/${escape(`${label}-${name}`)}" alt="${escape(`${label}: ${name}`)}" loading="lazy"></td>`;
+      return `<td><p>${escapeHtml(name)}${size ? ` · ${size.width} × ${size.height}` : ""}</p><img src="img/${escapeHtml(`${label}-${name}`)}" alt="${escapeHtml(`${label}: ${name}`)}" loading="lazy"></td>`;
     };
     const journey = cell(shotFile, row.shot, "journey");
     const drawn = cell(refFile, refName, "reference");
     if (existsSync(shotFile) && existsSync(refFile)) pairs += 1;
-    return `<tr><th scope="row">${escape(row.template)}<br>${escape(row.reference)}<br>${row.width} px</th>${journey}${drawn}</tr>`;
+    return `<tr><th scope="row">${escapeHtml(row.template)}<br>${escapeHtml(row.reference)}<br>${row.width} px</th>${journey}${drawn}</tr>`;
   });
-  const html = `<!doctype html>
+  const page = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escape(app)}: journey screenshots beside the reference</title>
+<title>${escapeHtml(app)}: journey screenshots beside the reference</title>
 <style>
 body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; background: #fff; color: #1e1a16; }
 table { border-collapse: collapse; width: 100%; }
@@ -100,15 +100,15 @@ td img { max-width: 100%; border: 1px solid #d9d0c3; }
 td.none { color: #8a2a0a; }
 p { margin: 0 0 4px; }
 </style></head><body>
-<h1>${escape(app)}: ${pairs} of ${rows.length} pairs</h1>
-<p>Journey shots from ${escape(shots)}; reference shots from ${escape(reference)}.</p>
+<h1>${escapeHtml(app)}: ${pairs} of ${rows.length} pairs</h1>
+<p>Journey shots from ${escapeHtml(shots)}; reference shots from ${escapeHtml(reference)}.</p>
 <table><thead><tr><th scope="col">Template</th><th scope="col">Journey</th><th scope="col">Reference</th></tr></thead>
 <tbody>
 ${blocks.join("\n")}
 </tbody></table>
 </body></html>
 `;
-  writeFileSync(join(out, "index.html"), html);
+  writeFileSync(join(out, "index.html"), page);
   console.log(`${app}: ${pairs} of ${rows.length} pairs → ${join(out, "index.html")}`);
   for (const line of missing) console.log(`  missing ${line}`);
 }

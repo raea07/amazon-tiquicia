@@ -517,7 +517,12 @@ const overflow = (page) =>
   });
   check(reported.status < 300, "a visitor reports the product");
   await go(small, `${OPS}/atencion`);
-  await ops.takeDown(small, productTitle, "Parece una imitación.", "Producto falsificado: se retira.");
+  await ops.takeDown(
+    small,
+    productTitle,
+    "Parece una imitación.",
+    "Producto falsificado: se retira.",
+  );
   check(
     sql(`select status from public.products where id = '${productId}'`) === "rejected",
     "staff take the product down",
