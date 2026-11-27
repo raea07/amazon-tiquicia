@@ -138,7 +138,15 @@ export const ORDER_PROGRESS: readonly OrderStatus[] = [
   "delivered",
 ];
 
-/** Buyer-facing wording. Statuses are internal; customers read sentences. */
+/**
+ * Buyer-facing wording. Statuses are internal; customers read sentences.
+ *
+ * Today's screens read these words. The Carreta words of every status, for
+ * every viewer, are in status-words.ts (`statusWord`); they differ here for
+ * `completed` («Entregado» for the shopper) and in English for
+ * `payment_review`. This table keeps its words until one change moves every
+ * screen and journey to status-words.ts, and is deleted then.
+ */
 export const ORDER_STATUS_LABEL: Readonly<Record<OrderStatus, { "es-CR": string; en: string }>> = {
   pending_payment: { "es-CR": "Esperando el pago", en: "Awaiting payment" },
   payment_review: { "es-CR": "Verificando el pago", en: "Verifying payment" },
