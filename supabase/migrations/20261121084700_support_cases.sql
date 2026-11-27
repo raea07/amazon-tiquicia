@@ -1272,7 +1272,8 @@ as $$
     'topic', c.topic,
     'status', c.status,
     'created_at', c.created_at,
-    'answer_due_at', c.due_at,
+    -- The last day, Costa Rica time, of the promise (due times are the end of a day).
+    'answer_due_on', (private.cr_local(c.due_at) - interval '1 second')::date,
     'resolved_at', c.resolved_at,
     'order_number', (select o.order_number from public.orders o where o.id = c.order_id),
     'answers', coalesce((
@@ -1331,8 +1332,9 @@ begin
   return jsonb_build_object(
     'reference', private.case_reference(c),
     'filed_at', c.created_at,
-    'acknowledge_by', c.first_response_due_at,
-    'answer_by', c.due_at,
+    -- The last days, Costa Rica time, of the two promises.
+    'acknowledge_by', (private.cr_local(c.first_response_due_at) - interval '1 second')::date,
+    'answer_by', (private.cr_local(c.due_at) - interval '1 second')::date,
     'order_number', (select o.order_number from public.orders o where o.id = c.order_id)
   );
 end;

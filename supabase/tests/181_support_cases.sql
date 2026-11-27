@@ -158,8 +158,10 @@ begin
   perform pg_temp.act('casos181a@yuntera.example');
   r := public.my_complaint_receipt(v_complaint);
   assert r ->> 'reference' = upper(left(v_complaint::text, 8)) and r ->> 'order_number' = current_setting('t.number_a')
-         and (r ->> 'answer_by')::timestamptz = (select due_at from private.cases where complaint_id = v_complaint)
-         and (r ->> 'acknowledge_by')::timestamptz < (r ->> 'answer_by')::timestamptz,
+         and (r ->> 'answer_by')::date
+             = (select (private.cr_local(due_at) - interval '1 second')::date from private.cases where complaint_id = v_complaint)
+         and (r ->> 'acknowledge_by')::date < (r ->> 'answer_by')::date
+         and (r ->> 'acknowledge_by')::date > private.cr_local(now())::date,
     format('receipt: %s', r);
   perform pg_temp.act('casos181b@yuntera.example');
   perform pg_temp.refused(format('select public.my_complaint_receipt(%L)', v_complaint), 'complaint_not_found');

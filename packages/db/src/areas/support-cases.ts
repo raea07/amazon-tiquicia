@@ -147,7 +147,13 @@ export type CasesDue = z.infer<typeof casesDue>;
 export const orderCases = z.object({ customer_id: id, cases: z.array(caseRow) });
 export type OrderCases = z.infer<typeof orderCases>;
 
-const targetUnit = z.enum(["minutes", "working_hours", "working_days", "calendar_days", "same_day"]);
+const targetUnit = z.enum([
+  "minutes",
+  "working_hours",
+  "working_days",
+  "calendar_days",
+  "same_day",
+]);
 export type CaseTargetUnit = z.infer<typeof targetUnit>;
 
 export const caseTarget = z.object({
@@ -183,7 +189,12 @@ export const caseReport = z.object({
 });
 export type CaseReport = z.infer<typeof caseReport>;
 
-export const savedReply = z.object({ id, title: z.string(), body: z.string(), updated_at: timestamp });
+export const savedReply = z.object({
+  id,
+  title: z.string(),
+  body: z.string(),
+  updated_at: timestamp,
+});
 export type SavedReply = z.infer<typeof savedReply>;
 
 /** One customer across their orders: no contact details. */
@@ -240,8 +251,8 @@ export const myCase = z.object({
   topic: z.string(),
   status: z.enum(["open", "closed"]),
   created_at: timestamp,
-  /** When the case is promised to be resolved (for a complaint, the written answer). */
-  answer_due_at: timestamp,
+  /** The last day (Costa Rica) the case is promised to be resolved by (for a complaint, the written answer). */
+  answer_due_on: day,
   resolved_at: timestamp.nullable(),
   order_number: z.string().nullable(),
   answers: z.array(
@@ -254,8 +265,10 @@ export type MyCase = z.infer<typeof myCase>;
 export const complaintReceipt = z.object({
   reference: z.string(),
   filed_at: timestamp,
-  acknowledge_by: timestamp,
-  answer_by: timestamp,
+  /** The last day (Costa Rica) of the acknowledgement promise. */
+  acknowledge_by: day,
+  /** The last day (Costa Rica) of the written answer promise. */
+  answer_by: day,
   order_number: z.string().nullable(),
 });
 export type ComplaintReceipt = z.infer<typeof complaintReceipt>;
@@ -330,11 +343,7 @@ export const supportCasesApi = ({ call, run }: Caller) => ({
     call("ops_add_case_note", { p_case_id: id.parse(caseId), p_body: body }, z.number().int()),
   /** The answer the customer reads; `close` also closes the case. Support and admin. */
   opsAnswerCase: (caseId: string, body: string, close: boolean) =>
-    call(
-      "ops_answer_case",
-      { p_case_id: id.parse(caseId), p_body: body, p_close: close },
-      caseRow,
-    ),
+    call("ops_answer_case", { p_case_id: id.parse(caseId), p_body: body, p_close: close }, caseRow),
   opsAssignCase: (caseId: string) =>
     call("ops_assign_case", { p_case_id: id.parse(caseId) }, caseRow),
   opsReopenCase: (caseId: string) =>
@@ -384,11 +393,7 @@ export const supportCasesApi = ({ call, run }: Caller) => ({
     ),
   /** The shopper's own cases with the answers; only one order's with `orderNumber`. */
   myCases: (orderNumber?: string | null) =>
-    call(
-      "my_cases",
-      orderNumber ? { p_order_number: orderNumber } : {},
-      z.array(myCase),
-    ),
+    call("my_cases", orderNumber ? { p_order_number: orderNumber } : {}, z.array(myCase)),
   myComplaintReceipt: (complaintId: string) =>
     call("my_complaint_receipt", { p_complaint_id: id.parse(complaintId) }, complaintReceipt),
 });

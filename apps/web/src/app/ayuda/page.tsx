@@ -1,6 +1,7 @@
 import { brand } from "@yuntera/brand";
-import { DEFAULT_RANKING } from "@yuntera/core";
+import { COMPLAINT_PROMISE, DEFAULT_RANKING } from "@yuntera/core";
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Ayuda",
@@ -95,12 +96,15 @@ export default function HelpPage() {
         <section>
           <h2 id="reclamos">Presentar un reclamo</h2>
           <p>
-            Escríbanos a{" "}
+            Use el{" "}
+            <Link className="text-link underline" href="/reclamo">
+              formulario de reclamos
+            </Link>
+            ; desde la página de su pedido ya lleva el número. También puede escribirnos a{" "}
             <a className="text-link underline" href={`mailto:${brand.support.email}`}>
               {brand.support.email}
-            </a>{" "}
-            con el número de su pedido. Respondemos en un máximo de 2 días hábiles. Reclamar no
-            tiene costo.
+            </a>
+            . {COMPLAINT_PROMISE}
           </p>
           <p>
             Si no queda conforme con nuestra respuesta, puede acudir a la Comisión Nacional del

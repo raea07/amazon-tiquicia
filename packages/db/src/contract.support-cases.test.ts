@@ -51,7 +51,8 @@ describe.skipIf(!db.enabled)("support cases contract (against a seeded database)
       await pool.end();
     }
     await db.connect();
-    if (!shopperId || !demoOrder) throw new Error("database is not seeded — run pnpm db:local:reset");
+    if (!shopperId || !demoOrder)
+      throw new Error("database is not seeded — run pnpm db:local:reset");
   });
   afterAll(db.close);
 
@@ -64,9 +65,7 @@ describe.skipIf(!db.enabled)("support cases contract (against a seeded database)
     const receipt = await shopper.myComplaintReceipt(complaintId);
     complaintRef = receipt.reference;
     expect(receipt.reference).toBe(complaintId.slice(0, 8).toUpperCase());
-    expect(new Date(receipt.answer_by).getTime()).toBeGreaterThan(
-      new Date(receipt.acknowledge_by).getTime(),
-    );
+    expect(receipt.answer_by > receipt.acknowledge_by).toBe(true);
     const mine = await shopper.myCases();
     expect(mine.map((item) => item.reference)).toContain(receipt.reference);
     // Another shopper cannot read the receipt.
@@ -89,9 +88,9 @@ describe.skipIf(!db.enabled)("support cases contract (against a seeded database)
     expect(detail.customer?.first_name).toBe("Prueba");
     expect(detail.can.answer).toBe(true);
 
-    expect(typeof (await staff.opsAddCaseNote(row.id, "Nota del contrato: no la ve el cliente."))).toBe(
-      "number",
-    );
+    expect(
+      typeof (await staff.opsAddCaseNote(row.id, "Nota del contrato: no la ve el cliente.")),
+    ).toBe("number");
     expect((await staff.opsAssignCase(row.id)).assigned_to_me).toBe(true);
     const closed = await staff.opsAnswerCase(
       row.id,
@@ -189,7 +188,9 @@ describe.skipIf(!db.enabled)("support cases contract (against a seeded database)
     }
     // A visitor holds no grant on any of them.
     await expect(db.as().opsCases()).rejects.toMatchObject({ code: "not_authenticated" });
-    await expect(db.as().opsCustomer(shopperId)).rejects.toMatchObject({ code: "not_authenticated" });
+    await expect(db.as().opsCustomer(shopperId)).rejects.toMatchObject({
+      code: "not_authenticated",
+    });
     await expect(db.as().myCases()).rejects.toMatchObject({ code: "not_authenticated" });
   });
 });
