@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { DRILL_MESSAGE } from "./drill-message";
 import {
   checkoutEvent,
   databaseError,
@@ -77,6 +78,22 @@ describe("redactText: each rule", () => {
     expect(redactText("PIN 4821")).toBe("PIN [code]");
     // A number far from the word, or a year, stays.
     expect(redactText("pedido 2026")).toBe("pedido 2026");
+  });
+
+  it("does not split a phone or an identity number next to the word for the code", () => {
+    // Both seen on a real run before the rules were put in this order.
+    expect(redactText("cédula 1-0234-0567, código de entrega 4821")).toBe(
+      "cédula [number], código de entrega [code]",
+    );
+    expect(redactText("tel 8888-1234 código de entrega 4821")).toBe(
+      "tel [phone] código de entrega [code]",
+    );
+  });
+
+  it("leaves nothing of the drill's made-up data (the error-reports journey's error)", () => {
+    expect(redactText(DRILL_MESSAGE)).toBe(
+      "Prueba de errores: pedido de [email], teléfono [phone], cédula [number], código de entrega [code], token [token]",
+    );
   });
 
   it("removes tokens, keys and secrets given by name", () => {

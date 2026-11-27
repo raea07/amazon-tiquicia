@@ -13,8 +13,9 @@
  * arguments are never given to the SDK. Everything is then filtered again by
  * `scrubEvent` before it is sent.
  */
+import { sdkOptions } from "./options";
 import { pathOnly } from "./scrub";
-import { type BuildValues, sdkOptions, trackerSettings } from "./settings";
+import { type BuildValues, trackerSettings } from "./settings";
 import { buildValues } from "./values";
 
 type Sdk = typeof import("@sentry/nextjs");

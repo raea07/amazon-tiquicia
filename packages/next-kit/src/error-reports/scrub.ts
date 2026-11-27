@@ -125,16 +125,6 @@ const RULES: Array<[RegExp, string]> = [
   // IP addresses.
   [/(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])/g, "[ip]"],
   [/(?<![\w:])(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}(?![\w:])/gi, "[ip]"],
-  // A delivery code: a number of 4 to 6 digits next to the word for it, on
-  // either side. (The code is 4 digits today; 6 covers a longer one.)
-  [
-    /\b(c(?:ó|o)digo(?:\s+de\s+entrega)?|pin|delivery[\s_-]*code|code)\b([^\d\n]{0,25}?)(?<!\d)\d{4,6}(?!\d)/giu,
-    "$1$2[code]",
-  ],
-  [
-    /(?<!\d)\d{4,6}(?!\d)(?=[^\d\n]{0,25}?\b(?:c(?:ó|o)digo|pin|delivery[\s_-]*code|code)\b)/giu,
-    "[code]",
-  ],
   // Costa Rican phone numbers: 8 digits starting 2, 4, 5, 6, 7 or 8, with or
   // without +506 and a dash or space in the middle. With the country code
   // first, so the long-number rule below does not take it.
@@ -145,6 +135,17 @@ const RULES: Array<[RegExp, string]> = [
   [/\bCR\d{2}(?:[\s-]?\d){18}\b/gi, "[number]"],
   [/(?<![\d.])\d(?:[\s.-]?\d){8,}(?![\d.])/g, "[number]"],
   [/(?<![\d.])[245678]\d{3}[\s.-]?\d{4}(?![\d.])/g, "[phone]"],
+  // A delivery code: a number of 4 to 6 digits next to the word for it, on
+  // either side. (The code is 4 digits today; 6 covers a longer one.) After
+  // the phone and identity rules, so their digits are not taken for a code.
+  [
+    /\b(c(?:ó|o)digo(?:\s+de\s+entrega)?|pin|delivery[\s_-]*code|code)\b([^\d\n]{0,25}?)(?<!\d)\d{4,6}(?!\d)/giu,
+    "$1$2[code]",
+  ],
+  [
+    /(?<!\d)\d{4,6}(?!\d)(?=[^\d\n]{0,25}?\b(?:c(?:ó|o)digo|pin|delivery[\s_-]*code|code)\b)/giu,
+    "[code]",
+  ],
 ];
 
 /**

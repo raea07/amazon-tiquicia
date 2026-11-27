@@ -12,10 +12,15 @@
  * Errors that happen before it arrives are kept in memory and sent once it
  * has started.
  */
-import { type BuildValues, sdkOptions, type TrackerSettings, trackerSettings } from "./settings";
+import { type BuildValues, type TrackerSettings, trackerSettings } from "./settings";
 import { buildValues } from "./values";
 
-type Sdk = typeof import("@sentry/nextjs");
+/** What is fetched once the page is ready: the SDK and the options it is started with. */
+export type Loaded = Pick<typeof import("./browser-sdk"), "init" | "captureException" | "sdkOptions">;
+type Sdk = Pick<Loaded, "init" | "captureException">;
+
+/** One download, after the page; not part of its first load. */
+const loadSdk = (): Promise<Loaded> => import("./browser-sdk");
 
 let settings: TrackerSettings | null = null;
 let sdk: Sdk | null = null;
@@ -31,9 +36,9 @@ const onError = (event: ErrorEvent) => keep(event.error ?? new Error(event.messa
 const onRejection = (event: PromiseRejectionEvent) => keep(event.reason);
 
 /** Loads and starts the SDK, then hands it the errors kept so far. */
-async function load(current: TrackerSettings, importSdk: () => Promise<Sdk>) {
+async function load(current: TrackerSettings, importSdk: () => Promise<Loaded>) {
   const loaded = await importSdk();
-  loaded.init(sdkOptions(current));
+  loaded.init(loaded.sdkOptions(current));
   sdk = loaded;
   window.removeEventListener("error", onError);
   window.removeEventListener("unhandledrejection", onRejection);
@@ -46,7 +51,7 @@ async function load(current: TrackerSettings, importSdk: () => Promise<Sdk>) {
  */
 export function startBrowserErrorReports(
   values: BuildValues = buildValues(),
-  importSdk: () => Promise<Sdk> = () => import("@sentry/nextjs"),
+  importSdk: () => Promise<Loaded> = loadSdk,
 ): boolean {
   if (typeof window === "undefined") return false;
   const current = trackerSettings(values);

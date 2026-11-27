@@ -9,6 +9,7 @@ import https from "node:https";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { securityHeaders } from "../../config.mjs";
 import { reportError, resetBrowserErrorReports, startBrowserErrorReports } from "./client";
+import { sdkOptions } from "./options";
 import { onRequestError, register, resetServerErrorReports } from "./server";
 import { trackerSettings } from "./settings";
 import { type StandIn, startStandIn } from "./standin";
@@ -139,7 +140,7 @@ describe("configured, the browser waits for the page before loading the SDK", ()
     };
     vi.stubGlobal("window", window);
     vi.stubGlobal("document", { readyState: "loading" });
-    const sdk = { init: vi.fn(), captureException: vi.fn() };
+    const sdk = { init: vi.fn(), captureException: vi.fn(), sdkOptions };
     const importSdk = vi.fn(async () => sdk as never);
 
     const dsn = `http://publickey@127.0.0.1:${standIn.port}/42`;
