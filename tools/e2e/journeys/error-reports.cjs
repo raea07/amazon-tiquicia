@@ -237,7 +237,9 @@ async function supportDesk(browser, order) {
   // happens while the text is in the form; then it is sent.
   const shopper = await context();
   await signIn(shopper.page, web);
-  await shopper.page.goto(`${web.base}/reclamo?pedido=${order.number}`, { waitUntil: "networkidle" });
+  await shopper.page.goto(`${web.base}/reclamo?pedido=${order.number}`, {
+    waitUntil: "networkidle",
+  });
   await shopper.page.selectOption('select[name="category"]', "delivery");
   await shopper.page.fill(
     'textarea[name="description"]',
@@ -247,7 +249,8 @@ async function supportDesk(browser, order) {
   await shopper.page.waitForTimeout(ON ? 2500 : 500);
   await shopper.page.click('main form button[type="submit"]');
   await shopper.page.locator('[data-testid="complaint-filed"]').waitFor({ timeout: 30_000 });
-  const caseId = sql(`select k.id from private.cases k join public.complaints c on c.id = k.complaint_id
+  const caseId =
+    sql(`select k.id from private.cases k join public.complaints c on c.id = k.complaint_id
     where c.description like '${secret.complaint}%' order by k.created_at desc limit 1`);
   const userId = sql(`select user_id from private.cases where id = '${caseId}'`);
   await shopper.c.close();
@@ -260,7 +263,10 @@ async function supportDesk(browser, order) {
   await staff.page.fill('textarea[name="note"]', `${secret.note}, llamar en la tarde.`);
   await staff.page.click('button:has-text("Guardar la nota")');
   await staff.page.waitForSelector("text=Nota guardada. El cliente no la ve.");
-  await staff.page.fill('textarea[name="answer"]', `${secret.answer}: le enviamos el pedido mañana.`);
+  await staff.page.fill(
+    'textarea[name="answer"]',
+    `${secret.answer}: le enviamos el pedido mañana.`,
+  );
   await staff.page.click('button:has-text("Responder"):not(:has-text("cerrar"))');
   await staff.page.waitForSelector('[data-testid="case-entry-answer"]');
   await staff.page.goto(`${ops.base}/casos/${caseId}?nota=${encodeURIComponent(secret.note)}`, {
@@ -300,7 +306,9 @@ async function supportDesk(browser, order) {
     /Prueba en (reclamo|caso|cliente)|ops_(case|customer)/.test(JSON.stringify(e.payload)),
   );
   expect(
-    shop.events.some((e) => /Prueba en reclamo/.test(e.payload.exception?.values?.[0]?.value || "")),
+    shop.events.some((e) =>
+      /Prueba en reclamo/.test(e.payload.exception?.values?.[0]?.value || ""),
+    ),
     "support desk: the complaint form's error was reported",
   );
   expect(
@@ -311,7 +319,9 @@ async function supportDesk(browser, order) {
     "support desk:",
     fromDesk.length,
     "reports:",
-    fromDesk.map((e) => `${e.payload.platform}: ${e.payload.exception?.values?.[0]?.value}`).join(" | "),
+    fromDesk
+      .map((e) => `${e.payload.platform}: ${e.payload.exception?.values?.[0]?.value}`)
+      .join(" | "),
   );
   const body = sentText([...shop.mine, ...consoleReports.mine].map((a) => a.body));
   for (const word of [...FORBIDDEN, ...words]) {

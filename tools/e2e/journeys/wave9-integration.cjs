@@ -95,11 +95,13 @@ const PAGES = ["/casos", "/casos/respuestas", "/casos/informe", "/clientes", "/s
 
   // A customer with a case: the shopper's order with a live delivery code,
   // and a complaint in which they typed that code.
-  const order = sql(`select o.order_number from public.orders o join auth.users u on u.id = o.user_id
+  const order =
+    sql(`select o.order_number from public.orders o join auth.users u on u.id = o.user_id
     join private.delivery_codes c on c.order_id = o.id
     where u.email = '${SHOPPER}' and o.status not in ('delivered', 'completed', 'cancelled', 'refunded')
     order by o.placed_at desc limit 1`);
-  const code = sql(`select c.code from private.delivery_codes c join public.orders o on o.id = c.order_id
+  const code =
+    sql(`select c.code from private.delivery_codes c join public.orders o on o.id = c.order_id
     where o.order_number = '${order}'`);
   const complaint = sql(`insert into public.complaints (user_id, order_id, category, description)
     select o.user_id, o.id, 'delivery', 'El repartidor me pidió el código y le dije ${code} por teléfono.'
@@ -119,17 +121,19 @@ const PAGES = ["/casos", "/casos/respuestas", "/casos/informe", "/clientes", "/s
   for (const role of Object.keys(TABLE)) {
     const page = role === "admin" ? admin : staff;
     if (role !== "admin") {
-      sql(`update public.staff_members set role = '${role}' where user_id = (select id from auth.users where email = '${STAFF}')`);
+      sql(
+        `update public.staff_members set role = '${role}' where user_id = (select id from auth.users where email = '${STAFF}')`,
+      );
     }
     const [casos, salud, open] = TABLE[role];
     await page.goto(`${OPS}/cuenta`, { waitUntil: "networkidle" });
     const menu = page.locator("details");
     check(
-      ((await menu.locator('a[href="/casos"]').count()) > 0) === casos,
+      (await menu.locator('a[href="/casos"]').count()) > 0 === casos,
       `${role}: the menu ${casos ? "offers" : "does not offer"} Casos`,
     );
     check(
-      ((await menu.locator('a[href="/salud"]').count()) > 0) === salud,
+      (await menu.locator('a[href="/salud"]').count()) > 0 === salud,
       `${role}: the menu ${salud ? "offers" : "does not offer"} Salud del sistema`,
     );
     for (const path of PAGES) {
@@ -156,10 +160,7 @@ const PAGES = ["/casos", "/casos/respuestas", "/casos/informe", "/clientes", "/s
   const said = await text(line);
   const onHealth = Number(/(\d+) casos? (está|están) atrasados?/.exec(said)?.[1] ?? "0");
   check(onHealth >= 1, `Salud del sistema: "${said.slice(0, 120)}"`);
-  check(
-    (await line.locator('a[href="/casos"]').count()) === 1,
-    "the cases line links to Casos",
-  );
+  check((await line.locator('a[href="/casos"]').count()) === 1, "the cases line links to Casos");
   await fits(admin, "Salud del sistema");
   await admin.screenshot({ path: SHOTS + "/w9-health-cases-late.png", fullPage: true });
   await admin.goto(`${OPS}/`, { waitUntil: "networkidle" });

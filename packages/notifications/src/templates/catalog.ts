@@ -28,6 +28,7 @@ export const RETURN_ANSWER_WORDS: Record<string, string> = {
 };
 const returnAnswerWords = (kind: string) =>
   RETURN_ANSWER_WORDS[kind] ?? RETURN_ANSWER_WORDS.withdrawal;
+
 import { STAFF_CATALOGUE_TEMPLATES } from "./staff-catalogue.ts";
 import { SUPPORT_TEMPLATES } from "./support-cases.ts";
 

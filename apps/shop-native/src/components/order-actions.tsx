@@ -263,10 +263,7 @@ export function ReturnForm({
               reason: reason.trim() || null,
             });
             setResult({
-              ok:
-                kind === "withdrawal"
-                  ? WITHDRAWAL_APPROVED
-                  : returnRequestedText(kind),
+              ok: kind === "withdrawal" ? WITHDRAWAL_APPROVED : returnRequestedText(kind),
             });
           } catch (error) {
             setResult({ error: messageOf(error) });

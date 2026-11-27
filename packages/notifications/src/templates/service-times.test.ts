@@ -12,6 +12,11 @@ const vars = {
   return_title: "Libreta",
   complaint_ref: "EFGH5678",
 };
+const template = (name: string) => {
+  const found = TEMPLATES[name];
+  if (!found) throw new Error(`no template ${name}`);
+  return found;
+};
 const links = { shop: "https://yuntera.example", seller: "https://vendedores.yuntera.example" };
 
 describe("answer times in messages", () => {
@@ -23,20 +28,20 @@ describe("answer times in messages", () => {
   });
 
   it("are what the return and complaint e-mails say", () => {
-    const damaged = TEMPLATES.return_received!({
+    const damaged = template("return_received")({
       vars: { ...vars, return_kind: "damaged" },
       name: "Ana",
       links,
     } as never);
     expect(damaged.paragraphs.join(" ")).toContain("en un máximo de 2 horas hábiles");
     expect(damaged.preheader).toContain("2 horas hábiles");
-    const withdrawal = TEMPLATES.return_received!({
+    const withdrawal = template("return_received")({
       vars: { ...vars, return_kind: "withdrawal" },
       name: "Ana",
       links,
     } as never);
     expect(withdrawal.paragraphs.join(" ")).toContain("en un máximo de 1 día hábil");
-    const complaint = TEMPLATES.complaint_received!({ vars, name: "Ana", links } as never);
+    const complaint = template("complaint_received")({ vars, name: "Ana", links } as never);
     expect(complaint.paragraphs.join(" ")).toContain("en un máximo de 5 días hábiles");
     expect(JSON.stringify([damaged, withdrawal, complaint])).not.toMatch(/3 días hábiles/);
   });

@@ -179,7 +179,8 @@ async function as(email) {
     "the parcel says it did not leave the warehouse, not 'Devuelto'",
   );
   check(
-    history.includes("Paquete: no salió de nuestra bodega") && !history.includes("Paquete: devuelto"),
+    history.includes("Paquete: no salió de nuestra bodega") &&
+      !history.includes("Paquete: devuelto"),
     "and so does its history line",
   );
   check((await overflow(shopper)) <= 0, "the order page fits 390 px");

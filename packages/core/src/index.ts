@@ -21,7 +21,7 @@ export * from "./route-stops";
 export * from "./routing";
 export * from "./scan-codes";
 export * from "./search";
-export * from "./service-times";
 export * from "./sellers";
 export * from "./sentence";
+export * from "./service-times";
 export * from "./shop-logos";
