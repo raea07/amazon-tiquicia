@@ -19,6 +19,7 @@
     "./auth-rules": "./src/auth-rules.ts",
     "./cache-tags": "./src/cache-tags.ts",
     "./guard": "./src/guard.ts",
+    "./version": "./src/version.ts",
     "./product-image": "./src/product-image.tsx",
     "./shop-logo": "./src/shop-logo.tsx",
     "./fiscal-document": "./src/fiscal-document.tsx",

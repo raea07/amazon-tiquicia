@@ -268,6 +268,11 @@ case "$COMMAND" in
         echo "SHOP_REFRESH_KEY=$REFRESH_KEY"
         # Signs the sign-in limit's hashes and the console's activity cookie. A local value.
         echo "AUTH_GUARD_KEY=$GUARD_KEY"
+        # Which commit the build is from, and where the console asks the seller centre and
+        # the field app for theirs (the console's Versiones panel; packages/next-kit/src/version.ts).
+        echo "YUNTERA_BUILD_COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
+        echo "YUNTERA_SELLER_URL=http://127.0.0.1:$(app_port seller)"
+        echo "YUNTERA_FIELD_URL=http://127.0.0.1:$(app_port field)"
         # Nothing stands in front of the apps here, so the journeys may say who the
         # visitor is in X-Forwarded-For; a deployment trusts only its own proxy.
         echo "AUTH_CLIENT_IP_HEADER=x-forwarded-for"
