@@ -215,13 +215,21 @@ module.exports = {
 
 // ── Notification settings (next-kit NotificationSettingsForm: shop and seller centre) ──
 
-/** A channel's box on the notification settings (email, whatsapp, sms, commercial). */
-const channelBox = (page, channel) => field(main(page), channel);
+// A channel's box is found as a checkbox with the channel's name: the
+// sign-in form that leads to this page has a text field also named "email",
+// and while the framework swaps the pages both can be in main at once.
+
+/** Every box of a channel on the notification settings (email, whatsapp, sms, commercial). */
+const channelBoxes = (page, channel) =>
+  main(page).locator(`input[type="checkbox"][name="${channel}"]`);
+
+/** A channel's box on the notification settings. */
+const channelBox = (page, channel) => channelBoxes(page, channel).first();
 
 /** What a channel's box says: whether it is offered, ticked and can be changed. */
 async function channelState(page, channel) {
   const box = channelBox(page, channel);
-  const offered = await main(page).locator(`[name="${channel}"]`).count();
+  const offered = await channelBoxes(page, channel).count();
   return {
     offered,
     checked: offered ? await box.isChecked() : false,
@@ -258,9 +266,16 @@ async function savePreferencesUntil(page, said) {
   await settledText(main(page), said, { what: "the notification settings" });
 }
 
-/** Waits for the notification settings page. */
-const waitForNotificationSettings = (page) =>
-  page.getByRole("heading", { level: 1, name: "Notificaciones" }).first().waitFor();
+/**
+ * Waits for the notification settings page: its heading, its e-mail box (on
+ * every settings page) and the sign-in form that led here gone from view, so a
+ * count of a channel's boxes is the page's own.
+ */
+async function waitForNotificationSettings(page) {
+  await page.getByRole("heading", { level: 1, name: "Notificaciones" }).first().waitFor();
+  await channelBox(page, "email").waitFor();
+  await main(page).locator('input[name="password"]').first().waitFor({ state: "hidden" });
+}
 
 const notificationSettings = {
   channelState,
