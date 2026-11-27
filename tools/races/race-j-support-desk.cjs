@@ -21,6 +21,11 @@
  *      and the contact ends closed.
  *   J6 a return decision with a note (ops_decide_return) against an answer on
  *      that return's case.
+ *   J7 the shopper deleting their account against staff recording a new
+ *      contact for them: the contact is refused after the deletion, or made
+ *      before it and then erased and closed with the account; never left
+ *      open with its summary. Forced: the shopper's old complaint is held, so
+ *      the deletion holds the account row while the contact is recorded.
  *
  * Every scenario: no deadlock, no lost or doubled entry, and the source row's
  * status and the case's status agree afterwards.
@@ -362,6 +367,62 @@ async function verifyJ6(h, ctx, results) {
   return bad;
 }
 
+// ── J7 ──────────────────────────────────────────────────────────────────────
+async function setupJ7(h) {
+  serial += 1;
+  const email = `carrera-j7-${Date.now().toString(36)}-${serial}@yuntera.example`;
+  const user = (
+    await h.q(
+      `insert into auth.users (id, email, raw_user_meta_data)
+       values (gen_random_uuid(), $1, '{"full_name": "Prueba Carrera Siete"}') returning id`,
+      [email],
+    )
+  ).rows[0].id;
+  h.ids.set(email, user);
+  const complaint = (
+    await h.q(
+      `insert into public.complaints (user_id, category, description, status, resolution, resolved_at)
+       values ($1, 'other', 'Queja vieja de la carrera siete.', 'resolved', 'Ya le respondimos.', now())
+       returning id`,
+      [user],
+    )
+  ).rows[0].id;
+  return { email, user, complaint };
+}
+const j7 = (_h, ctx) => [
+  { name: "delete", as: ctx.email, sql: "select public.delete_my_account()", args: [] },
+  {
+    name: "record",
+    as: STAFF,
+    sql: "select public.ops_record_contact('phone', 'other', $1, null, $2)",
+    args: ["Sofía llamó desde el 8765-4321 por su pedido.", ctx.user],
+  },
+];
+async function verifyJ7(h, ctx, results) {
+  const bad = refusals(results, { record: ["case_account_deleted", "customer_not_found"] });
+  const del = results.find((r) => r.name === "delete");
+  if (del.outcome && !lockLost(del)) bad.push(`deletion refused: ${del.outcome}`);
+  const s = (
+    await h.q(
+      `select count(*)::int as contacts,
+              count(*) filter (where k.status = 'open')::int as open,
+              count(*) filter (where k.summary is distinct from private.erased_case_text())::int as kept
+         from private.cases k where k.user_id = $1 and k.kind = 'contact'`,
+      [ctx.user],
+    )
+  ).rows[0];
+  const recorded = !results.find((r) => r.name === "record").outcome;
+  if (s.contacts !== (recorded ? 1 : 0))
+    bad.push(`${s.contacts} contacts, record ${recorded ? "ok" : "refused"}`);
+  if (!del.outcome && (s.open !== 0 || s.kept !== 0))
+    bad.push(`after the deletion: ${s.open} open, ${s.kept} with their summary`);
+  return bad;
+}
+const holdOldComplaint = (_h, ctx) => ({
+  hold: { sql: "select 1 from public.complaints where id = $1 for share", args: [ctx.complaint] },
+  holdMs: 150,
+});
+
 const scenarios = [
   ...pair("J1 ops_answer_case vs ops_resolve_complaint", (h) => complaint(h), j1, verifyJ1),
   {
@@ -377,9 +438,41 @@ const scenarios = [
   ...pair("J4 ops_assign_case vs ops_answer_case", (h) => complaint(h), j4, verifyJ4),
   ...pair("J5 delete_my_account vs ops_answer_case", setupJ5, j5, verifyJ5),
   ...pair("J6 ops_decide_return with a note vs ops_answer_case", setupJ6, j6, verifyJ6),
+  {
+    name: "J7 delete_my_account vs ops_record_contact natural",
+    setup: setupJ7,
+    actors: natural(j7),
+    verify: verifyJ7,
+  },
+  {
+    name: "J7 delete_my_account vs ops_record_contact forced, deletion under way",
+    setup: setupJ7,
+    actors: forced(j7, 1),
+    options: holdOldComplaint,
+    verify: verifyJ7,
+  },
+  {
+    name: "J7 delete_my_account vs ops_record_contact forced, contact first",
+    setup: setupJ7,
+    actors: forced(j7, 0),
+    options: holdOldComplaint,
+    verify: verifyJ7,
+  },
 ];
 
-module.exports = { scenarios, setupJ5, j5, verifyJ5, complaint, j1, verifyJ1 };
+module.exports = {
+  scenarios,
+  setupJ5,
+  j5,
+  verifyJ5,
+  setupJ7,
+  j7,
+  verifyJ7,
+  holdOldComplaint,
+  complaint,
+  j1,
+  verifyJ1,
+};
 
 if (require.main === module) {
   main("J", scenarios).catch((e) => {

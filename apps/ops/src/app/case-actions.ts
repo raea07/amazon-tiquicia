@@ -8,7 +8,7 @@
  * decides who may do what. A case is addressed by its own id only.
  */
 
-import { ApiError, CONTACT_TOPICS } from "@yuntera/db";
+import { CONTACT_TOPICS } from "@yuntera/db";
 import {
   type ActionState,
   attempt,
@@ -20,6 +20,7 @@ import {
 } from "@yuntera/next-kit/server";
 import { refresh } from "next/cache";
 import { z } from "zod";
+import { refusedForCode } from "@/lib/refused-for-code";
 import { currentStaff } from "@/lib/staff";
 
 type Api = Awaited<ReturnType<typeof sessionApi>>;
@@ -38,11 +39,6 @@ async function caseAction(
 
 const caseId = z.uuid();
 
-/** The database answers null when a text held the delivery code (and keeps the refusal on the trail). */
-function refusedForCode<T>(result: T | null): T {
-  if (result === null) throw new ApiError("note_contains_code");
-  return result;
-}
 const casePath = (id: string) => `/casos/${id}`;
 
 export async function addCaseNote(_previous: ActionState, formData: FormData) {

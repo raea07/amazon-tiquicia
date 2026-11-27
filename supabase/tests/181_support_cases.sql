@@ -439,8 +439,9 @@ begin
   perform pg_temp.act('casos181a@yuntera.example');
   v_complaint := public.file_complaint('payment', 'Me cobraron dos veces el mismo pedido.', null);
   perform pg_temp.act('central@yuntera.example');
-  perform pg_temp.refused(format('select public.ops_resolve_complaint(%L, %L, true)', v_complaint,
-    'El código 2468 no sirve para esto.'), 'note_contains_code');
+  -- Refused with the refusal kept (section 10 of 084700): null, nothing else.
+  assert public.ops_resolve_complaint(v_complaint, 'El código 2468 no sirve para esto.', true) is null,
+    'an answer with the code is refused';
   -- Many numbers are refused here too, whatever the code.
   perform pg_temp.refused(format('select public.ops_resolve_complaint(%L, %L, true)', v_complaint,
     (select string_agg(lpad(n::text, 4, '0'), ' ') from generate_series(1000, 1005) n)), 'too_many_numbers');

@@ -19,13 +19,18 @@
 --   6. The customer view and the audited reveal of a customer's contact.
 --   7. The shopper's own cases, with the answers, and a complaint's receipt.
 --   8. Account deletion: the text of the person's cases goes with the account.
+--   9. What Atención reads of a customer's own words (ops_care_queues,
+--      redefined): their own delivery code masked, and only what the role
+--      reads in Casos.
+--  10. Atención's doors keep a refusal (ops_resolve_complaint,
+--      ops_decide_return, ops_receive_return, ops_complete_return, redefined).
 --
 -- Who sees which case (section 4.1): support and admin all of them; ops the
 -- cases tied to an order; finance the cases about payments and refunds;
 -- catalog the cases about listings (content reports). Every function checks
--- the role again. Sellers never reach a case. No function changes an
--- existing one: the triggers follow the source rows whatever function
--- changes them.
+-- the role again. Sellers never reach a case. The triggers follow the
+-- source rows whatever function changes them; the only existing functions
+-- this migration redefines are the five of sections 9 and 10.
 
 -- ═══ 1. Response targets ═══════════════════════════════════════════════════
 
@@ -518,15 +523,31 @@ begin
   end if;
   v_plain := private.case_text_plain(p_text);
   v := v_plain;
-  -- Every way the guard reads a code (its digits alone, or split by up to two
-  -- spaces, dots, commas or dashes), and also inside a phone or an amount.
+  -- Its digits alone, or split by up to three characters that are neither a
+  -- letter nor a digit (spaces, dots, dashes, slashes, underscores, brackets:
+  -- more than the guard reads, as masking too much costs staff nothing), and
+  -- also inside a phone or an amount.
   foreach v_code in array private.case_live_codes(p_order_id, p_user_id) loop
     v := regexp_replace(v,
-      '(?<![0-9])' || substr(v_code, 1, 1) || '[ .,-]{0,2}' || substr(v_code, 2, 1) || '[ .,-]{0,2}'
-        || substr(v_code, 3, 1) || '[ .,-]{0,2}' || substr(v_code, 4, 1) || '(?![0-9])',
+      '(?<![0-9])' || substr(v_code, 1, 1) || '[^[:alnum:]]{0,3}' || substr(v_code, 2, 1) || '[^[:alnum:]]{0,3}'
+        || substr(v_code, 3, 1) || '[^[:alnum:]]{0,3}' || substr(v_code, 4, 1) || '(?![0-9])',
       '••••', 'g');
   end loop;
   return case when v = v_plain then p_text else v end;
+end;
+$$;
+
+-- Whether a text holds one of the delivery codes a text about the case may
+-- not hold (the match alone: it writes nothing and raises nothing).
+create or replace function private.case_text_has_code(p_order_id uuid, p_user_id uuid, p_text text)
+returns boolean
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  v_numbers text[] := private.case_text_numbers(p_text);
+begin
+  return cardinality(v_numbers) > 0 and v_numbers && private.case_live_codes(p_order_id, p_user_id);
 end;
 $$;
 
@@ -571,7 +592,7 @@ begin
     insert into private.case_number_checks (actor_id, numbers)
     values ((select auth.uid()), cardinality(v_numbers));
   end if;
-  if cardinality(v_numbers) = 0 or not (v_numbers && private.case_live_codes(p_order_id, p_user_id)) then
+  if not private.case_text_has_code(p_order_id, p_user_id, p_text) then
     return true;
   end if;
   insert into private.audit_log (actor_id, action, table_name, row_key, old_row, new_row)
@@ -620,7 +641,11 @@ begin
   end if;
   -- Answered from /atencion (ops_resolve_complaint): the answer goes on the timeline.
   if new.resolution is not null and new.resolution is distinct from old.resolution then
-    perform private.guard_case_text(c, new.resolution, 'ops_resolve_complaint');
+    -- ops_resolve_complaint checks its text itself, after everything else, so
+    -- that a refusal is kept (section 10); any other writer is checked here.
+    if current_setting('yuntera.case_text_checked', true) is distinct from new.id::text then
+      perform private.guard_case_text(c, new.resolution, 'ops_resolve_complaint');
+    end if;
     insert into private.case_entries (case_id, kind, author_id, body)
     values (c.id, 'answer', (select auth.uid()), new.resolution);
     update private.cases set first_response_at = coalesce(first_response_at, now()) where id = c.id;
@@ -662,7 +687,10 @@ begin
   end if;
   -- The note staff write when they decide is the customer's to read.
   if new.resolution_note is not null and new.resolution_note is distinct from old.resolution_note then
-    perform private.guard_case_text(c, new.resolution_note, 'return_decision');
+    -- The doors of Atención check their note themselves (section 10).
+    if current_setting('yuntera.case_text_checked', true) is distinct from new.id::text then
+      perform private.guard_case_text(c, new.resolution_note, 'return_decision');
+    end if;
     insert into private.case_entries (case_id, kind, author_id, body)
     values (c.id, 'answer', (select auth.uid()), new.resolution_note);
   end if;
@@ -1263,12 +1291,17 @@ begin
     if v_order is null or (p_user_id is not null and p_user_id <> v_user) then
       perform private.fail('order_not_found');
     end if;
+    -- The customer's account row, as ops_answer_case takes it: a deletion
+    -- under way (it holds that row) is waited for, so its outcome is read
+    -- below and no contact is left behind it unerased and open.
+    perform 1 from auth.users u where u.id = v_user for key share;
     if exists (select 1 from auth.users u where u.id = v_user and u.deleted_at is not null) then
       perform private.fail('case_account_deleted');
     end if;
   else
     -- A customer: someone who ordered, complained or asked for a return, and
     -- not a staff member. A seller or a driver account is not one.
+    perform 1 from auth.users u where u.id = p_user_id for key share;
     select u.id into v_user from auth.users u
     where u.id = p_user_id and u.deleted_at is null and private.is_customer(u.id)
       and not exists (select 1 from public.staff_members s where s.user_id = u.id);
@@ -1715,9 +1748,28 @@ create trigger auth_users_erase_case_text after update of deleted_at on auth.use
 -- return's reason and a report's details as the customer typed them, so a
 -- customer's own live delivery code typed there reached staff. A faithful
 -- copy of 083000's definition except those three values, which pass through
--- private.mask_shopper_codes (section 3), as public.ops_case's do. Same
--- arguments and columns: owner, security definer, search path and grants
--- stay as they were, and the console of 12ec48c reads the same shape.
+-- private.mask_shopper_codes (section 3), as public.ops_case's do; and
+-- except what it lists: each role reads only the complaints, returns and
+-- reports whose case it may open in Casos (section 4.1, through
+-- private.care_visible), the totals count the same rows, and the customer is
+-- named by first name, as in the customer view. Same arguments and columns:
+-- owner, security definer, search path and grants stay as they were, and
+-- the console of 12ec48c reads the same shape.
+
+-- Whether the caller's role reads the case of a complaint, return or report
+-- (section 4.1), so Atención lists what Casos lets that role open.
+create or replace function private.care_visible(p_kind text, p_id uuid, p_role public.staff_role)
+returns boolean
+language sql stable security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from private.cases k
+    where case p_kind when 'complaint' then k.complaint_id = p_id
+                      when 'return' then k.return_id = p_id
+                      else k.report_id = p_id end
+      and private.case_visible(p_role, k.area, k.order_id));
+$$;
 
 create or replace function public.ops_care_queues() returns jsonb
 language plpgsql stable security definer
@@ -1725,6 +1777,7 @@ set search_path = ''
 as $$
 declare
   c_page constant integer := 100;
+  v_role public.staff_role := private.case_reader_role();
 begin
   if not private.has_staff_role('support', 'ops', 'finance', 'catalog') then
     perform private.fail('forbidden');
@@ -1735,12 +1788,11 @@ begin
       from (
         select c.created_at, c.id, jsonb_build_object(
           'id', c.id, 'category', c.category, 'description', private.mask_shopper_codes(c.description, c.order_id, c.user_id), 'status', c.status,
-          'created_at', c.created_at, 'order_number', o.order_number, 'customer', pr.full_name
+          'created_at', c.created_at, 'order_number', o.order_number, 'customer', private.first_name_of(c.user_id)
         ) as item
         from public.complaints c
         left join public.orders o on o.id = c.order_id
-        left join public.profiles pr on pr.id = c.user_id
-        where c.status <> 'resolved'
+        where c.status <> 'resolved' and private.care_visible('complaint', c.id, v_role)
         order by c.created_at, c.id
         limit c_page
       ) x), '[]'::jsonb),
@@ -1751,14 +1803,13 @@ begin
           'id', r.id, 'kind', r.kind, 'quantity', r.quantity, 'reason', private.mask_shopper_codes(r.reason, o.id, r.user_id),
           'status', r.status, 'refund_due_on', r.refund_due_on, 'created_at', r.created_at,
           'title', i.title, 'order_number', o.order_number, 'seller_name', s.trade_name,
-          'customer', pr.full_name, 'amount_minor', i.unit_price_minor * r.quantity
+          'customer', private.first_name_of(r.user_id), 'amount_minor', i.unit_price_minor * r.quantity
         ) as item
         from public.return_requests r
         join public.order_items i on i.id = r.order_item_id
         join public.orders o on o.id = i.order_id
         left join public.sellers s on s.id = i.seller_id
-        left join public.profiles pr on pr.id = r.user_id
-        where r.status in ('requested', 'approved', 'received')
+        where r.status in ('requested', 'approved', 'received') and private.care_visible('return', r.id, v_role)
         order by r.refund_due_on nulls last, r.created_at, r.id
         limit c_page
       ) x), '[]'::jsonb),
@@ -1775,19 +1826,345 @@ begin
             when 'review' then (select left(rv.body, 120) from public.reviews rv where rv.id = cr.target_id)
           end
         ) as item
-        from public.content_reports cr where cr.status in ('open', 'in_review')
+        from public.content_reports cr
+        where cr.status in ('open', 'in_review') and private.care_visible('report', cr.id, v_role)
         order by cr.created_at, cr.id
         limit c_page
       ) x), '[]'::jsonb),
     'totals', jsonb_build_object(
-      'complaints', (select count(*) from public.complaints c where c.status <> 'resolved'),
+      'complaints', (select count(*) from public.complaints c
+                     where c.status <> 'resolved' and private.care_visible('complaint', c.id, v_role)),
       'returns', (select count(*) from public.return_requests r
-                  where r.status in ('requested', 'approved', 'received')),
+                  where r.status in ('requested', 'approved', 'received')
+                    and private.care_visible('return', r.id, v_role)),
       'reports', (select count(*) from public.content_reports cr
-                  where cr.status in ('open', 'in_review')))
+                  where cr.status in ('open', 'in_review') and private.care_visible('report', cr.id, v_role)))
   );
 end;
 $$;
+
+-- ═══ 10. Atención's doors keep a refusal ═══════════════════════════════════
+-- A staff text reaches a case through Atención too: a complaint's answer
+-- (ops_resolve_complaint, 081700) and the note of a return decision, a
+-- received return or a refund (ops_decide_return, ops_receive_return,
+-- ops_complete_return, 082900). Until now the triggers of section 3 checked
+-- those texts and raised note_contains_code, and a raise rolls back the
+-- whole call: the refusal never reached the audit trail, the numbers never
+-- counted against the hourly allowance, and a call that failed for another
+-- reason after the check (a text too long for the timeline) told the writer
+-- the answer for free. Staff could test every code without a trace.
+--
+-- Each of the four is now a faithful copy of its definition in force except
+-- these lines: it refuses a text longer than the timeline holds (4000
+-- characters) before anything else (text_too_long); it does its own work
+-- inside a block, checks the text only when that work has succeeded (so no
+-- later step can fail and tell the answer), and on a code undoes its work
+-- and keeps only the refusal; it then counts the text's numbers and, on a
+-- code, writes the refusal (case_text_allowed), so the lock-out of three
+-- refusals an hour and the allowance of twenty numbers an hour hold here as
+-- in Casos. It answers null when the text was refused (nothing else
+-- changed) and otherwise what it answered before, or true where it answered
+-- nothing (so it is dropped and created again, with the same grants). The
+-- triggers skip their own check for the row the door checks.
+
+drop function public.ops_resolve_complaint(uuid, text, boolean);
+create or replace function public.ops_resolve_complaint(
+  p_complaint_id uuid,
+  p_resolution text,
+  p_close boolean default true
+) returns boolean
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  c private.cases;
+  v_text text := trim(p_resolution);
+  v_refused boolean := false;
+begin
+  if not private.has_staff_role('support', 'ops') then
+    perform private.fail('forbidden');
+  end if;
+  -- The answer is sent to the person who complained, so it cannot be empty.
+  if coalesce(char_length(trim(p_resolution)), 0) < 10 then
+    perform private.fail('reason_required');
+  end if;
+  if char_length(v_text) > 4000 then
+    perform private.fail('text_too_long');
+  end if;
+  select * into c from private.cases where complaint_id = p_complaint_id;
+
+  begin
+    perform set_config('yuntera.case_text_checked', p_complaint_id::text, true);
+  update public.complaints
+  set status = case when p_close then 'resolved' else 'in_progress' end,
+      resolution = trim(p_resolution),
+      resolved_at = case when p_close then now() end
+  where id = p_complaint_id and status <> 'resolved';
+  if not found then
+    perform private.fail('complaint_not_found');
+  end if;
+
+  perform private.emit('complaint.answered',
+    jsonb_build_object('complaint_id', p_complaint_id, 'closed', p_close));
+    perform set_config('yuntera.case_text_checked', '', true);
+    if c.id is not null and private.case_text_has_code(c.order_id, c.user_id, v_text) then
+      raise exception using errcode = 'YT409';  -- caught just below, never seen
+    end if;
+  exception when sqlstate 'YT409' then
+    v_refused := true;
+  end;
+  if c.id is not null
+     and not private.case_text_allowed(c.order_id, c.user_id, v_text, 'ops_resolve_complaint', c.id::text) then
+    v_refused := true;
+  end if;
+  return case when v_refused then null else true end;
+end;
+$$;
+
+drop function public.ops_decide_return(uuid, boolean, text);
+create or replace function public.ops_decide_return(
+  p_return_id uuid,
+  p_approve boolean,
+  p_note text default null
+) returns boolean
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_order public.orders%rowtype;
+  v_status text;
+  c private.cases;
+  v_text text := nullif(trim(p_note), '');
+  v_refused boolean := false;
+begin
+  if not private.has_staff_role('support', 'ops') then
+    perform private.fail('forbidden');
+  end if;
+  if char_length(v_text) > 4000 then
+    perform private.fail('text_too_long');
+  end if;
+  select * into c from private.cases where return_id = p_return_id;
+
+  begin
+    perform set_config('yuntera.case_text_checked', p_return_id::text, true);
+  select o.* into v_order
+  from public.return_requests r
+  join public.order_items i on i.id = r.order_item_id
+  join public.orders o on o.id = i.order_id
+  where r.id = p_return_id;
+  if not found then
+    perform private.fail('return_not_found');
+  end if;
+  perform 1 from public.orders where id = v_order.id for update;
+  select status into v_status from public.return_requests where id = p_return_id for update;
+  if not (v_status = 'requested' or (v_status = 'approved' and not p_approve)) then
+    perform private.fail('invalid_return_state', v_status);
+  end if;
+  -- A refusal has to be explained: the shopper is told why.
+  if not p_approve and coalesce(char_length(trim(p_note)), 0) < 10 then
+    perform private.fail('reason_required');
+  end if;
+  if p_approve and not private.order_returnable(v_order) then
+    perform private.fail('order_not_returnable', v_order.status::text);
+  end if;
+
+  update public.return_requests
+  set status = case when p_approve then 'approved' else 'rejected' end,
+      refund_due_on = case when p_approve then private.cr_local(now())::date + 8 end,
+      resolution_note = nullif(trim(p_note), ''),
+      decided_by = (select auth.uid()),
+      resolved_at = case when p_approve then null else now() end
+  where id = p_return_id;
+
+  perform private.emit('return.decided',
+    jsonb_build_object('return_request_id', p_return_id, 'approved', p_approve));
+    perform set_config('yuntera.case_text_checked', '', true);
+    if c.id is not null and v_text is not null and private.case_text_has_code(c.order_id, c.user_id, v_text) then
+      raise exception using errcode = 'YT409';  -- caught just below, never seen
+    end if;
+  exception when sqlstate 'YT409' then
+    v_refused := true;
+  end;
+  if c.id is not null and v_text is not null
+     and not private.case_text_allowed(c.order_id, c.user_id, v_text, 'return_decision', c.id::text) then
+    v_refused := true;
+  end if;
+  return case when v_refused then null else true end;
+end;
+$$;
+
+drop function public.ops_receive_return(uuid, boolean, text);
+create or replace function public.ops_receive_return(
+  p_return_id uuid,
+  p_resellable boolean default true,
+  p_note text default null
+) returns boolean
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_order_id uuid;
+  v_return public.return_requests%rowtype;
+  v_item public.order_items%rowtype;
+  v_warehouse uuid;
+  v_location uuid;
+  v_restock boolean := false;
+  c private.cases;
+  v_text text := nullif(trim(p_note), '');
+  v_refused boolean := false;
+begin
+  if not private.has_staff_role('support', 'ops') then
+    perform private.fail('forbidden');
+  end if;
+  if char_length(v_text) > 4000 then
+    perform private.fail('text_too_long');
+  end if;
+  select * into c from private.cases where return_id = p_return_id;
+
+  begin
+    perform set_config('yuntera.case_text_checked', p_return_id::text, true);
+  select i.order_id into v_order_id
+  from public.return_requests r join public.order_items i on i.id = r.order_item_id
+  where r.id = p_return_id;
+  if not found then
+    perform private.fail('return_not_found');
+  end if;
+  perform 1 from public.orders where id = v_order_id for update;
+  select * into v_return from public.return_requests where id = p_return_id for update;
+  if v_return.status <> 'approved' then
+    perform private.fail('invalid_return_state', v_return.status);
+  end if;
+  if not private.order_returnable((select o from public.orders o where o.id = v_order_id)) then
+    perform private.fail('order_not_returnable');
+  end if;
+  select * into v_item from public.order_items where id = v_return.order_item_id;
+
+  if coalesce(p_resellable, true) and v_item.fulfillment = 'platform' then
+    select s.origin_warehouse_id into v_warehouse
+    from public.shipments s
+    join public.shipment_items si on si.shipment_id = s.id
+    join public.warehouses w on w.id = s.origin_warehouse_id
+    where si.order_item_id = v_item.id and s.status = 'delivered' and w.kind = 'platform'
+    order by si.quantity desc, s.id
+    limit 1;
+    if v_warehouse is not null then
+      select wl.id into v_location from public.warehouse_locations wl
+      where wl.warehouse_id = v_warehouse and wl.kind = 'returns' and wl.active
+      order by wl.code limit 1;
+      perform private.apply_stock_change(
+        v_warehouse, v_item.sku_id, v_item.seller_id, v_return.quantity, 'return',
+        v_location, 'return_request', p_return_id, 'Devolución recibida');
+      v_restock := true;
+    end if;
+  end if;
+
+  update public.return_requests
+  set status = 'received', received_at = now(), received_by = (select auth.uid()),
+      restocked = v_restock,
+      resolution_note = coalesce(nullif(trim(p_note), ''), resolution_note)
+  where id = p_return_id;
+
+  insert into public.order_events (order_id, kind, note, actor_id)
+  values (v_order_id, 'note',
+          'Recibimos ' || v_return.quantity || ' × ' || v_item.title || ' de vuelta',
+          (select auth.uid()));
+  perform private.emit('return.received', jsonb_build_object(
+    'return_request_id', p_return_id, 'restocked', v_restock));
+    perform set_config('yuntera.case_text_checked', '', true);
+    if c.id is not null and v_text is not null and private.case_text_has_code(c.order_id, c.user_id, v_text) then
+      raise exception using errcode = 'YT409';  -- caught just below, never seen
+    end if;
+  exception when sqlstate 'YT409' then
+    v_refused := true;
+  end;
+  if c.id is not null and v_text is not null
+     and not private.case_text_allowed(c.order_id, c.user_id, v_text, 'return_decision', c.id::text) then
+    v_refused := true;
+  end if;
+  return case when v_refused then null else true end;
+end;
+$$;
+
+create or replace function public.ops_complete_return(
+  p_return_id uuid,
+  p_note text default null
+) returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_order_id uuid;
+  v_return public.return_requests%rowtype;
+  v_item public.order_items%rowtype;
+  v_result jsonb;
+  c private.cases;
+  v_text text := nullif(trim(p_note), '');
+  v_refused boolean := false;
+  v_answer jsonb;
+begin
+  if not private.has_staff_role('finance', 'support') then
+    perform private.fail('forbidden');
+  end if;
+  if char_length(v_text) > 4000 then
+    perform private.fail('text_too_long');
+  end if;
+  select * into c from private.cases where return_id = p_return_id;
+
+  begin
+    perform set_config('yuntera.case_text_checked', p_return_id::text, true);
+  select i.order_id into v_order_id
+  from public.return_requests r join public.order_items i on i.id = r.order_item_id
+  where r.id = p_return_id;
+  if not found then
+    perform private.fail('return_not_found');
+  end if;
+  perform 1 from public.orders where id = v_order_id for update;
+  select * into v_return from public.return_requests where id = p_return_id for update;
+  if v_return.status = 'approved' then
+    -- The money goes back once the goods are back.
+    perform private.fail('return_not_received');
+  end if;
+  if v_return.status <> 'received' then
+    perform private.fail('invalid_return_state', v_return.status);
+  end if;
+  select * into v_item from public.order_items where id = v_return.order_item_id;
+
+  v_result := private.refund_units(v_order_id, 'return', p_return_id,
+    jsonb_build_array(jsonb_build_object('order_item_id', v_item.id, 'quantity', v_return.quantity)));
+
+  update public.return_requests
+  set status = 'refunded', refund_minor = (v_result ->> 'refund_minor')::bigint,
+      refunded_by = (select auth.uid()),
+      resolution_note = coalesce(nullif(trim(p_note), ''), resolution_note), resolved_at = now()
+  where id = p_return_id;
+
+  insert into public.order_events (order_id, kind, to_status, note, actor_id)
+  values (v_order_id, 'note', null,
+          'Reembolso de ' || v_return.quantity || ' × ' || v_item.title, (select auth.uid()));
+
+  v_answer := jsonb_build_object('refund_minor', (v_result ->> 'refund_minor')::bigint,
+                            'seller_debit_minor', (v_result ->> 'seller_debit_minor')::bigint);
+    perform set_config('yuntera.case_text_checked', '', true);
+    if c.id is not null and v_text is not null and private.case_text_has_code(c.order_id, c.user_id, v_text) then
+      raise exception using errcode = 'YT409';  -- caught just below, never seen
+    end if;
+  exception when sqlstate 'YT409' then
+    v_refused := true;
+  end;
+  if c.id is not null and v_text is not null
+     and not private.case_text_allowed(c.order_id, c.user_id, v_text, 'return_decision', c.id::text) then
+    v_refused := true;
+  end if;
+  return case when v_refused then null else v_answer end;
+end;
+$$;
+
+revoke all on function public.ops_resolve_complaint(uuid, text, boolean) from public, anon;
+revoke all on function public.ops_decide_return(uuid, boolean, text) from public, anon;
+revoke all on function public.ops_receive_return(uuid, boolean, text) from public, anon;
+grant execute on function public.ops_resolve_complaint(uuid, text, boolean) to authenticated;
+grant execute on function public.ops_decide_return(uuid, boolean, text) to authenticated;
+grant execute on function public.ops_receive_return(uuid, boolean, text) to authenticated;
 
 -- ═══ Grants ════════════════════════════════════════════════════════════════
 
@@ -1811,6 +2188,8 @@ revoke all on function private.case_text_plain(text) from public, anon, authenti
 revoke all on function private.case_live_codes(uuid, uuid) from public, anon, authenticated;
 revoke all on function private.mask_shopper_codes(text, uuid, uuid) from public, anon, authenticated;
 revoke all on function private.case_text_allowed(uuid, uuid, text, text, text) from public, anon, authenticated;
+revoke all on function private.case_text_has_code(uuid, uuid, text) from public, anon, authenticated;
+revoke all on function private.care_visible(text, uuid, public.staff_role) from public, anon, authenticated;
 revoke all on function private.guard_case_text(private.cases, text, text) from public, anon, authenticated;
 revoke all on function private.is_customer(uuid) from public, anon, authenticated;
 revoke all on function private.case_source_open(private.cases) from public, anon, authenticated;

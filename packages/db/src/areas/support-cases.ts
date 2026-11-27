@@ -15,7 +15,7 @@
  */
 
 import { z } from "zod";
-import { orderStatus } from "../schemas";
+import { orderStatus, refundResult } from "../schemas";
 import type { Caller, Messages } from "./types";
 
 const id = z.uuid();
@@ -315,6 +315,10 @@ export const supportCasesErrors = {
       "En la última hora escribió muchos números de cuatro cifras en notas y respuestas. Escriba este texto sin ellos o espere una hora; los montos con ₡ y punto (₡4.500) no cuentan.",
     en: "In the last hour you wrote many four-digit numbers in notes and answers. Write this text without them or wait an hour; amounts with ₡ and a point (₡4,500) do not count.",
   },
+  text_too_long: {
+    "es-CR": "El texto es demasiado largo: use como máximo 4000 caracteres.",
+    en: "The text is too long: use at most 4,000 characters.",
+  },
   case_account_deleted: {
     "es-CR":
       "La cuenta de este cliente se eliminó: su caso ya no recibe notas ni respuestas. Si la persona vuelve a escribir, registre un contacto nuevo cuando tenga otra cuenta o un pedido nuevo.",
@@ -442,4 +446,33 @@ export const supportCasesApi = ({ call, run }: Caller) => ({
     call("my_cases", orderNumber ? { p_order_number: orderNumber } : {}, z.array(myCase)),
   myComplaintReceipt: (complaintId: string) =>
     call("my_complaint_receipt", { p_complaint_id: id.parse(complaintId) }, complaintReceipt),
+
+  // Atención's four doors (they replace the core and integrity methods of the
+  // same names). Each answers null when its text held the customer's delivery
+  // code: nothing changed, and the refusal is on the audit trail (show
+  // `note_contains_code`), as in Casos.
+  opsResolveComplaint: (complaintId: string, resolution: string, close = true) =>
+    call(
+      "ops_resolve_complaint",
+      { p_complaint_id: complaintId, p_resolution: resolution, p_close: close },
+      z.literal(true).nullable(),
+    ),
+  opsDecideReturn: (returnId: string, approve: boolean, note?: string | null) =>
+    call(
+      "ops_decide_return",
+      { p_return_id: returnId, p_approve: approve, p_note: note ?? undefined },
+      z.literal(true).nullable(),
+    ),
+  opsReceiveReturn: (returnId: string, resellable = true, note: string | null = null) =>
+    call(
+      "ops_receive_return",
+      { p_return_id: returnId, p_resellable: resellable, p_note: note },
+      z.literal(true).nullable(),
+    ),
+  opsCompleteReturn: (returnId: string, note?: string | null) =>
+    call(
+      "ops_complete_return",
+      { p_return_id: returnId, p_note: note ?? undefined },
+      refundResult.nullable(),
+    ),
 });

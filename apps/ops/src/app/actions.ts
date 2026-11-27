@@ -31,6 +31,7 @@ import {
 } from "@yuntera/next-kit/server";
 import { refresh } from "next/cache";
 import { z } from "zod";
+import { refusedForCode } from "@/lib/refused-for-code";
 import { currentStaff } from "@/lib/staff";
 
 export async function signIn(_previous: ActionState, formData: FormData): Promise<ActionState> {
@@ -93,7 +94,7 @@ export async function decideReturn(
   return staffAction(
     "/atencion",
     async (api) => {
-      await api.opsDecideReturn(returnId.data, approve, note(formData) || null);
+      refusedForCode(await api.opsDecideReturn(returnId.data, approve, note(formData) || null));
       return approve
         ? "Reclamo aprobado. Coordine la recolección; el reembolso se registra cuando el producto llegue."
         : "Devolución rechazada; el cliente ve el motivo.";
@@ -111,7 +112,7 @@ export async function completeReturn(
   return staffAction(
     "/atencion",
     async (api) => {
-      await api.opsCompleteReturn(returnId.data, note(formData) || null);
+      refusedForCode(await api.opsCompleteReturn(returnId.data, note(formData) || null));
       return "Reembolso registrado.";
     },
     typed(formData, "note"),
@@ -128,7 +129,7 @@ export async function resolveComplaint(
   return staffAction(
     "/atencion",
     async (api) => {
-      await api.opsResolveComplaint(complaintId.data, note(formData), close);
+      refusedForCode(await api.opsResolveComplaint(complaintId.data, note(formData), close));
       return close
         ? "Reclamo cerrado con su respuesta."
         : "Respuesta enviada; el reclamo sigue abierto.";

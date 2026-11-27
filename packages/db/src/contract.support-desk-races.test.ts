@@ -1,6 +1,6 @@
 /**
  * The support desk's lock order (20261121084700_support_cases.sql), from real
- * sessions: one forced round each of tools/races family J's J1 and J5.
+ * sessions: one forced round each of tools/races family J's J1, J5 and J7.
  *
  *   J1  ops_answer_case against ops_resolve_complaint on one complaint. Both
  *       take the complaint's row before the case's row (the answer since the
@@ -8,6 +8,13 @@
  *   J5  the shopper deleting their account against an answer to their
  *       recorded contact. Both take the account's row first (the answer as
  *       key share, because the message it plans points at that account).
+ *   J7  the shopper deleting their account against staff recording a new
+ *       contact for them. The contact takes the account's row (key share)
+ *       before it reads whether the account is deleted, so it waits for a
+ *       deletion under way and is refused, instead of being left open with
+ *       its summary after the erasure (the outside review of the
+ *       integration). Here the shopper's old complaint is held, so the
+ *       deletion holds the account row when the contact comes.
  *
  * A third session holds the case row FOR SHARE; the first writer takes what
  * comes before it and waits there; the second starts 40 ms later, then the
@@ -16,7 +23,8 @@
  * and a deleted account's answer is erased or was refused.
  *
  * What it leaves: nothing of J1 (its complaint and case are deleted); for J5
- * a deleted account of its own and that account's closed contact.
+ * a deleted account of its own and that account's closed contact; for J7 a
+ * deleted account of its own.
  */
 
 import pg from "pg";
@@ -50,9 +58,10 @@ describe.skipIf(!db.enabled)("support desk lock order (against a seeded database
     caseId: string,
     first: [string, string, unknown[]],
     second: [string, string, unknown[]],
+    hold = "select 1 from private.cases where id = $1 for share",
   ) {
     const holder = await session(null);
-    await holder.query("select 1 from private.cases where id = $1 for share", [caseId]);
+    await holder.query(hold, [caseId]);
     const run = async ([user, sql, args]: [string, string, unknown[]], delay: number) => {
       const client = await session(user);
       try {
@@ -185,5 +194,43 @@ describe.skipIf(!db.enabled)("support desk lock order (against a seeded database
       [kase],
     );
     expect(after.rows[0]).toEqual({ status: "closed", kept: 0 });
+  });
+
+  it("J7: a contact recorded while the account is being deleted is refused, never left open", async () => {
+    const staff = await staffId();
+    const email = `carreras-contacto-${Date.now().toString(36)}@yuntera.example`;
+    const user =
+      (
+        await db.query<{ id: string }>(
+          `insert into auth.users (id, email, raw_user_meta_data)
+           values (gen_random_uuid(), $1, '{"full_name": "Prueba Carreras Contacto"}') returning id`,
+          [email],
+        )
+      ).rows[0]?.id ?? "";
+    const old =
+      (
+        await db.query<{ id: string }>(
+          `insert into public.complaints (user_id, category, description, status, resolution, resolved_at)
+           values ($1, 'other', 'Queja vieja de la prueba.', 'resolved', 'Ya le respondimos.', now()) returning id`,
+          [user],
+        )
+      ).rows[0]?.id ?? "";
+    complaints.push(old);
+    const outcomes = await forced(
+      old,
+      [user, "select public.delete_my_account()", []],
+      [
+        staff,
+        "select public.ops_record_contact('phone', 'other', $1, null, $2)",
+        ["Sofía llamó desde el 8765-4321 por su pedido.", user],
+      ],
+      "select 1 from public.complaints where id = $1 for share",
+    );
+    expect(outcomes).toEqual(["ok", "customer_not_found"]);
+    const after = await db.query<{ n: number }>(
+      "select count(*)::int as n from private.cases where user_id = $1 and kind = 'contact'",
+      [user],
+    );
+    expect(after.rows[0]?.n).toBe(0);
   });
 });
