@@ -983,3 +983,96 @@ Object.assign(module.exports, {
   zoneApplied,
   busyValues,
 });
+
+// ── Two shops on one product: offers, the cart's swap, the shop's page ─────
+
+const otherOffers = (page) => page.getByRole("region", { name: "Otras ofertas de este producto" });
+
+/** The other offers of a product page, as one line. */
+const otherOffersText = (page) => text(otherOffers(page));
+
+/** The first line of the cart, as one line. */
+const firstCartLine = (page) => text(main(page).locator("ul > li").first());
+
+/** When the cart says the other shop's offer would arrive. */
+const cartAlternativeArrival = (page) =>
+  text(testid(main(page).locator("ul > li").first(), "cart-alternative-arrival"));
+
+/** A shop's arrival date on the product page, wherever the page lists that shop's offer (data). */
+const shopOfferArrival = (page, shop) =>
+  text(
+    testid(
+      withValue(buyBox(page).or(otherOffers(page).getByRole("listitem")), shop).first(),
+      "offer-arrival",
+    ).first(),
+  );
+
+/** In the cart, swaps to the other shop's offer and waits for the line to name it. */
+async function swapToOffer(page, shop) {
+  await button(main(page), `Cambiar a la oferta de ${shop}`).click();
+  await settledText(
+    main(page).locator("ul > li").first(),
+    (t) => t.includes(`Vendido por ${shop}`),
+    {
+      what: "the cart line",
+    },
+  );
+}
+
+/** How many «Continuar con la compra» links the cart offers. */
+const checkoutLinks = (page) =>
+  main(page).getByRole("link", { name: "Continuar con la compra" }).count();
+
+/**
+ * From the cart: «Continuar con la compra», signs in, pays by this method,
+ * confirms and simulates the payment; returns the order page's main as one line.
+ */
+async function checkoutSignedOutAndPay(page, email, method) {
+  await continueToCheckout(page);
+  await page.waitForURL(/ingresar/);
+  await fillSignIn(page, email, PASSWORD);
+  await page.waitForURL((u) => new URL(u).pathname === "/pagar");
+  await choosePayment(page, method);
+  await confirmOrder(page);
+  await waitForOrderPage(page);
+  await simulatePayment(page);
+  return mainText(page);
+}
+
+const aboutShop = (page) => page.getByRole("region", { name: "Sobre la tienda" });
+
+/** A shop's public page: its description, how many bold marks it renders, whether its logo loaded and what it sells. */
+async function shopPage(page) {
+  return {
+    about: await text(aboutShop(page)),
+    bold: await aboutShop(page).locator("b").count(),
+    logoLoaded: await main(page)
+      .locator("header img")
+      .first()
+      .evaluate((img) => img.complete && img.naturalWidth > 0),
+    products: await text(main(page).getByRole("region", { name: "Lo que vende" })),
+  };
+}
+
+/** A shop's offer among the other offers (data): how many logos it shows. */
+const offerLogos = (page, shop) =>
+  withValue(otherOffers(page).getByRole("listitem"), shop).first().locator("img").count();
+
+/** Follows a shop's link from its offer and waits for the shop's page. */
+async function openShopFromOffer(page, shop, slug) {
+  await link(withValue(otherOffers(page).getByRole("listitem"), shop).first(), shop).click();
+  await page.waitForURL((u) => new URL(u).pathname === `/tienda/${slug}`);
+}
+
+Object.assign(module.exports, {
+  otherOffersText,
+  firstCartLine,
+  cartAlternativeArrival,
+  shopOfferArrival,
+  swapToOffer,
+  checkoutLinks,
+  checkoutSignedOutAndPay,
+  shopPage,
+  offerLogos,
+  openShopFromOffer,
+});

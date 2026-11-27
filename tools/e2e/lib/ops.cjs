@@ -907,7 +907,7 @@ const changeCardText = (page, kind) => text(changeCard(page, kind));
 async function approveChange(page, kind) {
   const waiting = await changesWaiting(page);
   await button(changeCard(page, kind), "Aprobar el cambio").click();
-  if (kind === "contact") {
+  if (kind === "contact" || kind === "description") {
     await page.waitForURL((u) => new URL(u).search.includes("resuelta=aprobada"));
     return;
   }
@@ -1794,7 +1794,9 @@ async function idleNotice(page) {
 /** «Quitar la búsqueda», and waits for the search to go. */
 async function clearOrderSearch(page) {
   await button(main(page), "Quitar la búsqueda").click();
-  await settledText(main(page), (t) => !t.includes("Quitar la búsqueda"), { what: "the orders list" });
+  await settledText(main(page), (t) => !t.includes("Quitar la búsqueda"), {
+    what: "the orders list",
+  });
 }
 
 /** What the order search field holds. */
@@ -1835,7 +1837,9 @@ async function openSectionsMenuByKeyboard(page) {
 async function chooseSection(page, name, path) {
   await link(sectionsNavigation(page), name).click();
   await page.waitForURL((u) => new URL(u).pathname === path);
-  await page.waitForFunction(() => !document.querySelector('nav[aria-label="Secciones"] details')?.open);
+  await page.waitForFunction(
+    () => !document.querySelector('nav[aria-label="Secciones"] details')?.open,
+  );
 }
 
 /** Takes down reported content from Atención (the report found by the product's title and its details). */
@@ -1860,4 +1864,68 @@ Object.assign(module.exports, {
   openSectionsMenuByKeyboard,
   chooseSection,
   takeDown,
+});
+
+// ── Listings shared between shops: review, shop description, logos ───────
+
+/** Publishes a new product from Catálogo (its card by title, data) and waits for it to leave the queue. */
+async function publishListing(page, title) {
+  const card = withValue(
+    main(page).getByRole("region", { name: "Productos nuevos" }).getByRole("listitem"),
+    title,
+  );
+  await button(card.first(), "Publicar").click();
+  await card.first().waitFor({ state: "detached" });
+}
+
+/** A change to a published product waiting for review (by title, data). */
+const editCard = (page, title) =>
+  withValue(editsToReview(page).getByRole("article"), title).first();
+
+/** The warning that a change pauses other shops' offers, as one line. */
+const editPausesOffers = (page, title) => text(testid(editCard(page, title), "edit-pauses-offers"));
+
+/** «Aprobar cambio» without the tick; returns the refusal. */
+async function approveEditUnconfirmed(page, title) {
+  await button(editCard(page, title), "Aprobar cambio").click();
+  return kit.waitForMessage(editCard(page, title), "marque la casilla para confirmarlo", {
+    roles: "alert",
+  });
+}
+
+/** Ticks that other offers pause, «Aprobar cambio», and waits for the change to leave the queue. */
+async function approveEditPausing(page, title) {
+  const card = editCard(page, title);
+  await field(card, "pausaOfertas").check();
+  await button(card, "Aprobar cambio").click();
+  await card.waitFor({ state: "detached", timeout: 30000 });
+}
+
+/** A logo to review on Logotipos, by its shop (its image's name). */
+const logoCard = (page, shop) =>
+  main(page)
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("img", { name: `Logotipo nuevo de ${shop}` }) })
+    .first();
+
+/** Opens Logotipos and waits for the shop's new logo to show. */
+async function openLogoReview(page, shop) {
+  await open(page, "/catalogo/logotipos");
+  await logoCard(page, shop).waitFor();
+}
+
+/** «Aprobar y publicar» a logo and waits for it to leave the queue. */
+async function approveLogo(page, shop) {
+  const card = logoCard(page, shop);
+  await button(card, "Aprobar y publicar").click();
+  await card.waitFor({ state: "detached", timeout: 30000 });
+}
+
+Object.assign(module.exports, {
+  publishListing,
+  editPausesOffers,
+  approveEditUnconfirmed,
+  approveEditPausing,
+  openLogoReview,
+  approveLogo,
 });

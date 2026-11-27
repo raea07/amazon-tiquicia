@@ -666,3 +666,230 @@ const warehouseRowCells = (page, sku) =>
     .allInnerTexts();
 
 Object.assign(module.exports, { historyEntries, historyKinds, warehouseRowCells });
+
+// ── Listings shared between shops: offers, variants, draft, the shop front ─
+
+/** From Productos, «Vender uno que ya existe»; waits for the search page. */
+async function openOfferSearch(page) {
+  await open(page, "/productos");
+  await link(main(page), "Vender uno que ya existe").click();
+  await page.waitForURL((u) => new URL(u).pathname === "/productos/ofrecer");
+}
+
+/** A product found to offer, by its title (data). */
+const offerMatch = (page, title) => withValue(main(page).getByRole("listitem"), title).first();
+
+/** Searches the catalogue for a product to offer; returns the result with this title, as one line. */
+async function searchToOffer(page, words, title) {
+  await field(main(page), "q").fill(words);
+  await button(main(page), "Buscar", true).click();
+  await offerMatch(page, title).waitFor();
+  return text(offerMatch(page, title));
+}
+
+/**
+ * Adds the shop's offer on a product found (the search page open now):
+ * price, who keeps it (seller, platform), handling days; waits for the answer.
+ */
+async function addOffer(page, title, { price, fulfillment, handlingDays }) {
+  const form = main(page)
+    .getByRole("form", { name: `Su oferta: ${title}` })
+    .first();
+  await field(form, "price").fill(price);
+  await field(form, "fulfillment").selectOption(fulfillment);
+  if (handlingDays !== undefined) await field(form, "handlingDays").fill(handlingDays);
+  await button(form, "Agregar mi oferta").click();
+  return kit.waitForMessage(main(page), "Agregamos su oferta", { roles: "status" });
+}
+
+/** Sets the stock on hand of a product on Inventario (its row by title); returns the row's answer. */
+async function setStockOf(page, title, units) {
+  await open(page, "/inventario");
+  const row = productRow(page, title);
+  await field(row, "quantity").fill(String(units));
+  await row.locator('button[type="submit"]').click();
+  const answer = row.getByRole("status").or(row.getByRole("alert")).first();
+  await answer.waitFor();
+  return text(answer);
+}
+
+/** A product's row in the list: as one line, how many «Editar» links, and whether it says what the shop may change. */
+async function sharedRow(page, title) {
+  const row = productRow(page, title);
+  return {
+    text: await text(row),
+    edits: await row.getByRole("link", { name: "Editar" }).count(),
+    saysWhatChanges: (await text(row)).includes("Usted cambia su precio y sus existencias"),
+  };
+}
+
+/** How many rows of the list show this product (data). */
+const productRows = (page, title) => main(page).getByRole("row", { name: title }).count();
+
+/** Opens a row's edit page from the list (row by title or variant, data) and waits for it; returns its address. */
+async function openEditOf(page, rowName) {
+  await link(productRow(page, rowName), "Editar").click();
+  await page.waitForURL((u) => /^\/productos\/[0-9a-f-]{36}$/.test(new URL(u).pathname));
+  await main(page).getByRole("heading", { level: 1 }).first().waitFor();
+  return page.url();
+}
+
+/** The address of a row's edit page, without opening it. */
+const editAddressOf = async (page, rowName) =>
+  BASE + (await link(productRow(page, rowName), "Editar").getAttribute("href"));
+
+/** Opens the price form of a row in the list and puts the offer on sale or in pause. */
+async function setOfferSale(page, title, status) {
+  const row = productRow(page, title);
+  await row.locator("summary").click();
+  const form = row.locator("form").filter({ has: page.locator('select[name="status"]') });
+  await field(form, "status").selectOption(status);
+  await button(form, "Guardar", true).click();
+  await form.getByRole("status").first().waitFor();
+}
+
+/** Stops selling another shop's product for good, from the row's price form. */
+async function stopSelling(page, title) {
+  const row = productRow(page, title);
+  await row.locator("summary").click();
+  const form = row.getByRole("form", { name: "Dejar de vender" });
+  await field(form, "confirma").check();
+  await button(form, "Dejar de vender este producto").click();
+  await kit.waitForMessage(row, "Dejó de venderlo", { roles: "status" });
+}
+
+const variants = (page) => main(page).getByRole("region", { name: "Variantes a la venta" });
+
+/** A variant's line on the edit page (by its name, data). */
+const variantLine = (page, name) => withValue(variants(page).getByRole("listitem"), name).first();
+
+/** Waits for the edit page's variants. */
+const waitForVariants = (page) => variants(page).waitFor();
+
+/** A variant's line, as one line. */
+const variantText = (page, name) => text(variantLine(page, name));
+
+/** «Retirar» a variant and waits for the answer; returns the line. */
+async function retireVariant(page, name) {
+  const line = variantLine(page, name);
+  await button(line, "Retirar la variante").click();
+  await kit.waitForMessage(line, "Variante retirada", { roles: "status" });
+  return text(line);
+}
+
+/** «Volver a ofrecer» a variant and waits for the answer. */
+async function offerVariantAgain(page, name) {
+  const line = variantLine(page, name);
+  await button(line, "Volver a ofrecer").click();
+  await kit.waitForMessage(line, "a la venta otra vez", { roles: "status" });
+}
+
+const draftBox = (page) => main(page).getByRole("region", { name: "Volver a borrador" });
+
+/** Waits for the edit page's «Volver a borrador» box. */
+const waitForDraftBox = (page) => draftBox(page).waitFor();
+
+/** The «Volver a borrador» box: as one line, and how many buttons to go back it offers. */
+async function draftBoxState(page) {
+  return {
+    text: await text(draftBox(page)),
+    buttons: await draftBox(page).getByRole("button", { name: "Volver a borrador" }).count(),
+  };
+}
+
+/** Takes a published listing back to draft; returns the page's answer. */
+async function backToDraft(page) {
+  await field(draftBox(page), "confirma").check();
+  await button(draftBox(page), "Volver a borrador").click();
+  return kit.waitForMessage(main(page), "Volvió a borrador", { roles: "status" });
+}
+
+/** The first status line of the edit page, as one line. */
+const editStatus = (page) => text(main(page).getByRole("status").first());
+
+/** «Guardar y enviar a revisión» on a draft, and waits for the page to say it is in review. */
+async function sendDraftForReview(page) {
+  await button(main(page), "Guardar y enviar a revisión").click();
+  await settledText(main(page), /En revisión; todavía no está publicado/, {
+    what: "the edit page",
+  });
+}
+
+/** Types a package weight in grams in the edit form. */
+const typeWeight = (page, grams) => field(main(page), "weightGrams").fill(grams);
+
+/** Waits for the edit form's weight field. */
+const waitForWeight = (page) => field(main(page), "weightGrams").waitFor();
+
+const descriptionBox = (page) =>
+  main(page).getByRole("region", { name: "Descripción", exact: true });
+const logoBox = (page) => main(page).getByRole("region", { name: "Logotipo", exact: true });
+
+/** Sends a new shop description to review from Tienda and waits for the page to say so. */
+async function sendDescription(page, description) {
+  await open(page, "/tienda");
+  await field(descriptionBox(page), "description", "textarea").fill(description);
+  await button(descriptionBox(page), "Enviar a revisión").click();
+  await settledText(descriptionBox(page), /Descripción nueva en revisión/, { what: "Tienda" });
+}
+
+/** Asks to remove the description and waits for the page to say so; tells whether the field is still required. */
+async function removeDescription(page) {
+  await open(page, "/tienda");
+  await button(descriptionBox(page), "Quitar la descripción").click();
+  await settledText(descriptionBox(page), /Pidió quitar la descripción/, { what: "Tienda" });
+  return (
+    (await field(descriptionBox(page), "description", "textarea").getAttribute("required")) !== null
+  );
+}
+
+/** Uploads a logo (a JPEG buffer) and waits for it to go to review. */
+async function uploadLogo(page, buffer) {
+  await testid(logoBox(page), "logo-file").setInputFiles({
+    name: "logo-sendero.jpg",
+    mimeType: "image/jpeg",
+    buffer,
+  });
+  await kit.waitForMessage(logoBox(page), "Enviamos el logotipo a revisión", {
+    roles: "status",
+    timeout: 30000,
+  });
+}
+
+/** Opens Tienda and waits until it says the logo is in review. */
+async function waitForLogoInReview(page) {
+  await open(page, "/tienda");
+  await settledText(logoBox(page), /Logotipo en revisión/, { what: "Tienda" });
+}
+
+/** The offers paused for their price, as one line. */
+const pausedOffers = (page) => text(testid(main(page), "paused-offers"));
+
+Object.assign(module.exports, {
+  openOfferSearch,
+  searchToOffer,
+  addOffer,
+  setStockOf,
+  sharedRow,
+  productRows,
+  openEditOf,
+  editAddressOf,
+  setOfferSale,
+  stopSelling,
+  waitForVariants,
+  variantText,
+  retireVariant,
+  offerVariantAgain,
+  waitForDraftBox,
+  draftBoxState,
+  backToDraft,
+  editStatus,
+  sendDraftForReview,
+  typeWeight,
+  waitForWeight,
+  sendDescription,
+  removeDescription,
+  uploadLogo,
+  waitForLogoInReview,
+  pausedOffers,
+});
