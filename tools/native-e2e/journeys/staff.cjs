@@ -11,6 +11,7 @@
 // while it is offline.
 
 const { chromium } = require("playwright");
+const { testIds } = require("../lib/screen.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
@@ -73,7 +74,7 @@ function check(condition, message) {
     page.on("response", (r) => {
       if (r.status() >= 500) errors.push(`${app.name} HTTP ${r.status()} ${r.url()}`);
     });
-    const byId = (id) => page.getByTestId(id).filter({ visible: true }).first();
+    const byId = (id) => testIds(page, id).filter({ visible: true }).first();
     const signIn = async (email) => {
       await byId("sign-in-email").fill(email);
       await byId("sign-in-password").fill(PASSWORD);
@@ -118,7 +119,7 @@ function check(condition, message) {
       Object.keys(localStorage).filter((key) => key.startsWith("sb-")),
     );
     check(stored.length === 0, "signed out with no connection: no session is left stored");
-    check(!(await page.getByTestId("sign-out-message").count()), "and no failure is reported");
+    check(!(await testIds(page, "sign-out-message").count()), "and no failure is reported");
     await context.setOffline(false);
     offline = false;
     await page.reload({ waitUntil: "networkidle" });

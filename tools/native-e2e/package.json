@@ -6,7 +6,7 @@
   "description": "Browser journeys through the web export of the native apps. Run with tools/dev/stack.sh native-e2e <lane>.",
   "scripts": {
     "journeys": "node run.mjs",
-    "test": "node --test testids/check.test.mjs lib/words.test.cjs"
+    "test": "node --test testids/check.test.mjs lib/words.test.cjs lib/journeys.test.cjs"
   },
   "devDependencies": {
     "axe-core": "4.14.1",

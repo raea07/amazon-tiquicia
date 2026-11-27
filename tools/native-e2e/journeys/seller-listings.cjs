@@ -25,7 +25,7 @@
 // Fails on any console error, uncaught exception or 5xx.
 
 const { chromium, request } = require("playwright");
-const { overflow, settledText, shows } = require("../lib/screen.cjs");
+const { overflow, settledText, shows, testIds } = require("../lib/screen.cjs");
 const seller = require("../lib/seller.cjs");
 const { word } = require("../lib/words.cjs");
 
@@ -93,7 +93,7 @@ async function as(email) {
   page.on("response", (r) => {
     if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
   });
-  const visible = (id) => page.getByTestId(id).filter({ visible: true }).first();
+  const visible = (id) => testIds(page, id).filter({ visible: true }).first();
   const said = async (id) => (await visible(id).innerText()).replace(/\s+/g, " ").trim();
   const shot = (name) =>
     page.screenshot({ path: `${SHOTS}/native-seller-listings-${name}.png`, fullPage: true });
@@ -130,7 +130,7 @@ async function as(email) {
   await visible(`${form}-price`).fill("4 000");
   await visible(`${form}-fulfillment-platform`).click();
   check(
-    (await page.getByTestId(`${form}-days`).count()) === 0,
+    (await testIds(page, `${form}-days`).count()) === 0,
     "no handling days are asked when the warehouse ships it",
   );
   await tall(`${form}-submit`, "the add-offer button");
@@ -209,9 +209,10 @@ async function as(email) {
   await shows(page, "paused-offer-result", "Precio guardado. Su oferta está a la venta otra vez.");
   // Without a reload: the paused box lets go of the offer, the confirmation
   // stays, and the list shows the offer on sale.
-  await page
-    .getByTestId(`paused-offer-${blenderOffer.offer_id}`)
-    .waitFor({ state: "detached", timeout: 10_000 });
+  await testIds(page, `paused-offer-${blenderOffer.offer_id}`).waitFor({
+    state: "detached",
+    timeout: 10_000,
+  });
   check(
     (await said("paused-offer-result")) === "Precio guardado. Su oferta está a la venta otra vez.",
     "the resumed offer leaves the paused box at once and the confirmation stays",
@@ -277,9 +278,10 @@ async function as(email) {
   // Back in Productos, the list no longer shows the offer as on sale.
   await page.goBack();
   await page.waitForURL((url) => new URL(url).pathname === "/productos");
-  await page
-    .getByTestId(`listing-${blenderOffer.offer_id}`)
-    .waitFor({ state: "detached", timeout: 10_000 });
+  await testIds(page, `listing-${blenderOffer.offer_id}`).waitFor({
+    state: "detached",
+    timeout: 10_000,
+  });
   check(true, "back in Productos, the withdrawn offer is no longer listed");
 
   // ── 4. A size retired and brought back ─────────────────────────────────────
@@ -381,7 +383,7 @@ async function as(email) {
   await noSideways("the shop's description");
   await shot("07-description");
   await visible("shop-face-withdraw").click();
-  await page.getByTestId("shop-face-withdraw").waitFor({ state: "detached" });
+  await testIds(page, "shop-face-withdraw").waitFor({ state: "detached" });
   check(
     (await owner("seller_shop_front", { p_seller_id: shopId })).description_request?.status !==
       "pending",

@@ -36,7 +36,7 @@
 const { chromium, request } = require("playwright");
 const driverApp = require("../lib/driver.cjs");
 const { word } = require("../lib/words.cjs");
-const { overflow, screenText, settledText } = require("../lib/screen.cjs");
+const { overflow, screenText, settledText, testIds } = require("../lib/screen.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const URL_ = process.env.NATIVE_DRIVER_URL || "http://127.0.0.1:3012";
@@ -213,7 +213,7 @@ async function newRoute() {
     }
   });
   // The stack keeps the screens below the current one in the page, hidden: use the visible one.
-  const byId = (id) => page.getByTestId(id).filter({ visible: true }).first();
+  const byId = (id) => testIds(page, id).filter({ visible: true }).first();
   const textOf = async (id) => (await byId(id).innerText()).replace(/\s+/g, " ").trim();
   // For a text that changes when data or the queue arrives: wait for what is expected.
   const says = async (id, wanted) =>
@@ -436,7 +436,7 @@ async function newRoute() {
   await page.reload({ waitUntil: "domcontentloaded" });
   await byId(`stop-${B}-1`).waitFor({ timeout: 30_000 });
   check(
-    !(await page.getByTestId("sign-in-email").filter({ visible: true }).count()),
+    !(await testIds(page, "sign-in-email").filter({ visible: true }).count()),
     "after a restart offline with an expired token, the driver is still in, not at the sign-in screen",
   );
   check(
@@ -618,7 +618,7 @@ async function newRoute() {
     "the fifth locks the order: not to hand it over, to call Central, and that a new code follows",
   );
   check(
-    !(await page.getByTestId("deliver-pin").filter({ visible: true }).count()) &&
+    !(await testIds(page, "deliver-pin").filter({ visible: true }).count()) &&
       calls.driver_complete_stop === 1,
     "a locked order takes no more codes",
   );
@@ -654,7 +654,7 @@ async function newRoute() {
     "and says where to go back to",
   );
   check(
-    !(await page.getByTestId("tracking").filter({ visible: true }).count()),
+    !(await testIds(page, "tracking").filter({ visible: true }).count()),
     "position sharing is no longer shown",
   );
   for (const fn of Object.keys(calls)) calls[fn] = 0;

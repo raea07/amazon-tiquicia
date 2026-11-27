@@ -8,7 +8,11 @@ Each journey starts from a freshly seeded database. Rules for the next one
 1. A journey file holds the flow and the checks. How a screen is found and
    worked lives in the app's helper: `lib/shop.cjs`, `seller.cjs`,
    `driver.cjs`, `warehouse.cjs`; the kit's account screens in
-   `lib/accounts.cjs`. A rebuilt screen changes its helper, not the journeys.
+   `lib/accounts.cjs`; the shared lookups in `lib/screen.cjs` (`on`,
+   `testIds`, `testIdsFrom`, `roleAll`…). A rebuilt screen changes its
+   helper, not the journeys. `lib/journeys.test.cjs` (run by `pnpm test` and
+   before every journey run) fails when a journey file calls a Playwright
+   lookup itself, or when any file finds an element by a bare text match.
 2. Find an element by its testID, or by its role and accessible name
    (`lib/screen.cjs`). Never by a CSS class, a tag or its place on the page,
    and never by a bare text match: `getByText` and `hasText` appear only in

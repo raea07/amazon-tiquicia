@@ -18,7 +18,7 @@
 
 const { chromium, request } = require("playwright");
 const { ownRoute } = require("../../e2e/lib/own-route.cjs");
-const { overflow, screenText, settledText } = require("../lib/screen.cjs");
+const { overflow, screenText, settledText, testIds } = require("../lib/screen.cjs");
 const shopApp = require("../lib/shop.cjs");
 const warehouseApp = require("../lib/warehouse.cjs");
 const { word } = require("../lib/words.cjs");
@@ -140,7 +140,7 @@ async function packedOrder(buyer, method) {
 
   // ── 2. The shopper app while the parcel waits ──
   const shop = await phone();
-  const shopId = (id) => shop.getByTestId(id).filter({ visible: true }).first();
+  const shopId = (id) => testIds(shop, id).filter({ visible: true }).first();
   await shop.goto(`${SHOP}/ingresar?siguiente=%2Fpedidos`, { waitUntil: "networkidle" });
   await shopApp.signIn(shop, SHOPPER, PASSWORD);
   await shopId(`order-${order.order_number}`).waitFor();
@@ -163,7 +163,7 @@ async function packedOrder(buyer, method) {
   log("   ", stopping);
   check(true, "the order page says how much comes back, the delivery fee included");
   check(
-    (await shop.getByTestId("delivery-pin").count()) === 0,
+    (await testIds(shop, "delivery-pin").count()) === 0,
     "no delivery code for an order being cancelled",
   );
   check(!(await screenText(shop)).includes(ON_ITS_WAY), "never En camino");
@@ -172,7 +172,7 @@ async function packedOrder(buyer, method) {
 
   // ── 3. The warehouse app checks it in ──
   const floor = await phone();
-  const floorId = (id) => floor.getByTestId(id).filter({ visible: true }).first();
+  const floorId = (id) => testIds(floor, id).filter({ visible: true }).first();
   await floor.goto(`${WAREHOUSE}/`, { waitUntil: "networkidle" });
   await warehouseApp.signIn(floor, "bodega@yuntera.example", PASSWORD);
   await floorId("warehouse-board").waitFor();
@@ -222,7 +222,7 @@ async function packedOrder(buyer, method) {
     "the order page gives the total refunded",
   );
   check(
-    (await shop.getByTestId("fee-kept").count()) === 0,
+    (await testIds(shop, "fee-kept").count()) === 0,
     "no word of a fee kept for a parcel stopped before it left",
   );
   await shop.screenshot({
@@ -296,7 +296,7 @@ async function packedOrder(buyer, method) {
     "never En camino or a date for a parcel sent back",
   );
   check(
-    (await shop.getByTestId("delivery-pin").count()) === 0,
+    (await testIds(shop, "delivery-pin").count()) === 0,
     "no delivery code for a parcel sent back",
   );
   await noSideways(shop, "order page, sent back");
@@ -357,7 +357,7 @@ async function packedOrder(buyer, method) {
       !kept.includes("Le devolvemos lo que pagó por el mismo medio"),
     "the notice does not promise back what was paid for the delivery",
   );
-  check((await shop.getByTestId("fee-kept").count()) === 0, "the fee line is not repeated");
+  check((await testIds(shop, "fee-kept").count()) === 0, "the fee line is not repeated");
   // A time already ends with "a. m." or "p. m.": no sentence ends with two stops.
   const keptPage = await screenText(shop);
   check(!/[^.]\.\.(\s|$)/.test(keptPage), "no sentence on the order page ends with two full stops");

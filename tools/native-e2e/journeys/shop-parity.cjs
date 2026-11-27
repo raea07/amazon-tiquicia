@@ -22,7 +22,7 @@
 // Fails on any browser console error, uncaught exception or 5xx response.
 
 const { chromium, request } = require("playwright");
-const { overflow: overflowOf, screenText, settledText } = require("../lib/screen.cjs");
+const { overflow: overflowOf, screenText, settledText, testIds } = require("../lib/screen.cjs");
 const shopApp = require("../lib/shop.cjs");
 
 const BASE = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
@@ -82,7 +82,7 @@ async function as(email) {
     if (response.status() >= 500) errors.push(`HTTP ${response.status()} ${response.url()}`);
   });
 
-  const visible = (testId) => page.getByTestId(testId).filter({ visible: true }).first();
+  const visible = (testId) => testIds(page, testId).filter({ visible: true }).first();
   const flat = async (locator) => (await locator.innerText()).replace(/\s+/g, " ").trim();
   const shot = (name) => page.screenshot({ path: `${SHOTS}/native-shop-parity-${name}.png` });
   const overflow = () => overflowOf(page);
@@ -189,7 +189,7 @@ async function as(email) {
   await visible("brand-clear").click();
   await page.waitForURL((url) => !new URL(url).searchParams.has("marca"));
   await shopApp.allProducts(page);
-  check((await page.getByTestId("brand-summary").count()) === 0, "the brand filter comes off");
+  check((await testIds(page, "brand-summary").count()) === 0, "the brand filter comes off");
 
   await page.goto(`${BASE}/c/mascotas?marca=nimbo`, { waitUntil: "networkidle" });
   await shopApp.brandEmpty(page).waitFor();
@@ -213,7 +213,7 @@ async function as(email) {
   await page.waitForURL(/\/categorias/);
   await page.waitForTimeout(1_000);
   check(
-    (await page.getByTestId("department-mascotas").filter({ visible: true }).count()) === 1,
+    (await testIds(page, "department-mascotas").filter({ visible: true }).count()) === 1,
     "a menu read a moment ago is not read again on every screen",
   );
   // The phone leaves the app and comes back (the web export hears it through
@@ -226,12 +226,11 @@ async function as(email) {
     set("hidden");
     set("visible");
   });
-  await page
-    .getByTestId("department-mascotas")
+  await testIds(page, "department-mascotas")
     .waitFor({ state: "detached", timeout: 10_000 })
     .catch(() => undefined);
   check(
-    (await page.getByTestId("department-mascotas").filter({ visible: true }).count()) === 0,
+    (await testIds(page, "department-mascotas").filter({ visible: true }).count()) === 0,
     "back in the foreground, the menu no longer shows the hidden category",
   );
   await shot("03-menu-after-hiding");
@@ -318,7 +317,7 @@ async function as(email) {
   // remove it, and there is no way on to the checkout.
   check(
     (await flat(visible("cart-nothing-to-buy"))).includes("Cambie cada producto") &&
-      (await page.getByTestId("cart-continue").count()) === 0,
+      (await testIds(page, "cart-continue").count()) === 0,
     "the checkout waits until the line is changed or removed",
   );
   const before = await page.evaluate(() => localStorage.getItem("yt_cart"));

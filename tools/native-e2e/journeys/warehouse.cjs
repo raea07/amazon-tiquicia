@@ -24,7 +24,7 @@
 
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
-const { overflow } = require("../lib/screen.cjs");
+const { overflow, testIds, testIdsFrom } = require("../lib/screen.cjs");
 const warehouseApp = require("../lib/warehouse.cjs");
 const { word } = require("../lib/words.cjs");
 
@@ -166,7 +166,7 @@ async function rpcAs(email, calls) {
   page.on("response", (r) => {
     if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
   });
-  const byId = (id) => page.getByTestId(id).first();
+  const byId = (id) => testIds(page, id).first();
   const textOf = async (id) => squash(await byId(id).innerText());
   const noSideways = async (where) =>
     check((await overflow(page)) <= 0, `no sideways scrolling at 390 px: ${where}`);
@@ -224,7 +224,7 @@ async function rpcAs(email, calls) {
 
   // ── Pick list ──
   // A parcel with more than one line, so both ways of entering a code are used.
-  const pending = page.getByTestId("shipment-pending");
+  const pending = testIds(page, "shipment-pending");
   let row = pending.first();
   for (let i = 0; i < (await pending.count()); i++) {
     if (/en [2-9] líneas/.test(await pending.nth(i).innerText())) {
@@ -237,13 +237,13 @@ async function rpcAs(email, calls) {
   const tracking = await textOf("shipment-title");
   check(/^[A-Z0-9-]+$/.test(tracking), `the parcel opens: ${tracking}`);
   const noCamera = async (prefix) =>
-    (await page.getByTestId(`${prefix}-camera`).count()) +
-      (await page.getByTestId(`${prefix}-camera-ask`).count()) ===
+    (await testIds(page, `${prefix}-camera`).count()) +
+      (await testIds(page, `${prefix}-camera-ask`).count()) ===
       0 && !(await warehouseApp.speaksOfCamera(page));
   await byId("start-picking").click();
   await byId("pick-current").waitFor();
   check(await noCamera("pick"), "the web export shows no camera, nor asks for one");
-  const lines = await page.getByTestId("pick-line").count();
+  const lines = await testIds(page, "pick-line").count();
   check(
     (await textOf("pick-progress")) ===
       `0 de ${lines} ${lines === 1 ? "línea lista" : "líneas listas"}`,
@@ -407,7 +407,7 @@ async function rpcAs(email, calls) {
     "a count above what was announced is refused with the reason and what to do, and nothing is sent",
   );
   check(
-    (await page.getByTestId("receive-surplus-confirm").count()) === 0,
+    (await testIds(page, "receive-surplus-confirm").count()) === 0,
     "and there is no way to confirm it anyway",
   );
   await shot("08a-receive-over");
@@ -487,7 +487,7 @@ async function rpcAs(email, calls) {
   await byId("returned-row").click();
   await byId("returned-submit").waitFor();
   check(
-    (await page.locator('[data-testid^="returned-condition-"][aria-checked="true"]').count()) === 0,
+    (await testIdsFrom(page, "returned-condition-", '[aria-checked="true"]').count()) === 0,
     "nothing is chosen for the worker",
   );
   await byId("returned-submit").click();

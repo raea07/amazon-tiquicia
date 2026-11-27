@@ -11,7 +11,7 @@
 
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
-const { overflow, screenText } = require("../lib/screen.cjs");
+const { overflow, screenText, testIds } = require("../lib/screen.cjs");
 const shopApp = require("../lib/shop.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
@@ -80,7 +80,7 @@ async function as(email) {
   page.on("response", (response) => {
     if (response.status() >= 500) errors.push(`HTTP ${response.status()} ${response.url()}`);
   });
-  const visible = (testId) => page.getByTestId(testId).filter({ visible: true }).first();
+  const visible = (testId) => testIds(page, testId).filter({ visible: true }).first();
   const noSideways = async (where) =>
     check((await overflow(page)) <= 0, `no sideways scrolling at 390 px: ${where}`);
 
@@ -137,7 +137,7 @@ async function as(email) {
     check(
       !screen.includes("El total cambia") &&
         !screen.includes("Continuar con la compra") &&
-        (await page.getByTestId("cart-blocked").count()) === 0,
+        (await testIds(page, "cart-blocked").count()) === 0,
       "the bottom bar says nothing more: no total and no second instruction",
     );
     const title = sql(`select title from public.products where slug = '${PRODUCT}'`);

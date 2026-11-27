@@ -24,7 +24,7 @@
 
 const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
-const { overflow } = require("../lib/screen.cjs");
+const { overflow, testIds } = require("../lib/screen.cjs");
 const warehouse = require("../lib/warehouse.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
@@ -152,11 +152,11 @@ async function rpcAs(email, calls) {
   page.on("response", (r) => {
     if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
   });
-  const byId = (id) => page.getByTestId(id).first();
+  const byId = (id) => testIds(page, id).first();
   const textOf = async (id) => squash(await byId(id).innerText());
-  const result = (sku) => page.getByTestId(`count-in-result-${sku}`).first();
-  const inResult = (sku, id) => result(sku).getByTestId(id).first();
-  const card = (sku) => page.getByTestId(`item-${sku}`).first();
+  const result = (sku) => testIds(page, `count-in-result-${sku}`).first();
+  const inResult = (sku, id) => testIds(result(sku), id).first();
+  const card = (sku) => testIds(page, `item-${sku}`).first();
   const says = async (locator, wanted) => {
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
@@ -225,7 +225,7 @@ async function rpcAs(email, calls) {
     "found by its name, with its shop",
   );
   check(
-    (await page.getByTestId("count-in-scan-feedback").count()) === 0,
+    (await testIds(page, "count-in-scan-feedback").count()) === 0,
     "the scanner's answer about the earlier code is gone after a search by name",
   );
   await inResult(notebook.sku_code, "count-in-quantity").fill("2");
@@ -266,7 +266,7 @@ async function rpcAs(email, calls) {
     "the confirmation is brought into view, not left above the screen",
   );
   check(
-    (await page.getByTestId("count-in-scan-feedback").count()) === 0,
+    (await testIds(page, "count-in-scan-feedback").count()) === 0,
     "no scanner answer from an earlier code is left in the count section",
   );
   check(
@@ -332,7 +332,7 @@ async function rpcAs(email, calls) {
   );
   check(
     (await inResult(earphones.sku_code, "count-in-note").inputValue()) ===
-      "Dos audífonos detrás de la caja" && (await page.getByTestId("count-in-none").count()) === 0,
+      "Dos audífonos detrás de la caja" && (await testIds(page, "count-in-none").count()) === 0,
     "found by a barcode read in another form, the refused form and its reason stay, never 'not found'",
   );
   expectRefusal = false;
@@ -400,14 +400,14 @@ async function rpcAs(email, calls) {
     [earphones.sku_code, 1],
   ]) {
     await card(sku).waitFor();
-    await card(sku).getByTestId("open-count").first().click();
-    await card(sku).getByTestId("count-quantity").first().fill("0");
-    await card(sku).getByTestId("count-note").first().fill("Fin de la prueba de conteo");
-    await card(sku).getByTestId("count-submit").first().click();
+    await testIds(card(sku), "open-count").first().click();
+    await testIds(card(sku), "count-quantity").first().fill("0");
+    await testIds(card(sku), "count-note").first().fill("Fin de la prueba de conteo");
+    await testIds(card(sku), "count-submit").first().click();
     await warehouse.stockResult(page, `ahora hay 0 unidades (−${onShelf})`);
     check(true, `${sku} counted back to 0`);
   }
-  await page.getByTestId(`item-${earphones.sku_code}`).first().waitFor({ state: "detached" });
+  await testIds(page, `item-${earphones.sku_code}`).first().waitFor({ state: "detached" });
   check((await textOf("location-summary")).includes("Está vacía"), "the shelf is empty again");
   const [stockAfter] = await rpcAs("sendero@yuntera.example", [
     ["seller_stock", { p_seller_id: shop.id }],

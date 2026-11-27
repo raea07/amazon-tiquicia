@@ -22,6 +22,7 @@
 // step provokes on purpose (lib/accounts.cjs, `expect`).
 
 const { chromium } = require("playwright");
+const { testIds } = require("../lib/screen.cjs");
 const {
   check,
   codeAt,
@@ -374,7 +375,7 @@ async function webIsUp() {
       /Todavía no podemos eliminar su cuenta/.test(shown) && !/account_/.test(shown),
       `the shopper with ${blockers.join(", ")} is told plainly what stands in the way`,
     );
-    check(!(await d.page.getByTestId("delete-submit").count()), "and there is no delete button");
+    check(!(await testIds(d.page, "delete-submit").count()), "and there is no delete button");
   } else {
     check(await d.on("delete-submit").isVisible(), "nothing blocks it, so the button is there");
   }

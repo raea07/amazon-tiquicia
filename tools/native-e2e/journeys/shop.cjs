@@ -15,7 +15,14 @@
 // is allowed by URL and status, at that step only.
 
 const { chromium, request } = require("playwright");
-const { overflow: overflowOf, screenText, settledText } = require("../lib/screen.cjs");
+const {
+  overflow: overflowOf,
+  roleAll,
+  screenText,
+  settledText,
+  testIds,
+  testIdsFrom,
+} = require("../lib/screen.cjs");
 const shop = require("../lib/shop.cjs");
 
 const BASE = process.env.NATIVE_SHOP_URL || "http://127.0.0.1:3010";
@@ -109,14 +116,14 @@ async function claimAs(email, orderItemId) {
     if (response.status() >= 500) errors.push(`HTTP ${response.status()} ${response.url()}`);
   });
 
-  const visible = (testId) => page.getByTestId(testId).filter({ visible: true }).first();
+  const visible = (testId) => testIds(page, testId).filter({ visible: true }).first();
   const shot = (name) => page.screenshot({ path: `${SHOTS}/native-shop-${name}.png` });
   const overflow = () => overflowOf(page);
 
   // 0. A link that opens a product directly still has a way back to the shop
   await page.goto(`${BASE}/p/camiseta-algodon-sendero`, { waitUntil: "networkidle" });
   await visible("buy-box").waitFor();
-  check((await page.getByRole("tab").count()) === 0, "a product opened by link fills the screen");
+  check((await roleAll(page, "tab").count()) === 0, "a product opened by link fills the screen");
   const back = shop.backToHome(page);
   const backBox = await back.boundingBox();
   check(
@@ -126,7 +133,7 @@ async function claimAs(email, orderItemId) {
   await back.click();
   await page.waitForURL((url) => new URL(url).pathname === "/");
   check(
-    (await page.getByRole("tab").filter({ visible: true }).count()) === 5,
+    (await roleAll(page, "tab").filter({ visible: true }).count()) === 5,
     "its back button leads to the shop's home, with the tabs",
   );
 
@@ -178,7 +185,7 @@ async function claimAs(email, orderItemId) {
     /Vendido por/.test(buyBox) && /Llega/.test(buyBox),
     "the buy box says who sells it and when it arrives",
   );
-  const otherOffers = await page.getByTestId("other-offer").filter({ visible: true }).count();
+  const otherOffers = await testIds(page, "other-offer").filter({ visible: true }).count();
   check(otherOffers >= 1, `competing offers are listed (${otherOffers})`);
   check((await overflow()) <= 0, "product page has no sideways scrolling");
   await shot("04-product");
@@ -197,7 +204,7 @@ async function claimAs(email, orderItemId) {
   await page.waitForURL(/\/carrito/);
   await visible("cart-summary").waitFor();
   check(
-    (await page.getByTestId("cart-line").filter({ visible: true }).count()) === 1,
+    (await testIds(page, "cart-line").filter({ visible: true }).count()) === 1,
     "the cart has one line",
   );
   await shot("05-cart");
@@ -218,7 +225,7 @@ async function claimAs(email, orderItemId) {
     `one clear message for a wrong password: "${wrong}"`,
   );
   check(
-    (await page.getByRole("alert").filter({ visible: true }).count()) === 1,
+    (await roleAll(page, "alert").filter({ visible: true }).count()) === 1,
     "exactly one message is shown",
   );
   check((await visible("sign-in-email").inputValue()) === SHOPPER, "the e-mail is kept");
@@ -230,13 +237,11 @@ async function claimAs(email, orderItemId) {
   await visible("sign-in-submit").click();
   await page.waitForURL((url) => new URL(url).pathname === "/pagar");
   await visible("checkout-summary").waitFor();
-  const preselected = await page
-    .locator('[data-testid^="payment-"][aria-checked="true"]')
+  const preselected = await testIdsFrom(page, "payment-", '[aria-checked="true"]')
     .filter({ visible: true })
     .count();
   check(preselected === 0, "no payment method is pre-selected");
-  const address = await page
-    .locator('[data-testid^="address-"][aria-checked="true"]')
+  const address = await testIdsFrom(page, "address-", '[aria-checked="true"]')
     .filter({ visible: true })
     .count();
   check(address === 1, "the shopper's own address is the one thing pre-selected");

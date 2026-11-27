@@ -28,7 +28,13 @@
 // the journey makes on purpose.
 
 const { chromium, request } = require("playwright");
-const { overflow, screenText, settledText } = require("../lib/screen.cjs");
+const {
+  overflow,
+  screenText,
+  settledText,
+  testIds,
+  testIdsEndingIn,
+} = require("../lib/screen.cjs");
 const shopApp = require("../lib/shop.cjs");
 const { word } = require("../lib/words.cjs");
 
@@ -180,10 +186,9 @@ async function stoppedOrder(buyer) {
     // Held requests now answer; the app gave up on them already.
     for (const route of held.splice(0)) route.continue().catch(() => undefined);
   };
-  const retryButtons = () =>
-    page.locator('[data-testid$="-retry"]').filter({ visible: true }).count();
+  const retryButtons = () => testIdsEndingIn(page, "-retry").filter({ visible: true }).count();
 
-  const visible = (testId) => page.getByTestId(testId).filter({ visible: true }).first();
+  const visible = (testId) => testIds(page, testId).filter({ visible: true }).first();
   const flat = async (locator) => squash(await locator.innerText());
   const shot = (name) =>
     page.screenshot({ path: `${SHOTS}/native-shop-followups-${name}.png`, fullPage: true });
@@ -263,7 +268,7 @@ async function stoppedOrder(buyer) {
     "it never says the order is up to date while its refresh failed",
   );
   check(
-    (await page.getByTestId("payment-unread").filter({ visible: true }).count()) === 0 &&
+    (await testIds(page, "payment-unread").filter({ visible: true }).count()) === 0 &&
       (await retryButtons()) === 1,
     "one notice and one 'Intentar de nuevo'",
   );
@@ -283,8 +288,8 @@ async function stoppedOrder(buyer) {
   );
   log("   ", told);
   check(
-    (await page.getByTestId("payment-unread").filter({ visible: true }).count()) === 0 &&
-      (await page.getByTestId("order-kept").filter({ visible: true }).count()) === 0,
+    (await testIds(page, "payment-unread").filter({ visible: true }).count()) === 0 &&
+      (await testIds(page, "order-kept").filter({ visible: true }).count()) === 0,
     "asked again, the payment answers: the amount comes and the notice goes",
   );
   await shot("02-payment-read");
@@ -305,7 +310,7 @@ async function stoppedOrder(buyer) {
   );
   check(
     kept.includes("Los montos de su pago y de sus reembolsos que ve pueden no estar al día.") &&
-      (await page.getByTestId("payment-kept").filter({ visible: true }).count()) === 0 &&
+      (await testIds(page, "payment-kept").filter({ visible: true }).count()) === 0 &&
       (await retryButtons()) === 1,
     "one notice says the payment's amounts may not be up to date too, with one button",
   );
@@ -313,13 +318,12 @@ async function stoppedOrder(buyer) {
   await shot("03-order-kept");
   heal();
   await visible("order-kept-retry").click();
-  await page
-    .getByTestId("order-kept")
+  await testIds(page, "order-kept")
     .waitFor({ state: "detached", timeout: 15_000 })
     .catch(() => undefined);
   check(
-    (await page.getByTestId("order-kept").filter({ visible: true }).count()) === 0 &&
-      (await page.getByTestId("payment-kept").filter({ visible: true }).count()) === 0,
+    (await testIds(page, "order-kept").filter({ visible: true }).count()) === 0 &&
+      (await testIds(page, "payment-kept").filter({ visible: true }).count()) === 0,
     "asked again, both answer and the notices go",
   );
 
@@ -379,8 +383,8 @@ async function stoppedOrder(buyer) {
   const other = await shownSlugs();
   check(other.length === 0, "a new brand's failed first search shows none of Nimbo's products");
   check(
-    (await page.getByTestId("listing-kept").filter({ visible: true }).count()) === 0 &&
-      (await page.getByTestId("brand-summary").filter({ visible: true }).count()) === 0,
+    (await testIds(page, "listing-kept").filter({ visible: true }).count()) === 0 &&
+      (await testIds(page, "brand-summary").filter({ visible: true }).count()) === 0,
     "and no notice or count meant for other results",
   );
   await shot("05-other-brand-failed");
@@ -478,7 +482,7 @@ async function stoppedOrder(buyer) {
     // or remove it), and the bottom bar adds nothing, as on the website.
     check(
       (await flat(visible("cart-nothing-to-buy"))).includes("Cambie cada producto") &&
-        (await page.getByTestId("cart-blocked").count()) === 0,
+        (await testIds(page, "cart-blocked").count()) === 0,
       "the summary still offers to change the line",
     );
     await noSideways("cart, alternatives unread");
@@ -520,7 +524,7 @@ async function stoppedOrder(buyer) {
     );
     log("   ", givenUp);
     check(
-      (await page.getByTestId("cart-alternatives-retry").filter({ visible: true }).count()) === 1,
+      (await testIds(page, "cart-alternatives-retry").filter({ visible: true }).count()) === 1,
       "a check that never answers ends with a way to ask again",
     );
     heal();
@@ -570,7 +574,7 @@ async function stoppedOrder(buyer) {
   log("   ", hungPayment);
   check(
     (await retryButtons()) === 1 &&
-      (await page.getByTestId("payment-loading").filter({ visible: true }).count()) === 0,
+      (await testIds(page, "payment-loading").filter({ visible: true }).count()) === 0,
     "a payment that never answers ends with the notice and one 'Intentar de nuevo'",
   );
   await shot("10-payment-hung");

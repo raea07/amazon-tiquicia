@@ -235,7 +235,9 @@ async function newPasswordOnWebsite(page, confirmUrl, password) {
     .getByRole("button", { name: /contraseña/i })
     .last()
     .click();
-  await page.getByText("su contraseña cambió").first().waitFor();
+  // The website's success box (packages/ui Alert, role status), found by its
+  // role and checked by its words (README rule 2).
+  await page.getByRole("status").filter({ hasText: "su contraseña cambió" }).first().waitFor();
 }
 
 /**

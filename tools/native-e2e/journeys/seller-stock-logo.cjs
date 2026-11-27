@@ -17,7 +17,7 @@
 // Fails on any console error, uncaught exception or 5xx.
 
 const { chromium, request } = require("playwright");
-const { overflow, settledText, shows } = require("../lib/screen.cjs");
+const { overflow, settledText, shows, testIds } = require("../lib/screen.cjs");
 const seller = require("../lib/seller.cjs");
 
 const BASE = process.env.NATIVE_SELLER_URL || "http://127.0.0.1:3011";
@@ -107,7 +107,7 @@ async function logoFor(owner, staff, shopId, jpeg, { publish }) {
   page.on("response", (r) => {
     if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
   });
-  const visible = (id) => page.getByTestId(id).filter({ visible: true }).first();
+  const visible = (id) => testIds(page, id).filter({ visible: true }).first();
   const said = async (id) => (await visible(id).innerText()).replace(/\s+/g, " ").trim();
   const shot = (name) =>
     page.screenshot({ path: `${SHOTS}/native-seller-stock-logo-${name}.png`, fullPage: true });
@@ -199,7 +199,7 @@ async function logoFor(owner, staff, shopId, jpeg, { publish }) {
   await shot("02-logo-actions");
   await visible("logo-withdraw").click();
   await shows(page, "logo-result", "Retiramos el logotipo que esperaba revisión.");
-  await page.getByTestId("logo-withdraw").waitFor({ state: "detached" });
+  await testIds(page, "logo-withdraw").waitFor({ state: "detached" });
   let front = await owner("seller_shop_front", { p_seller_id: shopId });
   check(
     front.logo_waiting === null && front.logo !== null,
@@ -220,7 +220,7 @@ async function logoFor(owner, staff, shopId, jpeg, { publish }) {
   await visible("logo-remove-confirm").click();
   await visible("logo-remove").click();
   await shows(page, "logo-result", "Quitamos el logotipo de su tienda.");
-  await page.getByTestId("logo-remove").waitFor({ state: "detached" });
+  await testIds(page, "logo-remove").waitFor({ state: "detached" });
   front = await owner("seller_shop_front", { p_seller_id: shopId });
   check(front.logo === null, "the shop no longer shows a logo");
   check(

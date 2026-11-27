@@ -29,19 +29,25 @@ if (ids.status !== 0) {
   console.error("The test-id check failed; no journey was run.");
   process.exit(1);
 }
-// The check itself and the status words (its tests, and words.cjs's switch).
+// The check itself, the status words (its tests, and words.cjs's switch) and
+// the rule that journey files find no element themselves.
 const own = spawnSync(
   process.execPath,
-  ["--test", `${here}testids/check.test.mjs`, `${here}lib/words.test.cjs`],
+  [
+    "--test",
+    `${here}testids/check.test.mjs`,
+    `${here}lib/words.test.cjs`,
+    `${here}lib/journeys.test.cjs`,
+  ],
   { stdio: ["ignore", "ignore", "inherit"] },
 );
 if (own.status !== 0) {
   console.error(
-    "The tests of the test-id check or of words.cjs failed; no journey was run. Run: node --test tools/native-e2e/testids/check.test.mjs tools/native-e2e/lib/words.test.cjs",
+    "The tests of the test-id check, of words.cjs or of the journey files failed; no journey was run. Run: pnpm --filter @yuntera/native-e2e test",
   );
   process.exit(1);
 }
-console.info("testids and words: their tests pass");
+console.info("testids, words and journey files: their tests pass");
 
 const shots = process.env.NATIVE_SHOTS ?? `${here}screenshots`;
 mkdirSync(shots, { recursive: true });

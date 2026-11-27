@@ -23,7 +23,7 @@
 // browser logs, expected there).
 
 const { chromium, request } = require("playwright");
-const { overflow } = require("../lib/screen.cjs");
+const { overflow, testIds } = require("../lib/screen.cjs");
 const warehouseApp = require("../lib/warehouse.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
@@ -107,10 +107,10 @@ async function rpcAs(email, calls) {
   page.on("response", (r) => {
     if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
   });
-  const byId = (id) => page.getByTestId(id).first();
+  const byId = (id) => testIds(page, id).first();
   const textOf = async (id) => squash(await byId(id).innerText());
-  const item = () => page.getByTestId(`item-${notebook.sku_code}`).first();
-  const inItem = (id) => item().getByTestId(id).first();
+  const item = () => testIds(page, `item-${notebook.sku_code}`).first();
+  const inItem = (id) => testIds(item(), id).first();
   /** Waits until the product's card says `wanted` (its numbers are separate texts). */
   const itemSays = async (wanted) => {
     const deadline = Date.now() + 15000;
@@ -161,7 +161,7 @@ async function rpcAs(email, calls) {
   // ── A move: more than is free is refused before sending; then three ──
   await inItem("open-move").click();
   await inItem("move-quantity").fill(String(source.free + 5));
-  await item().getByTestId(`move-target-${target.id}`).first().click();
+  await testIds(item(), `move-target-${target.id}`).first().click();
   await inItem("move-submit").click();
   check(
     (await textOf("move-error")).includes(`Solo hay ${source.free} unidades libres`),
@@ -257,7 +257,7 @@ async function rpcAs(email, calls) {
   // ── One back: to a shelf switched off meanwhile (refused), then to its first shelf ──
   if ((await inItem("move-quantity").count()) === 0) await inItem("open-move").click();
   await inItem("move-quantity").fill("1");
-  await item().getByTestId(`move-target-${other.id}`).first().click();
+  await testIds(item(), `move-target-${other.id}`).first().click();
   await rpcAs("central@yuntera.example", [
     ["ops_set_location_active", { p_location_id: other.id, p_active: false }],
   ]);
@@ -266,18 +266,15 @@ async function rpcAs(email, calls) {
   await warehouseApp.cardSays(item(), "move-error", /está desactivada/);
   check(true, "a move to a shelf switched off meanwhile is refused by the database");
   check(
-    (await page.getByTestId("stock-result").count()) === 0,
+    (await testIds(page, "stock-result").count()) === 0,
     "the earlier confirmation is not shown next to the refusal",
   );
   const deadline = Date.now() + 15000;
-  while (
-    Date.now() < deadline &&
-    (await item().getByTestId(`move-target-${other.id}`).count()) > 0
-  ) {
+  while (Date.now() < deadline && (await testIds(item(), `move-target-${other.id}`).count()) > 0) {
     await page.waitForTimeout(200);
   }
   check(
-    (await item().getByTestId(`move-target-${other.id}`).count()) === 0 &&
+    (await testIds(item(), `move-target-${other.id}`).count()) === 0 &&
       (await inItem("move-quantity").inputValue()) === "1",
     "the switched-off shelf leaves the choices, the quantity is kept",
   );
@@ -288,7 +285,7 @@ async function rpcAs(email, calls) {
     "nothing stays chosen: a second press moves nothing",
   );
   await shot("05b-move-refused-switched-off");
-  await item().getByTestId(`move-target-${source.location_id}`).first().click();
+  await testIds(item(), `move-target-${source.location_id}`).first().click();
   await inItem("move-submit").click();
   await warehouseApp.stockResult(
     page,
@@ -319,7 +316,7 @@ async function rpcAs(email, calls) {
   await item().waitFor();
   await inItem("open-move").click();
   await inItem("move-quantity").fill("2");
-  await item().getByTestId(`move-target-${source.location_id}`).first().click();
+  await testIds(item(), `move-target-${source.location_id}`).first().click();
   const [emptied] = await rpcAs("bodega@yuntera.example", [
     [
       "wms_move_stock",
@@ -350,7 +347,7 @@ async function rpcAs(email, calls) {
     "the refusal is an alert (announced at once), as on the web",
   );
   check(
-    (await page.getByTestId(`item-${notebook.sku_code}`).count()) === 0 &&
+    (await testIds(page, `item-${notebook.sku_code}`).count()) === 0 &&
       (await textOf("location-summary")).includes("Está vacía"),
     "the shelf reads empty, as the database says",
   );

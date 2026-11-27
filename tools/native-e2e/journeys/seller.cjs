@@ -24,7 +24,16 @@
 
 const { createHmac } = require("node:crypto");
 const { chromium, request } = require("playwright");
-const { allText, overflow, screenText, settledText, shows } = require("../lib/screen.cjs");
+const {
+  allText,
+  overflow,
+  roleAll,
+  screenText,
+  settledText,
+  shows,
+  testIds,
+  testIdsFrom,
+} = require("../lib/screen.cjs");
 const seller = require("../lib/seller.cjs");
 const { word } = require("../lib/words.cjs");
 
@@ -168,7 +177,7 @@ function colones(text) {
   };
 
   const { context, page } = await open("seller");
-  const visible = (id) => page.getByTestId(id).filter({ visible: true }).first();
+  const visible = (id) => testIds(page, id).filter({ visible: true }).first();
   const front = (id) => seller.inFront(page, id);
   const textOf = async (id) => (await visible(id).innerText()).replace(/\s+/g, " ").trim();
   const shot = (name) => page.screenshot({ path: `${SHOTS}/native-seller-${name}.png` });
@@ -278,9 +287,9 @@ function colones(text) {
   );
   dbRefusals = false;
   await visible("offer-price").fill(after);
-  const stockField = page.locator('[data-testid^="stock-quantity-"]').filter({ visible: true });
+  const stockField = testIdsFrom(page, "stock-quantity-").filter({ visible: true });
   await stockField.first().fill("23");
-  await page.locator('[data-testid^="stock-save-"]').filter({ visible: true }).first().click();
+  await testIdsFrom(page, "stock-save-").filter({ visible: true }).first().click();
   await seller.stockResult(page, "Existencias actualizadas.").waitFor();
   check(true, "stock at the seller's own place set to 23");
   await noSideways("offer");
@@ -301,8 +310,8 @@ function colones(text) {
   await visible("listing-title").waitFor();
   await visible("listing-title").fill("Lámpara de escritorio LED Volcán con brazo flexible");
   await visible("category").click();
-  await page.getByTestId("category-filter").filter({ visible: true }).first().fill("cocina");
-  await page.getByTestId("category-option-cocina").filter({ visible: true }).first().click();
+  await testIds(page, "category-filter").filter({ visible: true }).first().fill("cocina");
+  await testIds(page, "category-option-cocina").filter({ visible: true }).first().click();
   await visible("listing-bullets").fill("Luz cálida y fría\nBrazo flexible\nPuerto USB");
   await visible("listing-price").fill("20 000");
   await visible("listing-fulfillment-seller").click();
@@ -415,10 +424,10 @@ function colones(text) {
   await seller.toPackLink(page, 1).click();
   await page.waitForURL((url) => new URL(url).pathname === "/pedidos");
   check(
-    (await page.getByRole("tab", { selected: true }).first().innerText()).includes("Pedidos"),
+    (await roleAll(page, "tab", { selected: true }).first().innerText()).includes("Pedidos"),
     "the figure on the home screen opens the orders tab",
   );
-  const parcel = page.locator('[data-testid^="parcel-"]').filter({ visible: true }).first();
+  const parcel = testIdsFrom(page, "parcel-").filter({ visible: true }).first();
   await parcel.waitFor();
   const tracking = (await parcel.getAttribute("data-testid")).slice("parcel-".length);
   await shotFull("11-orders-to-pack");
@@ -437,7 +446,7 @@ function colones(text) {
 
   // 10. Inventory: the seller's own place, then stock sent to the warehouse (TecnoCasa)
   await seller.tabs.inventory(page).click();
-  await page.locator('[data-testid^="location-"]').filter({ visible: true }).first().waitFor();
+  await testIdsFrom(page, "location-").filter({ visible: true }).first().waitFor();
   await noSideways("inventory");
   await shot("12b-inventory-own-place");
   await chooseShop("TecnoCasa");
@@ -446,13 +455,13 @@ function colones(text) {
   await seller.tabs.orders(page).click();
   await seller.toPackHeading(page).waitFor();
   check(
-    (await page.getByTestId("pack-result").filter({ visible: true }).count()) === 0,
+    (await testIds(page, "pack-result").filter({ visible: true }).count()) === 0,
     "in TecnoCasa, Pedidos no longer says Ferretería's parcel is ready",
   );
   await seller.tabs.listings(page).click();
   await visible("new-listing").waitFor();
   check(
-    (await page.getByTestId("created-message").filter({ visible: true }).count()) === 0,
+    (await testIds(page, "created-message").filter({ visible: true }).count()) === 0,
     "and Productos no longer says a product was sent for review",
   );
 
@@ -493,7 +502,7 @@ function colones(text) {
 
   await seller.tabs.inventory(page).click();
   await visible("new-inbound").click();
-  await page.locator('[data-testid^="inbound-qty-"]').filter({ visible: true }).first().fill("15");
+  await testIdsFrom(page, "inbound-qty-").filter({ visible: true }).first().fill("15");
   await visible("inbound-submit").click();
   await visible("inbound-result").waitFor();
   const inbound = await textOf("inbound-result");
@@ -504,7 +513,7 @@ function colones(text) {
   // 11. A shop still in review sees what the web shows it
   const pendingShop = await open("pending");
   await signIn(pendingShop.page, "bazar@yuntera.example");
-  await pendingShop.page.getByTestId("shop-pending").first().waitFor();
+  await testIds(pendingShop.page, "shop-pending").first().waitFor();
   check(true, "a shop in review is told so on its home screen");
   await pendingShop.page.screenshot({ path: `${SHOTS}/native-seller-13-pending-shop.png` });
   await pendingShop.context.close();
@@ -512,7 +521,7 @@ function colones(text) {
   // 12. A newcomer creates an account in the app, then registers a shop
   const newcomer = await open("newcomer");
   const p = newcomer.page;
-  const by = (id) => p.getByTestId(id).filter({ visible: true }).first();
+  const by = (id) => testIds(p, id).filter({ visible: true }).first();
   await p.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await by("show-sign-up").click();
   await by("sign-up-name").fill("Ana Mora Solís");
@@ -540,7 +549,7 @@ function colones(text) {
   await p.screenshot({ path: `${SHOTS}/native-seller-14b-register-error.png` });
   await by("shop-id-number").fill("3-0456-0789");
   await by("shop-submit").click();
-  await p.getByTestId("seller-overview").filter({ visible: true }).first().waitFor();
+  await testIds(p, "seller-overview").filter({ visible: true }).first().waitFor();
   await seller.welcome(p).waitFor();
   check(
     (await by("current-shop").innerText()).includes("Cerámica La Guaria"),
@@ -553,8 +562,8 @@ function colones(text) {
   await by("new-listing").click();
   await by("listing-title").fill("Taza de cerámica pintada a mano 350 ml");
   await by("category").click();
-  await p.getByTestId("category-filter").filter({ visible: true }).first().fill("cocina y");
-  await p.getByTestId("category-option-cocina").filter({ visible: true }).first().click();
+  await testIds(p, "category-filter").filter({ visible: true }).first().fill("cocina y");
+  await testIds(p, "category-option-cocina").filter({ visible: true }).first().click();
   await by("listing-price").fill("6 500");
   await by("listing-fulfillment-seller").click();
   await by("package-weightGrams").fill("450");
@@ -616,14 +625,14 @@ function colones(text) {
 
   const twoStep = await open("second-step");
   const q = twoStep.page;
-  const on = (id) => q.getByTestId(id).filter({ visible: true }).first();
+  const on = (id) => testIds(q, id).filter({ visible: true }).first();
   const said = async (id) => (await on(id).innerText()).replace(/\s+/g, " ").trim();
   authRefusals = true; // a wrong code is a 422 from Auth, which the browser logs
   await signIn(q, SECOND);
   await on("second-step").waitFor();
   check(
     /Verificación en dos pasos/.test(await said("second-step")) &&
-      !(await q.getByTestId("seller-overview").count()),
+      !(await testIds(q, "seller-overview").count()),
     "the right password leads to the second step, not into the shop",
   );
   await q.screenshot({ path: `${SHOTS}/native-seller-18-second-step.png` });
@@ -667,7 +676,7 @@ function colones(text) {
   check(
     /Escribió demasiados códigos incorrectos.*Podrá intentarlo de nuevo en/.test(
       await said("second-step-message"),
-    ) && !(await q.getByTestId("seller-overview").count()),
+    ) && !(await testIds(q, "seller-overview").count()),
     "during the pause even the right code is not sent, and the message says how long to wait",
   );
   await q.screenshot({ path: `${SHOTS}/native-seller-19-second-step-paused.png` });

@@ -14,6 +14,7 @@
 // step provokes on purpose (lib/accounts.cjs, `expect`).
 
 const { chromium } = require("playwright");
+const { testIds } = require("../lib/screen.cjs");
 const {
   check,
   deleteThroughScreen,
@@ -84,7 +85,7 @@ const APPS = [
       app.blocker.test(blocked) && !/account_/.test(blocked),
       `the ${app.name} is told the role stands in the way and what to do`,
     );
-    check(!(await r.page.getByTestId("delete-submit").count()), "and there is no delete button");
+    check(!(await testIds(r.page, "delete-submit").count()), "and there is no delete button");
     await r.noSideways("deletion blocked");
     await r.shot(`accounts-${app.name}-03-deletion-blocked`, true);
     await r.on("delete-cancel").click();

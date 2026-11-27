@@ -3,8 +3,11 @@
 // and accounts.cjs build on these; journey files call the helpers.
 //
 // Rules this file keeps:
-// - an element is found by its testID (`on`, `all`, `prefixed`) or by its
-//   role and accessible name (`role`, `button`, `link`, `tab`, `heading`);
+// - an element is found by its testID (`on`, `all`, `prefixed`, and
+//   `testIds`, `testIdsFrom`, `testIdsEndingIn` for counts and scoped steps
+//   in the journeys) or by its
+//   role and accessible name (`role`, `button`, `link`, `tab`, `heading`,
+//   `roleAll`);
 // - words are read from an element found that way and checked: a word on
 //   screen never finds an element by itself, and no element is found by a
 //   class, a tag or its place on the page;
@@ -25,6 +28,23 @@ const prefixed = (page, prefix, more = "") =>
 const rowWith = (page, id, words) => page.getByTestId(id).filter({ visible: true, hasText: words });
 /** Waits until an element with this testID says `words`. */
 const shows = (page, id, words, options) => rowWith(page, id, words).first().waitFor(options);
+
+/**
+ * Every element with this testID inside `scope` (a page or an element found
+ * by testID), shown or not: for counts ("there is no delete button") and for
+ * steps that pick `.first()` or filter by visibility themselves.
+ */
+const testIds = (scope, id) => scope.getByTestId(id);
+/**
+ * Every element inside `scope` whose testID starts with `prefix`, shown or
+ * not; `more` adds an attribute condition (`[aria-checked="true"]`).
+ */
+const testIdsFrom = (scope, prefix, more = "") =>
+  scope.locator(`[data-testid^="${prefix}"]${more}`);
+/** Every element inside `scope` whose testID ends with `suffix`, shown or not. */
+const testIdsEndingIn = (scope, suffix) => scope.locator(`[data-testid$="${suffix}"]`);
+/** Every element with this role inside `scope` (no name: for counts and the selected tab). */
+const roleAll = (scope, kind, options) => scope.getByRole(kind, options);
 
 /** The first visible element with this role and accessible name. */
 const role = (page, kind, name, options = {}) =>
@@ -89,6 +109,7 @@ module.exports = {
   overflow,
   prefixed,
   role,
+  roleAll,
   rowWith,
   screen,
   screenText,
@@ -96,4 +117,7 @@ module.exports = {
   shows,
   squash,
   tab,
+  testIds,
+  testIdsEndingIn,
+  testIdsFrom,
 };

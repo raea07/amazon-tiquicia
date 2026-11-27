@@ -25,7 +25,7 @@ const { chromium, request } = require("playwright");
 const { ownRoute } = require("../../e2e/lib/own-route.cjs");
 const driverApp = require("../lib/driver.cjs");
 const { word } = require("../lib/words.cjs");
-const { overflow, screenText } = require("../lib/screen.cjs");
+const { overflow, screenText, testIds } = require("../lib/screen.cjs");
 
 const SHOTS = process.env.NATIVE_SHOTS || require("node:os").tmpdir();
 const URL_ = process.env.NATIVE_DRIVER_URL || "http://127.0.0.1:3012";
@@ -105,7 +105,7 @@ async function as(email) {
   page.on("response", (r) => {
     if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
   });
-  const byId = (id) => page.getByTestId(id).filter({ visible: true }).first();
+  const byId = (id) => testIds(page, id).filter({ visible: true }).first();
   const routeCard = (code) => driverApp.routeCard(page, code);
   const flat = async (locator) => (await locator.innerText()).replace(/\s+/g, " ");
 
@@ -176,7 +176,7 @@ async function as(email) {
     "the removed stop's screen says not to collect the parcel",
   );
   check(
-    (await page.getByTestId("stop-arrive").count()) === 0 &&
+    (await testIds(page, "stop-arrive").count()) === 0 &&
       !(await screenText(page)).includes("Inicie la ruta para poder entregar"),
     "the removed stop's screen offers nothing to do at the door",
   );

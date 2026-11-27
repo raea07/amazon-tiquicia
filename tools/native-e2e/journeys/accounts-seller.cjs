@@ -29,6 +29,7 @@
 // step provokes on purpose (lib/accounts.cjs, `expect`).
 
 const { chromium } = require("playwright");
+const { testIds } = require("../lib/screen.cjs");
 const {
   check,
   deleteThroughScreen,
@@ -85,7 +86,7 @@ const OWNER = "vendedor@yuntera.example";
   await seller.invitationRow(o.page, other).first().waitFor();
   await o.noSideways("team");
   await o.shot("accounts-seller-01-team-invited", true);
-  await seller.invitationRow(o.page, other).getByTestId("invitation-revoke").click();
+  await testIds(seller.invitationRow(o.page, other), "invitation-revoke").click();
   await seller.invitationRow(o.page, other).waitFor({ state: "detached" });
   check(
     (await o.said("team-notice")) === "Invitación retirada.",
@@ -122,8 +123,8 @@ const OWNER = "vendedor@yuntera.example";
   await o.page.reload({ waitUntil: "networkidle" });
   const row = seller.memberRow(o.page, member);
   await row.waitFor();
-  await row.getByTestId("member-role-admin").click();
-  await row.getByTestId("member-role-save").click();
+  await testIds(row, "member-role-admin").click();
+  await testIds(row, "member-role-save").click();
   await seller.rowMessage(row, "Rol actualizado.");
   const team = await rpcAs(OWNER, "seller_team", { p_seller_id: shop.id });
   check(
@@ -136,16 +137,16 @@ const OWNER = "vendedor@yuntera.example";
   const mine = seller.memberRow(m.page, "(usted)");
   await mine.waitFor();
   check((await mine.innerText()).includes("Administración"), "the member sees the new role");
-  await mine.getByTestId("member-leave").click();
+  await testIds(mine, "member-leave").click();
   await seller.rowMessage(mine, "Marque la casilla");
   check(true, "leaving needs the box ticked");
   await m.shot("accounts-seller-04-leave", true);
-  await mine.getByTestId("member-leave-confirm").click();
-  await mine.getByTestId("member-leave").click();
+  await testIds(mine, "member-leave-confirm").click();
+  await testIds(mine, "member-leave").click();
   await m.on("team-left").waitFor();
   check(
     (await m.said("team-left")).includes(shop.trade_name) &&
-      (await m.page.getByTestId("no-access").filter({ visible: true }).count()) === 1,
+      (await testIds(m.page, "no-access").filter({ visible: true }).count()) === 1,
     "out of the team, the member is back on the screen for an account without a shop, which says so",
   );
   check(
@@ -181,7 +182,7 @@ const OWNER = "vendedor@yuntera.example";
   const unsent = `sin-red-${Date.now()}@correo.example`;
   await o.context.setOffline(true);
   o.expect(/ERR_INTERNET_DISCONNECTED|Failed to fetch/);
-  await otherRow.getByTestId("member-remove").click();
+  await testIds(otherRow, "member-remove").click();
   await seller.rowMessage(otherRow, "No pudimos conectarnos", { timeout: 10_000 });
   await seller.invite(o.page, unsent);
   await o.shows("invite-message", "No pudimos conectarnos", { timeout: 10_000 });
@@ -196,7 +197,7 @@ const OWNER = "vendedor@yuntera.example";
     "offline, a removal and an invitation fail at once, and neither is sent when the connection returns",
   );
 
-  await otherRow.getByTestId("member-remove").click();
+  await testIds(otherRow, "member-remove").click();
   await otherRow.waitFor({ state: "detached" });
   check(
     (await rpcAs(OWNER, "seller_team", { p_seller_id: shop.id })).members.every(
@@ -306,7 +307,7 @@ const OWNER = "vendedor@yuntera.example";
   await o.on("open-shop-notifications").click();
   await o.page.waitForURL(/\/notificaciones/);
   await o.on("notify-whatsapp").waitFor();
-  check(!(await o.page.getByTestId("notify-sms").count()), "a shop is offered no SMS");
+  check(!(await testIds(o.page, "notify-sms").count()), "a shop is offered no SMS");
   if ((await o.on("notify-whatsapp").getAttribute("aria-checked")) !== "true") {
     await o.on("notify-whatsapp").click();
   }
