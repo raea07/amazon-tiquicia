@@ -305,6 +305,10 @@ function sql(statement) {
     !/@|%40|\+506/.test(support.url()),
     `the customer view's address holds no contact (${customerPath})`,
   );
+  // Load the customer view on its own: the order page left behind by the
+  // client-side navigation keeps its own "Mostrar contacto" form in the
+  // document (hidden), which would make the reason field ambiguous.
+  await ops.openCustomer(support, customerPath.split("/").pop());
   const view = await ops.mainText(support);
   check(view.includes("María") && view.includes(orderNumber), "the customer view: name and orders");
   check(!view.includes(SHOPPER), "no e-mail until it is asked for");
