@@ -13,7 +13,10 @@
 --                  give the same answer and leave nothing;
 --   the masking:   the customer's own live code reaches staff masked also
 --                  when typed with other separators (slashes, underscores,
---                  spaced dashes, several spaces);
+--                  spaced dashes, several spaces, line breaks) or at the
+--                  start or end of a longer number; a text staff wrote is
+--                  never masked, and the guard reads every shape the mask
+--                  reads (the review of the join, part 2);
 --   Atención:      ops_care_queues lists for each role only the complaints,
 --                  returns and reports whose case that role reads (table 4.1)
 --                  and names the customer by first name.
@@ -172,7 +175,10 @@ declare
   v_text text;
 begin
   foreach v_text in array array['6 - 2 - 8 - 4', '6/2/8/4', '6_2_8_4', '6   2   8   4', '6284', '6 2 8 4',
-                                '62-84', '6.2.8.4', '٦٢٨٤', '8888-6284', '(6)(2)(8)(4)'] loop
+                                '62-84', '6.2.8.4', '٦٢٨٤', '8888-6284', '(6)(2)(8)(4)',
+                                -- inside an unbroken longer number, and with wider gaps
+                                '88886284', '62848888', '16284', '62841', '6  -  2  -  8  -  4',
+                                E'6\n\n2\n\n8\n\n4'] loop
     assert private.mask_shopper_codes('Mi código: ' || v_text || '.', null, v_user) !~ '6.{0,12}2.{0,12}8.{0,12}4'
            and private.mask_shopper_codes('Mi código: ' || v_text || '.', null, v_user) like '%••••%',
       format('%s reaches staff masked: %s', v_text, private.mask_shopper_codes('Mi código: ' || v_text || '.', null, v_user));
@@ -180,6 +186,77 @@ begin
   -- Other numbers stay as written.
   assert private.mask_shopper_codes('Pedido 1234, tel. 8888-1234, del 6 al 28 de abril.', null, v_user)
          = 'Pedido 1234, tel. 8888-1234, del 6 al 28 de abril.', 'nothing else is masked';
+end $$;
+
+-- ── A staff text is never masked; the guard reads what the mask reads ──────
+-- The outside review of the join found an oracle: a note written as
+-- '0/6/5/7 0/6/5/8 …' passed the guard (it read no four-digit number, so it
+-- counted and refused nothing), and ops_case then masked the staff's own
+-- note with the customer's mask, showing '••••' exactly where a guess was a
+-- live code. Now the guard joins digits across the same gaps as the mask,
+-- and ops_case shows a staff entry as it was written.
+
+select pg_temp.shopper('notas197@yuntera.example', 'Nora Notas');
+insert into public.staff_members (user_id, role)
+select id, 'ops' from auth.users where email = 'notas197@yuntera.example';
+
+do $$
+declare
+  v_case uuid := (select id from private.cases where complaint_id = current_setting('t.complaint')::uuid);
+  v_text text;
+  v_sweep text;
+  v_note bigint;
+  v_body text;
+  v_refused integer;
+begin
+  -- Every shape the mask hides, the guard reads as the number.
+  foreach v_text in array array['6/2/8/4', '6_2_8_4', '(6)(2)(8)(4)', E'6\n2\n8\n4', E'62\n84',
+                                '6 - 2 - 8 - 4', '6 — 2 — 8 — 4', '6:2:8:4'] loop
+    assert '6284' = any (private.case_text_numbers(v_text)), format('the guard reads %L', v_text);
+  end loop;
+
+  perform pg_temp.act('notas197@yuntera.example');
+  -- The live code split by slashes: refused, and on the trail.
+  assert public.ops_add_case_note(v_case, 'Probar el 6/2/8/4 en la ruta.') is null,
+    'a note with the code split by slashes is refused';
+  -- The review's sweep: two hundred guesses in one note are too many numbers.
+  select string_agg(regexp_replace(lpad(g::text, 4, '0'), '(.)(.)(.)(.)', '\1/\2/\3/\4'), ' ')
+    into v_sweep from generate_series(6200, 6399) g;
+  perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)', v_case, v_sweep), 'too_many_numbers');
+  -- A phone that ends in the live code is read whole by the guard (it is
+  -- not a guess), so the note is kept, and staff read it as written: no
+  -- mask tells its writer that those four digits are a code.
+  v_note := public.ops_add_case_note(v_case, 'Llamó desde el 8888-6284, sin respuesta.');
+  assert v_note is not null, 'a note with a phone is kept';
+  select e ->> 'body' into v_body
+  from jsonb_array_elements(public.ops_case(v_case) -> 'entries') e
+  where (e ->> 'id')::bigint = v_note;
+  assert v_body = 'Llamó desde el 8888-6284, sin respuesta.', format('the staff note as written: %s', v_body);
+  assert not exists (select 1 from jsonb_array_elements(public.ops_case(v_case) -> 'entries') e
+                     where e ->> 'author' is not null and e ->> 'body' like '%••••%'),
+    'no staff entry is ever shown masked';
+  perform pg_temp.logout();
+  select count(*) into v_refused from private.audit_log a join auth.users u on u.id = a.actor_id
+  where u.email = 'notas197@yuntera.example' and a.action = 'REFUSED_CODE';
+  assert v_refused = 1, format('one refusal on the trail, not %s', v_refused);
+  assert (select sum(k.numbers) from private.case_number_checks k join auth.users u on u.id = k.actor_id
+          where u.email = 'notas197@yuntera.example') = 1,
+    'the refused slash note counted its number (the phone counts none)';
+end $$;
+
+-- An answer kept from before 084700 (no author) is still masked.
+do $$
+declare
+  v_case uuid := (select id from private.cases where complaint_id = current_setting('t.complaint')::uuid);
+  v_body text;
+begin
+  insert into private.case_entries (case_id, kind, body) values (v_case, 'answer', 'Su código es 6284.');
+  perform pg_temp.act('notas197@yuntera.example');
+  select e ->> 'body' into v_body
+  from jsonb_array_elements(public.ops_case(v_case) -> 'entries') e
+  where e ->> 'author' is null and e ->> 'kind' = 'answer' order by (e ->> 'id')::bigint desc limit 1;
+  perform pg_temp.logout();
+  assert v_body = 'Su código es ••••.', format('an old answer without an author is masked: %s', v_body);
 end $$;
 
 -- ── Atención lists for each role what table 4.1 lets it read ───────────────

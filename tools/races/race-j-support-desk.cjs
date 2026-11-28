@@ -26,6 +26,12 @@
  *      before it and then erased and closed with the account; never left
  *      open with its summary. Forced: the shopper's old complaint is held, so
  *      the deletion holds the account row while the contact is recorded.
+ *   J8 one staff member's texts at once: ten contacts recorded in parallel
+ *      by one fresh writer, each with five four-digit numbers (J8a) or with
+ *      the order's live delivery code among them (J8b). The hourly allowance
+ *      (20 numbers) and the lock-out (3 refusals) hold: at most 20 numbers
+ *      counted and at most 3 refusals on the audit trail, whatever the
+ *      interleaving (084700 checks one writer's texts one after another).
  *
  * Every scenario: no deadlock, no lost or doubled entry, and the source row's
  * status and the case's status agree afterwards.
@@ -423,6 +429,79 @@ const holdOldComplaint = (_h, ctx) => ({
   holdMs: 150,
 });
 
+// ── J8 ──────────────────────────────────────────────────────────────────────
+const J8_CALLS = 10;
+async function setupJ8(h) {
+  serial += 1;
+  const email = `carrera-j8-${Date.now().toString(36)}-${serial}@yuntera.example`;
+  const user = (
+    await h.q(
+      `insert into auth.users (id, email, raw_user_meta_data)
+       values (gen_random_uuid(), $1, '{"full_name": "Prueba Carrera Ocho"}') returning id`,
+      [email],
+    )
+  ).rows[0].id;
+  await h.q("insert into public.staff_members (user_id, role) values ($1, 'support')", [user]);
+  h.ids.set(email, user);
+  // Any order with a delivery code: a contact about it may not hold that code.
+  const order = (
+    await h.q(
+      `select o.order_number, c.code from public.orders o
+         join private.delivery_codes c on c.order_id = o.id
+        order by o.order_number limit 1`,
+    )
+  ).rows[0];
+  if (!order) throw new Error("no order with a delivery code in the seed");
+  return { email, user, number: order.order_number, code: order.code };
+}
+/** Five different four-digit numbers, none of them the code; `withCode` puts the code first. */
+function fiveNumbers(code, call, withCode) {
+  const out = [];
+  for (let n = 1000 + call * 7; out.length < 5; n += 1) {
+    const s = String(n);
+    if (s !== code && !out.includes(s)) out.push(s);
+  }
+  if (withCode) out[0] = code;
+  return out.join(" y ");
+}
+const j8 = (withCode) => (_h, ctx) =>
+  Array.from({ length: J8_CALLS }, (_, i) => ({
+    name: `record-${i}`,
+    as: ctx.email,
+    sql: "select public.ops_record_contact('phone', 'other', $1, $2, null) as id",
+    args: [`Llamada sobre los números ${fiveNumbers(ctx.code, i, withCode)}.`, ctx.number],
+  }));
+async function verifyJ8(h, ctx, results, withCode) {
+  const bad = [];
+  const allowed = withCode
+    ? ["too_many_refusals", "too_many_numbers_hour"]
+    : ["too_many_numbers_hour"];
+  for (const r of results) {
+    if (!r.outcome || lockLost(r)) continue;
+    if (!allowed.some((a) => r.outcome.includes(a))) bad.push(`${r.name} refused: ${r.outcome}`);
+  }
+  const s = (
+    await h.q(
+      `select (select coalesce(sum(k.numbers), 0)::int from private.case_number_checks k
+                where k.actor_id = $1) as numbers,
+              (select count(*)::int from private.audit_log a
+                where a.actor_id = $1 and a.action = 'REFUSED_CODE') as refusals,
+              (select count(*)::int from private.cases k where k.created_by = $1) as contacts`,
+      [ctx.user],
+    )
+  ).rows[0];
+  if (s.numbers > 20) bad.push(`${s.numbers} numbers counted in the hour (allowance 20)`);
+  if (s.refusals > 3) bad.push(`${s.refusals} refusals on the trail in the hour (lock-out 3)`);
+  const kept = results.filter((r) => !r.outcome && r.row && r.row.id).length;
+  const nulls = results.filter((r) => !r.outcome && r.row && !r.row.id).length;
+  if (s.contacts !== kept) bad.push(`${s.contacts} contacts recorded, ${kept} answered with an id`);
+  if (withCode && (kept !== 0 || nulls !== s.refusals))
+    bad.push(`${kept} contacts with the code kept, ${nulls} refused against ${s.refusals} on the trail`);
+  if (!withCode && kept * 5 !== s.numbers)
+    bad.push(`${kept} contacts kept but ${s.numbers} numbers counted`);
+  return bad;
+}
+
 const scenarios = [
   ...pair("J1 ops_answer_case vs ops_resolve_complaint", (h) => complaint(h), j1, verifyJ1),
   {
@@ -457,6 +536,18 @@ const scenarios = [
     actors: forced(j7, 0),
     options: holdOldComplaint,
     verify: verifyJ7,
+  },
+  {
+    name: "J8a ten contacts of one writer at once, five numbers each",
+    setup: setupJ8,
+    actors: j8(false),
+    verify: (h, ctx, results) => verifyJ8(h, ctx, results, false),
+  },
+  {
+    name: "J8b ten contacts of one writer at once, each with the code",
+    setup: setupJ8,
+    actors: j8(true),
+    verify: (h, ctx, results) => verifyJ8(h, ctx, results, true),
   },
 ];
 

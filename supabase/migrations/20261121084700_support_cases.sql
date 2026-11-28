@@ -362,8 +362,12 @@ $$;
 -- (NFKC, the decimal digits of other scripts mapped to 0-9, invisible format
 -- characters and combining marks removed):
 --   * a run of digits that is the code ('4821', 'x4821x', '4821 8888');
---   * consecutive runs joined by spaces, dots, commas or dashes whose digits
---     together are the code ('48-21', '4 8 2 1', '48.21').
+--   * consecutive runs joined by one to three characters that are neither a
+--     letter nor a digit (spaces, dots, commas, dashes, slashes, colons,
+--     underscores, brackets, line breaks) whose digits together are the code
+--     ('48-21', '4 8 2 1', '48.21', '4/8/2/1', '(4)(8)(2)(1)'). These are the
+--     gaps the mask of a customer's words reads too, so no shape the mask
+--     would hide is one the guard lets pass uncounted.
 -- Three shapes are read whole and never split, so they pass: an order number
 -- (YT-100123), a Costa Rica phone written 8888-1234 or +506 8888 1234, and
 -- an amount with a colón or dollar sign and thousands separators (₡4.821).
@@ -383,7 +387,15 @@ $$;
 -- The other direction: a customer may type their own live code into a
 -- complaint, a return's reason or a report. What the staff functions answer
 -- of those words masks it (mask_shopper_codes); the customer still reads
--- their own words as written.
+-- their own words as written. Only the customer's words are masked, never a
+-- text staff wrote: a staff text passed the guard when it was written, and
+-- masking it would show the writer which of their numbers is a live code
+-- without counting anything (an oracle outside the lock-out and the
+-- allowance).
+--
+-- Concurrent texts of one writer are checked one after another (an
+-- advisory lock per writer in case_text_allowed), so the lock-out and the
+-- allowance hold however many calls arrive at once.
 
 -- Decimal digits of other scripts, '0' to '9' of each (NFKC already turns
 -- full-width, mathematical, circled and superscript digits into 0-9).
@@ -441,7 +453,7 @@ begin
   v := regexp_replace(v, '[₡$] ?[0-9]{1,3}(?:[.,][0-9]{3})+(?:,[0-9]{1,2})?(?![0-9])', ' ', 'g');
 
   for v_group in
-    select m[1] from regexp_matches(v, '([0-9]+(?:[ .,-]{1,2}[0-9]+)*)', 'g') m
+    select m[1] from regexp_matches(v, '([0-9]+(?:[^[:alnum:]]{1,3}[0-9]+)*)', 'g') m
   loop
     v_runs := regexp_split_to_array(regexp_replace(v_group, '[^0-9]+', ' ', 'g'), ' ');
     for i in 1 .. cardinality(v_runs) loop
@@ -506,8 +518,10 @@ $$;
 -- customer still reads their words as they wrote them (my_cases and the
 -- order's page read the rows themselves). A text that holds no live code
 -- comes back exactly as written; one that does comes back in plain digits
--- (case_text_plain) with the code masked wherever it stands, also inside a
--- longer shape such as a phone (decision 61).
+-- (case_text_plain) with the code masked wherever it stands: its digits
+-- split by up to eight characters that are neither a letter nor a digit, and
+-- at the start or the end of a longer run of digits ('88881636', '16368888',
+-- a phone written with or without its dash) (decision 61).
 create or replace function private.mask_shopper_codes(p_text text, p_order_id uuid, p_user_id uuid)
 returns text
 language plpgsql stable security definer
@@ -517,21 +531,22 @@ declare
   v_plain text;
   v text;
   v_code text;
+  v_shape text;
 begin
   if p_text is null then
     return null;
   end if;
   v_plain := private.case_text_plain(p_text);
   v := v_plain;
-  -- Its digits alone, or split by up to three characters that are neither a
-  -- letter nor a digit (spaces, dots, dashes, slashes, underscores, brackets:
-  -- more than the guard reads, as masking too much costs staff nothing), and
-  -- also inside a phone or an amount.
+  -- Its digits alone, or split by up to eight characters that are neither a
+  -- letter nor a digit (spaces, dots, dashes, slashes, underscores, brackets,
+  -- line breaks: more than the guard reads, as masking too much costs staff
+  -- nothing), and also where it begins or ends a longer run of digits (a
+  -- phone or an amount, with or without separators).
   foreach v_code in array private.case_live_codes(p_order_id, p_user_id) loop
-    v := regexp_replace(v,
-      '(?<![0-9])' || substr(v_code, 1, 1) || '[^[:alnum:]]{0,3}' || substr(v_code, 2, 1) || '[^[:alnum:]]{0,3}'
-        || substr(v_code, 3, 1) || '[^[:alnum:]]{0,3}' || substr(v_code, 4, 1) || '(?![0-9])',
-      '••••', 'g');
+    v_shape := substr(v_code, 1, 1) || '[^[:alnum:]]{0,8}' || substr(v_code, 2, 1) || '[^[:alnum:]]{0,8}'
+      || substr(v_code, 3, 1) || '[^[:alnum:]]{0,8}' || substr(v_code, 4, 1);
+    v := regexp_replace(v, '(?<![0-9])' || v_shape || '|' || v_shape || '(?![0-9])', '••••', 'g');
   end loop;
   return case when v = v_plain then p_text else v end;
 end;
@@ -567,6 +582,12 @@ as $$
 declare
   v_numbers text[];
 begin
+  -- One writer's texts are checked one after another: without it, parallel
+  -- calls each read the counts before any of them wrote, and together pass
+  -- the lock-out and the hourly allowance.
+  if (select auth.uid()) is not null then
+    perform pg_advisory_xact_lock(hashtextextended('yuntera.case_text:' || (select auth.uid())::text, 0));
+  end if;
   if (select count(*) from private.audit_log a
       where a.actor_id = (select auth.uid()) and a.action = 'REFUSED_CODE'
         and a.at > now() - interval '1 hour') >= private.case_text_max_refusals() then
@@ -1003,9 +1024,15 @@ begin
     'entries', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', e.id, 'kind', e.kind,
-               -- Staff texts pass the guard when written; answers kept from
-               -- before this migration did not, so they are masked too.
-               'body', private.mask_shopper_codes(e.body, c.order_id, c.user_id), 'created_at', e.created_at,
+               -- A staff text (it has an author) passed the guard when it
+               -- was written and is shown as written: masking it would tell
+               -- its writer which of their numbers is a live code (section
+               -- 3). Only entries without an author, the answers kept from
+               -- before this migration (cases_backfill), are masked.
+               'body', case when e.author_id is null
+                            then private.mask_shopper_codes(e.body, c.order_id, c.user_id)
+                            else e.body end,
+               'created_at', e.created_at,
                'author', private.first_name_of(e.author_id)) order by e.id)
       from private.case_entries e where e.case_id = c.id), '[]'::jsonb),
     'can', jsonb_build_object(

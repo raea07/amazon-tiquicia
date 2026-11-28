@@ -319,7 +319,7 @@ begin
         current_setting('t.complaint'), 'Respuesta desde Atención, tabla de roles.'), 'ok,ok,ok,forbidden,forbidden'),
       ('ops_system_health', 'select public.ops_system_health()', 'ok,ok,ok,ok,ok'),
       ('ops_versions', 'select public.ops_versions()', 'ok,forbidden,forbidden,forbidden,forbidden'),
-      ('ops_set_store_build', 'select public.ops_set_store_build(''warehouse'', ''ios'', ''999.999.996'', 999999996, current_date, ''internal'')',
+      ('ops_set_store_build', 'select public.ops_set_store_build(''warehouse'', ''ios'', ''999.999.996'', 999999996, (now() at time zone ''America/Costa_Rica'')::date, ''internal'')',
        'ok,forbidden,forbidden,forbidden,forbidden')
     ) x (fn, sql, expected_all)
     cross join lateral (
@@ -377,7 +377,10 @@ begin
   perform pg_temp.act('exstaff196@yuntera.example');
   perform public.ops_answer_case(current_setting('t.case_report')::uuid, 'Revisamos la foto del producto.', false);
   perform public.ops_save_reply('Respuesta 196 de una exempleada', 'Gracias por escribirnos, lo revisamos.');
-  v_build := (public.ops_set_store_build('seller', 'android', '999.999.995', 999999995, current_date, 'internal') ->> 'id')::uuid;
+  v_build := (public.ops_set_store_build('seller', 'android', '999.999.995', 999999995,
+    -- Today in Costa Rica: the function refuses a later day, and between
+    -- 00:00 and 06:00 UTC current_date is already tomorrow there.
+    (now() at time zone 'America/Costa_Rica')::date, 'internal') ->> 'id')::uuid;
   -- Staff answer and note the customer's cases; a contact stays open.
   perform pg_temp.act('soporte196b@yuntera.example');
   perform public.ops_add_case_note(current_setting('t.case_return')::uuid, 'Dalia pidió que la llamemos.');
