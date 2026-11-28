@@ -372,6 +372,7 @@ declare
   v_user uuid := current_setting('t.user_d')::uuid;
   v_ex uuid := (select id from auth.users where email = 'exstaff196@yuntera.example');
   r jsonb;
+  v_answers bigint;
 begin
   -- A former administrator wrote an answer, a saved answer and a phone build.
   perform pg_temp.act('exstaff196@yuntera.example');
@@ -389,10 +390,13 @@ begin
   perform public.ops_add_case_note(v_contact, 'Le explicamos dónde ver la factura.');
   perform public.ops_resolve_complaint(current_setting('t.complaint')::uuid, 'Le devolvimos el cobro repetido.', true);
   perform public.ops_decide_return(current_setting('t.return')::uuid, false, 'No vemos daño en las fotos, Dalia.');
+  perform public.ops_resolve_report(current_setting('t.report')::uuid, false, 'Revisamos la foto, Dalia; está bien.');
   perform pg_temp.logout();
 
   -- The customer's open order would hold the deletion back: it is delivered.
   perform pg_temp.deliver(current_setting('t.order_d2')::uuid);
+  select count(*) into v_answers from private.case_entries e join private.cases c on c.id = e.case_id
+  where c.user_id = v_user and e.kind = 'answer';
   perform pg_temp.act('cliente196@yuntera.example');
   perform public.delete_my_account();
   perform pg_temp.logout();
@@ -407,6 +411,20 @@ begin
     'a status entry keeps its status';
   assert (select summary from private.cases where id = v_contact) = private.erased_case_text(), 'summary erased';
   assert (select status from private.cases where id = v_contact) = 'closed', 'the open contact closed';
+  -- The same staff texts where the source rows keep them (a complaint's
+  -- answer, a return's note, a report's decision) read the same sentence;
+  -- the rows stay, and no answer is added to a timeline (the second review
+  -- of the join found the complaint's answer kept on the complaint).
+  assert (select resolution from public.complaints where id = current_setting('t.complaint')::uuid)
+         = private.erased_case_text(), 'the complaint''s answer erased';
+  assert (select resolution_note from public.return_requests where id = current_setting('t.return')::uuid)
+         = private.erased_case_text(), 'the return''s note erased';
+  assert (select resolution from public.content_reports where id = current_setting('t.report')::uuid)
+         = private.erased_case_text(), 'the report''s decision erased';
+  assert (select count(*) from private.case_entries e join private.cases c on c.id = e.case_id
+          where c.user_id = v_user and e.kind = 'answer') = v_answers, 'no answer added by the erasure';
+  assert not exists (select 1 from private.case_number_checks k where k.actor_id = v_user),
+    'the erasure counted no number';
   -- Nothing new is written on the account's cases.
   perform pg_temp.act('soporte196@yuntera.example');
   perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)', v_contact, 'Otra nota más.'),

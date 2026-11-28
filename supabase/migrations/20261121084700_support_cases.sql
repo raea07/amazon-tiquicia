@@ -676,8 +676,10 @@ begin
       new.id, null, null, new.created_at);
     return null;
   end if;
-  -- ops_answer_case and ops_reopen_case write their own entries.
-  if current_setting('yuntera.case_in_hand', true) = new.id::text then
+  -- ops_answer_case and ops_reopen_case write their own entries; an account
+  -- deletion erasing the answer writes none (erase_case_text).
+  if current_setting('yuntera.case_in_hand', true) = new.id::text
+     or current_setting('yuntera.erasing_cases', true) = 'on' then
     return null;
   end if;
   select * into c from private.cases where complaint_id = new.id for update;
@@ -724,6 +726,10 @@ begin
     select i.order_id into v_order from public.order_items i where i.id = new.order_item_id;
     perform private.open_case('return', new.kind, v_order, new.user_id, 'shop',
       new.id, null, null, new.created_at);
+    return null;
+  end if;
+  -- An account deletion erasing the note writes no entry (erase_case_text).
+  if current_setting('yuntera.erasing_cases', true) = 'on' then
     return null;
   end if;
   select * into c from private.cases where return_id = new.id for update;
@@ -1764,8 +1770,16 @@ $$;
 -- delete_my_account marks the sign-in record deleted; the text of the
 -- person's cases (a contact's summary, notes and answers, which may name
 -- them) goes with it. The cases stay, as the complaints do, for the register.
--- An open recorded contact closes; no note, answer or reopening is accepted
--- on a deleted account's case afterwards (case_account_deleted).
+-- So does the same staff text where the source rows keep it: a complaint's
+-- answer (complaints.resolution), the note on a return
+-- (return_requests.resolution_note) and the decision on a report the person
+-- filed (content_reports.resolution) read the same replacement sentence; the
+-- rows stay. (No written rule keeps the staff's free text after a deletion:
+-- the privacy document keeps orders, payments, invoices and ledger entries;
+-- the second review of the join found the answer erased from the timeline
+-- but kept on the complaint.) An open recorded contact closes; no note,
+-- answer or reopening is accepted on a deleted account's case afterwards
+-- (case_account_deleted).
 
 create or replace function private.erase_case_text() returns trigger
 language plpgsql security definer
@@ -1785,6 +1799,18 @@ begin
   from private.cases c
   where c.id = e.case_id and c.user_id = new.id and e.kind in ('note', 'answer') and e.body is not null
     and e.body <> private.erased_case_text();
+  -- The same texts on the source rows. delete_my_account has already
+  -- written these rows (it erased the person's own text there), so their
+  -- locks are held and no new lock is taken. The triggers that follow
+  -- those rows onto the timeline skip this step (yuntera.erasing_cases):
+  -- the replacement is not an answer, and it holds no number to count.
+  update public.complaints x set resolution = private.erased_case_text()
+  where x.user_id = new.id and x.resolution is not null and x.resolution <> private.erased_case_text();
+  update public.return_requests r set resolution_note = private.erased_case_text()
+  where r.user_id = new.id and r.resolution_note is not null
+    and r.resolution_note <> private.erased_case_text();
+  update public.content_reports r set resolution = private.erased_case_text()
+  where r.reporter_id = new.id and r.resolution is not null and r.resolution <> private.erased_case_text();
   perform set_config('yuntera.erasing_cases', '', true);
   update private.cases c set summary = private.erased_case_text()
   where c.user_id = new.id and c.summary is not null;

@@ -100,6 +100,21 @@ async function state(h, ctx) {
 
 const lockLost = (r) => r.outcome === "DEADLOCK" || r.outcome === "SERIALIZATION";
 
+/** Staff texts a deleted account's complaints, returns and reports still hold (none expected). */
+async function sourceTextsKept(h, user) {
+  return (
+    await h.q(
+      `select (select count(*)::int from public.complaints x where x.user_id = $1
+                 and x.resolution is distinct from private.erased_case_text() and x.resolution is not null)
+            + (select count(*)::int from public.return_requests r where r.user_id = $1
+                 and r.resolution_note is distinct from private.erased_case_text() and r.resolution_note is not null)
+            + (select count(*)::int from public.content_reports r where r.reporter_id = $1
+                 and r.resolution is distinct from private.erased_case_text() and r.resolution is not null) as n`,
+      [user],
+    )
+  ).rows[0].n;
+}
+
 /** Outcomes allowed beside "ok"; anything else is wrong. */
 function refusals(results, allowed) {
   const bad = [];
@@ -321,6 +336,8 @@ async function verifyJ5(h, ctx, results) {
   if (!del.outcome) {
     if (s.kept !== 0) bad.push(`${s.kept} texts kept after the account was deleted`);
     if (s.status !== "closed") bad.push(`the deleted account's contact is ${s.status}`);
+    const source = await sourceTextsKept(h, ctx.user);
+    if (source !== 0) bad.push(`${source} staff texts kept on the complaints after the deletion`);
   }
   if (s.answers !== (answered ? 1 : 0))
     bad.push(`${s.answers} answers, answer ${answered ? "ok" : "refused"}`);
@@ -438,6 +455,8 @@ async function verifyJ7(h, ctx, results) {
     bad.push(`${s.contacts} contacts, record ${recorded ? "ok" : "refused"}`);
   if (!del.outcome && (s.open !== 0 || s.kept !== 0))
     bad.push(`after the deletion: ${s.open} open, ${s.kept} with their summary`);
+  if (!del.outcome && (await sourceTextsKept(h, ctx.user)) !== 0)
+    bad.push("a staff text kept on the complaint after the deletion");
   return bad;
 }
 const holdOldComplaint = (_h, ctx) => ({
@@ -605,6 +624,8 @@ async function verifyJ9(h, ctx, results) {
     )
   ).rows[0];
   if (!del.outcome && !reopen.outcome) bad.push("both the deletion and the reopening went through");
+  if (s.deleted && (await sourceTextsKept(h, ctx.user)) !== 0)
+    bad.push("the complaint's answer kept after the deletion");
   if (s.deleted && (s.case_status !== "closed" || s.complaint_status !== "resolved"))
     bad.push(`a deleted account with its case ${s.case_status}, complaint ${s.complaint_status}`);
   if ((s.case_status === "closed") !== (s.complaint_status === "resolved"))
@@ -644,6 +665,7 @@ async function verifyDeletedCase(h, ctx, results, allowed) {
   if (!del.outcome) {
     if (s.kept !== 0 || !s.summary_gone) bad.push(`${s.kept} texts kept after the deletion`);
     if (s.kind === "contact" && s.status !== "closed") bad.push(`the contact is ${s.status}`);
+    if ((await sourceTextsKept(h, ctx.user)) !== 0) bad.push("a staff text kept on a source row");
   }
   const answer = results.find((r) => r.name === "answer");
   if (answer && s.answers !== (answer.outcome ? 0 : 1))
