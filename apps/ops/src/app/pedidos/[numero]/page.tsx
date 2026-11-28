@@ -32,6 +32,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { confirmPayment } from "@/app/actions";
 import { staffCancelOrder } from "@/app/integrity-actions";
+import { RevealContactForm } from "@/components/case-forms";
 import { CatalogueOutcome } from "@/components/catalogue-outcome";
 import { DeliveryCodePanel, ReturnedParcelForm } from "@/components/integrity-forms";
 import { NotificationLine } from "@/components/notification-list";
@@ -351,7 +352,6 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
         <section className="rounded-lg border border-border bg-surface p-5 text-sm">
           <h2 className="text-lg font-bold">Entrega</h2>
           <p className="mt-2 font-semibold">{order.address.recipient_name}</p>
-          <p className="text-ink-muted">{order.address.phone}</p>
           <p className="mt-2">{order.address.senas}</p>
           <p className="text-ink-muted">
             {[order.address.district, order.address.canton].filter(Boolean).join(", ")}
@@ -361,6 +361,18 @@ async function Order({ params }: Pick<PageProps<"/pedidos/[numero]">, "params">)
             El código de entrega solo lo ve el cliente. Nadie de Yuntera debe pedírselo por teléfono
             ni por mensaje.
           </Alert>
+          {/* Owner decision D55: the phone only on request, with a reason on
+              the audit trail. get_order gives staff no phone; the form's
+              answer shows it once. */}
+          {canHandleParcels ? (
+            <div className="mt-4" data-testid="delivery-contact">
+              <h3 className="font-bold">Teléfono de entrega</h3>
+              <p className="mt-1 mb-3 text-ink-muted">
+                No se muestra hasta que usted diga para qué lo necesita.
+              </p>
+              <RevealContactForm orderNumber={order.order_number} />
+            </div>
+          ) : null}
           {deliveryCode ? (
             <DeliveryCodePanel
               state={deliveryCode}

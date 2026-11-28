@@ -256,6 +256,49 @@ function sql(statement) {
     order by created_at desc limit 1`);
   check(contactCase.length === 36, "the WhatsApp contact is a case of the order");
   await fits(support, "the console order page with its cases");
+
+  // Owner decision D55: the delivery phone only on request, on the audit trail.
+  const shipPhone = sql(
+    `select ship_phone from public.orders where order_number = '${orderNumber}'`,
+  );
+  const national = shipPhone.replace(/^\+506/, "");
+  const shown = `${national.slice(0, 4)}-${national.slice(4)}`;
+  const before = await support.content();
+  check(
+    national.length === 8 &&
+      ![shipPhone, national, shown].some((form) => before.includes(form)) &&
+      !(await ops.mainText(support)).includes(shown),
+    "the order page holds no delivery phone before the look, in its text or its data",
+  );
+  const refusedLook = await ops.revealDeliveryPhone(support, "corto", { refused: true });
+  check(
+    refusedLook.includes("Escriba para qué necesita el contacto: de 10 a 300 caracteres.") &&
+      !refusedLook.includes(shown),
+    "a look with a reason too short is refused, in plain words",
+  );
+  check((await ops.deliveryContactReason(support)) === "corto", "the refusal keeps the typed text");
+  const lookReason = `Llamar porque el repartidor no encuentra la casa (${Date.now()}).`;
+  const look = await ops.revealDeliveryPhone(support, lookReason);
+  check(
+    look.includes(`Teléfono de entrega: ${shown}.`) &&
+      look.includes("Quedó registrado en Auditoría"),
+    `with a reason the phone shows (${look.slice(0, 80)})`,
+  );
+  check(
+    ![shipPhone, national, shown].some((form) => support.url().includes(form)),
+    "never in the address",
+  );
+  check(
+    sql(`select count(*) from private.audit_log
+         where action = 'VIEW_CONTACT' and table_name = 'orders'
+           and new_row ->> 'order_number' = '${orderNumber}' and new_row ->> 'reason' = '${lookReason}'
+           and actor_id = (select id from auth.users where email = '${SUPPORT}')
+           and new_row::text not like '%${national}%'`) === "1",
+    "the look is one audit row with the order, the actor and the reason, without the phone",
+  );
+  await fits(support, "the console order page after the look");
+  await support.screenshot({ path: SHOTS + "/sc5b-order-delivery-phone.png", fullPage: true });
+
   await ops.openCustomerFromOrder(support);
   const customerPath = new URL(support.url()).pathname;
   check(
@@ -281,6 +324,12 @@ function sql(statement) {
     "Auditoría shows who saw a customer's contact, and why",
   );
   check(!trail.includes(SHOPPER), "and not the contact itself");
+  check(
+    trail.includes("Vio el teléfono de entrega de un pedido") &&
+      trail.includes(`Pedido ${orderNumber} · Motivo: ${lookReason}`) &&
+      !trail.includes(shown),
+    "Auditoría shows who saw an order's delivery phone, for which order and why, without the phone",
+  );
   await ops.openCases(admin, "/respuestas");
   await fits(admin, "Respuestas guardadas");
   await admin.screenshot({ path: SHOTS + "/sc7-saved-replies.png", fullPage: true });
@@ -309,6 +358,14 @@ function sql(statement) {
   const financeClosed = await ops.caseLinks(finance);
   check(!financeClosed.includes(`/casos/${caseId}`), "but not the delivery complaint");
   await finance.screenshot({ path: SHOTS + "/sc9-finance-cases.png", fullPage: true });
+  // Finance opens the order without the phone and without the form to ask for it.
+  await ops.openOrder(finance, orderNumber);
+  const financeOrder = await finance.content();
+  check(
+    ![shipPhone, national, shown].some((form) => financeOrder.includes(form)) &&
+      (await ops.deliveryContactCount(finance)) === 0,
+    "finance reads the order page with no delivery phone and no Mostrar contacto",
+  );
   // The browser reports a 404 document as a console error; that one message is expected here.
   const probe = await finance.context().newPage();
   probe.on("console", (m) => {

@@ -283,7 +283,11 @@ it is near or past its due time.
 5. **Ver el cliente** shows one customer's orders, returns, complaints and
    cases. Their phone and e-mail appear only with **Mostrar contacto**, which
    asks why; the reason is recorded on Auditoría. If a customer typed their own
-   delivery code into a complaint, staff read it as "••••".
+   delivery code into a complaint, staff read it as "••••". The order's page
+   shows the recipient's delivery phone the same way: **Mostrar contacto** in
+   its delivery block (support, operations and administrators) asks why the
+   phone is needed, shows it once, and Auditoría records who looked, at which
+   order and why.
 6. Review **Informe del mes** on the first working day of each month: cases by
    type, first responses on time, complaints answered within 5 working days,
    refunds within the legal period, reopened cases.
@@ -291,7 +295,8 @@ it is near or past its due time.
 Who reads which case: support and administrators every case; operations the
 cases tied to an order; finance payments and refunds; catalogue staff the
 reports about listings. Only support and administrators answer, assign,
-reopen, record contacts and reveal a contact. When a customer deletes their
+reopen, record contacts and reveal a customer's contact; operations may also
+reveal an order's delivery phone. When a customer deletes their
 account, the text of their cases is erased and an open contact closes.
 
 ## What support is measured on

@@ -26,6 +26,7 @@ const TABLES: Record<string, string> = {
   reviews: "Reseñas",
   products: "Productos",
   customers: "Clientes",
+  orders: "Pedidos",
   saved_replies: "Respuestas guardadas",
   cases: "Casos",
 };
@@ -61,7 +62,7 @@ export default function AuditPage() {
       <PageHeader title="Auditoría">
         Quién cambió qué en lo que no debe cambiar en silencio: permisos, repartidores, estado y
         datos bancarios de vendedores, pagos, tarifas y ajustes, y quién vio el contacto de un
-        cliente y para qué. Este registro no se puede editar.
+        cliente o el teléfono de entrega de un pedido, y para qué. Este registro no se puede editar.
       </PageHeader>
       <div className="mt-6">
         <Suspense fallback={<Skeleton className="h-96" />}>
@@ -110,14 +111,18 @@ async function Trail() {
       {entries.map((entry) => (
         <tr key={entry.id}>
           <td className="whitespace-nowrap">{formatDateTime(entry.at)}</td>
-          <td>{ACTIONS[entry.action] ?? entry.action}</td>
+          <td>
+            {entry.action === "VIEW_CONTACT" && entry.table_name === "orders"
+              ? "Vio el teléfono de entrega de un pedido"
+              : (ACTIONS[entry.action] ?? entry.action)}
+          </td>
           <td>
             {TABLES[entry.table_name] ?? entry.table_name}
             {entry.subject ? <p className="text-xs text-ink-muted">{entry.subject}</p> : null}
           </td>
           <td className="max-w-md break-words text-xs text-ink-muted">
             {entry.action === "VIEW_CONTACT"
-              ? `Motivo: ${String(entry.new_row?.reason ?? "")}`
+              ? `${entry.new_row?.order_number ? `Pedido ${String(entry.new_row.order_number)} · ` : ""}Motivo: ${String(entry.new_row?.reason ?? "")}`
               : entry.action === "REFUSED_CODE"
                 ? (REFUSED_IN[String(entry.new_row?.function ?? "")] ?? "En un caso")
                 : changes(entry.old_row, entry.new_row) || (entry.row_key ?? "")}

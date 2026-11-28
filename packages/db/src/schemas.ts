@@ -365,6 +365,10 @@ export const orderDetail = z.object({
   can_cancel: z.boolean(),
   address: z.object({
     recipient_name: z.string(),
+    /**
+     * The order's own shopper only. Staff read "" (since 085000, owner
+     * decision D55) and ask for it with opsOrderContact, on the audit trail.
+     */
     phone: z.string(),
     postal_code: z.string(),
     senas: z.string(),

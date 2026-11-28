@@ -314,6 +314,8 @@ begin
       ('ops_customer', format('select public.ops_customer(%L)', v_user), 'ok,ok,ok,ok,forbidden'),
       ('ops_customer_contact', format('select public.ops_customer_contact(%L, %L)', v_user,
         'Para confirmar la entrega por teléfono.'), 'ok,ok,forbidden,forbidden,forbidden'),
+      ('ops_order_contact', format('select public.ops_order_contact(%L, %L)', v_number,
+        'Para confirmar la entrega por teléfono.'), 'ok,ok,ok,forbidden,forbidden'),
       ('ops_care_queues', 'select public.ops_care_queues()', 'ok,ok,ok,ok,ok'),
       ('ops_resolve_complaint', format('select public.ops_resolve_complaint(%L, %L, false)',
         current_setting('t.complaint'), 'Respuesta desde Atención, tabla de roles.'), 'ok,ok,ok,forbidden,forbidden'),

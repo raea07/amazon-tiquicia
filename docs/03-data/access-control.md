@@ -264,7 +264,7 @@ as the second lock.
 | Role      | Reach                                                                                                                                                                                                                                                                                           |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ops`     | Orders, sellers' private details, drivers, warehouses and staff assignments, the dispatch board, routes, settlements, returns; approve or suspend sellers; the Operación tools of 084000 (zones, districts, holidays, closures, warehouse locations, stuck routes)                              |
-| `support` | Orders and timelines (with the shopper's contact and address), sellers' private details, returns, complaints, content reports; cancel an order for a shopper; see which messages an order produced and resend a stuck one                                                                       |
+| `support` | Orders and timelines (the address; phone, e-mail on request), sellers' private details, returns, complaints, content reports; cancel an order for a shopper; see which messages an order produced and resend a stuck one                                                                        |
 | `finance` | Orders, fee schedule, seller statements, the ledger, settlements, invoices; decides sellers' bank-detail requests; previews, creates and settles payout runs; sees offers a fee change paused (`ops_fee_floor_breaches`, also `catalog`)                                                        |
 | `catalog` | All listings; approve or reject a listing, a listing edit and its photos; take down any photo; resolve content reports; categories, brands (deleting an unused one since 084100), search synonyms, review moderation, and correcting, taking down and putting back a published product (083700) |
 | `admin`   | All of the above, plus staff membership, the audit log and resetting a colleague's second factor (never their own); the operational settings (084000; every other setting is protected)                                                                                                         |
@@ -384,6 +384,7 @@ API role.
 | Saved answers             | `ops_saved_replies` (read); `ops_save_reply`, `ops_delete_reply` (change)     | Read: support and admin. Change: admin only, audited                                                                                                                                       |
 | Customer view             | `ops_customer`                                                                | Support, ops, finance, admin; only for a customer (an order, a complaint or a return)                                                                                                      |
 |                           | `ops_customer_contact`                                                        | Support and admin, with a reason of 10 to 300 characters written on the audit trail                                                                                                        |
+| Order page                | `ops_order_contact`                                                           | Support, ops and admin, with a reason of 10 to 300 characters on the audit trail; `get_order` gives staff no phone                                                                         |
 | The shopper's own cases   | `my_cases`, `my_complaint_receipt`                                            | The signed-in shopper, their own cases only; never a note                                                                                                                                  |
 | What Atención reads       | `ops_care_queues` (re-created in `084700`)                                    | Support, ops, finance, catalog, admin, each listing only what its role reads in Casos (table 4.1), the customer by first name; a customer's own live delivery code comes masked            |
 | System health             | `ops_system_health`                                                           | Any active staff role; each role gets only its lines (below)                                                                                                                               |
@@ -394,6 +395,23 @@ API role.
 `private.price_items`, `wms_receive_returned_shipment` and
 `private.settle_gateway_refund` with the same arguments and grants;
 `private.reword_old_cancel_reasons` is granted to no app role.
+
+**The delivery phone only on request** (owner decision D55, `085000`): one
+rule for every staff screen that would show a shopper's phone or e-mail.
+`get_order` gives the recipient's phone to the order's own shopper only;
+staff read an empty string. The console's order page offers "Mostrar
+contacto" in its delivery block to support, operations and administrators,
+who call about deliveries; `ops_order_contact` asks for a reason of 10 to
+300 characters, as `ops_customer_contact` does, and writes one
+`VIEW_CONTACT` row naming the order, the actor and the reason (Auditoría:
+"Vio el teléfono de entrega de un pedido"). Finance and catalogue staff
+open the order without the phone and without the form. Operations may see
+an order's delivery phone this way but not a customer's account contact
+(`ops_customer_contact` stays support and admin): the delivery phone is
+what a call about that delivery needs. Drivers keep the recipient's name
+and phone on their own stops (`driver_today`, the field app and the driver
+app), unchanged, because they need it at the door; the warehouse sees no
+phone.
 
 ### Who sees what: Casos and Salud del sistema
 

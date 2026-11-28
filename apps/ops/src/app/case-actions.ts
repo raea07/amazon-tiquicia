@@ -2,13 +2,14 @@
 
 /**
  * The support desk's actions: notes, answers, assignment, reopening,
- * recorded contacts, the audited reveal of a customer's contact, and saved
- * answers. Each re-reads the session, validates its input with zod and calls
+ * recorded contacts, the audited reveal of a customer's contact and of an
+ * order's delivery phone, and saved answers. Each re-reads the session, validates its input with zod and calls
  * one database function, which checks the caller's role again; nothing here
  * decides who may do what. A case is addressed by its own id only.
  */
 
-import { CONTACT_TOPICS } from "@yuntera/db";
+import { parsePhone } from "@yuntera/core";
+import { CONTACT_TOPICS, ORDER_CONTACT_REASON } from "@yuntera/db";
 import {
   type ActionState,
   attempt,
@@ -146,19 +147,40 @@ export async function recordContact(_previous: ActionState, formData: FormData) 
   );
 }
 
-/** "Mostrar contacto": the reason is written on the audit trail. */
+const orderNumber = z.string().regex(/^YT-\d{4,12}$/);
+
+/**
+ * "Mostrar contacto": the reason is written on the audit trail. A customer's
+ * contact (`userId`, the customer view) or an order's delivery phone
+ * (`orderNumber`, the order page; owner decision D55).
+ */
 export async function revealContact(_previous: ActionState, formData: FormData) {
   const values = typed(formData, "reason");
-  const userId = z.uuid().safeParse(formData.get("userId"));
-  if (!userId.success) return { error: GENERIC_ERROR };
-  const reason = z.string().trim().min(10).max(300).safeParse(values.reason);
+  const order = formData.has("orderNumber")
+    ? orderNumber.safeParse(formData.get("orderNumber"))
+    : null;
+  const userId = order ? null : z.uuid().safeParse(formData.get("userId"));
+  if ((order && !order.success) || (userId && !userId.success)) return { error: GENERIC_ERROR };
+  const reason = z
+    .string()
+    .trim()
+    .min(ORDER_CONTACT_REASON.min)
+    .max(ORDER_CONTACT_REASON.max)
+    .safeParse(values.reason);
   if (!reason.success) {
     return { error: "Escriba para qué necesita el contacto: de 10 a 300 caracteres.", values };
   }
-  if (!(await currentStaff())) redirectTo(signInPath(`/clientes/${userId.data}`));
+  const returnTo = order?.data ? `/pedidos/${order.data}` : `/clientes/${userId?.data}`;
+  if (!(await currentStaff())) redirectTo(signInPath(returnTo));
   // No refresh: the contact is shown once, in this answer, and never stored on the page.
   return attempt(async () => {
-    const found = await (await sessionApi()).opsCustomerContact(userId.data, reason.data);
+    const api = await sessionApi();
+    if (order?.data) {
+      const found = await api.opsOrderContact(order.data, reason.data);
+      const phone = found.phone ? (parsePhone(found.phone)?.formatted ?? found.phone) : null;
+      return `Teléfono de entrega: ${phone ?? "no tiene"}. Quedó registrado en Auditoría que usted lo vio.`;
+    }
+    const found = await api.opsCustomerContact(userId?.data ?? "", reason.data);
     return `Correo: ${found.email ?? "no tiene"} · Teléfono: ${found.phone ?? "no tiene"}. Quedó registrado en Auditoría que usted lo vio.`;
   }, values);
 }

@@ -2329,3 +2329,39 @@ const caseNoteShown = (page, note) =>
   });
 
 Object.assign(module.exports, { caseNoteShown });
+
+// ── Owner decision D55: the delivery phone only on request ─────────────────
+
+/** The order page's «Teléfono de entrega» block. */
+const deliveryContact = (page) => testid(main(page), "delivery-contact");
+
+/** What the «Teléfono de entrega» block says now, as one line. */
+const deliveryContactText = (page) => text(deliveryContact(page));
+
+/** The reason typed in the «Teléfono de entrega» block (kept after a refusal). */
+const deliveryContactReason = (page) =>
+  deliveryContact(page).getByLabel("Para qué lo necesita").inputValue();
+
+/**
+ * «Mostrar contacto» in the order page's delivery block with `reason`, and
+ * waits for the answer expected: the phone, or with `refused` the refusal.
+ * Answers the block's text.
+ */
+async function revealDeliveryPhone(page, reason, { refused = false } = {}) {
+  await deliveryContact(page).getByLabel("Para qué lo necesita").fill(reason);
+  await button(deliveryContact(page), "Mostrar contacto").click();
+  const wanted = refused ? "Escriba para qué necesita el contacto" : "Teléfono de entrega:";
+  return settledText(deliveryContact(page), (said) => said.includes(wanted), {
+    what: "the delivery block's answer",
+  });
+}
+
+/** How many «Teléfono de entrega» blocks the order page shows (0 for a role that may not look). */
+const deliveryContactCount = (page) => deliveryContact(page).count();
+
+Object.assign(module.exports, {
+  deliveryContactCount,
+  deliveryContactText,
+  deliveryContactReason,
+  revealDeliveryPhone,
+});

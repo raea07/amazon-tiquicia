@@ -80,6 +80,28 @@
 --      sent, so its completed_at is later anyway. completed_at is now never
 --      earlier than requested_at; for those later settlements nothing
 --      changes.
+--
+--   5. ORDERS CANCELLED BEFORE THIS MIGRATION get the reason points 2 and 3
+--      would have written (private.reword_old_cancel_reasons, run once here).
+--
+--   6. THE DELIVERY PHONE ONLY ON REQUEST (owner decision D55, 27 November
+--      2026: "one rule for every screen"). public.get_order gave every
+--      staff role that opens an order (ops, support, finance, admin) the
+--      recipient's phone in `address.phone`, while the customer view gives
+--      a customer's contact only through ops_customer_contact, with a
+--      reason on the audit trail. get_order now gives the phone to the
+--      order's own shopper only; to staff `address.phone` is the empty
+--      string. The field stays a string because the console of 12ec48c (on
+--      the hosted preview until the next deploy) parses it with
+--      z.string(): its order page still renders, with no phone. The store
+--      build of 3f251c3 reads only the shopper's own orders, whose answer
+--      does not change. The new public.ops_order_contact(order number,
+--      reason) gives the phone to support, operations and administrators,
+--      with a reason of 10 to 300 characters (ops_customer_contact's rule),
+--      and writes one VIEW_CONTACT row on the audit trail that names the
+--      order, the actor and the reason, never the phone. Finance does not
+--      call about deliveries and is refused, as is every other caller,
+--      whether the order exists or not.
 
 -- ═══ 1. A cart line of a product the caller may not see ════════════════════
 
@@ -329,13 +351,14 @@ begin
 end;
 $$;
 
--- Replaces the version in 20261121084600_shopper_followups.sql. Two changes:
+-- Replaces the version in 20261121084600_shopper_followups.sql. Three changes:
 -- the shopper is given the new reason too (header, point 2); the list is the
 -- one packages/core/src/cancellation.ts keeps (CANCEL_REASON). And each parcel
 -- and each of its history lines says whether staff stopped it before it ever
 -- left (`stopped_before_leaving`, new and optional: the store build of
 -- 3f251c3 ignores it), so the shopper's pages do not call it "Devuelto"
--- (packages/core/src/parcel-words.ts).
+-- (packages/core/src/parcel-words.ts). And the recipient's phone goes to the
+-- order's own shopper only; staff read '' (header, point 6).
 create or replace function public.get_order(p_order_number text) returns jsonb
 language plpgsql stable security definer
 set search_path = ''
@@ -401,7 +424,10 @@ begin
                       and not exists (select 1 from public.shipments s
                                       where s.order_id = o.id and s.status <> 'pending')),
     'address', jsonb_build_object(
-      'recipient_name', o.ship_recipient_name, 'phone', o.ship_phone,
+      -- Since 085000 (owner decision D55): staff ask for the phone with
+      -- ops_order_contact, and the look is on the audit trail.
+      'recipient_name', o.ship_recipient_name,
+      'phone', case when v_is_owner then o.ship_phone else '' end,
       'postal_code', o.ship_postal_code, 'senas', o.ship_senas,
       'lat', o.ship_lat, 'lng', o.ship_lng, 'plus_code', o.ship_plus_code,
       'district', (select d.name from public.districts d where d.postal_code = o.ship_postal_code),
@@ -634,3 +660,42 @@ end;
 $$;
 
 select private.reword_old_cancel_reasons();
+
+-- ═══ 6. The delivery phone only on request ═════════════════════════════════
+
+-- "Mostrar contacto" on the console's order page (header, point 6): the
+-- recipient's phone of one order, for support, operations and
+-- administrators, with the reason written on the audit trail (shown on
+-- Auditoría as "Vio el teléfono de entrega de un pedido"). The trail keeps
+-- the order, the actor and the reason, never the phone. An order whose
+-- account was deleted has no phone left (''), and answers null.
+create or replace function public.ops_order_contact(p_order_number text, p_reason text) returns jsonb
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_reason text := trim(coalesce(p_reason, ''));
+  v_order public.orders%rowtype;
+begin
+  -- The same answer for every caller without the role, whether the order
+  -- exists or not.
+  if not private.has_staff_role('support', 'ops') then
+    perform private.fail('forbidden');
+  end if;
+  if char_length(v_reason) not between 10 and 300 then
+    perform private.fail('reason_required');
+  end if;
+  select * into v_order from public.orders where order_number = p_order_number;
+  if not found then
+    perform private.fail('order_not_found');
+  end if;
+  insert into private.audit_log (actor_id, action, table_name, row_key, old_row, new_row)
+  values ((select auth.uid()), 'VIEW_CONTACT', 'orders', v_order.id::text, null,
+          jsonb_build_object('order_number', v_order.order_number, 'reason', v_reason));
+  return jsonb_build_object('order_number', v_order.order_number,
+                            'phone', nullif(v_order.ship_phone, ''));
+end;
+$$;
+
+revoke all on function public.ops_order_contact(text, text) from public, anon;
+grant execute on function public.ops_order_contact(text, text) to authenticated;

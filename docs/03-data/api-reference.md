@@ -364,7 +364,11 @@ A case row (`CaseRow`) is: id, reference (8 characters), kind (`complaint`,
 `email`), status (`open`, `closed`), order number, customer and assignee
 (first names), assigned to me, created, first response due, due, first
 response, resolved, next due, clock (`on_time`, `due_soon`, `overdue`,
-`closed`) and times reopened.
+`closed`) and times reopened. Every due time is counted on the desk's own
+calendar (`private.desk_week`, owner decision D56 and decision 69): Monday to
+Friday 08:00 to 17:00 and Saturday 08:00 to 12:00, Costa Rica time, Sunday
+and `holidays` closed; the legal withdrawal and warranty dates keep
+`add_business_days` (Monday to Friday).
 
 | Function                                                                                                      | Roles                          | Returns or does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Errors                                                                                                                                                                        |
 | ------------------------------------------------------------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -420,11 +424,25 @@ Same arguments, columns and grants; new fields are optional.
   reason is always "Cancelado por el cliente".
 - `get_order(order number)`: the shopper's reasons gain "Los paquetes no
   salieron de la bodega"; each parcel and each history line has
-  `stopped_before_leaving` (staff stopped it and it never went out).
+  `stopped_before_leaving` (staff stopped it and it never went out). The
+  recipient's `address.phone` goes to the order's own shopper only; every
+  staff role reads `""` (owner decision D55), a string as before, so the
+  console of `12ec48c` still parses it.
 - `wms_receive_returned_shipment(shipment, resellable, note)`: cancels the
   order for "Los paquetes no salieron de la bodega" when every parcel that
   came back was stopped before it left.
 - Refunds: `completed_at` is never earlier than `requested_at`.
+
+New in 085000 (owner decision D55), granted to `authenticated` only:
+
+- `ops_order_contact(order number, reason)`: support, ops and admin. The
+  recipient's phone of one order, `{order_number, phone}` (`phone` null when
+  the account was deleted), for the order page's "Mostrar contacto". The
+  reason is 10 to 300 characters, trimmed. Each call writes one
+  `VIEW_CONTACT` row on the audit trail (`table_name` `orders`, the order's
+  id, `{order_number, reason}`), never the phone. Errors: `forbidden` (any
+  other caller, whether the order exists or not), `reason_required`,
+  `order_not_found`.
 
 ## Server-side only
 

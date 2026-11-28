@@ -3,7 +3,7 @@
 **What this is.** Every question the strategy documents, the marketing pieces and the November research ask the owner, each asked once, in the order the answers are needed. Written 24 November 2026.
 **How to answer.** Reply like "D4 A, D10 D". "ok" accepts every recommended option of one group, for example "ok before the pilot". An answer is recorded in `docs/02-architecture/decisions.md`.
 **Where they come from.** [Go-to-market](go-to-market.md), [roll-out plan](rollout-plan.md), [team structure](team-structure.md), [pricing strategy](pricing-strategy.md), the [marketing pieces](../../marketing/README.md) and the research in [market and costs](../research/market-and-costs-2026-11.md), [support and system-health tools](../research/support-and-system-health-tools.md) and [English translation](../research/english-translation-plan.md). Those documents point here instead of asking.
-**Count.** 56 numbers: 5 already decided, 5 needed now, 2 the builders do unless you object, 32 before the pilot with real money, 10 before the open launch, 2 later. A number never changes once given, so the list is not in number order.
+**Count.** 56 numbers: 6 already decided, 5 needed now, 2 the builders do unless you object, 31 before the pilot with real money, 10 before the open launch, 2 later. A number never changes once given, so the list is not in number order.
 
 Amounts are colones a month unless stated, from the document named; US dollars at ₡450. Every amount is an estimate or an assumption, as its source says. Questions for the lawyer and the accountant are separate: they are in [compliance](../05-security-compliance/compliance-costa-rica.md) §9 and §10 and in [open questions](../08-open-questions.md) 67 to 82. A decision that waits on one names it.
 
@@ -18,6 +18,8 @@ Amounts are colones a month unless stated, from the document named; US dollars a
 **D3. Do new Android test builds reach testers without a click?** Decided 23 November 2026: yes, from the first Android release on. The owner made that first release on 23 November 2026, and the build setting was changed on 24 November 2026. Google may refuse such a build before its first review of the app (not verified); the build then arrives as a draft. From: `STATUS.md`, "What needs you", item 11, step 7; [store testing](../07-deployment/store-testing.md) §7. Changing the build setting is the builders' work.
 
 **D50. Which error tracker?** Decided 24 November 2026: Sentry, on its free plan, in the owner's existing account. Only projects whose names start with yuntera are created there; names, phones, e-mails and addresses are removed before anything is sent; alerts arrive by e-mail. The four websites come first; the phone apps follow with their next version. Cost ₡0 now; US$26 a month on a yearly plan (₡11,700) once a second developer joins (support research §2.4). From: support research §3.3, question 5. Waits on it: the error-tracking build.
+
+**D55. Does the staff order page show the delivery phone only on request?** Decided 27 November 2026: A. The order page hides the phone behind the same "Mostrar contacto" with a reason, and every look is on the audit trail: one rule for every screen. From: the support desk build (wave 9). Built in wave 9 (migration `085000`): the console's order page shows the delivery phone to support, operations and administrators only after a reason, and Auditoría records who looked, at which order and why; finance opens the order without it. Drivers keep the phone on their own stops, which they need at the door. Recorded in `docs/03-data/access-control.md`.
 
 **D56. What are the service hours, and does Saturday count as a working day?** Decided 27 November 2026: A. Monday to Friday 08:00 to 17:00 and Saturday 08:00 to 12:00, Costa Rica time, with Saturday a working day for the answer targets; Sunday and public holidays closed. The legal withdrawal and warranty periods keep counting Monday to Friday. From: [customer service](../06-operations/customer-service.md), "Service hours" and "Response targets"; the support desk build (wave 9). Built in wave 9: the desk's own calendar in `private.case_due`, the hours on the shop's and the shopper app's Ayuda (the app's text reaches phones with the next store build); recorded as decision 69 in `docs/02-architecture/decisions.md`.
 
@@ -296,13 +298,6 @@ Cost of A: until authorised, about ₡2,600 a parcel with IVA; once authorised, 
 - B. The team reviews. No cost, and mistakes reach print.
 
 Cost: not researched; ask 2 editors for quotes. Waits on it: every "final text" piece, the tagline (D32), the English release.
-
-**D55. Does the staff order page show the delivery phone only on request?** From: the support desk build (wave 9), `STATUS.md`, "Not built". Today the console's order page shows the recipient's phone in its delivery block to every staff role that opens it, while the customer view shows a customer's phone only after "Mostrar contacto" with a reason on the audit trail.
-
-- A. The order page hides the phone too, behind the same "Mostrar contacto" with a reason. **(recommended)** One rule for every screen, and every look at a phone is on the audit trail. Staff who call about a delivery need one more click.
-- B. Keep it as it is. Faster for operations staff; looks at a phone there leave no trace.
-
-Waits on it: a small change to the console's order page.
 
 ---
 

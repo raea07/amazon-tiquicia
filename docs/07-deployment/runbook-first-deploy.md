@@ -2444,9 +2444,12 @@ Apply them in filename order, in one sitting, then deploy the four web apps.
    `health_ping`, **granted to visitors** (the eighteenth visitor function).
    It reads `084700`'s tables, so it runs after it.
 3. `20261121085000_wave8_followups.sql` (six functions, all `create or
-   replace`, same arguments and columns): `cart_lines`, `get_order`,
-   `cancel_order`, `wms_receive_returned_shipment`, `private.price_items`
-   and `private.settle_gateway_refund`, and once
+   replace`, same arguments and columns): `cart_lines`, `get_order` (which
+   since owner decision D55 gives staff the recipient's phone as an empty
+   string), `cancel_order`, `wms_receive_returned_shipment`,
+   `private.price_items` and `private.settle_gateway_refund`; one new
+   function, `ops_order_contact` (the delivery phone on request, granted to
+   signed-in users only, audited); and once
    `private.reword_old_cancel_reasons()`, which rewords the orders cancelled
    before it (a shopper's own text becomes "Cancelado por el cliente"; a
    check-in of parcels staff stopped before they left becomes "Los paquetes
@@ -2461,7 +2464,9 @@ is its id with `buyable` false, which that cart already shows as "no
 disponible"; `get_order` gains only optional fields and one more reason that
 the old page shows with the staff-cancellation words; a complaint filed from
 the old shop opens a case by trigger and is answered from the old Atención
-as before; the old console ignores what Atención's doors now answer. One
+as before; the old console ignores what Atención's doors now answer; the old
+console's order page reads `get_order`'s empty phone as a string and shows
+an empty line where the phone was (it has no "Mostrar contacto" yet). One
 difference for the minutes in between: a staff text in Atención that holds a
 customer's delivery code is refused with nothing saved, which the old
 console shows as saved (and its refund form as a general error); staff never
@@ -2488,7 +2493,10 @@ Do this in order.
    nothing reached the customer and no stock moved. Tell staff not to use
    Atención from point 3 until point 7 is done. If someone used it, open
    each complaint or return they touched after the deploy and check that it
-   changed.
+   changed. In the same minutes the console's order page shows no delivery
+   phone at all (owner decision D55; the new console asks for it with
+   "Mostrar contacto"): a call about a delivery waits for point 7, and the
+   driver's app still shows the phone on the stop.
 
 3. **Apply the three** with `remote-db.sh push`; `status` then lists 47.
    Straight after, call `health_ping` through the public API as a visitor:
@@ -2511,12 +2519,15 @@ Do this in order.
    And: every new or redefined function a definer with an empty search path
    and its migration's grants; no table privilege for an app role; row-level
    security on every new table.
-5. **Run the suites** with `remote-db.sh test`: all 48 files, among them the
+5. **Run the suites** with `remote-db.sh test`: all 50 files, among them the
    new `181_support_cases.sql` (it moves its own `REFUSED_CODE` audit rows
    back an hour by switching `audit_log_immutable` off inside its rolled-back
    transaction, which needs the table owner), `185_system_health.sql` (it
    reads the real pg_cron history and accepts "unavailable" with
-   `no_access` or `not_logged`), `191` to `195` and `196_wave9_integration.sql`.
+   `no_access` or `not_logged`), `191` to `195`, `196_wave9_integration.sql`,
+   `197_atencion_refusals.sql`, `198_desk_calendar.sql` (it adds two holidays
+   of its own inside its rolled-back transaction) and
+   `199_order_contact.sql`.
    Never run the race harness or the contract race tests against a hosted
    database.
 6. **Set the new settings per Vercel project, before the deploy**:

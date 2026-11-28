@@ -168,11 +168,21 @@ export function RecordContactForm({
   );
 }
 
-/** "Mostrar contacto": asks why, and the reason goes on the audit trail. */
-export function RevealContactForm({ userId }: { userId: string }) {
+/**
+ * "Mostrar contacto": asks why, and the reason goes on the audit trail. With
+ * `userId`, a customer's e-mail and phone (the customer view); with
+ * `orderNumber`, the recipient's phone of that order (the order page, owner
+ * decision D55). The contact is only in the action's answer, never in the
+ * page.
+ */
+export function RevealContactForm(target: { userId: string } | { orderNumber: string }) {
   return (
     <ActionForm action={revealContact} submit="Mostrar contacto" variant="secondary">
-      <input type="hidden" name="userId" value={userId} />
+      {"orderNumber" in target ? (
+        <input type="hidden" name="orderNumber" value={target.orderNumber} />
+      ) : (
+        <input type="hidden" name="userId" value={target.userId} />
+      )}
       <TextField
         label="Para qué lo necesita"
         name="reason"

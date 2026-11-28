@@ -12,8 +12,10 @@
  *     checked in contract.frozen-callers and contract.wave8-followups).
  *   - The web apps of 12ec48c (on the hosted preview until the next deploy,
  *     which comes after the migrations): the cart with an id-only line, an
- *     order cancelled for the new reason, a complaint filed from the shop and
- *     answered from the old Atención (the case follows by trigger).
+ *     order cancelled for the new reason, the console's order page reading
+ *     that order without the delivery phone (085000, point 6), a complaint
+ *     filed from the shop and answered from the old Atención (the case
+ *     follows by trigger).
  *
  * What it leaves: one return request (withdrawn) and one complaint
  * (answered), with their cases, of comprador2; one cancelled order of its own
@@ -152,8 +154,13 @@ describe.skipIf(!db.enabled)("old callers against wave 9 (against a seeded datab
     expect(quote.issue).toBeNull();
     expect(quote.total_minor).toBeGreaterThan(0);
 
-    const order = (await app.getOrder?.(line.order_number as never)) as { order_number: string };
+    const order = (await app.getOrder?.(line.order_number as never)) as {
+      order_number: string;
+      address: { phone: string };
+    };
     expect(order.order_number).toBe(line.order_number);
+    // The shopper still reads their own delivery phone (085000, point 6).
+    expect(order.address.phone).toMatch(/^\+506\d{8}$/);
   });
 
   it("the web apps of 12ec48c: an id-only cart line, the new reason, a complaint answered in Atención", async () => {
@@ -200,6 +207,17 @@ describe.skipIf(!db.enabled)("old callers against wave 9 (against a seeded datab
     };
     expect(order.status).toBe("cancelled");
     expect(order.cancel_reason).toBe("Los paquetes no salieron de la bodega");
+
+    // The old console's order page reads the same order with its own schema:
+    // the phone is '' for staff since 085000 (owner decision D55), which that
+    // schema's z.string() accepts, so the page still renders, with no phone.
+    const staffView = (await staff.getOrder?.(placed.order_number as never)) as {
+      order_number: string;
+      address: { phone: string; recipient_name: string };
+    };
+    expect(staffView.order_number).toBe(placed.order_number);
+    expect(staffView.address.phone).toBe("");
+    expect(staffView.address.recipient_name.length).toBeGreaterThan(0);
     const list = (await shop.myOrders?.()) as Array<{ order_number: string }>;
     expect(list.some((o) => o.order_number === placed.order_number)).toBe(true);
 
