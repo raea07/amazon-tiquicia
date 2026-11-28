@@ -20,6 +20,7 @@ const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
 const fieldApp = require("../lib/field.cjs");
 const kit = require("../lib/kit.cjs");
+const { word } = require("../lib/words.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
@@ -199,10 +200,11 @@ async function as(email) {
     /Devolución [0-9A-F]{8}.*?(?= (?:Reclamo|Devolución|Reporte|Consulta) [0-9A-F]{8}|$)/.exec(
       decided,
     )?.[0] ?? "";
+  const shopperSees = { viewer: "shopper" };
   check(
-    decidedCard.includes("En revisión") &&
-      decidedCard.includes("Aprobada: por recibir (desde el") &&
-      !decidedCard.includes("Por responder") &&
+    decidedCard.includes(word("cases", "open", { ...shopperSees, answered: true })) &&
+      decidedCard.includes(`${word("return_requests", "approved", shopperSees)} (desde el`) &&
+      !decidedCard.includes(word("cases", "open", shopperSees)) &&
       !decidedCard.includes("Todavía no hay respuesta."),
     `the approved return's case reads as answered, with the decision (${decidedCard})`,
   );

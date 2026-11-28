@@ -594,13 +594,37 @@ the hosted project, against real Sentry, on Vercel or on a phone.
   `support-cases` journey). Breaking `get_order` on purpose (staff given
   the phone again) made suite `199` fail. The console of `12ec48c` reads
   the order with its own schema, without the phone
-  (`contract.wave9-integration`). D56: suite `198` holds 45 instants with
+  (`contract.wave9-integration`). D56: suite `198` holds 51 instants with
   their due time on the desk's calendar, at the edges (exactly 08:00 and
   17:00, Saturday at 12:00, a Sunday, a holiday on a Saturday and on a
   Monday after one, the end of the year); suite `181`'s expectations moved
   to the new calendar; Ayuda's hours are read in the `support-cases` and
   `shop-complaint` journeys; a test keeps `SERVICE_HOURS`, the migration
   and customer-service.md equal.
+- **The outside checks of part 3** (28 November 2026, security and a walk
+  at 390 and 1280 px) found one major and five minor problems; all are fixed
+  but one minor wording question for the owner. (1, major) After staff
+  approved a return in Atención without a note, the shopper's case card
+  said «Por responder · Todavía no hay respuesta» beside «Aprobada» on the
+  same order page; `my_cases` now answers `responded_at` and the last
+  `decision`, and the card reads «En revisión» with «Aprobada: por recibir
+  (desde el …)» on the website and in the phone app (the app's change
+  reaches phones only with a new store build). Breaking the card on purpose
+  made `followups` fail. (2) The code guard split a phone written with a
+  space, a dot or in pairs into two numbers, so a real phone ending in a
+  live code was refused and the refusal named the code; every common phone
+  format is now read whole (decision 61, suite `197`: six formats, each
+  with the code and another number, give the same answer, rows and
+  counters). (3) A reason of line breaks or tabs passed
+  `ops_order_contact` and `ops_customer_contact`; both now trim every kind
+  of white space. (4) The phone shown by "Mostrar contacto" stayed in the
+  document after leaving the order page, and Back showed it again without a
+  new audit row; the form now starts again when its page is hidden
+  (breaking it on purpose made `support-cases` fail). (5) A contact
+  recorded at night or on a Sunday was due that same closed day; minutes
+  and "same day" now count from the moment the desk is open (decision 69,
+  customer-service.md). Left for the owner: noon is written «12 p. m.» on
+  Ayuda, as everywhere in the apps (core's `formatTime`).
 - **What the join changed**: wave 9's decisions are numbered 61 to 68 (69, the desk's calendar, came with D56), after
   the main line's 59 and 60. Wave 9's status words come from the one module
   (`packages/core/src/status-words.ts`): a case reads «Por responder»,
@@ -614,14 +638,14 @@ the hosted project, against real Sentry, on Vercel or on a phone.
   and theme colour.
 - **Lint and types**: no lint errors (193 warnings and 257 notes, of kinds
   already there); no type errors in the 20 typecheck tasks.
-- **Unit tests**: 1936 pass in 16 packages, without a database.
+- **Unit tests**: 1938 pass in 16 packages, without a database.
 - **Database tests**: 51 files pass on PostgreSQL 16 (47 migrations), with
   the stack down.
 - **API contract tests**: 250 tests in 44 files (39 contract files) pass,
-  three times on the same database; the first of the three also reported
-  one unhandled error after its tests, a connection `contract.payments`
-  ends when it drops its own copy of the database, and the next two were
-  clean.
+  twice in a row on the same database after the fixes of part 3's outside
+  checks, both clean (before them, one of three runs reported an unhandled
+  error after its tests: a connection `contract.payments` ends when it
+  drops its own copy of the database).
 - **Browser journeys**: all 35 passed in one run with the tracker off (on
   27 November, before the fixes, `system-health` had stopped once at its
   data step and then passed alone). Breaking the case page's width fix or
@@ -1240,7 +1264,8 @@ D2 in the decisions and the Android release in the store documents" is done
   shop's and the shopper app's Ayuda; the app's text reaches phones only
   with a new store build, and the automatic WhatsApp reply outside the
   hours is not set up. The order page's "Mostrar contacto" (D55) shows the
-  phone as an answer to the form: it is gone after a reload, by design. In
+  phone as an answer to the form: it is gone after a reload or on leaving
+  the page, by design. In
   a factura's detail the answer of `invoice_detail` still gives finance and
   the issuing seller the receiver's e-mail with no recorded look (no page
   shows it); the law requires it on the document, so it was left (`access-control.md`, "The delivery
