@@ -44,7 +44,10 @@
 -- left at closing time carries to the opening of the next working day);
 -- working_days (the desk's working days, Saturday included, not counting
 -- the day the case opens) and calendar_days (to the end of that day, Costa
--- Rica time); same_day (the end of the day it opens).
+-- Rica time); same_day (the end of the day it opens, or of the next working
+-- day when it opens after closing or on a closed day); minutes (clock
+-- minutes from the moment it opens, or from the next opening when the desk
+-- is closed).
 create table private.case_targets (
   kind text not null check (kind in ('complaint', 'return', 'report', 'contact')),
   topic text not null default '*' check (topic ~ '^(\*|[a-z_]{2,40})$'),
@@ -149,6 +152,29 @@ begin
 end;
 $$;
 
+-- The first moment at or after p_from that the desk is open: p_from itself
+-- inside the day's hours, else the next opening (today's, before it opens,
+-- or the next working day's).
+create or replace function private.desk_next_open(p_from timestamptz) returns timestamptz
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  v_local timestamp := private.cr_local(p_from);
+  v_opens time;
+  v_closes time;
+  v_next date;
+begin
+  select h.opens, h.closes into v_opens, v_closes from private.desk_hours(v_local::date) h;
+  if found and v_local::time < v_closes then
+    return case when v_local::time >= v_opens then p_from
+                else private.cr_instant(v_local::date + v_opens) end;
+  end if;
+  v_next := private.desk_add_days(v_local::date, 1);
+  return private.cr_instant(v_next + (select h.opens from private.desk_hours(v_next) h));
+end;
+$$;
+
 -- When a target counted from p_from falls due, on the desk's calendar
 -- (private.desk_hours: Saturday mornings are working time, Sunday and
 -- holidays are not). The legal withdrawal and warranty windows keep the
@@ -169,7 +195,10 @@ declare
 begin
   case p_unit
     when 'minutes' then
-      return p_from + make_interval(mins => p_amount);
+      -- Clock minutes from the moment the desk is open ("15 minutes during
+      -- service hours"): a case opened while it is closed counts from the
+      -- next opening.
+      return private.desk_next_open(p_from) + make_interval(mins => p_amount);
     when 'working_hours' then
       -- Counted only inside the desk's hours: what is left at closing time
       -- carries to the opening of the next working day.
@@ -198,7 +227,11 @@ begin
     when 'calendar_days' then
       return private.cr_instant((v_day + p_amount + 1)::timestamp);
     when 'same_day' then
-      return private.cr_instant((v_day + 1)::timestamp);
+      -- The end of the day the desk first is open: the day itself inside its
+      -- hours or before it opens; after closing, on a Sunday or a holiday,
+      -- the next working day (a promise for a day the desk is closed is one
+      -- nobody keeps).
+      return private.cr_instant((private.cr_local(private.desk_next_open(p_from))::date + 1)::timestamp);
     else
       perform private.fail('invalid_target');
   end case;
@@ -420,7 +453,7 @@ $$;
 -- What counts as "holding" it, after the text is brought to plain digits
 -- (NFKC, the decimal digits of other scripts mapped to 0-9, invisible format
 -- characters and combining marks removed):
---   * a run of digits that is the code ('4821', 'x4821x', '4821 8888');
+--   * a run of digits that is the code ('4821', 'x4821x', '4821 888');
 --   * consecutive runs joined by one to three characters that are neither a
 --     letter nor a digit (spaces, dots, commas, dashes, slashes, colons,
 --     underscores, brackets, line breaks) whose digits together are the code
@@ -428,7 +461,8 @@ $$;
 --     gaps the mask of a customer's words reads too, so no shape the mask
 --     would hide is one the guard lets pass uncounted.
 -- Three shapes are read whole and never split, so they pass: an order number
--- (YT-100123), a Costa Rica phone written 8888-1234 or +506 8888 1234, and
+-- (YT-100123), a Costa Rica phone in every common format (8888-1234,
+-- 8888 1234, 8888.1234, 88 88 12 34, +506 8888 1234), and
 -- an amount with a colón or dollar sign and thousands separators (₡4.821).
 -- A text with more than five different four-digit numbers is refused as
 -- such, whatever the code, so one note cannot test many guesses.
@@ -521,8 +555,16 @@ declare
 begin
   -- The shapes read whole.
   v := regexp_replace(v, '[Yy][Tt]-?[0-9]+', ' ', 'g');
-  v := regexp_replace(v, '\+ ?506[ .-]?[0-9]{4}[ .-]?[0-9]{4}(?![0-9])', ' ', 'g');
-  v := regexp_replace(v, '(?<![0-9][ .,-]?)[245678][0-9]{3}-[0-9]{4}(?![0-9]|[ .,-][0-9])', ' ', 'g');
+  -- A phone in every common format: +506 then 8 digits (as 4+4 or 2+2+2+2,
+  -- split by a space, a dot or a dash or not at all), or 8 digits starting
+  -- with 2, 4, 5, 6, 7 or 8 split the same way ('8888-1234', '8888 1234',
+  -- '8888.1234', '88 88 12 34'). One rule for every format: a phone written
+  -- with a space must not be split into two numbers where one with a dash
+  -- is read whole (decision 61).
+  v := regexp_replace(v, '\+ ?506[ .-]?[0-9]{2}[ .-]?[0-9]{2}[ .-]?[0-9]{2}[ .-]?[0-9]{2}(?![0-9])', ' ', 'g');
+  v := regexp_replace(v, '(?<![0-9][ .,-]?)[245678][0-9]{3}[ .-][0-9]{4}(?![0-9]|[ .,-][0-9])', ' ', 'g');
+  v := regexp_replace(v,
+    '(?<![0-9][ .,-]?)[245678][0-9][ .-][0-9]{2}[ .-][0-9]{2}[ .-][0-9]{2}(?![0-9]|[ .,-][0-9])', ' ', 'g');
   v := regexp_replace(v, '[₡$] ?[0-9]{1,3}(?:[.,][0-9]{3})+(?:,[0-9]{1,2})?(?![0-9])', ' ', 'g');
 
   for v_group in
@@ -1706,6 +1748,19 @@ begin
 end;
 $$;
 
+-- A text without the white space at its ends, as the apps trim it (the
+-- white space of JavaScript's String.prototype.trim: tabs, line breaks,
+-- spaces of every width, the byte-order mark). PostgreSQL's trim() removes
+-- only the ASCII space, so a reason of eleven line breaks passed it.
+create or replace function private.trim_space(p_text text) returns text
+language sql immutable
+set search_path = ''
+as $$
+  select regexp_replace(coalesce(p_text, ''),
+    '^[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+|[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$',
+    '', 'g');
+$$;
+
 -- "Mostrar contacto": the customer's e-mail and phone, for support and
 -- administrators, with the reason written on the audit trail (shown on
 -- Auditoría as "Vio el contacto de un cliente"). The trail keeps the reason
@@ -1715,7 +1770,7 @@ language plpgsql security definer
 set search_path = ''
 as $$
 declare
-  v_reason text := trim(coalesce(p_reason, ''));
+  v_reason text := private.trim_space(p_reason);
   v_email text;
   v_phone text;
 begin
@@ -1760,6 +1815,13 @@ as $$
     -- The last day, Costa Rica time, of the promise (due times are the end of a day).
     'answer_due_on', (private.cr_local(c.due_at) - interval '1 second')::date,
     'resolved_at', c.resolved_at,
+    -- Someone responded (as Casos reads it): an answer, or a decision such as
+    -- a return approved without a note. The card says «En revisión» then,
+    -- never «Por responder», and shows the decision.
+    'responded_at', c.first_response_at,
+    'decision', (select jsonb_build_object('status', e.body, 'at', e.created_at)
+                 from private.case_entries e where e.case_id = c.id and e.kind = 'status'
+                 order by e.id desc limit 1),
     'order_number', (select o.order_number from public.orders o where o.id = c.order_id),
     'answers', coalesce((
       select jsonb_agg(jsonb_build_object('body', e.body, 'created_at', e.created_at,
@@ -2317,6 +2379,7 @@ revoke all on function private.cr_instant(timestamp) from public, anon, authenti
 revoke all on function private.desk_week() from public, anon, authenticated;
 revoke all on function private.desk_hours(date) from public, anon, authenticated;
 revoke all on function private.desk_add_days(date, integer) from public, anon, authenticated;
+revoke all on function private.desk_next_open(timestamptz) from public, anon, authenticated;
 revoke all on function private.case_due(timestamptz, integer, text) from public, anon, authenticated;
 revoke all on function private.case_target(text, text) from public, anon, authenticated;
 revoke all on function private.case_entries_append_only() from public, anon, authenticated;
@@ -2333,6 +2396,7 @@ revoke all on function private.case_text_numbers(text) from public, anon, authen
 revoke all on function private.case_text_max_refusals() from public, anon, authenticated;
 revoke all on function private.case_text_max_numbers() from public, anon, authenticated;
 revoke all on function private.case_text_plain(text) from public, anon, authenticated;
+revoke all on function private.trim_space(text) from public, anon, authenticated;
 revoke all on function private.case_live_codes(uuid, uuid) from public, anon, authenticated;
 revoke all on function private.mask_shopper_codes(text, uuid, uuid) from public, anon, authenticated;
 revoke all on function private.case_text_allowed(uuid, uuid, text, text, text) from public, anon, authenticated;

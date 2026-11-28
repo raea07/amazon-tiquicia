@@ -280,7 +280,10 @@ end $$;
 -- A phone that ends in the live code and one that ends in another number
 -- give the same answer, the same rows, the same counters and the same text
 -- on the case page (decision 61): the guard reads a phone whole, so the
--- writer learns nothing about which four digits are a code.
+-- writer learns nothing about which four digits are a code. The same holds
+-- for every common way to write a phone: with a dash, a space, a dot, in
+-- pairs, and after +506 (the second outside check of part 3 found the space,
+-- the dot and the pairs split into two numbers, so the live one was refused).
 create function pg_temp.note_counts(p_case uuid, p_writer uuid) returns int[]
 language sql as $$
   select array[
@@ -302,7 +305,13 @@ declare
   v_kind text;
   v_seen text[] := '{}';
 begin
-  foreach v_text in array array['Llamar al 8899-6284 mañana temprano.', 'Llamar al 8899-6285 mañana temprano.'] loop
+  foreach v_text in array array[
+    'Llamar al 8899-6284 mañana temprano.', 'Llamar al 8899-6285 mañana temprano.',
+    'Llamar al 8899 6284 mañana temprano.', 'Llamar al 8899 6285 mañana temprano.',
+    'Llamar al 8899.6284 mañana temprano.', 'Llamar al 8899.6285 mañana temprano.',
+    'Llamar al 88 99 62 84 mañana temprano.', 'Llamar al 88 99 62 85 mañana temprano.',
+    'Llamar al 6284 8899 mañana temprano.', 'Llamar al 6285 8899 mañana temprano.',
+    'Llamar al +506 88 99 62 84 mañana temprano.', 'Llamar al +506 88 99 62 85 mañana temprano.'] loop
     v_before := pg_temp.note_counts(v_case, v_writer);
     perform pg_temp.act('notas197@yuntera.example');
     v_id := public.ops_add_case_note(v_case, v_text);
@@ -318,9 +327,13 @@ begin
       case when v_id is null then 'null' else 'an id' end, v_kind,
       v_after[1] - v_before[1], v_after[2] - v_before[2], v_after[3] - v_before[3], v_after[4] - v_before[4]);
   end loop;
-  assert v_seen[1] = v_seen[2], format('the same for the code and another number: %s', v_seen);
-  assert v_seen[1] = 'answer an id; note by the writer: true; entries +1, numbers +0, trail +0, refusals +0',
-    format('a kept note, nothing counted: %s', v_seen[1]);
+  -- Each pair (the code, another number) gives the same, and every format
+  -- gives a kept note with nothing counted.
+  for i in 1 .. cardinality(v_seen) loop
+    assert v_seen[i] = 'answer an id; note by the writer: true; entries +1, numbers +0, trail +0, refusals +0',
+      format('a kept note, nothing counted, the same for the code and another number (text %s): %s', i, v_seen);
+  end loop;
+  assert cardinality(v_seen) = 12, format('six formats, two numbers each: %s', cardinality(v_seen));
 end $$;
 
 -- An answer kept from before 084700 (no author) is still masked.

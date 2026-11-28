@@ -80,8 +80,12 @@ begin
   insert into public.holidays (day, name) values ('2031-03-03', 'Feriado de prueba 181')
   on conflict (day) do nothing;
 
-  -- minutes: the clock, whatever the day.
-  assert private.case_due('2031-03-01 18:00+00', 15, 'minutes') = '2031-03-01 18:15+00', 'minutes';
+  -- minutes: clock minutes from the moment the desk is open (Saturday 1 Mar
+  -- 11:00 CR), or from the next opening when it is closed (Saturday exactly
+  -- 12:00 CR: Sunday closed, Monday 3 the holiday, so Tuesday 4 at 08:15).
+  assert private.case_due('2031-03-01 17:00+00', 15, 'minutes') = '2031-03-01 17:15+00', 'minutes';
+  assert private.case_due('2031-03-01 18:00+00', 15, 'minutes') = '2031-03-04 14:15+00',
+    format('minutes while the desk is closed: %s', private.case_due('2031-03-01 18:00+00', 15, 'minutes'));
   -- working_hours on a working day inside the hours: from the moment (Tue 4 Mar 10:00 CR).
   assert private.case_due('2031-03-04 16:00+00', 2, 'working_hours') = '2031-03-04 18:00+00',
     format('working hours, Tuesday: %s', private.case_due('2031-03-04 16:00+00', 2, 'working_hours'));
@@ -119,8 +123,11 @@ begin
   -- calendar_days and same_day: to the end of that day, Costa Rica time.
   assert private.case_due('2031-02-28 16:00+00', 8, 'calendar_days') = '2031-03-09 06:00+00', 'calendar days';
   assert private.case_due('2031-02-28 16:00+00', 1, 'same_day') = '2031-03-01 06:00+00', 'same day';
-  -- Late at night in Costa Rica is still that day there (01:00 UTC is 19:00 CR the day before).
-  assert private.case_due('2031-03-01 01:00+00', 1, 'same_day') = '2031-03-01 06:00+00', 'same day, CR evening';
+  -- The desk's clock is Costa Rica's: 22:30 UTC is 16:30 CR, still open, so that Friday.
+  assert private.case_due('2031-02-28 22:30+00', 1, 'same_day') = '2031-03-01 06:00+00', 'same day, CR afternoon';
+  -- Friday 19:00 CR (01:00 UTC), after closing: the end of the next working day, Saturday 1 Mar.
+  assert private.case_due('2031-03-01 01:00+00', 1, 'same_day') = '2031-03-02 06:00+00',
+    format('same day, after closing: %s', private.case_due('2031-03-01 01:00+00', 1, 'same_day'));
 
   -- The targets of customer-service.md.
   assert (select (first_response_amount, first_response_unit, resolution_amount, resolution_unit)
@@ -273,7 +280,7 @@ begin
   foreach v_text in array array[
     '4821', 'Su código es 4821.', 'código: 4821, ya se lo dije', '(4821)', 'x4821x', '4821a',
     -- followed or preceded by another number
-    '4821 8888', 'el 4821 2 veces', '4821,1234', '1234, 4821', '1 4821',
+    '4821 888', 'el 4821 2 veces', '4821,1234', '1234, 4821', '1 4821',
     -- split by separators
     '4 8 2 1', '48-21', '48.21', '4 821', '₡4821',
     -- other digits and invisible characters
@@ -283,6 +290,10 @@ begin
   end loop;
   foreach v_text in array array[
     'Llamar al 8888-4821 en la tarde.', 'Llamar al +506 8888 4821.', 'Teléfono +5068888-4821.',
+    -- a phone with a space, a dot or in pairs is read whole like one with a
+    -- dash (decision 61), whichever of its two halves is the code
+    'Llamar al 8888 4821.', 'Llamar al 8888.4821.', 'Llamar al 88 88 48 21.', 'Llamar al 4821 8888.',
+    'Llamar al +506 88 88 48 21.',
     'Pedido YT-104821 revisado.', 'Se devuelven ₡4.821 del envío.', 'Son $4,821.50 en total.',
     'Referencia 482100 del banco.', 'Son 48 210 colones.', '84821', 'El 27/11 a las 10:30.',
     'Sin números.'] loop
@@ -488,7 +499,7 @@ begin
     'Pregunta a qué hora llega el pedido de hoy.', current_setting('t.number_a'));
   select * into strict c from private.cases where id = v_case;
   assert c.kind = 'contact' and c.channel = 'whatsapp' and c.order_id = current_setting('t.order_a')::uuid
-         and c.user_id = current_setting('t.user_a')::uuid and c.first_response_due_at = c.created_at + interval '15 minutes'
+         and c.user_id = current_setting('t.user_a')::uuid and c.first_response_due_at = private.case_due(c.created_at, 15, 'minutes')
          and c.created_by = (select id from auth.users where email = 'soporte181@yuntera.example'),
     format('contact by order: %s', to_jsonb(c));
   perform pg_temp.remember('case_contact', v_case::text);
@@ -670,7 +681,12 @@ begin
   perform pg_temp.act('soporte181@yuntera.example');
   assert (public.ops_customer(v_user) ->> 'can_reveal_contact')::boolean, 'support may reveal';
   perform pg_temp.refused(format('select public.ops_customer_contact(%L, %L)', v_user, 'corto'), 'reason_required');
-  r := public.ops_customer_contact(v_user, 'Llamar por la entrega de hoy, no contesta WhatsApp.');
+  -- White space of any kind is not a reason (PostgreSQL's trim() removes only spaces).
+  perform pg_temp.refused(format('select public.ops_customer_contact(%L, %L)', v_user, repeat(E'\n', 11)), 'reason_required');
+  perform pg_temp.refused(format('select public.ops_customer_contact(%L, %L)', v_user, repeat(E'\t', 11)), 'reason_required');
+  perform pg_temp.refused(format('select public.ops_customer_contact(%L, %L)', v_user,
+    E'\u00a0\u2003\u3000\ufeff corto \r\n'), 'reason_required');
+  r := public.ops_customer_contact(v_user, E'\n\tLlamar por la entrega de hoy, no contesta WhatsApp.\u00a0\n');
   assert r ->> 'email' = 'casos181a@yuntera.example' and r ->> 'phone' is not null, format('contact: %s', r);
   perform pg_temp.logout();
 
@@ -742,6 +758,37 @@ begin
          and not has_function_privilege('anon', 'public.ops_cases(text, integer, integer)', 'execute')
          and has_function_privilege('authenticated', 'public.ops_case(uuid)', 'execute'),
     'granted to authenticated only';
+end $$;
+
+-- A return approved in Atención without a note: the shopper's case reads
+-- as responded, with the decision, as the console reads it (second outside
+-- check of part 3: the card said «Por responder» beside «Aprobada»).
+do $$
+declare
+  v_return uuid;
+  r jsonb;
+begin
+  insert into public.return_requests (order_item_id, user_id, kind, quantity, status)
+  select i.id, o.user_id, 'damaged', 1, 'requested'
+  from public.order_items i join public.orders o on o.id = i.order_id
+  where o.id = current_setting('t.order_b')::uuid limit 1
+  returning id into v_return;
+  perform pg_temp.act('casos181b@yuntera.example');
+  select x into r from jsonb_array_elements(public.my_cases(current_setting('t.number_b'))) x
+  where x ->> 'id' = (select id::text from private.cases where return_id = v_return);
+  assert r -> 'responded_at' = 'null'::jsonb and r -> 'decision' = 'null'::jsonb
+         and jsonb_array_length(r -> 'answers') = 0, format('not responded yet: %s', r);
+  perform pg_temp.act('ops181@yuntera.example');
+  assert public.ops_decide_return(v_return, true, null), 'approved without a note';
+  perform pg_temp.act('casos181b@yuntera.example');
+  select x into r from jsonb_array_elements(public.my_cases(current_setting('t.number_b'))) x
+  where x ->> 'id' = (select id::text from private.cases where return_id = v_return);
+  perform pg_temp.logout();
+  assert r ->> 'status' = 'open' and jsonb_array_length(r -> 'answers') = 0
+         and (r ->> 'responded_at')::timestamptz = (select first_response_at from private.cases where return_id = v_return)
+         and r -> 'decision' ->> 'status' = 'approved' and (r -> 'decision' ->> 'at') is not null,
+    format('the shopper reads a response and the decision: %s', r);
+  delete from public.return_requests where id = v_return;
 end $$;
 
 -- A case follows its source row if one is ever deleted (nothing in the API

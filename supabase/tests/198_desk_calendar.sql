@@ -104,18 +104,26 @@ insert into due_cases values
   ('2033-05-08 10:00', 5, 'working_days', '2033-05-14 00:00', 'five from a Sunday: to Friday'),
   ('2033-05-13 16:00', 5, 'working_days', '2033-05-21 00:00', 'five over a Saturday holiday: to Friday'),
   ('2026-12-31 10:00', 5, 'working_days', '2027-01-08 00:00', 'five at the end of the year: to Thursday 7'),
-  -- calendar_days and same_day: the calendar, whatever the hours.
+  -- calendar_days: the calendar, whatever the hours.
   ('2033-05-06 16:00', 8, 'calendar_days', '2033-05-15 00:00', 'eight calendar days from a Friday'),
   ('2033-05-07 09:00', 8, 'calendar_days', '2033-05-16 00:00', 'eight calendar days from a Saturday'),
   ('2033-05-08 10:00', 8, 'calendar_days', '2033-05-17 00:00', 'eight calendar days from a Sunday'),
   ('2026-12-31 10:00', 8, 'calendar_days', '2027-01-09 00:00', 'eight calendar days over New Year'),
-  ('2033-05-06 16:00', 1, 'same_day', '2033-05-07 00:00', 'same day, Friday'),
-  ('2033-05-07 15:00', 1, 'same_day', '2033-05-08 00:00', 'same day, Saturday afternoon'),
-  ('2033-05-08 10:00', 1, 'same_day', '2033-05-09 00:00', 'same day, Sunday'),
-  ('2026-12-31 23:30', 1, 'same_day', '2027-01-01 00:00', 'same day, the last evening of the year'),
-  -- minutes: the clock, whatever the hours.
+  -- same_day: the end of the day the desk is first open (the walk of part 3
+  -- found a contact recorded on Friday at 22:15 due that same evening).
+  ('2033-05-06 16:00', 1, 'same_day', '2033-05-07 00:00', 'same day, Friday afternoon: that Friday'),
+  ('2033-05-06 22:15', 1, 'same_day', '2033-05-08 00:00', 'same day, Friday night: the end of Saturday'),
+  ('2033-05-09 07:00', 1, 'same_day', '2033-05-10 00:00', 'same day, Monday before opening: that Monday'),
+  ('2033-05-07 15:00', 1, 'same_day', '2033-05-10 00:00', 'same day, Saturday afternoon: the end of Monday'),
+  ('2033-05-08 10:00', 1, 'same_day', '2033-05-10 00:00', 'same day, Sunday: the end of Monday'),
+  ('2026-12-31 23:30', 1, 'same_day', '2027-01-03 00:00', 'same day, the last evening of the year: Saturday 2 January'),
+  -- minutes: clock minutes from the moment the desk is open.
   ('2033-05-07 11:50', 15, 'minutes', '2033-05-07 12:05', 'minutes past the Saturday closing'),
-  ('2033-05-08 10:00', 15, 'minutes', '2033-05-08 10:15', 'minutes on a Sunday');
+  ('2033-05-09 08:00', 15, 'minutes', '2033-05-09 08:15', 'minutes from exactly 08:00'),
+  ('2033-05-09 07:50', 15, 'minutes', '2033-05-09 08:15', 'minutes before opening: from 08:00'),
+  ('2033-05-06 17:00', 15, 'minutes', '2033-05-07 08:15', 'minutes from exactly 17:00: Saturday 08:15'),
+  ('2033-05-08 10:00', 15, 'minutes', '2033-05-09 08:15', 'minutes on a Sunday: Monday 08:15'),
+  ('2033-05-14 10:00', 15, 'minutes', '2033-05-16 08:15', 'minutes on a Saturday holiday: Monday 08:15');
 
 do $$
 declare
@@ -130,7 +138,7 @@ begin
              private.cr_local(v_got));
     n := n + 1;
   end loop;
-  assert n = 45, format('the table has 45 rows, %s ran', n);
+  assert n = 51, format('the table has 51 rows, %s ran', n);
 end $$;
 
 -- ── Wrong caller ───────────────────────────────────────────────────────────
@@ -140,7 +148,7 @@ declare
   f text;
 begin
   foreach f in array array['private.desk_week()', 'private.desk_hours(date)',
-                           'private.desk_add_days(date, integer)',
+                           'private.desk_add_days(date, integer)', 'private.desk_next_open(timestamptz)',
                            'private.case_due(timestamptz, integer, text)'] loop
     assert not has_function_privilege('anon', f, 'execute'), format('anon cannot call %s', f);
     assert not has_function_privilege('authenticated', f, 'execute'),

@@ -117,7 +117,12 @@ begin
       ('otro199@yuntera.example', format('select public.ops_order_contact(%L, %L)', 'YT-999999999', v_reason), 'forbidden'),
       (null, format('select public.ops_order_contact(%L, %L)', 'YT-999999999', v_reason), 'forbidden'),
       ('soporte199@yuntera.example', format('select public.ops_order_contact(%L, %L)', 'YT-999999999', v_reason), 'order_not_found'),
-      -- A reason is required: missing, empty, spaces, nine characters, 301 characters.
+      -- A reason is required: missing, empty, spaces, nine characters, 301 characters,
+      -- and white space of any kind (line breaks, tabs, wide spaces) is not a reason.
+      ('soporte199@yuntera.example', format('select public.ops_order_contact(%L, %L)', v_number, repeat(E'\n', 11)), 'reason_required'),
+      ('ops199@yuntera.example', format('select public.ops_order_contact(%L, %L)', v_number, repeat(E'\t', 11)), 'reason_required'),
+      ('admin199@yuntera.example', format('select public.ops_order_contact(%L, %L)', v_number, E'\r\n\t \u00a0\u2003\u3000\ufeff\u2028\u000b\f'), 'reason_required'),
+      ('ops199@yuntera.example', format('select public.ops_order_contact(%L, %L)', v_number, E'\n\t Llamarlo.\n\t '), 'reason_required'),
       ('soporte199@yuntera.example', format('select public.ops_order_contact(%L, null)', v_number), 'reason_required'),
       ('ops199@yuntera.example', format('select public.ops_order_contact(%L, %L)', v_number, ''), 'reason_required'),
       ('ops199@yuntera.example', format('select public.ops_order_contact(%L, %L)', v_number, '           '), 'reason_required'),

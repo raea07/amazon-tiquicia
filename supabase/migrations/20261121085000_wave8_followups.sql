@@ -674,7 +674,7 @@ language plpgsql security definer
 set search_path = ''
 as $$
 declare
-  v_reason text := trim(coalesce(p_reason, ''));
+  v_reason text := private.trim_space(p_reason);
   v_order public.orders%rowtype;
 begin
   -- The same answer for every caller without the role, whether the order
