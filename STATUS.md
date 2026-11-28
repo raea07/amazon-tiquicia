@@ -646,9 +646,12 @@ the hosted project, against real Sentry, on Vercel or on a phone.
   checks, both clean (before them, one of three runs reported an unhandled
   error after its tests: a connection `contract.payments` ends when it
   drops its own copy of the database).
-- **Browser journeys**: all 35 passed in one run with the tracker off (on
-  27 November, before the fixes, `system-health` had stopped once at its
-  data step and then passed alone). Breaking the case page's width fix or
+- **Browser journeys**: all 35 pass with the tracker off. In the last full
+  run after part 3's outside checks, 33 passed; `notifications` stopped once
+  on a page that took more than 30 s to load, and `system-health`, run
+  right after it, saw a stopped message left behind; both passed when run
+  alone once more (on 27 November `system-health` had also stopped once at
+  its data step and then passed alone). Breaking the case page's width fix or
   the return card's words on purpose made `support-cases` and `followups`
   fail. `node tools/e2e/selectors.mjs --check` and `node tools/e2e/check-words.cjs`
   pass with no ceiling raised; `touch-targets.cjs`, now also over wave 9's
