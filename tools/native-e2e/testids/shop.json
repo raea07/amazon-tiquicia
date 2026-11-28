@@ -167,6 +167,10 @@
       "files": ["apps/shop-native/src/components/case-answers.tsx"]
     },
     {
+      "id": "case-no-answer",
+      "files": ["apps/shop-native/src/components/case-answers.tsx"]
+    },
+    {
       "id": "categories-kept",
       "files": ["apps/shop-native/src/app/(tabs)/categorias.tsx"]
     },

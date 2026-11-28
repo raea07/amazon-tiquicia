@@ -8,6 +8,8 @@ import {
   checkComplaint,
   complaintFiledText,
   myCaseDueText,
+  myCaseNoAnswerText,
+  myCaseResponded,
   myCaseStatusWord,
 } from "./complaints";
 
@@ -111,5 +113,50 @@ describe("myCaseStatusWord", () => {
     expect(myCaseStatusWord({ status: "closed", answers: [] })).toBe("Respondido");
     // A value the module does not know is shown as it came.
     expect(myCaseStatusWord({ status: "archived", answers: [] })).toBe("archived");
+  });
+
+  it("reads a decision without a written answer as a response, as the console does", () => {
+    const approved = {
+      status: "open",
+      kind: "return",
+      answers: [],
+      responded_at: "2026-11-28T04:15:00Z",
+      decision: { status: "approved" },
+    };
+    expect(myCaseResponded(approved)).toBe(true);
+    expect(myCaseStatusWord(approved)).toBe("En revisión");
+    expect(myCaseResponded({ answers: [], responded_at: null })).toBe(false);
+    // The old answer without the field still reads as before.
+    expect(myCaseStatusWord({ status: "open", answers: [] })).toBe("Por responder");
+  });
+});
+
+describe("myCaseNoAnswerText", () => {
+  it("shows the decision of a return or a report, so the card agrees with the order's page", () => {
+    const base = { answers: [], responded_at: "2026-11-28T04:15:00Z" };
+    expect(
+      myCaseNoAnswerText(
+        { ...base, kind: "return", decision: { status: "approved" } },
+        "27 de noviembre",
+      ),
+    ).toBe(
+      "Aprobada: por recibir (desde el 27 de noviembre). Todavía no hay una respuesta escrita; le avisamos si la hay.",
+    );
+    expect(
+      myCaseNoAnswerText(
+        { ...base, kind: "report", decision: { status: "in_review" } },
+        "2 de diciembre",
+      ),
+    ).toBe(
+      "En revisión (desde el 2 de diciembre). Todavía no hay una respuesta escrita; le avisamos si la hay.",
+    );
+    // Responded with no decision the screen can name.
+    expect(
+      myCaseNoAnswerText({ ...base, kind: "return", decision: { status: "x" } }, "1 de diciembre"),
+    ).toBe("Ya revisamos su caso. Todavía no hay una respuesta escrita; le avisamos si la hay.");
+    // Nobody has responded yet.
+    expect(myCaseNoAnswerText({ kind: "complaint", answers: [], responded_at: null }, null)).toBe(
+      "Todavía no hay respuesta. Le avisamos cuando la haya.",
+    );
   });
 });

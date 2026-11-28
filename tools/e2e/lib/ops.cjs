@@ -2365,3 +2365,28 @@ Object.assign(module.exports, {
   deliveryContactReason,
   revealDeliveryPhone,
 });
+
+/**
+ * Waits until no form of the phone (`forms`) is left in the page's document,
+ * hidden pages the router keeps included; answers whether it went within
+ * `timeout` ms.
+ */
+async function phoneLeftDocument(page, forms, timeout = 10000) {
+  const until = Date.now() + timeout;
+  for (;;) {
+    const html = await page.content();
+    if (!forms.some((form) => html.includes(form))) return true;
+    if (Date.now() > until) return false;
+    await page.waitForTimeout(250);
+  }
+}
+
+/** Back to the order page; answers the «Teléfono de entrega» block's text and the reason field. */
+async function backToDeliveryContact(page) {
+  await page.goBack();
+  await page.waitForURL((u) => new URL(u).pathname.startsWith("/pedidos/"));
+  await deliveryContact(page).waitFor();
+  return { said: await deliveryContactText(page), reason: await deliveryContactReason(page) };
+}
+
+Object.assign(module.exports, { phoneLeftDocument, backToDeliveryContact });

@@ -108,12 +108,61 @@ export function myCaseDueText(kind: string, day: string): string {
 }
 
 /**
- * Where a shopper's case stands, in words (never colour alone): the «cases»
- * words of status-words.ts (decision 59), «En revisión» once it has an answer.
+ * Whether someone at Yuntera has responded to a shopper's case: a written
+ * answer, or a decision without one (a return approved in Atención without a
+ * note sets responded_at, the case's first_response_at, as the console reads
+ * it). Without this the shopper read «Por responder» while the same order
+ * page said «Aprobada».
  */
-export function myCaseStatusWord(item: { status: string; answers: readonly unknown[] }): string {
+export function myCaseResponded(item: {
+  answers: readonly unknown[];
+  responded_at?: string | null;
+}): boolean {
+  return item.answers.length > 0 || (item.responded_at ?? null) !== null;
+}
+
+/**
+ * Where a shopper's case stands, in words (never colour alone): the «cases»
+ * words of status-words.ts (decision 59), «En revisión» once someone has
+ * responded (myCaseResponded).
+ */
+export function myCaseStatusWord(item: {
+  status: string;
+  answers: readonly unknown[];
+  responded_at?: string | null;
+}): string {
   return (
-    statusWordOf("cases", item.status, { viewer: "shopper", answered: item.answers.length > 0 })
+    statusWordOf("cases", item.status, { viewer: "shopper", answered: myCaseResponded(item) })
       ?.word ?? item.status
   );
+}
+
+/**
+ * What a shopper's case card says when it has no written answer, the day of
+ * the decision already formatted. A return or a report decided without a note
+ * shows the decision in the words of status-words.ts («Aprobada: por recibir
+ * (desde el 27 de noviembre).»), so the card agrees with the order's page.
+ */
+export function myCaseNoAnswerText(
+  item: {
+    kind: string;
+    answers: readonly unknown[];
+    responded_at?: string | null;
+    decision?: { status: string } | null;
+  },
+  decisionDay: string | null,
+): string {
+  const source =
+    item.kind === "return" ? "return_requests" : item.kind === "report" ? "content_reports" : null;
+  const word =
+    source && item.decision
+      ? statusWordOf(source, item.decision.status, { viewer: "shopper" })?.word
+      : undefined;
+  if (word && decisionDay) {
+    return `${word} (desde el ${decisionDay}). Todavía no hay una respuesta escrita; le avisamos si la hay.`;
+  }
+  if (myCaseResponded(item)) {
+    return "Ya revisamos su caso. Todavía no hay una respuesta escrita; le avisamos si la hay.";
+  }
+  return "Todavía no hay respuesta. Le avisamos cuando la haya.";
 }

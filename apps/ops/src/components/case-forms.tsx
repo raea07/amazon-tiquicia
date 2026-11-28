@@ -176,8 +176,14 @@ export function RecordContactForm({
  * page.
  */
 export function RevealContactForm(target: { userId: string } | { orderNumber: string }) {
+  // The contact lives only in the action's answer, shown once. A step to
+  // another page keeps this page hidden in the document, answer included, and
+  // Back showed it again without a new look on the trail: when the page is
+  // hidden its effects end, so the form starts again under a new key.
+  const [round, setRound] = useState(0);
+  useEffect(() => () => setRound((value) => value + 1), []);
   return (
-    <ActionForm action={revealContact} submit="Mostrar contacto" variant="secondary">
+    <ActionForm key={round} action={revealContact} submit="Mostrar contacto" variant="secondary">
       {"orderNumber" in target ? (
         <input type="hidden" name="orderNumber" value={target.orderNumber} />
       ) : (

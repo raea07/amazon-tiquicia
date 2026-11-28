@@ -305,6 +305,23 @@ function sql(statement) {
     !/@|%40|\+506/.test(support.url()),
     `the customer view's address holds no contact (${customerPath})`,
   );
+  // The phone is shown once: the order page the router keeps hidden drops
+  // it, and Back shows the form again, not the phone (second outside check).
+  check(
+    await ops.phoneLeftDocument(support, [shipPhone, national, shown]),
+    "after leaving the order page the phone is no longer in the document",
+  );
+  const back = await ops.backToDeliveryContact(support);
+  check(
+    !back.said.includes(shown) && back.said.includes("Mostrar contacto") && back.reason === "",
+    `Back shows the form again, not the phone (${back.said.slice(0, 80)})`,
+  );
+  check(
+    sql(`select count(*) from private.audit_log
+         where action = 'VIEW_CONTACT' and table_name = 'orders'
+           and new_row ->> 'order_number' = '${orderNumber}'`) === "1",
+    "and no look was recorded without asking",
+  );
   // Load the customer view on its own: the order page left behind by the
   // client-side navigation keeps its own "Mostrar contacto" form in the
   // document (hidden), which would make the reason field ambiguous.

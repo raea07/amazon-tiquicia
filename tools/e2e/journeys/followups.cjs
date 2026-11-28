@@ -173,6 +173,40 @@ async function as(email) {
   );
   await a.screenshot({ path: SHOTS + "/fu3-withdrawn.png", fullPage: true });
   await noSideways(a, "order page after withdrawing");
+
+  // Asked again and approved in Atención without a note: the case card says
+  // it is under review and shows the decision, as the order line does, never
+  // «Por responder» (second outside check of wave 9 part 3).
+  await web.requestReturn(a, title, {
+    kind: "damaged",
+    quantity: 1,
+    reason: "La caja llegó abierta y aplastada.",
+  });
+  await web.returnReceived(a);
+  const staff = await as("central@yuntera.example");
+  const queued = (await staff.rpc("ops_care_queues")).returns.find(
+    (r) => r.order_number === target.number && r.status === "requested",
+  );
+  check(queued, "the new request waits in Atención");
+  check(
+    (await staff.rpc("ops_decide_return", { p_return_id: queued.id, p_approve: true })) === true,
+    "approved without a note",
+  );
+  await staff.dispose();
+  await web.openOrder(a, target.number, "load");
+  const decided = await web.orderCasesText(a);
+  const decidedCard =
+    /Devolución [0-9A-F]{8}.*?(?= (?:Reclamo|Devolución|Reporte|Consulta) [0-9A-F]{8}|$)/.exec(
+      decided,
+    )?.[0] ?? "";
+  check(
+    decidedCard.includes("En revisión") &&
+      decidedCard.includes("Aprobada: por recibir (desde el") &&
+      !decidedCard.includes("Por responder") &&
+      !decidedCard.includes("Todavía no hay respuesta."),
+    `the approved return's case reads as answered, with the decision (${decidedCard})`,
+  );
+  await noSideways(a, "order page after the approval");
   await shop.close();
 
   // ── 2. The district of each stop, in the field app ──────────────────────

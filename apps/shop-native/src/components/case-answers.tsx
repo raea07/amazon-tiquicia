@@ -1,4 +1,4 @@
-import { MY_CASE_KIND, myCaseDueText, myCaseStatusWord } from "@yuntera/core";
+import { MY_CASE_KIND, myCaseDueText, myCaseNoAnswerText, myCaseStatusWord } from "@yuntera/core";
 import type { MyCase } from "@yuntera/db";
 import { colors, radius, space } from "@yuntera/expo-kit/theme";
 import { Badge, Card, formatDate, formatDateTime, Stack, Text } from "@yuntera/expo-kit/ui";
@@ -29,8 +29,13 @@ export function CaseAnswers({ cases, showOrder }: { cases: MyCase[]; showOrder: 
                 : ""}
             </Text>
             {item.answers.length === 0 ? (
-              <Text variant="small" tint="muted">
-                Todavía no hay respuesta. Le avisamos cuando la haya.
+              <Text variant="small" tint="muted" testID="case-no-answer">
+                {myCaseNoAnswerText(
+                  item,
+                  item.decision
+                    ? formatDate(item.decision.at, { day: "numeric", month: "long" })
+                    : null,
+                )}
               </Text>
             ) : (
               item.answers.map((answer) => (

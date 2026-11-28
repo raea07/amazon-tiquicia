@@ -256,6 +256,10 @@ export const myCase = z.object({
   /** The last day (Costa Rica) the case is promised to be resolved by (for a complaint, the written answer). */
   answer_due_on: day,
   resolved_at: timestamp.nullable(),
+  /** When someone first responded: an answer, or a decision without one. Optional: answers from before it parse. */
+  responded_at: timestamp.nullable().optional(),
+  /** The last decision on the return or report (its status value), if any. */
+  decision: z.object({ status: z.string(), at: timestamp }).nullable().optional(),
   order_number: z.string().nullable(),
   answers: z.array(
     z.object({ body: z.string(), created_at: timestamp, author: z.string().nullable() }),

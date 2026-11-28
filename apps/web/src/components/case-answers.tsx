@@ -1,4 +1,4 @@
-import { MY_CASE_KIND, myCaseDueText, myCaseStatusWord } from "@yuntera/core";
+import { MY_CASE_KIND, myCaseDueText, myCaseNoAnswerText, myCaseStatusWord } from "@yuntera/core";
 import type { MyCase } from "@yuntera/db";
 import { Badge, formatDate, formatDateTime } from "@yuntera/ui";
 import type { Route } from "next";
@@ -43,8 +43,13 @@ export function CaseAnswers({ cases, showOrder }: { cases: MyCase[]; showOrder: 
               : ""}
           </p>
           {item.answers.length === 0 ? (
-            <p className="mt-3 text-ink-muted">
-              Todavía no hay respuesta. Le avisamos cuando la haya.
+            <p className="mt-3 text-ink-muted" data-testid="case-no-answer">
+              {myCaseNoAnswerText(
+                item,
+                item.decision
+                  ? formatDate(item.decision.at, { day: "numeric", month: "long" })
+                  : null,
+              )}
             </p>
           ) : (
             <ol className="mt-3 flex flex-col gap-3">
