@@ -95,6 +95,10 @@ describe.skipIf(!db.enabled)("the delivery phone on request (against a seeded da
     await expect(db.as(ADMIN).opsOrderContact(orderNumber, "corto")).rejects.toMatchObject({
       code: "reason_required",
     });
+    // White space of any kind is not a reason (the database trims it as the apps do).
+    await expect(db.as(ADMIN).opsOrderContact(orderNumber, "\n".repeat(11))).rejects.toMatchObject({
+      code: "reason_required",
+    });
     await expect(
       db.as(ADMIN).opsOrderContact("YT-999999999", "Prueba de contrato: un pedido que no existe."),
     ).rejects.toMatchObject({ code: "order_not_found" });

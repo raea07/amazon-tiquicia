@@ -134,6 +134,10 @@ describe.skipIf(!db.enabled)("support cases contract (against a seeded database)
       "Le volvimos a enviar la factura, ahora en PDF.",
     ]);
     expect(JSON.stringify(mine)).not.toContain("Nota del contrato");
+    // Answered: the shopper's case says when someone first responded; a
+    // complaint has no status decision.
+    expect(own?.responded_at).toEqual(expect.any(String));
+    expect(own?.decision ?? null).toBeNull();
   });
 
   it("a recorded contact, the order's cases, the Hoy line, targets and the report parse", async () => {
