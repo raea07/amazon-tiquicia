@@ -556,6 +556,24 @@ the hosted project, against real Sentry, on Vercel or on a phone.
   `touch-targets.cjs` now reads wave 9's pages; the index link to decision
   64; suite `196` failed between 00:00 and 06:00 UTC (it used the UTC date
   for a store build).
+- **The second round of outside checks of the join** (28 November 2026)
+  left two major and four minor problems; all are fixed. (1) A staff
+  member could reopen a closed complaint's case while its account was being
+  deleted, leaving an open case nobody could close: `ops_reopen_case` now
+  takes the account row first (race J9: 28 of 30 rounds wrong before, 0 of
+  90 after; J10 and J11 race an answer and an assignment against the
+  deletion, already correct). (2) The shopper's order page was 411 px wide
+  at 390 with a long URL in an answer; it fits now, and every journey
+  measures width against the screen through one helper
+  (`kit.overflowPx`): in a phone context `innerWidth` grows with the page,
+  so the old check could never fail. With the true check all 35 journeys
+  found no other page too wide; breaking the order page's fix on purpose
+  made `support-cases` fail. Also fixed: a locked-out staff member could
+  not cancel an order with an open return or withdraw a return of their
+  own; the mask missed digits of 30 scripts outside the basic plane; a
+  deleted account's staff answers stayed on the complaint, the return and
+  the report. Kept by ruling: a note with a phone that ends in a live code
+  is shown as written (decision 61 says why).
 - **What the join changed**: wave 9's decisions are numbered 61 to 68, after
   the main line's 59 and 60. Wave 9's status words come from the one module
   (`packages/core/src/status-words.ts`): a case reads «Por responder»,
