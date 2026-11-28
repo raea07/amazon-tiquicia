@@ -626,12 +626,22 @@ $$;
 -- The same check for texts that reach a case through Atención (a complaint's
 -- answer, the note on a return decision): those functions run the trigger
 -- inside their own step, so a refusal there raises note_contains_code.
+-- What reaches this check without a door is a fixed system text (a
+-- cancellation closing the order's open returns, a shopper withdrawing their
+-- return), which a person did not type. A text without a four-digit number
+-- cannot hold a code: it counts nothing and is not held back by the lock-out,
+-- which is for what a person types, so a locked-out staff member can still
+-- cancel an order or withdraw a return of their own. A text with a number
+-- gets the whole check, lock-out first, so its answer tells nothing.
 create or replace function private.guard_case_text(c private.cases, p_text text, p_function text)
 returns void
 language plpgsql security definer
 set search_path = ''
 as $$
 begin
+  if cardinality(private.case_text_numbers(p_text)) = 0 then
+    return;
+  end if;
   if not private.case_text_allowed(c.order_id, c.user_id, p_text, p_function, c.id::text) then
     perform private.fail('note_contains_code');
   end if;

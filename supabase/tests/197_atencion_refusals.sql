@@ -21,6 +21,14 @@
 --                  returns and reports whose case that role reads (table 4.1)
 --                  and names the customer by first name.
 --
+-- And what the second review of the join left open, also in 084700:
+--
+--   the lock-out:  a writer locked out by three refusals still cancels an
+--                  order with an open return, withdraws a return of their
+--                  own, decides, receives and refunds without a note,
+--                  assigns and reopens (none of them puts typed text on a
+--                  case); what they type is still refused.
+--
 -- Everything is this suite's own and rolls back.
 
 begin;
@@ -292,6 +300,114 @@ begin
   assert public.ops_care_queues() -> 'returns' @> jsonb_build_array(jsonb_build_object(
     'id', current_setting('t.return_b'), 'customer', 'Dalia')), 'the customer by first name';
   perform pg_temp.logout();
+end $$;
+
+-- ── A locked-out writer still does what puts no typed text on a case ───────
+-- The lock-out (three refusals in an hour) stops a person probing with what
+-- they type. The actions that write only a fixed system text to a return
+-- through the trigger (a cancellation closing the order's open returns, a
+-- shopper withdrawing their own return) or no text at all (deciding,
+-- receiving and refunding without a note, assigning, reopening) still go
+-- through for a locked-out support or ops account. A typed text is still
+-- refused, with or without the code, so the lock-out tells nothing.
+
+select pg_temp.shopper('bloqueo197s@yuntera.example', 'Bruno Bloqueado');
+select pg_temp.shopper('bloqueo197o@yuntera.example', 'Olga Bloqueada');
+insert into public.staff_members (user_id, role)
+select u.id, x.role::public.staff_role
+from (values ('bloqueo197s@yuntera.example', 'support'), ('bloqueo197o@yuntera.example', 'ops')) x (email, role)
+join auth.users u on u.email = x.email;
+
+-- An order of the customer still being prepared, with two open returns (the
+-- state the rules before 082900 let through, made here as the owner), and a
+-- delivered order of the support writer themself, with a return of theirs.
+select pg_temp.remember('order_c', pg_temp.place('cliente197@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:2'), 'card', 'refusal-197-c')::text);
+select pg_temp.pay(current_setting('t.order_c')::uuid);
+with r as (
+  insert into public.return_requests (order_item_id, user_id, kind, quantity, reason, status)
+  values (pg_temp.item(current_setting('t.order_c')::uuid, 'libreta-tapa-dura-a5'),
+          current_setting('t.user_d')::uuid, 'damaged', 1, 'Primera.', 'requested')
+  returning id)
+select pg_temp.remember('return_c1', (select id::text from r));
+select pg_temp.remember('order_s', pg_temp.place('bloqueo197s@yuntera.example',
+  pg_temp.items('libreta-tapa-dura-a5:1'), 'card', 'refusal-197-s')::text);
+select pg_temp.pay(current_setting('t.order_s')::uuid);
+select pg_temp.deliver(current_setting('t.order_s')::uuid);
+
+do $$
+declare
+  v_case uuid := (select id from private.cases where complaint_id = current_setting('t.complaint')::uuid);
+  v_email text;
+begin
+  perform pg_temp.act('bloqueo197s@yuntera.example');
+  perform pg_temp.remember('return_s', public.request_return(
+    pg_temp.item(current_setting('t.order_s')::uuid, 'libreta-tapa-dura-a5'), 'damaged', 1, 'Se rompió.')::text);
+  -- Both writers lock themselves out with three notes holding the live code.
+  foreach v_email in array array['bloqueo197s@yuntera.example', 'bloqueo197o@yuntera.example'] loop
+    perform pg_temp.act(v_email);
+    for i in 1 .. 3 loop
+      assert public.ops_add_case_note(v_case, 'Probar el 6284 otra vez.') is null, 'refused';
+    end loop;
+    perform pg_temp.refused(format('select public.ops_add_case_note(%L, %L)', v_case, 'Nota sin números.'),
+      'too_many_refusals');
+  end loop;
+  perform pg_temp.logout();
+end $$;
+
+do $$
+declare
+  v_counted bigint := (select count(*) from private.case_number_checks k join auth.users u on u.id = k.actor_id
+                       where u.email in ('bloqueo197s@yuntera.example', 'bloqueo197o@yuntera.example'));
+  v_case uuid;
+begin
+  -- A text reaching a return through the trigger (no door checked it): one
+  -- that holds a number meets the lock-out, code or not (the same answer);
+  -- a text without a number cannot hold a code, so it is not refused.
+  perform pg_temp.act('bloqueo197o@yuntera.example');
+  perform pg_temp.refused(format('update public.return_requests set resolution_note = %L where id = %L',
+    'Revisada, el 6284.', current_setting('t.return_c1')), 'too_many_refusals');
+  perform pg_temp.refused(format('update public.return_requests set resolution_note = %L where id = %L',
+    'Revisada, el 1357.', current_setting('t.return_c1')), 'too_many_refusals');
+  update public.return_requests set resolution_note = 'Revisada por bodega.'
+  where id = current_setting('t.return_c1')::uuid;
+
+  -- Ops cancels the order: its open return closes with the fixed text.
+  assert public.cancel_order(current_setting('t.order_c')::uuid, 'Sin existencias') ->> 'status' in ('cancelled', 'refunded'),
+    'a locked-out ops account cancels an order with an open return';
+  assert (select status || ' / ' || resolution_note from public.return_requests
+          where id = current_setting('t.return_c1')::uuid) = 'rejected / Cerrada: el pedido se canceló.',
+    'the open return closed with the fixed text';
+  assert (select status from private.cases where return_id = current_setting('t.return_c1')::uuid) = 'closed',
+    'and its case closed';
+
+  -- Ops decides and receives a return without a note.
+  assert public.ops_decide_return(current_setting('t.return_b')::uuid, true, null), 'approved without a note';
+  assert public.ops_receive_return(current_setting('t.return_b')::uuid, true, null), 'received without a note';
+
+  -- Support refunds it, assigns and reopens cases, and withdraws their own return.
+  perform pg_temp.act('bloqueo197s@yuntera.example');
+  assert (public.ops_complete_return(current_setting('t.return_b')::uuid, null) ->> 'refund_minor')::bigint > 0,
+    'refunded without a note';
+  v_case := (select id from private.cases where return_id = current_setting('t.return_b')::uuid);
+  assert (select status from private.cases where id = v_case) = 'closed', 'the refunded return''s case closed';
+  assert public.ops_reopen_case(v_case) ->> 'status' = 'open', 'reopened';
+  assert public.ops_assign_case(v_case) is not null, 'assigned';
+  assert public.withdraw_return_request(current_setting('t.return_s')::uuid) ->> 'status' = 'rejected',
+    'a locked-out staff member withdraws a return of their own';
+  -- What they type is still refused, with or without a number.
+  perform pg_temp.refused(format('select public.ops_answer_case(%L, %L, false)', v_case,
+    'Le escribimos mañana sin falta.'), 'too_many_refusals');
+  perform pg_temp.refused(format('select public.ops_answer_case(%L, %L, false)', v_case,
+    'Le escribimos por el 6284.'), 'too_many_refusals');
+  perform pg_temp.logout();
+
+  assert (select count(*) from private.case_number_checks k join auth.users u on u.id = k.actor_id
+          where u.email in ('bloqueo197s@yuntera.example', 'bloqueo197o@yuntera.example')) = v_counted,
+    'nothing of this counted a number';
+  assert (select count(*) from private.audit_log a join auth.users u on u.id = a.actor_id
+          where u.email in ('bloqueo197s@yuntera.example', 'bloqueo197o@yuntera.example')
+            and a.action = 'REFUSED_CODE') = 6, 'no refusal was added';
 end $$;
 
 select 'ok' as atencion_refusals;
