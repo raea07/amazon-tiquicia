@@ -583,6 +583,23 @@ were deployed from `4e2ac0f` with error reports off.
   consultas" and Atención are 17 px tall links. On the preview the
   console's Versiones says "no respondió" for the shop, the seller centre
   and the field app: its request to them meets the Vercel login.
+- **The outside attack** (a second agent, through the public API only,
+  after the deploy) found no way in. The six new private tables and the
+  three tables they follow are closed to every role; every staff function
+  refuses the wrong caller with the same answer whether the id exists or
+  not; a shopper reads only their own cases; `get_order` gives staff an
+  empty phone; `health_ping` answers only `{"ok":true}`; a visitor may call
+  18 functions. One low finding stays open: `private.mask_shopper_codes`
+  masks a shopper's own code at the start or the end of a longer run of
+  digits, not in its middle, so a code the shopper wrote with a digit on
+  both sides reaches staff inside that longer number, where nothing marks
+  which four digits are the code. Only the shopper can cause it, with their
+  own code. Closing it needs a new migration (the mask reading every
+  four-digit window, as the staff guard does); it goes with the next
+  database change. The attacker left one more cancelled and refunded
+  throwaway order, one look at a contact and the one refusal it was allowed
+  as `central` on the audit trail, and one throwaway account without any
+  data that it could not delete.
 - **Still not verified:** anything on a phone; a real payment gateway; the
   phone apps' new screens, which are in no store build; real Sentry (the
   supervisor sets it up next; the websites report nothing until then); the
