@@ -100,13 +100,62 @@ begin
 end;
 $$;
 
+-- Writes with the triggers off, so the bad and good states below are made
+-- without anything being sent, numbered or audited, and without the
+-- lifecycle guards refusing a state a test needs. This switches off the user
+-- triggers of exactly the tables those writes touch, and on its first call
+-- drops the foreign keys the stand-in payment attempts and gateway refunds
+-- point past (their payment, order and refund do not exist). It does not use
+-- session_replication_role: on a hosted project the database owner is no
+-- superuser and may not set it ("permission denied to set parameter"), while
+-- it owns these tables. All of it rolls back with the suite.
+create function pg_temp.triggers_off() returns void
+language plpgsql as $$
+declare
+  t text;
+  c record;
+begin
+  foreach t in array array['private.notification_deliveries', 'private.outbox_events', 'private.outbox_jobs',
+    'private.notify_channel_pauses', 'public.electronic_invoices', 'private.invoice_transmission_pause',
+    'private.invoice_worker_health', 'private.gateway_refunds', 'private.payment_attempts', 'public.orders',
+    'public.shipments', 'public.routes', 'public.route_stops', 'public.complaints', 'private.cases',
+    'private.auth_attempts'] loop
+    execute format('alter table %s disable trigger user', t);
+  end loop;
+  for c in
+    select k.conrelid::regclass as tbl, k.conname from pg_constraint k
+    where k.contype = 'f'
+      and ((k.conrelid = 'private.payment_attempts'::regclass
+            and k.confrelid in ('public.payments'::regclass, 'public.orders'::regclass))
+        or (k.conrelid = 'private.gateway_refunds'::regclass and k.confrelid = 'private.refunds'::regclass))
+  loop
+    execute format('alter table %s drop constraint %I', c.tbl, c.conname);
+  end loop;
+end;
+$$;
+
+create function pg_temp.triggers_on() returns void
+language plpgsql as $$
+declare
+  t text;
+begin
+  foreach t in array array['private.notification_deliveries', 'private.outbox_events', 'private.outbox_jobs',
+    'private.notify_channel_pauses', 'public.electronic_invoices', 'private.invoice_transmission_pause',
+    'private.invoice_worker_health', 'private.gateway_refunds', 'private.payment_attempts', 'public.orders',
+    'public.shipments', 'public.routes', 'public.route_stops', 'public.complaints', 'private.cases',
+    'private.auth_attempts'] loop
+    execute format('alter table %s enable trigger user', t);
+  end loop;
+end;
+$$;
+
 -- Brings every check into its good state, whatever the database held:
--- written with the triggers off (session_replication_role), so nothing is
+-- written with the triggers off (pg_temp.triggers_off), so nothing is
 -- sent, numbered or audited by it. All of it rolls back with the suite.
 create function pg_temp.all_good() returns void
 language plpgsql as $$
 begin
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   update private.notification_deliveries set status = 'sent', sent_at = coalesce(sent_at, now())
   where status in ('dead', 'failed', 'pending', 'sending');
   update private.outbox_jobs set status = 'done', done_at = now() where status in ('pending', 'dead');
@@ -143,7 +192,7 @@ begin
   -- them) set aside, so the cases line reads good.
   update private.cases set status = 'closed', resolved_at = now() where status = 'open';
   delete from private.auth_attempts where action = 'sign_in';
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
 end;
 $$;
 
@@ -165,11 +214,11 @@ language plpgsql as $$
 declare
   v_event bigint;
 begin
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   insert into private.outbox_events (topic, payload) values ('test185.event', '{}') returning id into v_event;
   insert into private.outbox_jobs (event_id, consumer, status, attempts, created_at)
   values (v_event, p_consumer, p_status, p_attempts, p_created);
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
 end;
 $$;
 
@@ -177,13 +226,13 @@ $$;
 create function pg_temp.invoice(p_status text, p_at timestamptz, p_held text default null) returns void
 language plpgsql as $$
 begin
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   insert into public.electronic_invoices
     (document_type, status, total_minor, kind, rejected_at, submitted_at, issued_at, held_reason)
   values ('04', p_status::public.invoice_status, 100000, 'delivery',
           case when p_status = 'rejected' then p_at end,
           case when p_status = 'sent' then p_at end, p_at, p_held);
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
 end;
 $$;
 
@@ -192,13 +241,13 @@ create function pg_temp.attempt(p_status text, p_declined timestamptz default nu
                                 p_work_after timestamptz default now()) returns void
 language plpgsql as $$
 begin
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   insert into private.payment_attempts
     (payment_id, order_id, provider, environment, method, amount_minor, status, declined_at,
      work_after, expires_at)
   values (gen_random_uuid(), gen_random_uuid(), 'onvo', 'test', 'card', 100000, p_status, p_declined,
           p_work_after, now() + interval '30 minutes');
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
 end;
 $$;
 
@@ -207,11 +256,11 @@ create function pg_temp.gateway_refund(p_status text, p_work_after timestamptz d
                                        p_channel text default 'gateway') returns void
 language plpgsql as $$
 begin
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   insert into private.gateway_refunds (refund_id, channel, amount_minor, status, failed_at, work_after)
   values (gen_random_uuid(), p_channel, 50000, p_status,
           case when p_status = 'failed' then now() - interval '2 hours' end, p_work_after);
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
 end;
 $$;
 
@@ -568,9 +617,9 @@ begin
   assert pg_temp.state(v, 'refunds_failed') = 'problem'
      and (pg_temp.line(v, 'refunds_failed') -> 'count')::int = 1, 'refunds: one failed';
   -- Paid by transfer instead: no longer a gateway refund that failed.
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   update private.gateway_refunds set channel = 'transfer', status = 'succeeded' where status = 'failed';
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
   v := pg_temp.health('finanzas185@yuntera.example');
   assert pg_temp.state(v, 'refunds_failed') = 'ok', 'refunds: paid another way';
 end $$;
@@ -698,21 +747,21 @@ begin
   -- An open route of today with stops to visit, started 23 hours ago, is
   -- not stuck (the old rule looked at the start time only).
   select * into r from public.routes where driver_id is not null order by created_at limit 1;
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   update public.routes set status = 'in_progress', started_at = now() - interval '23 hours',
                            service_date = v_today, completed_at = null where id = r.id;
   update public.route_stops set status = 'pending' where route_id = r.id;
   update public.shipments set status = 'out_for_delivery'
   where id in (select shipment_id from public.route_stops where route_id = r.id);
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
   v := pg_temp.health('operaciones185@yuntera.example');
   assert pg_temp.state(v, 'routes_open') = 'ok', format('routes: today, open stops, %s', pg_temp.line(v, 'routes_open'));
   perform pg_temp.others_ok(v, 'none');
 
   -- Its day passed.
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   update public.routes set service_date = v_today - 1 where id = r.id;
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
   v := pg_temp.health('operaciones185@yuntera.example');
   assert pg_temp.state(v, 'routes_open') = 'problem'
      and pg_temp.line(v, 'routes_open') -> 'refs' = jsonb_build_array(r.code)
@@ -721,44 +770,44 @@ begin
   perform pg_temp.others_ok(v, 'routes_open');
 
   -- A parcel on it was cancelled.
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   update public.routes set service_date = v_today where id = r.id;
   update public.shipments set status = 'cancelled'
   where id = (select shipment_id from public.route_stops where route_id = r.id order by sequence limit 1);
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
   v := pg_temp.health('operaciones185@yuntera.example');
   assert pg_temp.state(v, 'routes_open') = 'problem'
      and pg_temp.line(v, 'routes_open') -> 'parts' = '{"past_date": 0, "cancelled_parcel": 1, "no_open_stops": 0}',
     format('routes: cancelled parcel, %s', pg_temp.line(v, 'routes_open'));
 
   -- Every stop visited and the route still open (it should have closed by itself).
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   update public.shipments set status = 'delivered'
   where id in (select shipment_id from public.route_stops where route_id = r.id);
   update public.route_stops set status = 'delivered' where route_id = r.id;
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
   v := pg_temp.health('operaciones185@yuntera.example');
   assert pg_temp.state(v, 'routes_open') = 'problem'
      and pg_temp.line(v, 'routes_open') -> 'parts' = '{"past_date": 0, "cancelled_parcel": 0, "no_open_stops": 1}',
     format('routes: no stop left, %s', pg_temp.line(v, 'routes_open'));
 
   -- A draft of today with no stop at all, and one assigned yesterday and never started.
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   update public.route_stops set status = 'pending' where route_id = r.id;
   update public.shipments set status = 'out_for_delivery'
   where id in (select shipment_id from public.route_stops where route_id = r.id);
   insert into public.routes (code, service_date, depot_warehouse_id, status)
   values ('R-T185A', v_today, v_depot, 'draft');
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
   v := pg_temp.health('operaciones185@yuntera.example');
   assert pg_temp.state(v, 'routes_open') = 'problem'
      and pg_temp.line(v, 'routes_open') -> 'refs' = '["R-T185A"]'
      and pg_temp.line(v, 'routes_open') -> 'parts' = '{"past_date": 0, "cancelled_parcel": 0, "no_open_stops": 1}',
     format('routes: no stops, %s', pg_temp.line(v, 'routes_open'));
-  perform set_config('session_replication_role', 'replica', true);
+  perform pg_temp.triggers_off();
   delete from public.routes where code = 'R-T185A';
   update public.routes set status = 'assigned', started_at = null, service_date = v_today - 1 where id = r.id;
-  perform set_config('session_replication_role', 'origin', true);
+  perform pg_temp.triggers_on();
   v := pg_temp.health('operaciones185@yuntera.example');
   assert pg_temp.state(v, 'routes_open') = 'problem'
      and pg_temp.line(v, 'routes_open') -> 'refs' = jsonb_build_array(r.code), 'routes: assigned yesterday, never started';

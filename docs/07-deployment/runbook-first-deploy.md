@@ -2413,9 +2413,12 @@ real.
 
 ### Migrations 084700, 084800 and 085000 (wave 9)
 
-Three migrations of wave 9, merged on 27 November 2026 and **not applied to
-the hosted preview yet** (it has 44). Written before anyone applies them.
-Apply them in filename order, in one sitting, then deploy the four web apps.
+Three migrations of wave 9, merged on 27 November 2026 and **applied to the
+hosted preview on 28 November 2026** (it now has 47; its four web apps run
+`4e2ac0f`; what was done is in the next section). This section was written
+before anyone applied them; the corrections that applying them brought are
+marked "(on the preview: …)". Apply them in filename order, in one sitting,
+then deploy the four web apps.
 
 1. `20261121084700_support_cases.sql` (the support desk): **new private
    tables** `case_targets` (14 rows of targets), `cases`, `case_entries`,
@@ -2428,8 +2431,11 @@ Apply them in filename order, in one sitting, then deploy the four web apps.
    return requests, 11 cases; on the preview the count is
    `select (select count(*) from public.complaints) + (select count(*) from
    public.return_requests) + (select count(*) from public.content_reports)`,
-   run before the push. The backfill writes cases and their timeline only: it
-   **plans no message and emits no event**. It re-creates `ops_care_queues`
+   run before the push (on the preview: 0 complaints, 3 return requests and
+   9 content reports, so 12 cases, all closed). The backfill writes cases and
+   their timeline only: it **plans no message and emits no event** (the five
+   starting saved answers do write five `INSERT` rows on the audit trail,
+   with no actor). It re-creates `ops_care_queues`
    (same arguments and shape; a customer's own delivery code in their words
    comes masked, each role lists only what it may open in Casos, and the
    customer is a first name), re-creates Atención's four doors that write a
@@ -2454,7 +2460,10 @@ Apply them in filename order, in one sitting, then deploy the four web apps.
    before it (a shopper's own text becomes "Cancelado por el cliente"; a
    check-in of parcels staff stopped before they left becomes "Los paquetes
    no salieron de la bodega") and prints how many. Nothing else of those
-   orders changes, and nothing is sent.
+   orders changes, and nothing is sent. (On the preview: `remote-db.sh push`
+   does not show what a file prints; the count is the difference in the
+   orders' reasons, 6, and a second run inside a block that always rolls
+   back answers 0.)
 
 **Why the web apps come after the migrations, and why that order is safe.**
 The preview's web apps run `12ec48c` until they are deployed again, and
@@ -2484,7 +2493,12 @@ Do this in order.
 2. **Check that the platform allows a trigger on `auth.users`** (an `after
    update of deleted_at` trigger owned by `postgres`): `select tgname from
    pg_trigger where tgrelid = 'auth.users'::regclass;` lists the triggers
-   already there; if creating one is refused, stop and report.
+   already there; if creating one is refused, stop and report. (On the
+   preview: two were there, `on_auth_user_created` and
+   `invoice_forget_receiver`, both calling functions owned by `postgres`;
+   `postgres` holds the `TRIGGER` privilege on `auth.users`, which
+   `supabase_auth_admin` owns; the new trigger was created without a
+   refusal.)
 
    **Warning for points 3 to 7.** Between the push and the deploy, the
    console still runs `12ec48c`. When Atención refuses a text there (an
@@ -2502,7 +2516,8 @@ Do this in order.
    Straight after, call `health_ping` through the public API as a visitor:
    `POST /rest/v1/rpc/health_ping` with the publishable key and body `{}`
    answers `{"ok":true}` (a "function not found" means the API has not
-   reloaded its schema cache yet).
+   reloaded its schema cache yet). (On the preview: it answered from the
+   first call, 1 s after the push ended; no "function not found" was seen.)
 4. **Check what they left**:
 
    ```sql
@@ -2518,8 +2533,12 @@ Do this in order.
 
    And: every new or redefined function a definer with an empty search path
    and its migration's grants; no table privilege for an app role; row-level
-   security on every new table.
-5. **Run the suites** with `remote-db.sh test`: all 50 files, among them the
+   security on every new table. (On the preview: every public function the
+   three files make or redefine is a definer; eighteen private helpers are
+   not, as the files write them (pure text, constant and date functions such
+   as `private.desk_week`, `private.case_text_numbers` and
+   `private.health_jobs`), and no app role may execute any of them.)
+5. **Run the suites** with `remote-db.sh test`: all 51 files, among them the
    new `181_support_cases.sql` (it moves its own `REFUSED_CODE` audit rows
    back an hour by switching `audit_log_immutable` off inside its rolled-back
    transaction, which needs the table owner), `185_system_health.sql` (it
@@ -2527,7 +2546,12 @@ Do this in order.
    `no_access` or `not_logged`), `191` to `195`, `196_wave9_integration.sql`,
    `197_atencion_refusals.sql`, `198_desk_calendar.sql` (it adds two holidays
    of its own inside its rolled-back transaction) and
-   `199_order_contact.sql`.
+   `199_order_contact.sql`. (On the preview: `185` failed at its first run
+   with `permission denied to set parameter "session_replication_role"`:
+   the hosted `postgres` is no superuser. It now switches off the user
+   triggers of the tables it writes and drops two foreign keys its stand-in
+   rows point past, all inside its rolled-back transaction; then all 51
+   passed.)
    Never run the race harness or the contract race tests against a hosted
    database.
 6. **Set the new settings per Vercel project, before the deploy**:
@@ -2542,16 +2566,232 @@ Do this in order.
 8. **Check afterwards**: in the console, Salud del sistema shows each line
    for an administrator, Versiones names the deployed commit for all four
    apps and the newest migration `20261121085000`, and Tareas programadas
-   lists the seven jobs with their last runs (not "Sin historial"); Casos
+   lists the seven jobs with their last runs (not "Sin historial") (on the
+   preview: Versiones names the console's own commit and the migration, and
+   says "no respondió" for the shop, the seller centre and the field app,
+   because the console's server request to them meets the Vercel login, as
+   the shop's catalogue refresh does; their commit was read from each
+   website's browser code instead); Casos
    lists the backfilled cases; the web shop's `/reclamo` files a complaint
    and shows its reference; a staff answer reaches "Sus consultas". The
    shopper app's new screens need a new store build; the store build
    `3f251c3` keeps working.
 
-**Not verified on a hosted database:** the trigger on `auth.users`, the
-pg_cron history read by the owner of `ops_system_health`, `health_ping`
-through the hosted Data API, and the commit passed with `--build-env` and
-`--env` on Vercel.
+**Verified on the preview on 28 November 2026** (next section): the trigger
+on `auth.users` (an account deleted with a case), the pg_cron history read
+by the owner of `ops_system_health` (seven jobs with their last runs),
+`health_ping` through the hosted Data API, and the commit passed with
+`--build-env` and `--env` (in each website's browser code, and on the
+console's Versiones). **Still not verified there:** the Versiones row of the
+other three websites while they sit behind the Vercel login, a staff role
+other than administrator (the preview has one staff account; the SQL suites
+prove the roles), anything on a phone, and real Sentry.
+
+### What was done on the preview, 28 November 2026
+
+The three migrations, `084700`, `084800` and `085000`, in one sitting (07:16
+to 08:03 UTC, 01:16 to 02:03 Costa Rica time, a Saturday), in the order
+above, then the four web apps from `4e2ac0f`. Vercel CLI 65.12.1, Playwright
+in headless Chromium, the Management API through the network proxy;
+worktree at `4e2ac0f`, clean for the deploys.
+
+1. **Recorded first** (07:16 to 07:21). `status`: 44 applied, these three
+   pending, nothing else. 141 tables, 51 160 rows (most of them the
+   scheduler's history); 0 complaints, 3 return requests (1 refunded, 2
+   rejected) and 9 content reports (all dismissed): 12; every order's
+   `cancel_reason` (22 orders); every row of `app_settings` (31 keys,
+   `payments_mode` `sandbox`); orders, shipments and payments by status
+   (44 orders); 18 refunds; 64 ledger transactions, none unbalanced; 118
+   audit rows; 0 rows in `private.notification_deliveries` and 154 pending
+   `notify` jobs (no worker is deployed); 17 functions a visitor may
+   execute in `public`, 263 for signed-in users; owner, definer, search
+   path, grants and md5 of the eleven functions `084700` and `085000`
+   redefine; the triggers on `auth.users` (`on_auth_user_created`,
+   `invoice_forget_receiver`), `complaints` and `content_reports` (none) and
+   `return_requests` (two guards); the 14 holidays (the next is
+   1 December 2026); the seven scheduled jobs with their last five runs (all
+   succeeded); 23 accounts (11 demo, 12 deleted), 0 second factors; no Edge
+   Function; 0 table privileges of the app roles. The rewording was
+   predicted from `085000`'s own rule before the push: six orders.
+2. **`push`** applied the three at the first try in 1.9 s (07:21:56.9 to
+   07:21:58.9); `status` lists 47. No platform difference; no migration was
+   edited. From 1 s after the push for 20 s (32 rounds), `health_ping` as a
+   visitor answered `200 {"ok":true}`, and `my_orders` (`p_limit`),
+   `get_order` (`p_order_number`) and `cart_lines` (`p_offer_ids`) as
+   `comprador` all answered 200: no "function not found" was seen (before
+   the push `health_ping` answered `404 PGRST202`, as expected).
+3. **What they left** (07:22). 12 cases, all closed, each with exactly one
+   `opened` entry (38 entries: 12 opened, 12 status, 2 answers, 12 closed); 14
+   `case_targets`, 5 `saved_replies`, 0 `store_builds`, 0
+   `case_number_checks`; no row in `notification_deliveries` and the same
+   311 outbox events; `health_ping` executable by visitors,
+   `ops_system_health` not; 18 visitor functions in `public` (the 17 and
+   `health_ping`); 287 for signed-in users (+24, the new public functions);
+   the private functions an app role may execute unchanged (the 21
+   row-level-security helpers). The eleven redefined functions have a new
+   md5 and exactly the owner (`postgres`), definer, `search_path=""` and
+   grants they had; every new public function is a definer with an empty
+   search path, granted to `authenticated` only (`health_ping` and
+   `cart_lines` also to `anon`); `private.reword_old_cancel_reasons` to no
+   app role. Row-level security on the six new tables and on all 104; 0
+   table privileges, 0 write policies. The reworded orders are exactly the
+   six of the rule: YT-101556 and YT-102002 (a shopper's own text) became
+   "Cancelado por el cliente"; YT-101552, YT-101553, YT-101554 and
+   YT-102000 (parcels staff stopped before they left) became "Los paquetes
+   no salieron de la bodega". The push does not show what the migration
+   printed; a second run inside a block that always rolls back answered 0.
+   Everything else identical to point 1: `app_settings`, orders but for
+   those six reasons, shipments, payments, refunds, the ledger, stock
+   levels, shelves and offers. The audit trail grew by five rows, the
+   starting saved answers' `INSERT`s. The jobs kept succeeding.
+4. **Suites** (07:23:52 to 07:29:15): 50 of 51 passed at the first run;
+   `185_system_health.sql` failed with `permission denied to set parameter
+   "session_replication_role"` (the hosted `postgres` is no superuser). The
+   suite now switches off the user triggers of the tables it writes with
+   `alter table … disable trigger user` and drops the two foreign keys its
+   stand-in payment attempts and gateway refunds point past, inside its
+   rolled-back transaction (`postgres` owns those tables; no assertion
+   changed). It passed locally (lane 19, all 51 files after a reset), and
+   then all 51 passed on the preview; the only `skipped` rows are
+   `125_followups` `net_grants` and part 2 of `100_notifications`. Row
+   counts before and after identical except the scheduler's history and
+   two sessions of this run's sign-ins: no case, audit row, number check
+   or lock-out was left.
+5. **Settings.** On `yuntera-central` only, `YUNTERA_SELLER_URL`
+   (`https://yuntera-vende.vercel.app`) and `YUNTERA_FIELD_URL`
+   (`https://yuntera-campo.vercel.app`), plain, Production and Preview.
+   Nothing else changed on any project.
+6. **Deploy**, one at a time from the repository root with the command of
+   section 7 (`--build-env` and `--env YUNTERA_BUILD_COMMIT=4e2ac0f3…`,
+   `--token dummy`), 38 to 55 s each: web `dpl_nHJ3sKN3gjaNwm3RmYjo56bV8iJX`
+   (ready 07:31:28), vende `dpl_A34UFpPnHu2v3hLysHCAajnuY3da`, central
+   `dpl_7dxnQKQcPc6zDZrskPyZEhjGBiHb`, campo
+   `dpl_5aE6u1s7S4ArFm2gXabF9dz8E26T` (ready 07:34:01). Every website's
+   browser code names `4e2ac0f3cf9d…`. Without a bypass all 16 addresses
+   (the four production addresses and the four new deployments, `/` and
+   `/ingresar`) answer `302` to `vercel.com/sso-api`. **The window**
+   (07:21:58 to 07:33:23 for the console): the old apps' shop home, cart,
+   orders and an order page as `comprador`, and the console's two order
+   pages and Atención as `central` loaded with no error before and after
+   the push; the old console's order page held the recipient's phone in its
+   HTML before the push and none after (an empty string, no "Teléfono"
+   line). Nobody used Atención in the window.
+7. **The shopper app of `3f251c3`** (the store builds): its read calls and
+   their named arguments, from that commit's `apps/shop-native`,
+   `packages/expo-kit` and `packages/db` (`search_products`,
+   `suggest_products`, `list_categories`, `list_districts`, `get_product`,
+   `cart_lines`, `checkout_quote`, `my_roles`, `my_profile`,
+   `my_addresses`, `my_orders` with `p_limit` 50, `get_order`,
+   `order_payment`, `my_order_returns`), called with that commit's own client
+   and schemas as a visitor and as `comprador` and `comprador3`, before the
+   push, after it and after the smoke test with the orders it touched
+   (YT-100006, YT-100009, YT-100017, YT-102947): 0 parse failures each
+   time; the shopper's own `get_order` still carries the recipient's phone.
+8. **Smoke test** through bypass secrets made at 07:21 and revoked at 07:59
+   (a second set for a read-only repeat, 08:00 to 08:02), sent to the four
+   `vercel.app` hosts only, failing on console errors, page errors, failed
+   requests and 5xx (none).
+   - **Shop** at 1280 and 390 px: home, the charger's promise ("Llega el
+     lunes, 30 de noviembre"), the cart, checkout (nothing chosen, nothing
+     ticked, payments said to be simulated), YT-102947 paid by the
+     simulation (one charger, ₡10 400), its code and the recipient's phone
+     on the shopper's page, the list, Ayuda ("Atendemos de lunes a viernes
+     de 8 a. m. a 5 p. m. y los sábados de 8 a. m. a 12 p. m." and "Los
+     domingos y los feriados no atendemos."), sign-out with no session
+     cookie left (`HttpOnly`, `Secure` before).
+   - **A complaint** by `comprador3` on YT-100009 at 01:47 Costa Rica time
+     on Saturday 28 November, with a 60-character word and a long address:
+     reference `094D41EB`, "Le respondemos por escrito a más tardar el
+     sábado, 5 de diciembre" (the page is itself the acknowledgement, so it
+     names one date). By hand from the desk's calendar: acknowledgement 1
+     working day, Sunday closed, so the end of Monday 30 November; answer 5
+     working days, 1 December a holiday, so Monday 30, Wednesday 2,
+     Thursday 3, Friday 4 and Saturday 5: the end of Saturday 5 December.
+     The case holds exactly those two due times. "Sus consultas" lists it
+     and fits 390 px.
+   - **The console** as `central`: Casos lists it ("Responder: a más tardar
+     el final del lunes, 30 nov"), the 12 backfilled cases under closed;
+     the case page shows the customer's words and fits 390 px; an internal
+     note marked Prueba; «Asignarme el caso» (the product has no way to
+     unassign); the saved answer «Dónde está mi pedido» marked Prueba and
+     «Responder y cerrar»; `comprador3` read it in "Sus consultas" and on
+     the order page, never the note; reopened and closed again with a
+     second answer; a saved answer marked Prueba created and deleted;
+     Informe del mes with the service hours; a WhatsApp contact marked
+     Prueba recorded from YT-100009's page and its case answered and
+     closed (that answer planned one `case_answered` e-mail, which stays
+     pending: no worker is deployed).
+   - **D55** on YT-100017: no form of the phone in the HTML before a look;
+     an empty reason is stopped by the browser's required field (nothing
+     sent), "corto" is refused with "Escriba para qué necesita el
+     contacto: de 10 a 300 caracteres." and kept; "Prueba: verificación
+     del despliegue" shows the phone and says it was recorded; leaving and
+     Back show the empty form; exactly one `VIEW_CONTACT` row with the
+     reason and without the phone; Auditoría says "Vio el teléfono de
+     entrega de un pedido"; the customer view's «Mostrar contacto» once.
+     No address held a phone.
+   - **The delivery code**: `comprador3` filed `849F7677` on YT-100017
+     (confirmed, not delivered) with that order's code, read inside the
+     script; the case page, Casos, Atención, the customer view and the
+     order page hold the four digits nowhere ("••••"). `central` typed no
+     four-digit number all along: 0 refusals, 0 numbers counted.
+   - **A return decided without a note**: `comprador3` asked to return the
+     teak board of YT-100006 (damaged, Prueba); `central` approved it in
+     Atención with no note; the case card read «En revisión … Aprobada: por
+     recibir (desde el 28 de noviembre)», not «Por responder»; then
+     «El producto no llegó: cerrar la devolución» (no stock moved, no
+     refund): rejected, case closed.
+   - **System health**: 14 lines in words (two problems that are true on
+     the preview: 157 events wait to become messages, no worker; route
+     R-1003's day passed); Tareas programadas lists the seven jobs, each
+     "corrió a tiempo"; Versiones as above. The phone builds registered:
+     shop Android 0.1.0 (4), internal test since 23 November 2026, and
+     iPhone 0.1.0 (4), internal test since 24 November 2026
+     (store-testing.md). The seller centre (`vendedor`) and the field app
+     (`repartidor`, `bodega`) load their main pages at both widths.
+   - **An account deleted with a case**: a throwaway shopper under
+     `yuntera.example` signed up through the shop (signed in at once),
+     paid YT-102948 in the simulation, filed `F7E65278`, cancelled the
+     order; `central` answered and closed; the throwaway deleted the
+     account through the shop. Then the case is closed, its texts read
+     "Texto eliminado junto con la cuenta.", the answer on the complaint is
+     erased and no open case belongs to the account.
+   - **Error reports off**: the browser contacted only the four
+     `vercel.app` hosts; `/prueba-de-errores` is the not-found page on all
+     four, with no tracker request.
+   - **Pages at 390 px** (43 measured): one `h1`, `lang` `es-CR`, no
+     sideways scroll except the cart (436 px with one line; 445 px on
+     `12ec48c`, so older than wave 9). Auditoría shows the raw keys of older
+     entries (`shipment_recalled`, `district_zone`, …). Under 44 px: «Ir a
+     Atención» on a case page and the order numbers in "Sus consultas" and
+     Atención (17 px), «Devolver o reclamar garantía» on an order (20 px).
+9. **Afterwards** (07:57 to 08:03). Vercel since 07:30: no 5xx and no error
+   log on the four projects. The jobs ran without a failure. Advisors:
+   security 321 → 352 (the six new private tables without a policy, by
+   design; `health_ping` for visitors; 24 new signed-in functions),
+   performance 101 → 108 (five unindexed foreign keys of the new tables,
+   two of the new indexes not used yet). The bypass secrets were revoked;
+   each project lists none. `central` wrote one more note at the end. Against
+   point 1: the migrations' changes above and the smoke test's records
+   below; stock levels, shelves, offers, `app_settings` and the ledger's
+   balances identical.
+
+What this round left on the preview, on purpose: YT-102947 (`comprador`) and
+YT-102948 (the deleted throwaway), both cancelled by their shopper and
+refunded in the simulation (₡10 400 each), with their ledger rows (each
+sums to zero) and events; the complaints `094D41EB` and `849F7677` of
+`comprador3` (closed; the second holds that order's code in the shopper's
+own words, which staff read masked) and `F7E65278` (erased); the closed
+WhatsApp contact `FD86B8F0` and return `C409F63C`; one pending
+`case_answered` e-mail to `comprador3` that nothing sends; two
+`VIEW_CONTACT` rows, the saved answer created and deleted, and the two store
+builds on the audit trail; the two store builds; one anonymised account.
+
+**For production**: the same order. Before the push, check that `postgres`
+may create the trigger on `auth.users`; expect no "function not found" but
+check it straight after; set `YUNTERA_SELLER_URL` and `YUNTERA_FIELD_URL`
+before the deploy. Once the websites are public, Versiones reads all four
+commits.
 
 #### Later, by the owner's supervisor: the Sentry account
 

@@ -7,8 +7,11 @@ are not part of it yet (see the last section).
 
 **State.** Built and tested on this machine only: unit tests, a stand-in
 tracker in the tests, and a browser journey in a lane with the websites built
-to report to a stand-in. No Sentry project exists yet and nothing has been
-sent to Sentry. Every website is off until its address is set.
+to report to a stand-in. The four test websites on Vercel run this code since
+28 November 2026 with no address set: they load no tracker code (checked
+there: no request to any host but their own). No Sentry project exists yet
+and nothing has been sent to Sentry; the supervisor sets it up next. Every
+website is off until its address is set.
 
 Everything lives in one place, `packages/next-kit/src/error-reports/`, which
 the four websites use through three small files each: `src/instrumentation.ts`
