@@ -624,7 +624,21 @@ the hosted project, against real Sentry, on Vercel or on a phone.
   recorded at night or on a Sunday was due that same closed day; minutes
   and "same day" now count from the moment the desk is open (decision 69,
   customer-service.md). Left for the owner: noon is written «12 p. m.» on
-  Ayuda, as everywhere in the apps (core's `formatTime`).
+  Ayuda, as everywhere in the apps (core's `formatTime`); it is owner
+  decision D58. The second walk, at `62e3014`, saw the fixes hold on screen
+  and found one more minor wording point on that card (see "Not built").
+- **The supervisor's own run of part 3** (28 November 2026, lane 14, on
+  `62e3014`, nothing replayed from a task cache): lint with 0 errors,
+  typecheck 20 of 20, 1938 unit tests, 51 SQL files on 47 migrations, the
+  contract tests twice (250 of 250 each time), race family J at 30 rounds
+  (36 rows, 0 wrong), all 35 browser journeys in one run, the selector,
+  word, touch-target and compare guards, all 19 phone-app journeys with
+  their guards, and `error-reports` with the stand-in tracker. No security
+  checker read the last fix round; the supervisor read its database changes
+  and probed the guard's phone formats, the desk's opening times and the
+  trimmed reason by hand. A reason made only of invisible characters
+  (zero-width spaces) still passes the 10-character rule, as a reason of
+  ten letters "a" does.
 - **What the join changed**: wave 9's decisions are numbered 61 to 68 (69, the desk's calendar, came with D56), after
   the main line's 59 and 60. Wave 9's status words come from the one module
   (`packages/core/src/status-words.ts`): a case reads «Por responder»,
@@ -1214,6 +1228,14 @@ D2 in the decisions and the Android release in the store documents" is done
   that is the shared `FormMessage` and field work of stage 1, part 2. The
   error pages have no `h1` (their title is `EmptyState`'s `h2`, as on the
   main line before): the same shared work.
+- **Two wording points of part 3's outside checks, left for stage 2.** On
+  the shopper's case card, a return decided without a note reads «Aprobada:
+  por recibir (desde el …)», the warehouse's word, where the order line on
+  the same page says «Aprobada. Le contactaremos para recoger el producto»;
+  and a closed case without a written answer still ends with «le avisamos
+  si la hay». Noon is written «12 p. m.» in the service hours on Ayuda;
+  owner decision D58 proposes «al mediodía» for that sentence. Both move
+  with the shopper website and the shopper app in stage 2.
 
 **Decided on 24 and 27 November 2026, not built**
 

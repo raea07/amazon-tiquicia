@@ -3,7 +3,7 @@
 **What this is.** Every question the strategy documents, the marketing pieces and the November research ask the owner, each asked once, in the order the answers are needed. Written 24 November 2026.
 **How to answer.** Reply like "D4 A, D10 D". "ok" accepts every recommended option of one group, for example "ok before the pilot". An answer is recorded in `docs/02-architecture/decisions.md`.
 **Where they come from.** [Go-to-market](go-to-market.md), [roll-out plan](rollout-plan.md), [team structure](team-structure.md), [pricing strategy](pricing-strategy.md), the [marketing pieces](../../marketing/README.md) and the research in [market and costs](../research/market-and-costs-2026-11.md), [support and system-health tools](../research/support-and-system-health-tools.md) and [English translation](../research/english-translation-plan.md). Those documents point here instead of asking.
-**Count.** 57 numbers: 7 already decided, 5 needed now, 2 the builders do unless you object, 31 before the pilot with real money, 10 before the open launch, 2 later. A number never changes once given, so the list is not in number order.
+**Count.** 58 numbers: 7 already decided, 5 needed now, 3 the builders do unless you object, 31 before the pilot with real money, 10 before the open launch, 2 later. A number never changes once given, so the list is not in number order.
 
 Amounts are colones a month unless stated, from the document named; US dollars at ₡450. Every amount is an estimate or an assumption, as its source says. Questions for the lawyer and the accountant are separate: they are in [compliance](../05-security-compliance/compliance-costa-rica.md) §9 and §10 and in [open questions](../08-open-questions.md) 67 to 82. A decision that waits on one names it.
 
@@ -74,6 +74,8 @@ Waits on it: the English work and the English columns of the marketing pieces (A
 **D5. Bug reports and releases.** The builders keep bug reports in the code repository's free issue list, follow a one-page checklist before each release, and add a console page that shows which version runs. Cost ₡0. The other option was a bought test tool (price not researched). From: support research §3.3, question 3.
 
 **D8. English web addresses.** English pages keep today's addresses with `/en` in front, so every link already sent keeps working. The other option was translated addresses, which needs a second set of links. From: English research §7, question 4.
+
+**D58. How is noon written in the service hours?** The builders write "los sábados de 8 a. m. al mediodía" in the hours sentence on the shop's and the shopper app's Ayuda and in the console's monthly report, together with the shopper pages of stage 2 of the rebuild. Today the sentence reads "12 p. m.", which some people read as midnight. Every other time keeps the clock form ("2 p. m."). The other options were "12 m. d." and leaving "12 p. m.". From: the second outside walk of the support desk build (wave 9), 28 November 2026.
 
 ---
 
