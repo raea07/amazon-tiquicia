@@ -79,9 +79,13 @@ counted; a **working hour** counts inside the hours of a working day
 time carries to the opening of the next working day. A case filed on Friday
 at 16:00 with 2 working hours is due on Saturday at 09:00; one filed on
 Saturday at 11:00 is due on Monday at 09:00, and one filed on Sunday on
-Monday at 10:00. Minutes, calendar days and "same day" count the clock and
-the calendar, whatever the hours. The legal periods (withdrawal, warranty)
-keep counting Monday to Friday, as the law's _días hábiles_.
+Monday at 10:00. Minutes count the clock from the moment the desk is open:
+a contact recorded while it is closed counts its 15 minutes from the next
+opening (Sunday 10:00 is due on Monday at 08:15). "Same day" is the end of
+the day the desk is first open: a contact recorded on Friday at 22:15 is
+due by the end of Saturday, one on Sunday by the end of Monday. Calendar
+days count the calendar, whatever the hours. The legal periods (withdrawal,
+warranty) keep counting Monday to Friday, as the law's _días hábiles_.
 
 ## Tone
 

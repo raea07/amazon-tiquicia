@@ -2231,8 +2231,14 @@ digits are a code, so nothing is revealed. Refusing or masking it would be
 the leak: its writer would learn that the number they typed holds a live
 code. The rule against passing a code on is a rule for people, in the
 staff guide (`docs/06-operations/customer-service.md`), not a text filter.
-Suite 197 checks that a phone ending in a live code and one ending in
-another number give the same answer, rows and counters.
+The rule holds for every common way to write a phone: with a dash
+(8888-1234), a space (8888 1234), a dot (8888.1234), in pairs
+(88 88 12 34) and after +506. Until the second outside check of part 3 the
+guard read only the dash and +506 forms whole and split the others into two
+numbers, so a real phone written with a space whose last four digits were a
+live code was refused, and the refusal told its writer the code. Suite 197
+checks that a phone ending in a live code and one ending in another number
+give the same answer, rows and counters in each of those six forms.
 
 Since the third outside review of the join (28 November 2026): the
 lock-out applies only to text a person typed. A fixed system text that
@@ -2407,8 +2413,13 @@ public holidays closed.
 `private.desk_add_days` counts its working days. `private.case_due` counts
 every target on it, with each unit keeping its meaning: working hours
 inside the day's hours, the rest carried to the next opening; working days
-to the end of the nth working day after the day the case opens; minutes,
-calendar days and the same day on the clock and the calendar as before.
+to the end of the nth working day after the day the case opens; calendar
+days on the calendar as before. Minutes and the same day count from the
+moment the desk is open, as the staff guide's "15 minutes during service
+hours" says: a contact recorded while the desk is closed counts its minutes
+from the next opening, and its "same day" is the end of the next working
+day (the second outside check of part 3 found a contact recorded on Friday
+at 22:15 due that same evening, and one on a Sunday due that Sunday).
 `private.add_business_days` is not changed: the withdrawal and warranty
 periods, the law's _días hábiles_, keep counting Monday to Friday. The hours
 have one source in TypeScript, `SERVICE_HOURS` in
