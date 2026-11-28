@@ -277,6 +277,52 @@ begin
     'the refused slash note counted its number (the phone counts none)';
 end $$;
 
+-- A phone that ends in the live code and one that ends in another number
+-- give the same answer, the same rows, the same counters and the same text
+-- on the case page (decision 61): the guard reads a phone whole, so the
+-- writer learns nothing about which four digits are a code.
+create function pg_temp.note_counts(p_case uuid, p_writer uuid) returns int[]
+language sql as $$
+  select array[
+    (select count(*)::int from private.case_entries where case_id = p_case),
+    (select coalesce(sum(numbers), 0)::int from private.case_number_checks where actor_id = p_writer),
+    (select count(*)::int from private.audit_log where actor_id = p_writer),
+    (select count(*)::int from private.audit_log where actor_id = p_writer and action = 'REFUSED_CODE')]
+$$;
+
+do $$
+declare
+  v_case uuid := (select id from private.cases where complaint_id = current_setting('t.complaint')::uuid);
+  v_writer uuid := (select id from auth.users where email = 'notas197@yuntera.example');
+  v_text text;
+  v_id bigint;
+  v_before int[];
+  v_after int[];
+  v_body text;
+  v_kind text;
+  v_seen text[] := '{}';
+begin
+  foreach v_text in array array['Llamar al 8899-6284 mañana temprano.', 'Llamar al 8899-6285 mañana temprano.'] loop
+    v_before := pg_temp.note_counts(v_case, v_writer);
+    perform pg_temp.act('notas197@yuntera.example');
+    v_id := public.ops_add_case_note(v_case, v_text);
+    select e ->> 'body' into v_body from jsonb_array_elements(public.ops_case(v_case) -> 'entries') e
+    where (e ->> 'id')::bigint = v_id;
+    perform pg_temp.logout();
+    v_after := pg_temp.note_counts(v_case, v_writer);
+    select kind || ' by the writer: ' || (author_id = v_writer)::text into v_kind
+    from private.case_entries where id = v_id;
+    assert v_body = v_text, format('%s is shown as written: %s', v_text, v_body);
+    -- The answer (an id or null), the rows it added, the counters it moved.
+    v_seen := v_seen || format('answer %s; %s; entries +%s, numbers +%s, trail +%s, refusals +%s',
+      case when v_id is null then 'null' else 'an id' end, v_kind,
+      v_after[1] - v_before[1], v_after[2] - v_before[2], v_after[3] - v_before[3], v_after[4] - v_before[4]);
+  end loop;
+  assert v_seen[1] = v_seen[2], format('the same for the code and another number: %s', v_seen);
+  assert v_seen[1] = 'answer an id; note by the writer: true; entries +1, numbers +0, trail +0, refusals +0',
+    format('a kept note, nothing counted: %s', v_seen[1]);
+end $$;
+
 -- An answer kept from before 084700 (no author) is still masked.
 do $$
 declare

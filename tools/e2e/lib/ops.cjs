@@ -2321,3 +2321,11 @@ Object.assign(module.exports, {
   waitForOrderHeaderWith,
   toPaymentsLink,
 });
+
+/** Waits until the case page shows `note` exactly as it was written; answers the page's text. */
+const caseNoteShown = (page, note) =>
+  settledText(main(page), (said) => said.includes(kit.squash(note)), {
+    what: "the case page's timeline",
+  });
+
+Object.assign(module.exports, { caseNoteShown });

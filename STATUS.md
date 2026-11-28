@@ -193,7 +193,9 @@ In the order that unblocks the most.
    migrations `084700`, `084800` and `085000` or this code, and no Sentry
    project exists. A supervisor applies the migrations and deploys the web
    apps after this merge, and creates the Sentry projects later, with the
-   steps in the runbook. Two new questions for you are in
+   steps in the runbook. Between the migrations and the deploy the old
+   console shows a refused Atención text as saved, so staff do not use
+   Atención in between (runbook, wave 9). Two new questions for you are in
    [`owner-decisions.md`](docs/00-strategy/owner-decisions.md) (D55: the
    delivery phone on the staff order page; D56: the service hours and
    Saturday). **Wave 8 is on the hosted preview.** Migrations `084400`, `084500` and

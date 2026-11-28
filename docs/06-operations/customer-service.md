@@ -236,11 +236,14 @@ it is near or past its due time.
 1. Open the oldest case first. Use **Asignarme el caso** so colleagues know
    who has it.
 2. Write what you found in **Nota interna**. The customer never sees notes.
-   Never write the delivery code. The console refuses a note, an answer, a
-   contact summary, or an answer or note written in Atención, that holds it,
-   saves nothing of that step, records the refusal on Auditoría, and after
-   three refusals in an hour stops you writing for that hour. Four-digit
-   numbers count too: after 20 in an hour, write without them or wait.
+   Never write the delivery code. Never ask a customer for it, and never
+   note it down or pass it on in any form (words, a phone number, a
+   message to a colleague): only the customer holds it. The console refuses
+   a note, an answer, a contact summary, or an answer or note written in
+   Atención, that holds it, saves nothing of that step, records the refusal
+   on Auditoría, and after three refusals in an hour stops you writing for
+   that hour. Four-digit numbers count too: after 20 in an hour, write
+   without them or wait.
 3. Answer in **Respuesta al cliente**. Start from **Usar una respuesta
    guardada** when one fits, then adjust it. The customer reads the answer in
    their account ("Sus consultas") and on the order's page; a message tells

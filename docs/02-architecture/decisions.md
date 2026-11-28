@@ -2171,7 +2171,7 @@ staff read.
 **Decision.** Staff texts: a note, an answer, a contact summary, an answer
 written in Atención and the note on a return decision are refused when
 they hold a live code of the case's order or of the customer's orders still
-to be delivered, read through separators, other scripts' digits and
+to be delivered, read through separators, every script's decimal digits and
 invisible characters. Each refusal is on Auditoría without the text; three
 in an hour lock the writer out; a text with more than five four-digit
 numbers is refused. Since the integration of wave 9, every four-digit
@@ -2216,6 +2216,33 @@ an advisory lock per writer, so ten parallel calls of one writer no
 longer pass the lock-out (they had left 5 refusals) or the allowance (50
 numbers). A date such as 27/11/2026 or a time such as 10:30 now counts
 its four-digit numbers against the allowance.
+
+**What the guard stops, and what it cannot.** It stops discovery (a staff
+member testing guesses until one is refused, the oracle) and accident (a
+note such as "el código es 1234"). It cannot stop a staff member who
+already knows a code from passing it on: in words, in a disguise, by
+telephone, or as the last four digits of a phone number, which the guard
+reads whole on purpose (as it reads an order number and an amount). A note
+such as "Llamar al 8888-1234" is therefore kept and shown as written, also
+when 1234 is a live code. A person reading it cannot tell that four of its
+digits are a code, so nothing is revealed. Refusing or masking it would be
+the leak: its writer would learn that the number they typed holds a live
+code. The rule against passing a code on is a rule for people, in the
+staff guide (`docs/06-operations/customer-service.md`), not a text filter.
+Suite 197 checks that a phone ending in a live code and one ending in
+another number give the same answer, rows and counters.
+
+Since the third outside review of the join (28 November 2026): the
+lock-out applies only to text a person typed. A fixed system text that
+reaches a return through the trigger (a cancellation closing the order's
+open returns, a shopper withdrawing their return) holds no four-digit
+number, cannot hold a code and is not held back, so a locked-out staff
+member can still cancel, refund and decide without a note; a text with a
+number still meets the lock-out first. The guard and the mask read every Unicode
+decimal digit (general category Nd, a generated list of 67 scripts), not
+a hand list of 37. And an account deletion erases the staff's answer and
+note where the complaint, the return or the report keeps them, as it
+erases them on the case timeline: no written rule keeps that free text.
 
 **Not verified.** Not tried against a determined person on the hosted
 project.

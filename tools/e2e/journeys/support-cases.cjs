@@ -178,12 +178,17 @@ function sql(statement) {
            and a.new_row::text not like '%${code}%'`) === "1",
     "the refusal is on the audit trail, without the text or the code",
   );
-  await ops.writeCaseNote(
-    support,
-    `Nota interna de prueba: revisar el empaque del pedido ${orderNumber}, tel. 8888-${code}.`,
-  );
+  // A phone that ends in the live code, on purpose: the guard reads a phone
+  // whole (decision 61), so a person reading the note cannot tell that four
+  // of its digits are a code, and refusing or masking it would tell them.
+  const phoneNote = `Nota interna de prueba: revisar el empaque del pedido ${orderNumber}, tel. 8888-${code}.`;
+  await ops.writeCaseNote(support, phoneNote);
   await ops.caseNoteSaved(support);
-  check(true, "a note with an order number and a phone number is kept");
+  await ops.caseNoteShown(support, phoneNote);
+  check(
+    true,
+    "a staff note with a phone is kept and shown as written: nothing marks which digits are a code",
+  );
   await ops.assignCaseToMe(support);
   const prefilled = await ops.useSavedReply(support, "Dónde está mi pedido");
   check(prefilled.startsWith("Gracias por escribirnos."), "a saved answer fills the answer");

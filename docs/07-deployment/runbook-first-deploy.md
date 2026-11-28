@@ -2480,6 +2480,16 @@ Do this in order.
    update of deleted_at` trigger owned by `postgres`): `select tgname from
    pg_trigger where tgrelid = 'auth.users'::regclass;` lists the triggers
    already there; if creating one is refused, stop and report.
+
+   **Warning for points 3 to 7.** Between the push and the deploy, the
+   console still runs `12ec48c`. When Atención refuses a text there (an
+   answer to a complaint, a return decision, a receipt or a refund with its
+   note), the old console says it was saved, although nothing was saved,
+   nothing reached the customer and no stock moved. Tell staff not to use
+   Atención from point 3 until point 7 is done. If someone used it, open
+   each complaint or return they touched after the deploy and check that it
+   changed.
+
 3. **Apply the three** with `remote-db.sh push`; `status` then lists 47.
    Straight after, call `health_ping` through the public API as a visitor:
    `POST /rest/v1/rpc/health_ping` with the publishable key and body `{}`
