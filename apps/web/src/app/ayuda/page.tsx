@@ -1,5 +1,11 @@
 import { brand } from "@yuntera/brand";
-import { COMPLAINT_PROMISE, DEFAULT_RANKING, REFUND_TIME } from "@yuntera/core";
+import {
+  COMPLAINT_PROMISE,
+  DEFAULT_RANKING,
+  REFUND_TIME,
+  SERVICE_DAYS_NOTE,
+  SERVICE_HOURS_TEXT,
+} from "@yuntera/core";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -17,7 +23,9 @@ const percent = (value: number) => `${Math.round(value * 100)} %`;
  * is honest about what it does; they must be reviewed by a Costa Rican lawyer
  * before launch. The ranking explanation reads its numbers from the same
  * constants the code uses, so it cannot drift from what actually happens; the
- * offer order is described in words (packages/core/src/offers.ts).
+ * offer order is described in words (packages/core/src/offers.ts). The
+ * service hours come from SERVICE_HOURS in packages/core/src/service-times.ts,
+ * the calendar the support desk counts its targets on.
  */
 export default function HelpPage() {
   const ranking = DEFAULT_RANKING.weights;
@@ -91,6 +99,12 @@ export default function HelpPage() {
             </li>
           </ul>
           <p>Solicite la devolución desde la página de su pedido.</p>
+        </section>
+
+        <section>
+          <h2 id="horario">Horario de atención</h2>
+          <p data-testid="service-hours">{SERVICE_HOURS_TEXT}</p>
+          <p>{SERVICE_DAYS_NOTE}</p>
         </section>
 
         <section>

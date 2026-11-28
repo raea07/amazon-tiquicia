@@ -1,7 +1,8 @@
 // The shopper app (web export, at phone size): the complaint form and the
 // answers (migration 20261121084700_support_cases.sql).
 //
-//   1. Ayuda gives the promised times of customer-service.md and opens the form.
+//   1. Ayuda gives the promised times of customer-service.md and the service
+//      hours (owner decision D56), and opens the form.
 //   2. The demo shopper opens one of their orders, taps "Presente un reclamo",
 //      finds the order's number in the form, is refused an empty choice,
 //      files the complaint and reads its reference and the promised dates.
@@ -100,6 +101,13 @@ async function as(email) {
   );
   await shop.helpComplaintButton(page);
   check(true, "and a button to the complaint form");
+  // Owner decision D56: the service hours, built from the core constant.
+  const hours = await shop.helpServiceHours(page);
+  check(
+    hours ===
+      "Atendemos de lunes a viernes de 8 a. m. a 5 p. m. y los sábados de 8 a. m. a 12 p. m.",
+    `Ayuda says the service hours: ${hours}`,
+  );
 
   // ── 2. A complaint from the order's screen ────────────────────────────────
   await page.goto(`${SHOP}/pedidos/${orderNumber}`, { waitUntil: "networkidle" });

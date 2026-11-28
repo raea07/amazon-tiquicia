@@ -394,7 +394,7 @@ def avisos():
 
 def ayuda():
     body = head('Ayuda, Yuntera') + shop_header() + f'''<main class="wrap" style="padding-bottom:24px"><div style="display:grid;gap:32px;grid-template-columns:minmax(0,1fr)" class="help-grid">
-<div><h1 class="t-title" style="padding:24px 0 8px">Ayuda</h1><p class="muted">Respondemos por WhatsApp de lunes a sábado, de 8 a. m. a 6 p. m. WhatsApp: [número por definir]</p>
+<div><h1 class="t-title" style="padding:24px 0 8px">Ayuda</h1><p class="muted">Atendemos de lunes a viernes de 8 a. m. a 5 p. m. y los sábados de 8 a. m. a 12 p. m. WhatsApp: [número por definir]</p>
 <nav class="toc" aria-label="En esta página" style="margin-top:16px"><a href="#e">Entregas y zonas</a><br><a href="#d">Devoluciones y garantía</a><br><a href="#p">Medios de pago</a><br><a href="#r">Presentar un reclamo</a></nav></div>
 <div class="prose"><h2 id="e">Entregas y zonas</h2><p>Entregamos en el Gran Área Metropolitana al día siguiente si pide antes de las 2 p. m. Lo llevan nuestros propios repartidores. El envío cuesta {col(1500)} y es gratis desde {col(25000)}.</p>
 <p>Al recibir, dígale al repartidor su código de entrega de 4 números. Nadie de Yuntera se lo va a pedir por teléfono ni por mensaje.</p>

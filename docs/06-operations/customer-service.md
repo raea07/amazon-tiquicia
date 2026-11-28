@@ -21,11 +21,33 @@ Targets and thresholds are **assumptions to validate** in the pilot.
 | Phone             | Outbound, when writing is not working        | No inbound call centre in the pilot                                                                                                                                              |
 | Seller support    | WhatsApp and email, separate number or label | Sellers and shoppers are not mixed in one queue                                                                                                                                  |
 
-Hours in the pilot: Monday to Saturday, the same days deliveries run. The hours
-are published; outside them an automatic reply says when a person will answer.
+Service runs Monday to Saturday, the same days deliveries run, at the hours
+below. The hours are published on the shop's help page and in the shopper
+app's help screen; outside them an automatic reply says when a person will
+answer.
 
 Every conversation is linked to an order or an account and summarised in a
 note, so the next person does not ask the shopper to repeat themselves.
+
+## Service hours
+
+Decided by the owner on 27 November 2026 (D56), in Costa Rica time:
+
+| Day       | Opens  | Closes |
+| --------- | ------ | ------ |
+| Monday    | 08:00  | 17:00  |
+| Tuesday   | 08:00  | 17:00  |
+| Wednesday | 08:00  | 17:00  |
+| Thursday  | 08:00  | 17:00  |
+| Friday    | 08:00  | 17:00  |
+| Saturday  | 08:00  | 12:00  |
+| Sunday    | Closed | Closed |
+
+Public holidays (Operación → Feriados) are closed, a holiday on a Saturday
+included. The shopper reads: "Atendemos de lunes a viernes de 8 a. m. a
+5 p. m. y los sábados de 8 a. m. a 12 p. m." This table, `SERVICE_HOURS`
+in `packages/core/src/service-times.ts` and `private.desk_week` in the
+database are kept equal by a test.
 
 ## Response targets
 
@@ -48,12 +70,18 @@ computes every due date; the words shoppers read come from
 `packages/core/src/service-times.ts`, and a test keeps this table, those rows
 and those words equal. A return for a damaged, wrong or warranty item takes
 the "Wrong, damaged or missing item" row; a report about a listing or review
-takes the complaint's. **A working day** is Monday to Friday, without the
-holidays under Operación → Feriados, ending at midnight Costa Rica time; a
-**working hour** counts between 08:00 and 17:00 of a working day. Both are
-assumptions until the service hours are published (owner question D56):
-service runs Monday to Saturday, so a target counted this way may end a day
-later than promised, never earlier.
+takes the complaint's. Every target counts on the desk's own calendar, the
+service hours above: **a working day** is Monday to Saturday, without the
+holidays under Operación → Feriados, and a target in working days ends at
+midnight Costa Rica time of the last one, the day the case opens not
+counted; a **working hour** counts inside the hours of a working day
+(08:00 to 17:00, on Saturday 08:00 to 12:00), and what is left at closing
+time carries to the opening of the next working day. A case filed on Friday
+at 16:00 with 2 working hours is due on Saturday at 09:00; one filed on
+Saturday at 11:00 is due on Monday at 09:00, and one filed on Sunday on
+Monday at 10:00. Minutes, calendar days and "same day" count the clock and
+the calendar, whatever the hours. The legal periods (withdrawal, warranty)
+keep counting Monday to Friday, as the law's _días hábiles_.
 
 ## Tone
 

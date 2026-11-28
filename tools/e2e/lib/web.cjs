@@ -1205,3 +1205,13 @@ Object.assign(module.exports, {
   breadcrumbParent,
   breadcrumbLine,
 });
+
+// ── Owner decision D56: the service hours on Ayuda ─────────────────────────
+
+/** Opens Ayuda and gives the service hours it says, as one line (U+00A0 as a space). */
+async function helpServiceHours(page) {
+  await openReady(page, "/ayuda");
+  return (await text(testid(main(page), "service-hours"))).replace(/ /g, " ");
+}
+
+Object.assign(module.exports, { helpServiceHours });

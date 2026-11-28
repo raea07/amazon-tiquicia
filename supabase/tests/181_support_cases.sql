@@ -1,7 +1,8 @@
 -- Support cases (20261121084700_support_cases.sql).
 --
---   targets:      the due times of every unit, on the operations calendar
---                 (weekends and public.holidays skipped), and who reads them;
+--   targets:      the due times of every unit, on the desk's calendar
+--                 (Saturday mornings worked, Sundays and public.holidays
+--                 skipped; suite 198 has the full table), and who reads them;
 --   triggers:     a complaint, a return request and a content report each
 --                 open a case with the target's due times; answering or
 --                 closing them from /atencion is written on the timeline;
@@ -91,23 +92,29 @@ begin
   assert private.case_due('2031-03-04 21:00+00', 2, 'working_hours') = '2031-03-04 23:00+00',
     'working hours, up to closing';
   -- Friday 28 Feb 16:30 CR: half an hour that day, the rest from 08:00 of the
-  -- next working day (Tuesday 4, after the weekend and the holiday).
-  assert private.case_due('2031-02-28 22:30+00', 2, 'working_hours') = '2031-03-04 15:30+00',
+  -- next working day, Saturday 1 Mar (the desk's calendar, owner decision D56).
+  assert private.case_due('2031-02-28 22:30+00', 2, 'working_hours') = '2031-03-01 15:30+00',
     format('working hours across closing: %s', private.case_due('2031-02-28 22:30+00', 2, 'working_hours'));
-  -- Friday 22:00 CR, after closing: from Tuesday 08:00.
-  assert private.case_due('2031-03-01 04:00+00', 2, 'working_hours') = '2031-03-04 16:00+00',
+  -- Friday 22:00 CR, after closing: from Saturday 08:00.
+  assert private.case_due('2031-03-01 04:00+00', 2, 'working_hours') = '2031-03-01 16:00+00',
     format('working hours, after closing: %s', private.case_due('2031-03-01 04:00+00', 2, 'working_hours'));
   -- More hours than a working day holds: 10 hours from Tuesday 08:00 is Wednesday 09:00.
   assert private.case_due('2031-03-04 14:00+00', 10, 'working_hours') = '2031-03-05 15:00+00',
     format('working hours over two days: %s', private.case_due('2031-03-04 14:00+00', 10, 'working_hours'));
-  -- Saturday 1 Mar: Monday 3 is the holiday, so from Tuesday 4 at 08:00.
-  assert private.case_due('2031-03-01 16:00+00', 2, 'working_hours') = '2031-03-04 16:00+00',
-    format('working hours over a weekend and a holiday: %s',
+  -- Saturday 1 Mar 10:00 CR: the two hours fit before the Saturday closing at 12:00.
+  assert private.case_due('2031-03-01 16:00+00', 2, 'working_hours') = '2031-03-01 18:00+00',
+    format('working hours on a Saturday morning: %s',
            private.case_due('2031-03-01 16:00+00', 2, 'working_hours'));
-  -- working_days: Friday 28 Feb + 1 skips the weekend and the holiday: end of Tue 4 Mar (CR).
-  assert private.case_due('2031-02-28 16:00+00', 1, 'working_days') = '2031-03-05 06:00+00',
+  -- Saturday 1 Mar 11:00 CR: one hour that morning; Sunday is closed and
+  -- Monday 3 is the holiday, so the other hour from Tuesday 4 at 08:00.
+  assert private.case_due('2031-03-01 17:00+00', 2, 'working_hours') = '2031-03-04 15:00+00',
+    format('working hours over a weekend and a holiday: %s',
+           private.case_due('2031-03-01 17:00+00', 2, 'working_hours'));
+  -- working_days: Friday 28 Feb + 1 is Saturday 1 Mar, a working day of the desk: its end (CR).
+  assert private.case_due('2031-02-28 16:00+00', 1, 'working_days') = '2031-03-02 06:00+00',
     format('working days: %s', private.case_due('2031-02-28 16:00+00', 1, 'working_days'));
-  assert private.case_due('2031-02-28 16:00+00', 5, 'working_days') = '2031-03-11 06:00+00',
+  -- Five: Saturday 1, Tuesday 4 to Friday 7 (Sunday closed, Monday 3 the holiday).
+  assert private.case_due('2031-02-28 16:00+00', 5, 'working_days') = '2031-03-08 06:00+00',
     format('five working days: %s', private.case_due('2031-02-28 16:00+00', 5, 'working_days'));
   -- calendar_days and same_day: to the end of that day, Costa Rica time.
   assert private.case_due('2031-02-28 16:00+00', 8, 'calendar_days') = '2031-03-09 06:00+00', 'calendar days';

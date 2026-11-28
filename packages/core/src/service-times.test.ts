@@ -5,8 +5,12 @@ import {
   COMPLAINT_PROMISE,
   REFUND_TIME,
   returnRequestedText,
+  SERVICE_DAYS_NOTE,
+  SERVICE_HOURS,
+  SERVICE_HOURS_TEXT,
   SERVICE_TARGETS,
   type ServiceTime,
+  serviceHoursText,
   serviceTarget,
   serviceTimeWords,
 } from "./service-times";
@@ -28,6 +32,46 @@ function migrationTargets() {
     resolution: { amount: Number(m[5]), unit: m[6] },
     situation: m[7],
   }));
+}
+
+/** The desk's week in the migration (private.desk_week): one row per day it answers. */
+function migrationHours() {
+  const sql = read("supabase/migrations/20261121084700_support_cases.sql");
+  const body =
+    /create or replace function private\.desk_week\(\)[\s\S]*?as \$\$([\s\S]*?)\$\$;/.exec(
+      sql,
+    )?.[1] ?? "";
+  return [...body.matchAll(/\((\d), time '(\d\d:\d\d)', time '(\d\d:\d\d)'\)/g)].map((m) => ({
+    day: Number(m[1]),
+    opens: m[2],
+    closes: m[3],
+  }));
+}
+
+const DAY_NUMBER: Record<string, number> = {
+  Sunday: 0,
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+};
+
+/** The "Service hours" table of customer-service.md: the days with hours, and the closed ones. */
+function documentHours() {
+  const md = read("docs/06-operations/customer-service.md");
+  const section = md.split("## Service hours")[1]?.split("\n## ")[0] ?? "";
+  const open: { day: number; opens: string; closes: string }[] = [];
+  const closed: number[] = [];
+  for (const line of section.split("\n")) {
+    const cells = line.split("|").map((c) => c.trim());
+    const day = DAY_NUMBER[cells[1] ?? ""];
+    if (cells.length < 5 || day === undefined) continue;
+    if (cells[2] === "Closed") closed.push(day);
+    else open.push({ day, opens: cells[2] as string, closes: cells[3] as string });
+  }
+  return { open, closed, holidaysClosed: /public holidays[^|\n]*closed/i.test(section) };
 }
 
 /** The "Response targets" table of customer-service.md: situation → [first, resolution]. */
@@ -94,6 +138,51 @@ describe("service targets", () => {
       amount: 2,
       unit: "working_hours",
     });
+  });
+});
+
+describe("service hours", () => {
+  it("are the desk's week in the migration, day for day", () => {
+    expect(migrationHours()).toEqual(SERVICE_HOURS.map((x) => ({ ...x })));
+  });
+
+  it("are the Service hours table of customer-service.md, with Sunday and holidays closed", () => {
+    const doc = documentHours();
+    expect(doc.open).toEqual(SERVICE_HOURS.map((x) => ({ ...x })));
+    const openDays = new Set(SERVICE_HOURS.map((x) => x.day));
+    expect(doc.closed).toEqual([0, 1, 2, 3, 4, 5, 6].filter((d) => !openDays.has(d)));
+    expect(doc.holidaysClosed, "the table says public holidays are closed").toBe(true);
+  });
+
+  it("are Monday to Friday 08:00 to 17:00 and Saturday 08:00 to 12:00 (owner decision D56)", () => {
+    expect(SERVICE_HOURS).toEqual([
+      { day: 1, opens: "08:00", closes: "17:00" },
+      { day: 2, opens: "08:00", closes: "17:00" },
+      { day: 3, opens: "08:00", closes: "17:00" },
+      { day: 4, opens: "08:00", closes: "17:00" },
+      { day: 5, opens: "08:00", closes: "17:00" },
+      { day: 6, opens: "08:00", closes: "12:00" },
+    ]);
+  });
+
+  it("are said in plain Spanish from the constant", () => {
+    const plain = (text: string) => text.replace(/\u00a0/g, " ");
+    expect(plain(SERVICE_HOURS_TEXT)).toBe(
+      "Atendemos de lunes a viernes de 8 a. m. a 5 p. m. y los sábados de 8 a. m. a 12 p. m.",
+    );
+    expect(
+      plain(
+        serviceHoursText([
+          { day: 1, opens: "09:00", closes: "18:30" },
+          { day: 3, opens: "09:00", closes: "18:30" },
+          { day: 6, opens: "08:00", closes: "12:00" },
+        ]),
+      ),
+    ).toBe(
+      "Atendemos los lunes de 9 a. m. a 6:30 p. m., los miércoles de 9 a. m. a 6:30 p. m. y los sábados de 8 a. m. a 12 p. m.",
+    );
+    expect(SERVICE_DAYS_NOTE).toMatch(/domingos y los feriados no atendemos/);
+    expect(SERVICE_DAYS_NOTE).toMatch(/lunes a viernes/);
   });
 });
 

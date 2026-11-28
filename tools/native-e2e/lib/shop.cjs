@@ -179,3 +179,13 @@ Object.assign(module.exports, {
   caseAnswersText,
   cancelReasonText,
 });
+
+// ── Owner decision D56: the service hours on Ayuda ─────────────────────────
+
+/** The service hours Ayuda says, as one line (U+00A0 as a space). */
+async function helpServiceHours(page) {
+  await on(page, "help-hours").waitFor();
+  return squash((await on(page, "help-hours").innerText()).replace(/ /g, " "));
+}
+
+Object.assign(module.exports, { helpServiceHours });

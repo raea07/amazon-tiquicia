@@ -17,6 +17,9 @@
 //      types: the payment contact, not the delivery complaint, whose page is
 //      "not found"; "Hoy" carries the cases line.
 //   6. Every new console page and the shop's form fit 390 px.
+//   7. Ayuda says the service hours (owner decision D56), and the console's
+//      order page shows the delivery phone only after "Mostrar contacto"
+//      with a reason, which Auditoría records (owner decision D55).
 //
 // Screen steps are in lib/web.cjs and lib/ops.cjs; status words come from
 // lib/words.cjs. Fails on any console error, uncaught exception or 5xx (a
@@ -118,6 +121,16 @@ function sql(statement) {
     promise.includes("1 día hábil") && promise.includes("5 días hábiles"),
     `the form says the promised times: ${promise}`,
   );
+  // Owner decision D56: Ayuda says the service hours, built from the core constant.
+  const hours = await web.helpServiceHours(shopper);
+  check(
+    hours ===
+      "Atendemos de lunes a viernes de 8 a. m. a 5 p. m. y los sábados de 8 a. m. a 12 p. m.",
+    `Ayuda says the service hours: ${hours}`,
+  );
+  await fits(shopper, "Ayuda");
+  await web.openOrder(shopper, orderNumber);
+  await web.startComplaintFromOrder(shopper);
   await web.fillComplaint(shopper, {
     category: "delivery",
     // A long unbroken word: the case page must still fit 390 px.

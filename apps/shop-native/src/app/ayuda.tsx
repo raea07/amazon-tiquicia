@@ -1,5 +1,11 @@
 import { brand } from "@yuntera/brand";
-import { COMPLAINT_PROMISE, DEFAULT_RANKING, REFUND_TIME } from "@yuntera/core";
+import {
+  COMPLAINT_PROMISE,
+  DEFAULT_RANKING,
+  REFUND_TIME,
+  SERVICE_DAYS_NOTE,
+  SERVICE_HOURS_TEXT,
+} from "@yuntera/core";
 import { colors, radius, space } from "@yuntera/expo-kit/theme";
 import { Button, LinkButton, Screen, Stack, Text } from "@yuntera/expo-kit/ui";
 import * as Linking from "expo-linking";
@@ -48,7 +54,8 @@ function Draft() {
  * Help and the legal basics, with the website's words (apps/web/src/app/ayuda).
  * The ranking explanation reads its numbers from the constants the search
  * uses, so it cannot drift from what happens; the offer order is described
- * in words (packages/core/src/offers.ts).
+ * in words (packages/core/src/offers.ts). The service hours come from
+ * SERVICE_HOURS in packages/core/src/service-times.ts.
  */
 export default function HelpScreen() {
   const ranking = DEFAULT_RANKING.weights;
@@ -110,6 +117,11 @@ export default function HelpScreen() {
           hechos a la medida.
         </Item>
         <Text>Solicite la devolución desde la página de su pedido.</Text>
+      </Section>
+
+      <Section title="Horario de atención">
+        <Text testID="help-hours">{SERVICE_HOURS_TEXT}</Text>
+        <Text>{SERVICE_DAYS_NOTE}</Text>
       </Section>
 
       <Section title="Presentar un reclamo">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatClock, formatDay, formatTime } from "./dates";
+import { formatClock, formatDay, formatTime, weekdayName } from "./dates";
 
 /** Builds an instant from a Costa Rican wall-clock time (UTC−6, no DST). */
 const cr = (date: string, hour: number, minute = 0) => {
@@ -188,5 +188,14 @@ describe("formatDay, long form (§10.4, §19.2)", () => {
 
   it("needs `now` for a relative word", () => {
     expect(() => formatDay("2026-11-25", { form: "long", relative: true })).toThrow(RangeError);
+  });
+});
+
+describe("weekdayName", () => {
+  it("names a day of the week, 0 Sunday to 6 Saturday", () => {
+    expect(weekdayName(0)).toBe("domingo");
+    expect(weekdayName(6)).toBe("sábado");
+    expect(weekdayName(3, { locale: "en" })).toBe("Wednesday");
+    expect(() => weekdayName(7)).toThrow(RangeError);
   });
 });

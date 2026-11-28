@@ -75,6 +75,7 @@ its own entry, not something that happens by drift.
 | 66  | [A cart line of a product the caller may not see is its id alone](#66-a-cart-line-of-a-product-the-caller-may-not-see-is-its-id-alone)                                                                                     | Built; not on the preview yet            |
 | 67  | [One build commit with one rule, given at deploy time](#67-one-build-commit-with-one-rule-given-at-deploy-time)                                                                                                            | Built; not on the preview yet            |
 | 68  | [One rule for a late case, read by Salud, Hoy and Casos](#68-one-rule-for-a-late-case-read-by-salud-hoy-and-casos)                                                                                                         | Built; not on the preview yet            |
+| 69  | [The desk has its own calendar with Saturday morning; the law keeps Monday to Friday](#69-the-desk-has-its-own-calendar-with-saturday-morning-the-law-keeps-monday-to-friday)                                              | Built; not on the preview yet            |
 
 ---
 
@@ -1949,8 +1950,9 @@ like the rest of the console. Nothing new is deployed for them.
   nothing more on them.
 
 **Not verified.** Nothing of it has run on the hosted project. Working days
-are Monday to Friday without holidays and working hours 08:00 to 17:00, an
-assumption until the service hours are published (owner question D56).
+were Monday to Friday without holidays and working hours 08:00 to 17:00, an
+assumption until the owner decided the service hours (D56); decision 69
+replaces it.
 Whether the complaint form meets the legal minimum is for the lawyer. A
 case the role may not see answers "not found" with HTTP 200 (the console's
 pages draw it inside a streamed part).
@@ -2386,3 +2388,45 @@ time asks for attention, past the resolution time is a problem.
 administrators get the line, as before.
 
 **Not verified.** Not on the hosted preview yet.
+
+## 69. The desk has its own calendar with Saturday morning; the law keeps Monday to Friday
+
+**Context.** The support desk counted its working hours from 08:00 to 17:00
+and its working days Monday to Friday through `private.add_business_days`,
+the operations calendar that also counts the legal withdrawal and warranty
+periods. Customer service promises service Monday to Saturday, the delivery
+days, and the hours were not published. On 27 November 2026 the owner chose
+D56 A: Monday to Friday 08:00 to 17:00 and Saturday 08:00 to 12:00, Costa
+Rica time, with Saturday a working day for the answer targets; Sunday and
+public holidays closed.
+
+**Decision.** The desk has its own calendar in `084700`:
+`private.desk_week` lists the hours of each day it answers,
+`private.desk_hours` gives one day's hours (none on a Sunday or on a day of
+`public.holidays`, a holiday on a Saturday included) and
+`private.desk_add_days` counts its working days. `private.case_due` counts
+every target on it, with each unit keeping its meaning: working hours
+inside the day's hours, the rest carried to the next opening; working days
+to the end of the nth working day after the day the case opens; minutes,
+calendar days and the same day on the clock and the calendar as before.
+`private.add_business_days` is not changed: the withdrawal and warranty
+periods, the law's _días hábiles_, keep counting Monday to Friday. The hours
+have one source in TypeScript, `SERVICE_HOURS` in
+`packages/core/src/service-times.ts`; a test keeps it equal to
+`private.desk_week` and to the "Service hours" table of customer-service.md,
+and the shop's Ayuda, the shopper app's Ayuda and the console's monthly
+report say them in words built from it.
+
+**Consequences.** A case filed on Friday afternoon, a Saturday or a Sunday
+is due earlier than before: 2 working hours from Friday 16:00 end on
+Saturday at 09:00 instead of Monday, and a complaint filed on Friday is
+acknowledged by the end of Saturday. Someone must answer on Saturday
+mornings. `084700` is applied nowhere yet, so no due time was ever stored on
+the old count: every case, the ones it opens for existing rows included, is
+counted on the new calendar. "Día hábil" means a
+desk day (Saturday included) in the answer targets and a Monday-to-Friday
+day in the legal periods; Ayuda says so in one sentence. The shopper app's
+Ayuda reaches phones only with a new store build.
+
+**Not verified.** Not on the hosted preview yet. Whether staff can answer on
+Saturday mornings is for the pilot.

@@ -1,4 +1,4 @@
-import { formatNumber, toCostaRicaTime } from "@yuntera/core";
+import { formatNumber, SERVICE_HOURS_TEXT, toCostaRicaTime } from "@yuntera/core";
 import { sessionApi } from "@yuntera/next-kit/server";
 import { PageHeader, Stat } from "@yuntera/next-kit/shell";
 import { Skeleton, touchLinkClass } from "@yuntera/ui";
@@ -177,8 +177,9 @@ async function Report({ searchParams }: Pick<PageProps<"/casos/informe">, "searc
           Plazos que se usan
         </h3>
         <p className="mt-1 text-sm text-ink-muted">
-          Los de la política de atención al cliente. Los días hábiles son de lunes a viernes sin los
-          feriados de Operación.
+          Los de la política de atención al cliente, contados en el horario de atención.{" "}
+          {SERVICE_HOURS_TEXT} El sábado cuenta como día hábil; los domingos y los feriados de
+          Operación, no.
         </p>
         <ul className="mt-3 flex flex-col gap-2 text-sm" data-testid="case-targets">
           {targets.map((target) => (

@@ -4,8 +4,11 @@
 --
 --   1. Response targets: one settings table with the targets of
 --      docs/06-operations/customer-service.md, and the due time of a target
---      counted on the operations calendar the delivery promise uses
---      (public.holidays through private.add_business_days).
+--      counted on the desk's own calendar (owner decision D56, 27 Nov 2026:
+--      Monday to Friday 08:00 to 17:00 and Saturday 08:00 to 12:00, Costa
+--      Rica time; Sunday and public.holidays closed). The legal withdrawal
+--      and warranty periods keep the operations calendar of
+--      private.add_business_days (Monday to Friday), which is unchanged.
 --   2. Cases (private.cases) and their timeline (private.case_entries,
 --      append-only). Every complaint, return request and content report gets
 --      a case by trigger, and the existing ones get one here, so the three
@@ -36,11 +39,12 @@
 
 -- One row per kind of case and topic ('*' = any other topic of that kind).
 -- first_response: the first human answer; resolution: the case closed.
--- Units: minutes; working_hours (counted between 08:00 and 17:00 of working
--- days, from the moment the case opens; what is left at 17:00 carries to the
--- next working day); working_days
--- and calendar_days (to the end of that day, Costa Rica time); same_day (the
--- end of the day it opens).
+-- Units: minutes; working_hours (counted inside the desk's hours of its
+-- working days, private.desk_week, from the moment the case opens; what is
+-- left at closing time carries to the opening of the next working day);
+-- working_days (the desk's working days, Saturday included, not counting
+-- the day the case opens) and calendar_days (to the end of that day, Costa
+-- Rica time); same_day (the end of the day it opens).
 create table private.case_targets (
   kind text not null check (kind in ('complaint', 'return', 'report', 'contact')),
   topic text not null default '*' check (topic ~ '^(\*|[a-z_]{2,40})$'),
@@ -92,9 +96,63 @@ as $$
   select (p_local + interval '6 hours') at time zone 'UTC';
 $$;
 
--- When a target counted from p_from falls due. Working days are those of the
--- operations calendar (Monday to Friday, without public.holidays), the same
--- calendar the withdrawal and warranty windows use.
+-- The desk's week (owner decision D56, 27 November 2026): the hours people
+-- answer on each day of the week, Costa Rica time, 0 Sunday to 6 Saturday.
+-- A day not listed is closed, and so is every day in public.holidays,
+-- whatever its weekday. packages/core/src/service-times.ts (SERVICE_HOURS)
+-- and the "Service hours" table of docs/06-operations/customer-service.md
+-- say the same; packages/core/src/service-times.test.ts keeps the three equal.
+create or replace function private.desk_week()
+returns table (dow integer, opens time, closes time)
+language sql immutable
+set search_path = ''
+as $$
+  values (1, time '08:00', time '17:00'),
+         (2, time '08:00', time '17:00'),
+         (3, time '08:00', time '17:00'),
+         (4, time '08:00', time '17:00'),
+         (5, time '08:00', time '17:00'),
+         (6, time '08:00', time '12:00');
+$$;
+
+-- The desk's hours on one day: one row, or none when the desk is closed
+-- (a day of the week desk_week does not list, or a public holiday, a
+-- holiday on a Saturday included).
+create or replace function private.desk_hours(p_day date)
+returns table (opens time, closes time)
+language sql stable security definer
+set search_path = ''
+as $$
+  select w.opens, w.closes
+  from private.desk_week() w
+  where w.dow = extract(dow from p_day)::integer
+    and not exists (select 1 from public.holidays h where h.day = p_day);
+$$;
+
+-- The desk's working day p_days after p_from (p_from itself not counted),
+-- as private.add_business_days counts on the operations calendar.
+create or replace function private.desk_add_days(p_from date, p_days integer) returns date
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  v_day date := p_from;
+  v_left integer := p_days;
+begin
+  while v_left > 0 loop
+    v_day := v_day + 1;
+    if exists (select 1 from private.desk_hours(v_day)) then
+      v_left := v_left - 1;
+    end if;
+  end loop;
+  return v_day;
+end;
+$$;
+
+-- When a target counted from p_from falls due, on the desk's calendar
+-- (private.desk_hours: Saturday mornings are working time, Sunday and
+-- holidays are not). The legal withdrawal and warranty windows keep the
+-- operations calendar (private.add_business_days, Monday to Friday).
 create or replace function private.case_due(p_from timestamptz, p_amount integer, p_unit text)
 returns timestamptz
 language plpgsql stable security definer
@@ -103,39 +161,40 @@ as $$
 declare
   v_local timestamp := private.cr_local(p_from);
   v_day date := v_local::date;
+  v_next date;
+  v_opens time;
+  v_closes time;
   v_left interval;
   v_free interval;
-  -- When people start and stop answering on a working day. customer-service.md
-  -- says the hours are published but does not give them: both are
-  -- assumptions to confirm.
-  c_opens constant time := time '08:00';
-  c_closes constant time := time '17:00';
 begin
   case p_unit
     when 'minutes' then
       return p_from + make_interval(mins => p_amount);
     when 'working_hours' then
-      -- Counted only inside working hours: what is left at closing time
+      -- Counted only inside the desk's hours: what is left at closing time
       -- carries to the opening of the next working day.
       v_left := make_interval(hours => p_amount);
       loop
         v_day := v_local::date;
-        if private.add_business_days(v_day - 1, 1) <> v_day or v_local::time >= c_closes then
-          v_local := private.add_business_days(v_day, 1) + c_opens;
+        select h.opens, h.closes into v_opens, v_closes from private.desk_hours(v_day) h;
+        if not found or v_local::time >= v_closes then
+          v_next := private.desk_add_days(v_day, 1);
+          v_local := v_next + (select h.opens from private.desk_hours(v_next) h);
           continue;
         end if;
-        if v_local::time < c_opens then
-          v_local := v_day + c_opens;
+        if v_local::time < v_opens then
+          v_local := v_day + v_opens;
         end if;
-        v_free := (v_day + c_closes) - v_local;
+        v_free := (v_day + v_closes) - v_local;
         if v_left <= v_free then
           return private.cr_instant(v_local + v_left);
         end if;
         v_left := v_left - v_free;
-        v_local := private.add_business_days(v_day, 1) + c_opens;
+        v_next := private.desk_add_days(v_day, 1);
+        v_local := v_next + (select h.opens from private.desk_hours(v_next) h);
       end loop;
     when 'working_days' then
-      return private.cr_instant((private.add_business_days(v_day, p_amount) + 1)::timestamp);
+      return private.cr_instant((private.desk_add_days(v_day, p_amount) + 1)::timestamp);
     when 'calendar_days' then
       return private.cr_instant((v_day + p_amount + 1)::timestamp);
     when 'same_day' then
@@ -2255,6 +2314,9 @@ grant execute on function public.ops_receive_return(uuid, boolean, text) to auth
 -- ═══ Grants ════════════════════════════════════════════════════════════════
 
 revoke all on function private.cr_instant(timestamp) from public, anon, authenticated;
+revoke all on function private.desk_week() from public, anon, authenticated;
+revoke all on function private.desk_hours(date) from public, anon, authenticated;
+revoke all on function private.desk_add_days(date, integer) from public, anon, authenticated;
 revoke all on function private.case_due(timestamptz, integer, text) from public, anon, authenticated;
 revoke all on function private.case_target(text, text) from public, anon, authenticated;
 revoke all on function private.case_entries_append_only() from public, anon, authenticated;

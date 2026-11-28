@@ -5,8 +5,14 @@
  * same table in TypeScript only so the words on screen and in messages say
  * the same numbers. service-times.test.ts keeps the three equal: this table,
  * the migration's rows and the "Response targets" table of
- * docs/06-operations/customer-service.md.
+ * docs/06-operations/customer-service.md. The desk's hours (SERVICE_HOURS)
+ * are kept equal the same way: private.desk_week in the migration, which
+ * counts the working hours and days of every target, and the "Service
+ * hours" table of customer-service.md.
  */
+
+import { formatClock, weekdayName } from "./dates";
+import { endSentence } from "./sentence";
 
 export type ServiceUnit =
   | "minutes"
@@ -176,3 +182,76 @@ export function returnAnswerTime(kind: string): string {
 export function returnRequestedText(kind: string): string {
   return `Recibimos su solicitud. Le respondemos en un máximo de ${returnAnswerTime(kind)}.`;
 }
+
+/**
+ * The desk's hours, Costa Rica time (owner decision D56, 27 November 2026):
+ * the days it answers, 0 Sunday to 6 Saturday, each with its opening and
+ * closing time. A day not listed is closed, and so is every public holiday.
+ * Saturday is a working day for the targets above; the legal withdrawal and
+ * warranty periods keep counting Monday to Friday.
+ */
+export interface ServiceDay {
+  day: number;
+  /** "08:00", 24-hour clock. */
+  opens: string;
+  closes: string;
+}
+
+export const SERVICE_HOURS: readonly ServiceDay[] = [
+  { day: 1, opens: "08:00", closes: "17:00" },
+  { day: 2, opens: "08:00", closes: "17:00" },
+  { day: 3, opens: "08:00", closes: "17:00" },
+  { day: 4, opens: "08:00", closes: "17:00" },
+  { day: 5, opens: "08:00", closes: "17:00" },
+  { day: 6, opens: "08:00", closes: "12:00" },
+];
+
+// «sábado» → «sábados»; «lunes» and «miércoles» stay as they are.
+const plural = (day: string) => (day.endsWith("s") ? day : `${day}s`);
+
+const clock = (time: string) => {
+  const [hour, minute] = time.split(":").map(Number);
+  return formatClock(hour as number, minute as number);
+};
+
+/**
+ * «Atendemos de lunes a viernes de 8 a. m. a 5 p. m. y los sábados de 8 a. m.
+ * a 12 p. m.», from SERVICE_HOURS: days in a row with the same hours are
+ * one range, a day alone is said in the plural («los sábados»).
+ */
+export function serviceHoursText(hours: readonly ServiceDay[] = SERVICE_HOURS): string {
+  const groups: ServiceDay[][] = [];
+  for (const day of [...hours].sort((a, b) => a.day - b.day)) {
+    const last = groups.at(-1);
+    const prev = last?.at(-1);
+    if (
+      last &&
+      prev &&
+      prev.day === day.day - 1 &&
+      prev.opens === day.opens &&
+      prev.closes === day.closes
+    ) {
+      last.push(day);
+    } else {
+      groups.push([day]);
+    }
+  }
+  const parts = groups.map((group) => {
+    const first = group[0] as ServiceDay;
+    const last = group.at(-1) as ServiceDay;
+    const days =
+      group.length === 1
+        ? `los ${plural(weekdayName(first.day))}`
+        : `de ${weekdayName(first.day)} a ${weekdayName(last.day)}`;
+    return `${days} de ${clock(first.opens)} a ${clock(first.closes)}`;
+  });
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} y ${parts.at(-1)}`;
+  return endSentence(`Atendemos ${list}`);
+}
+
+/** What the help pages say about the hours, the closed days and the periods. */
+export const SERVICE_HOURS_TEXT = serviceHoursText();
+
+/** The sentence after the hours on the help pages. */
+export const SERVICE_DAYS_NOTE =
+  "Los domingos y los feriados no atendemos. Para nuestros plazos de respuesta el sábado cuenta como día hábil; los plazos de la ley para devolver y para la garantía se cuentan de lunes a viernes.";

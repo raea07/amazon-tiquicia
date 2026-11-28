@@ -254,6 +254,10 @@
       "files": ["apps/shop-native/src/app/ayuda.tsx"]
     },
     {
+      "id": "help-hours",
+      "files": ["apps/shop-native/src/app/ayuda.tsx"]
+    },
+    {
       "id": "home-kept",
       "files": ["apps/shop-native/src/app/(tabs)/index.tsx"]
     },

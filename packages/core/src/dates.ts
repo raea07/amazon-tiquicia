@@ -37,6 +37,13 @@ const WEEKDAYS: Record<CoreLocale, readonly string[]> = {
   en: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
 };
 
+/** «lunes» / «Monday» for a day of the week, 0 Sunday to 6 Saturday. */
+export function weekdayName(weekday: number, opts: { locale?: CoreLocaleInput } = {}): string {
+  const name = WEEKDAYS[coreLocale(opts.locale)][weekday];
+  if (name === undefined) throw new RangeError(`Not a day of the week: ${weekday}`);
+  return name;
+}
+
 const MONTHS: Record<CoreLocale, readonly string[]> = {
   es: [
     "enero",
