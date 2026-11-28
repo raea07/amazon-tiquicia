@@ -92,6 +92,13 @@ when the four wave 9 workstreams were (the support desk against Atención).
 | `lib.cjs`                        |        | The harness: fixture, sessions acting as demo users, the barrier, the checks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `run-all.sh`                     |        | Every family against one database, one after another.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
+Family J also races the account deletion against the other staff writers of
+a case (J7 recording a contact, J9 reopening a closed complaint's case, J10
+answering an open report, J11 assigning an open contact) and one writer's
+texts against each other (J8); the file's header says what each must leave.
+Before `ops_reopen_case` took the customer's account row first, J9 left an
+open case on a deleted account in 28 of 30 rounds.
+
 **Natural and forced.** A "natural" scenario lets both sessions go at the
 same moment (each may start a few milliseconds late, varied by round) and
 counts what happens. A "forced" scenario adds a third session that takes a

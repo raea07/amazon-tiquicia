@@ -1254,7 +1254,16 @@ begin
   if v_role is null or v_role not in ('admin', 'support') then
     perform private.fail('forbidden');
   end if;
-  -- The complaint first, as in ops_answer_case.
+  -- The customer's account row first, then the complaint, then the case, in
+  -- the order ops_answer_case takes them. A deletion under way holds the
+  -- account row, so the reopening waits for it and then refuses
+  -- (case_account_deleted below); a reopening under way makes the deletion
+  -- wait and then refuse for the open complaint. Without it a closed case
+  -- could be reopened while its account was being deleted and stay open,
+  -- with nobody left to answer or close it (the second review of the join).
+  perform 1 from auth.users u
+  where u.id = (select k.user_id from private.cases k where k.id = p_case_id)
+  for key share;
   perform 1 from public.complaints x
   where x.id = (select k.complaint_id from private.cases k where k.id = p_case_id)
   for update;

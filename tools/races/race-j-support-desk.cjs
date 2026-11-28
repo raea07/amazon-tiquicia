@@ -4,10 +4,11 @@
  *
  *   node race-j-support-desk.cjs <database-url> [rounds] [scenario-regex]
  *
- * Lock order the desk promises: the customer's account row (key share, only
- * ops_answer_case, as delete_my_account takes it first), then a complaint's
- * row, then the case's row; the trigger behind ops_resolve_complaint and the
- * return decision take the source row and then the case.
+ * Lock order the desk promises: the customer's account row (key share, in
+ * ops_answer_case, ops_reopen_case and ops_record_contact, as
+ * delete_my_account takes it first), then a complaint's row, then the case's
+ * row; the trigger behind ops_resolve_complaint and the return decision take
+ * the source row and then the case.
  *
  *   J1 ops_answer_case against ops_resolve_complaint on the same complaint.
  *   J2 ops_reopen_case against ops_answer_case on a closed complaint's case.
@@ -32,6 +33,21 @@
  *      (20 numbers) and the lock-out (3 refusals) hold: at most 20 numbers
  *      counted and at most 3 refusals on the audit trail, whatever the
  *      interleaving (084700 checks one writer's texts one after another).
+ *   J9 the shopper deleting their account against staff reopening their
+ *      closed complaint's case: the reopening is refused after the deletion
+ *      (case_account_deleted) or the deletion is refused after the reopening
+ *      (account_has_open_complaints); never an open case on a deleted
+ *      account. Before ops_reopen_case took the account row first, 28 of 30
+ *      rounds (natural and both forced) left exactly that.
+ *   J10 the deletion against an answer on the shopper's open report (a
+ *      deletion leaves a report's case open): the answer is refused after
+ *      it, or written before it and erased with the account.
+ *   J11 the deletion against assigning the shopper's open recorded contact:
+ *      the contact ends closed, the assignment written once or refused
+ *      (case_closed).
+ *   J9 to J11 forced: "deletion under way" holds the shopper's profile row,
+ *   so the deletion holds the account row and waits; "staff first" holds the
+ *   case row, so the staff call holds what comes before it and waits.
  *
  * Every scenario: no deadlock, no lost or doubled entry, and the source row's
  * status and the case's status agree afterwards.
@@ -504,6 +520,164 @@ async function verifyJ8(h, ctx, results, withCode) {
   return bad;
 }
 
+// ── J9, J10, J11: the account deletion against the other staff writers ──────
+/** A fresh shopper of the harness (no orders, so nothing else holds the deletion back). */
+async function freshShopper(h, tag) {
+  serial += 1;
+  const email = `carrera-${tag}-${Date.now().toString(36)}-${serial}@yuntera.example`;
+  const user = (
+    await h.q(
+      `insert into auth.users (id, email, raw_user_meta_data)
+       values (gen_random_uuid(), $1, '{"full_name": "Prueba Carrera Borrado"}') returning id`,
+      [email],
+    )
+  ).rows[0].id;
+  h.ids.set(email, user);
+  return { email, user };
+}
+/** J9: a complaint of a fresh shopper, answered and closed from Casos. */
+async function setupJ9(h) {
+  const who = await freshShopper(h, "j9");
+  const complaintId = (
+    await h.q(
+      `insert into public.complaints (user_id, category, description, status)
+       values ($1, 'other', 'Queja de la carrera nueve, para reabrir.', 'open') returning id`,
+      [who.user],
+    )
+  ).rows[0].id;
+  const kase = (await h.q("select id from private.cases where complaint_id = $1", [complaintId]))
+    .rows[0].id;
+  await h.call(STAFF, "select public.ops_answer_case($1, $2, true)", [kase, ANSWER_A]);
+  return { ...who, complaint: complaintId, kase };
+}
+/** J10 and J11: an open report of a fresh shopper (a deletion leaves its case open) or an open contact. */
+async function setupJ10(h, kind) {
+  const who = await freshShopper(h, kind === "report" ? "j10" : "j11");
+  if (kind === "report") {
+    const report = (
+      await h.q(
+        `insert into public.content_reports (reporter_id, target_type, target_id, reason, details)
+         select $1, 'product', p.id, 'misleading', 'La foto no es la del producto, carrera.'
+           from public.products p order by p.id limit 1 returning id`,
+        [who.user],
+      )
+    ).rows[0].id;
+    const kase = (await h.q("select id from private.cases where report_id = $1", [report])).rows[0]
+      .id;
+    return { ...who, kase };
+  }
+  await h.q(
+    `insert into public.complaints (user_id, category, description, status, resolution, resolved_at)
+     values ($1, 'other', 'Queja vieja de la carrera once.', 'resolved', 'Ya le respondimos.', now())`,
+    [who.user],
+  );
+  const kase = (
+    await h.call(STAFF, "select public.ops_record_contact('phone', 'other', $1, null, $2) as id", [
+      "Pregunta de la carrera once por teléfono.",
+      who.user,
+    ])
+  ).id;
+  return { ...who, kase };
+}
+const deleting = (ctx) => ({
+  name: "delete",
+  as: ctx.email,
+  sql: "select public.delete_my_account()",
+  args: [],
+});
+const j9 = (_h, ctx) => [
+  deleting(ctx),
+  { name: "reopen", as: STAFF, sql: "select public.ops_reopen_case($1)", args: [ctx.kase] },
+];
+async function verifyJ9(h, ctx, results) {
+  const bad = refusals(results, {
+    delete: ["account_has_open_complaints"],
+    reopen: ["case_account_deleted"],
+  });
+  const del = results.find((r) => r.name === "delete");
+  const reopen = results.find((r) => r.name === "reopen");
+  const s = (
+    await h.q(
+      `select k.status as case_status, x.status as complaint_status,
+              (select deleted_at is not null from auth.users where id = $2) as deleted
+         from private.cases k join public.complaints x on x.id = k.complaint_id where k.id = $1`,
+      [ctx.kase, ctx.user],
+    )
+  ).rows[0];
+  if (!del.outcome && !reopen.outcome) bad.push("both the deletion and the reopening went through");
+  if (s.deleted && (s.case_status !== "closed" || s.complaint_status !== "resolved"))
+    bad.push(`a deleted account with its case ${s.case_status}, complaint ${s.complaint_status}`);
+  if ((s.case_status === "closed") !== (s.complaint_status === "resolved"))
+    bad.push(`case ${s.case_status} but complaint ${s.complaint_status}`);
+  return bad;
+}
+const j10 = (_h, ctx) => [
+  deleting(ctx),
+  {
+    name: "answer",
+    as: STAFF,
+    sql: "select public.ops_answer_case($1, $2, false)",
+    args: [ctx.kase, ANSWER_A],
+  },
+];
+const j11 = (_h, ctx) => [
+  deleting(ctx),
+  { name: "assign", as: STAFF, sql: "select public.ops_assign_case($1)", args: [ctx.kase] },
+];
+/** After J10 or J11: a deleted account keeps no text, and a contact of it is closed. */
+async function verifyDeletedCase(h, ctx, results, allowed) {
+  const bad = refusals(results, allowed);
+  const del = results.find((r) => r.name === "delete");
+  if (del.outcome && !lockLost(del)) bad.push(`deletion refused: ${del.outcome}`);
+  const s = (
+    await h.q(
+      `select k.kind, k.status,
+              (select count(*)::int from private.case_entries e where e.case_id = k.id
+                 and e.kind in ('note', 'answer') and e.body is distinct from private.erased_case_text()) as kept,
+              (select count(*)::int from private.case_entries e where e.case_id = k.id and e.kind = 'answer') as answers,
+              (select count(*)::int from private.case_entries e where e.case_id = k.id and e.kind = 'assigned') as assigned,
+              k.summary is null or k.summary = private.erased_case_text() as summary_gone
+         from private.cases k where k.id = $1`,
+      [ctx.kase],
+    )
+  ).rows[0];
+  if (!del.outcome) {
+    if (s.kept !== 0 || !s.summary_gone) bad.push(`${s.kept} texts kept after the deletion`);
+    if (s.kind === "contact" && s.status !== "closed") bad.push(`the contact is ${s.status}`);
+  }
+  const answer = results.find((r) => r.name === "answer");
+  if (answer && s.answers !== (answer.outcome ? 0 : 1))
+    bad.push(`${s.answers} answers, answer ${answer.outcome || "ok"}`);
+  const assign = results.find((r) => r.name === "assign");
+  if (assign && s.assigned !== (assign.outcome ? 0 : 1))
+    bad.push(`${s.assigned} assignments, assign ${assign.outcome || "ok"}`);
+  return bad;
+}
+/** The deletion holds the account row and waits at the profile, which this session holds. */
+const holdProfile = (_h, ctx) => ({
+  hold: { sql: "select 1 from public.profiles where id = $1 for update", args: [ctx.user] },
+  holdMs: 150,
+});
+function deletionTrio(name, setup, actors, verify) {
+  return [
+    { name: `${name} natural`, setup, actors: natural(actors), verify },
+    {
+      name: `${name} forced, deletion under way`,
+      setup,
+      actors: forced(actors, 1),
+      options: holdProfile,
+      verify,
+    },
+    {
+      name: `${name} forced, staff first`,
+      setup,
+      actors: forced(actors, 0),
+      options: holdCase,
+      verify,
+    },
+  ];
+}
+
 const scenarios = [
   ...pair("J1 ops_answer_case vs ops_resolve_complaint", (h) => complaint(h), j1, verifyJ1),
   {
@@ -551,6 +725,19 @@ const scenarios = [
     actors: j8(true),
     verify: (h, ctx, results) => verifyJ8(h, ctx, results, true),
   },
+  ...deletionTrio("J9 delete_my_account vs ops_reopen_case", setupJ9, j9, verifyJ9),
+  ...deletionTrio(
+    "J10 delete_my_account vs ops_answer_case on an open report",
+    (h) => setupJ10(h, "report"),
+    j10,
+    (h, ctx, results) => verifyDeletedCase(h, ctx, results, { answer: ["case_account_deleted"] }),
+  ),
+  ...deletionTrio(
+    "J11 delete_my_account vs ops_assign_case on an open contact",
+    (h) => setupJ10(h, "contact"),
+    j11,
+    (h, ctx, results) => verifyDeletedCase(h, ctx, results, { assign: ["case_closed"] }),
+  ),
 ];
 
 module.exports = {
