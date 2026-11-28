@@ -528,8 +528,9 @@ How the new parts work, in short:
 ## How it was checked
 
 **Wave 9 joined with stage 1 of the rebuild, on a development machine on
-27 November 2026** (lane 16 of `tools/dev/stack.sh`), all run after the last
-change to code; only Markdown changed after the journeys. Not run: anything on
+27 and 28 November 2026** (lane 16 of `tools/dev/stack.sh`; lane 11 for the
+races), all run again on 28 November after the fixes of the outside checks,
+after the last change to code; only Markdown changed after the journeys. Not run: anything on
 the hosted project, against real Sentry, on Vercel or on a phone.
 
 - **Three outside checks of the join** (the whole tree, security, and a
@@ -564,26 +565,32 @@ the hosted project, against real Sentry, on Vercel or on a phone.
   and two native journeys of wave 9 find things through the helpers, by
   role, name or test id. The global error page draws the website's lockup
   and theme colour.
-- **Lint and types**: no lint errors (192 warnings and 257 notes, of kinds
+- **Lint and types**: no lint errors (193 warnings and 257 notes, of kinds
   already there); no type errors in the 20 typecheck tasks.
-- **Unit tests**: 1930 pass in 16 packages, without a database.
+- **Unit tests**: 1931 pass in 16 packages, without a database.
 - **Database tests**: 49 files pass on PostgreSQL 16 (47 migrations), with
   the stack down.
 - **API contract tests**: 246 tests in 43 files (38 contract files) pass,
   twice in a row on the same database.
-- **Browser journeys**: all 35 ran in one run with the tracker off; 34 passed.
-  `system-health` stopped once at its data step («the seed has a document
-  Hacienda accepted», before any screen of its own), then passed alone.
-  `node tools/e2e/selectors.mjs --check` and `node tools/e2e/check-words.cjs`
-  pass with no ceiling raised; `touch-targets.cjs`: no control under 44 px;
+- **Browser journeys**: all 35 passed in one run with the tracker off (on
+  27 November, before the fixes, `system-health` had stopped once at its
+  data step and then passed alone). Breaking the case page's width fix or
+  the return card's words on purpose made `support-cases` and `followups`
+  fail. `node tools/e2e/selectors.mjs --check` and `node tools/e2e/check-words.cjs`
+  pass with no ceiling raised; `touch-targets.cjs`, now also over wave 9's
+  pages: no control under 44 px;
   `compare.mjs`: every row has its pair.
 - **Native journeys**: all 19 pass through the web export; the native
   guards and the test-id lists pass.
 - **Error reports with the stand-in tracker**: `error-reports` passed once with
   `ERROR_TRACKER=standin`: 5 or 6 reports from each website and 3 from the
   support desk pages, 27 envelopes in all, none carrying a forbidden word.
-- **Races**: not run again. The only SQL change of the join is the decision
-  number in two comments of `084700`.
+- **Races**: family J at 30 rounds on a freshly reset lane 11 after the last
+  change to SQL (the fixes in `084700`): 27 rows, 0 wrong rounds, 0 lock
+  errors, 0 timeouts, the new J8 included; without the fix J8a and J8b were
+  wrong in 10 of 10 rounds. `tools/races/faithful-copies.cjs` prints the
+  same for the three migrations as before the fix. Families A to I were not
+  run again (their SQL did not change since part 1 ran them).
 
 **Wave 9, on a development machine on 27 November 2026**, after the four
 streams were merged, their cross-stream work done and the five findings of
