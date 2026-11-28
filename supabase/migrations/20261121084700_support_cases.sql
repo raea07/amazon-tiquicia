@@ -397,8 +397,17 @@ $$;
 -- advisory lock per writer in case_text_allowed), so the lock-out and the
 -- allowance hold however many calls arrive at once.
 
--- Decimal digits of other scripts, '0' to '9' of each (NFKC already turns
--- full-width, mathematical, circled and superscript digits into 0-9).
+-- Every decimal digit of Unicode other than 0-9 (general category Nd), '0'
+-- to '9' of each script: each entry is the first of ten consecutive code
+-- points whose digit values are 0 to 9 (67 scripts, Unicode 15.1.0). The
+-- list is generated, not written by hand (a hand list of 37 missed Brahmi,
+-- Adlam, Chakma, Sharada and others outside the basic plane); to renew it
+-- for a newer Unicode, run and paste:
+--   python3 -c "import unicodedata as u; print(', '.join(\"x'%04X'::int\" % c
+--     for c in range(0x80, 0x110000) if u.category(chr(c)) == 'Nd' and u.digit(chr(c)) == 0
+--     and all(u.category(chr(c + d)) == 'Nd' and u.digit(chr(c + d)) == d for d in range(10))))"
+-- (NFKC already turns full-width, mathematical, circled and superscript
+-- digits into 0-9; those entries do no harm.)
 create or replace function private.foreign_digits() returns text
 language sql immutable
 set search_path = ''
@@ -411,7 +420,12 @@ as $$
     x'17E0'::int, x'1810'::int, x'1946'::int, x'19D0'::int, x'1A80'::int, x'1A90'::int,
     x'1B50'::int, x'1BB0'::int, x'1C40'::int, x'1C50'::int, x'A620'::int, x'A8D0'::int,
     x'A900'::int, x'A9D0'::int, x'A9F0'::int, x'AA50'::int, x'ABF0'::int, x'FF10'::int,
-    x'104A0'::int]) z
+    x'104A0'::int, x'10D30'::int, x'11066'::int, x'110F0'::int, x'11136'::int, x'111D0'::int,
+    x'112F0'::int, x'11450'::int, x'114D0'::int, x'11650'::int, x'116C0'::int, x'11730'::int,
+    x'118E0'::int, x'11950'::int, x'11C50'::int, x'11D50'::int, x'11DA0'::int, x'11F50'::int,
+    x'16A60'::int, x'16AC0'::int, x'16B50'::int, x'1D7CE'::int, x'1D7D8'::int, x'1D7E2'::int,
+    x'1D7EC'::int, x'1D7F6'::int, x'1E140'::int, x'1E2F0'::int, x'1E4F0'::int, x'1E950'::int,
+    x'1FBF0'::int]) z
   cross join generate_series(0, 9) d;
 $$;
 
@@ -427,7 +441,7 @@ declare
   v text := coalesce(p_text, '');
 begin
   v := normalize(v, NFKC);
-  v := translate(v, private.foreign_digits(), repeat('0123456789', 37));
+  v := translate(v, private.foreign_digits(), repeat('0123456789', char_length(private.foreign_digits()) / 10));
   return regexp_replace(v,
     '[­͏؜ᅟᅠ឴឵᠋-᠏​-‏‪-‮⁠-⁯ㅤ︀-️﻿ﾠ̀-ͯ᪰-᫿⃐-⃿]',
     '', 'g');

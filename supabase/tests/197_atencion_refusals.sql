@@ -191,6 +191,31 @@ begin
            and private.mask_shopper_codes('Mi código: ' || v_text || '.', null, v_user) like '%••••%',
       format('%s reaches staff masked: %s', v_text, private.mask_shopper_codes('Mi código: ' || v_text || '.', null, v_user));
   end loop;
+  -- The live code written in the decimal digits of other scripts, those
+  -- outside the basic plane among them: the guard reads it and the mask
+  -- covers it. Each entry is the script's digit zero.
+  declare
+    v_script text;
+    v_zero int;
+    v_code text;
+    v_masked text;
+  begin
+    for v_script, v_zero in values
+      ('Arabic-Indic', x'0660'::int), ('Devanagari', x'0966'::int), ('Thai', x'0E50'::int),
+      ('Tibetan', x'0F20'::int), ('Myanmar', x'1040'::int), ('Khmer', x'17E0'::int),
+      ('Mongolian', x'1810'::int), ('Osmanya', x'104A0'::int), ('Brahmi', x'11066'::int),
+      ('Chakma', x'11136'::int), ('Sharada', x'111D0'::int), ('Newa', x'11450'::int),
+      ('Tirhuta', x'114D0'::int), ('Modi', x'11650'::int), ('Takri', x'116C0'::int),
+      ('Ahom', x'11730'::int), ('Mro', x'16A60'::int), ('Pahawh Hmong', x'16B50'::int),
+      ('Adlam', x'1E950'::int), ('Nag Mundari', x'1E4F0'::int) loop
+      v_code := chr(v_zero + 6) || chr(v_zero + 2) || chr(v_zero + 8) || chr(v_zero + 4);
+      assert '6284' = any (private.case_text_numbers('Su código es ' || v_code || '.')),
+        format('the guard reads the code in %s digits', v_script);
+      v_masked := private.mask_shopper_codes('Mi código: ' || v_code || '.', null, v_user);
+      assert v_masked = 'Mi código: ••••.', format('the mask covers the code in %s digits: %s', v_script, v_masked);
+    end loop;
+    assert char_length(private.foreign_digits()) = 670, 'every Nd digit outside 0-9 (Unicode 15.1)';
+  end;
   -- Other numbers stay as written.
   assert private.mask_shopper_codes('Pedido 1234, tel. 8888-1234, del 6 al 28 de abril.', null, v_user)
          = 'Pedido 1234, tel. 8888-1234, del 6 al 28 de abril.', 'nothing else is masked';
