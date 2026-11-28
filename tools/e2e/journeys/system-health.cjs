@@ -79,8 +79,7 @@ function sql(statement) {
     isMobile: true,
     hasTouch: true,
   };
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - 390);
   async function signIn(email, path, options = desktop) {
     const page = await (await browser.newContext(options)).newPage();
     watch(page);

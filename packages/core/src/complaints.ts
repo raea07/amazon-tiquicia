@@ -94,6 +94,20 @@ export const MY_CASE_KIND: Record<string, string> = {
 };
 
 /**
+ * What the shopper's case card promises by its due day (answer_due_on, the
+ * case's resolution day), the day already formatted. Only a complaint's due
+ * day is the day of an answer (the written answer); a return or a contact is
+ * resolved by then and a report reviewed, while their first answer comes
+ * sooner (a return's in 2 working hours, as the order's page says), so they
+ * never say «le respondemos» for that later day.
+ */
+export function myCaseDueText(kind: string, day: string): string {
+  if (kind === "complaint") return `le respondemos a más tardar el ${day}`;
+  if (kind === "report") return `lo revisamos a más tardar el ${day}`;
+  return `lo resolvemos a más tardar el ${day}`;
+}
+
+/**
  * Where a shopper's case stands, in words (never colour alone): the «cases»
  * words of status-words.ts (decision 59), «En revisión» once it has an answer.
  */

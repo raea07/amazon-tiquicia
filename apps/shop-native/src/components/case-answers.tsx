@@ -1,4 +1,4 @@
-import { MY_CASE_KIND, myCaseStatusWord } from "@yuntera/core";
+import { MY_CASE_KIND, myCaseDueText, myCaseStatusWord } from "@yuntera/core";
 import type { MyCase } from "@yuntera/db";
 import { colors, radius, space } from "@yuntera/expo-kit/theme";
 import { Badge, Card, formatDate, formatDateTime, Stack, Text } from "@yuntera/expo-kit/ui";
@@ -25,7 +25,7 @@ export function CaseAnswers({ cases, showOrder }: { cases: MyCase[]; showOrder: 
               Desde el {formatDate(item.created_at, { day: "numeric", month: "long" })}
               {showOrder && item.order_number ? ` · pedido ${item.order_number}` : ""}
               {item.status === "open"
-                ? ` · le respondemos a más tardar el ${formatDate(item.answer_due_on)}`
+                ? ` · ${myCaseDueText(item.kind, formatDate(item.answer_due_on))}`
                 : ""}
             </Text>
             {item.answers.length === 0 ? (

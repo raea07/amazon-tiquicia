@@ -207,7 +207,7 @@ export function SavedReplyForm({ reply }: { reply?: SavedReply }) {
 
 export function DeleteReplyForm({ replyId }: { replyId: string }) {
   return (
-    <ActionForm action={deleteReply} submit="Eliminar" variant="ghost" size="sm" hideOnSuccess>
+    <ActionForm action={deleteReply} submit="Eliminar" variant="ghost" hideOnSuccess>
       <input type="hidden" name="replyId" value={replyId} />
     </ActionForm>
   );

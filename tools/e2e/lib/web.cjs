@@ -1164,6 +1164,10 @@ async function sendComplaint(page) {
   return text(filed);
 }
 
+/** The «Ver sus consultas» link shown once a complaint is filed (for its size). */
+const myCasesLinkAfterFiling = (page) =>
+  link(testid(main(page), "complaint-filed"), "Ver sus consultas");
+
 /** Opens «Sus consultas» in the account. */
 const openMyCases = (page) => open(page, "/cuenta/casos");
 
@@ -1193,6 +1197,7 @@ Object.assign(module.exports, {
   complaintPromise,
   fillComplaint,
   sendComplaint,
+  myCasesLinkAfterFiling,
   openMyCases,
   orderCasesText,
   openCategory,

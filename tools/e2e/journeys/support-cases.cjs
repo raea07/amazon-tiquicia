@@ -71,8 +71,9 @@ function sql(statement) {
       hasTouch: true,
       locale: "es-CR",
     });
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  // Measured against the screen's 390 px, not innerWidth: in a phone context
+  // a page that is too wide widens the layout viewport, and innerWidth with it.
+  const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - 390);
   const fits = async (page, what) =>
     check((await overflow(page)) <= 0, `${what} fits 390 px without sideways scrolling`);
 
@@ -117,7 +118,9 @@ function sql(statement) {
   );
   await web.fillComplaint(shopper, {
     category: "delivery",
-    description: "El paquete llegó con la caja abierta y faltaba el cargador.",
+    // A long unbroken word: the case page must still fit 390 px.
+    description:
+      "El paquete llegó con la caja abierta y faltaba el cargador. Supercalifragilisticoespialidosoextraordinariamentelargo.",
   });
   await fits(shopper, "the complaint form");
   await shopper.screenshot({ path: SHOTS + "/sc1-complaint-form.png", fullPage: true });
@@ -129,6 +132,11 @@ function sql(statement) {
     filedText.includes("Este mensaje es la confirmación") &&
       (filedText.match(/a más tardar el/g) ?? []).length === 1,
     "the message is the acknowledgement, with the date of the written answer",
+  );
+  const casesLink = await web.myCasesLinkAfterFiling(shopper).boundingBox();
+  check(
+    casesLink && casesLink.height >= 44,
+    `«Ver sus consultas» is at least 44 px tall (${casesLink?.height})`,
   );
   await shopper.screenshot({ path: SHOTS + "/sc2-complaint-filed.png", fullPage: true });
   const caseId =
@@ -181,7 +189,7 @@ function sql(statement) {
   check(prefilled.startsWith("Gracias por escribirnos."), "a saved answer fills the answer");
   await ops.typeCaseAnswer(
     support,
-    "Lamentamos lo de la caja. Le enviamos el cargador que faltaba el lunes, sin costo.",
+    "Lamentamos lo de la caja. Le enviamos el cargador que faltaba el lunes, sin costo. https://yuntera.example/ayuda/envios/cargadores-que-faltaron/en-una-caja-abierta/sin-espacios",
   );
   // Closed, the page redraws without the answer form: the timeline says it.
   await ops.answerAndCloseCase(support);

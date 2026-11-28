@@ -496,7 +496,9 @@ async function verifyJ8(h, ctx, results, withCode) {
   const nulls = results.filter((r) => !r.outcome && r.row && !r.row.id).length;
   if (s.contacts !== kept) bad.push(`${s.contacts} contacts recorded, ${kept} answered with an id`);
   if (withCode && (kept !== 0 || nulls !== s.refusals))
-    bad.push(`${kept} contacts with the code kept, ${nulls} refused against ${s.refusals} on the trail`);
+    bad.push(
+      `${kept} contacts with the code kept, ${nulls} refused against ${s.refusals} on the trail`,
+    );
   if (!withCode && kept * 5 !== s.numbers)
     bad.push(`${kept} contacts kept but ${s.numbers} numbers counted`);
   return bad;

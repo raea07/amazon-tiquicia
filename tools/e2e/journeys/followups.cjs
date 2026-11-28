@@ -145,6 +145,17 @@ async function as(email) {
     /Devolución por producto dañado/.test(before) && !/Reclamo por/.test(before),
     "the request is named «Devolución por producto dañado»",
   );
+  // The return's case on the same page gives the day it is resolved by, and
+  // never a second answer time beside the line's «2 horas hábiles».
+  const cases = await web.orderCasesText(a);
+  const card =
+    /Devolución [0-9A-F]{8}.*?(?= (?:Reclamo|Devolución|Reporte|Consulta) [0-9A-F]{8}|$)/.exec(
+      cases,
+    )?.[0] ?? "";
+  check(
+    card.includes("lo resolvemos a más tardar el") && !card.includes("respondemos"),
+    `the return's case says when it is resolved, not a second answer time (${card})`,
+  );
   const opener = web.withdrawOpener(a, title);
   const box = await opener.boundingBox();
   check(box && box.height >= 44, `the withdraw opener is at least 44 px tall (${box?.height})`);

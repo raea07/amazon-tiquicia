@@ -7,6 +7,7 @@ import {
   COMPLAINT_DESCRIPTION_MIN,
   checkComplaint,
   complaintFiledText,
+  myCaseDueText,
   myCaseStatusWord,
 } from "./complaints";
 
@@ -83,6 +84,23 @@ describe("complaintFiledText", () => {
     expect(text).toContain("a más tardar el lunes 7 de diciembre");
     // No second confirmation is promised.
     expect(text.match(/a más tardar/g)).toHaveLength(1);
+  });
+});
+
+describe("myCaseDueText", () => {
+  it("promises an answer by the due day only for a complaint", () => {
+    expect(myCaseDueText("complaint", "2 de diciembre")).toBe(
+      "le respondemos a más tardar el 2 de diciembre",
+    );
+    for (const kind of ["return", "contact", "report", "other"]) {
+      expect(myCaseDueText(kind, "2 de diciembre")).not.toContain("respondemos");
+    }
+    expect(myCaseDueText("return", "2 de diciembre")).toBe(
+      "lo resolvemos a más tardar el 2 de diciembre",
+    );
+    expect(myCaseDueText("report", "2 de diciembre")).toBe(
+      "lo revisamos a más tardar el 2 de diciembre",
+    );
   });
 });
 

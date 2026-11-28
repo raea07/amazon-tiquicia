@@ -69,8 +69,8 @@ async function Case({ params }: Pick<PageProps<"/casos/[id]">, "params">) {
   const left = timeLeft(item, now);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
-      <div className="flex flex-col gap-8">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="flex min-w-0 flex-col gap-8">
         <header>
           <p className="text-sm text-ink-muted">
             <Link href="/casos" className={touchLinkClass()}>
@@ -127,7 +127,7 @@ async function Case({ params }: Pick<PageProps<"/casos/[id]">, "params">) {
               </p>
             ) : null}
             {item.request.text ? (
-              <p className="mt-2 whitespace-pre-line break-words rounded-md bg-surface-muted p-3">
+              <p className="mt-2 whitespace-pre-line wrap-anywhere rounded-md bg-surface-muted p-3">
                 {item.request.text}
               </p>
             ) : (
@@ -169,7 +169,7 @@ async function Case({ params }: Pick<PageProps<"/casos/[id]">, "params">) {
                 </p>
                 {entry.body && (entry.kind === "note" || entry.kind === "answer") ? (
                   <p
-                    className={`mt-1 whitespace-pre-line break-words rounded-md p-3 ${
+                    className={`mt-1 whitespace-pre-line wrap-anywhere rounded-md p-3 ${
                       entry.kind === "note" ? "bg-surface-muted" : "border border-border bg-surface"
                     }`}
                   >

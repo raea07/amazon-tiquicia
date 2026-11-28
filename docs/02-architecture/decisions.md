@@ -70,7 +70,7 @@ its own entry, not something that happens by drift.
 | 61  | [The delivery code never reaches staff through the support desk, in either direction](#61-the-delivery-code-never-reaches-staff-through-the-support-desk-in-either-direction)                                              | Built; not on the preview yet            |
 | 62  | [Case targets live only in the database; the shopper's words follow them by a test](#62-case-targets-live-only-in-the-database-the-shoppers-words-follow-them-by-a-test)                                                   | Built; not on the preview yet            |
 | 63  | [An answer reaches the shopper in their account; a message only says it is there](#63-an-answer-reaches-the-shopper-in-their-account-a-message-only-says-it-is-there)                                                      | Built; not on the preview yet            |
-| 64  | [health_ping answers nothing but ok](#64-healthping-answers-nothing-but-ok)                                                                                                                                                | Built; not on the preview yet            |
+| 64  | [health_ping answers nothing but ok](#64-health_ping-answers-nothing-but-ok)                                                                                                                                               | Built; not on the preview yet            |
 | 65  | [A parcel stopped before it left has its own reason and its own words](#65-a-parcel-stopped-before-it-left-has-its-own-reason-and-its-own-words)                                                                           | Built; not on the preview yet            |
 | 66  | [A cart line of a product the caller may not see is its id alone](#66-a-cart-line-of-a-product-the-caller-may-not-see-is-its-id-alone)                                                                                     | Built; not on the preview yet            |
 | 67  | [One build commit with one rule, given at deploy time](#67-one-build-commit-with-one-rule-given-at-deploy-time)                                                                                                            | Built; not on the preview yet            |
@@ -2197,10 +2197,25 @@ test every code without a trace.) Finding a code therefore needs either
 refusals, three an hour, or accepted texts, twenty numbers an hour (an
 estimate of about 250 hours of writing on average for one code). A code
 written as half of a phone number or in words passes the guard. A
-shopper's code is masked also when typed with slashes, underscores or gaps
-of up to three characters, and inside a phone, so a masked phone can
-appear. Old answers kept from before `084700` are masked when staff read
-them.
+shopper's code is masked also when typed with slashes, underscores, line
+breaks or gaps of up to eight characters, and where it begins or ends a
+longer number (a phone with or without its dash), so a masked phone can
+appear. Old answers kept from before `084700` (entries without an author)
+are masked when staff read them.
+
+Since the second outside review of the join with stage 1 (28 November
+2026): a text staff wrote is never masked when staff read it. Masking a
+staff note with the customer's mask had been an oracle: a note of guesses
+written as `0/6/5/7 0/6/5/8 …` passed the guard uncounted, and the case
+page then showed `••••` exactly where a guess was a live code (all three
+live codes of one customer in 40 notes and 8 seconds, with nothing on
+Auditoría). The guard now joins digits across the same gaps the mask
+reads (one to three characters that are neither a letter nor a digit), so
+such a note is refused or counted; and `private.case_text_allowed` takes
+an advisory lock per writer, so ten parallel calls of one writer no
+longer pass the lock-out (they had left 5 refusals) or the allowance (50
+numbers). A date such as 27/11/2026 or a time such as 10:30 now counts
+its four-digit numbers against the allowance.
 
 **Not verified.** Not tried against a determined person on the hosted
 project.

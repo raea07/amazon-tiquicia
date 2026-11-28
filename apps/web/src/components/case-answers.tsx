@@ -1,4 +1,4 @@
-import { MY_CASE_KIND, myCaseStatusWord } from "@yuntera/core";
+import { MY_CASE_KIND, myCaseDueText, myCaseStatusWord } from "@yuntera/core";
 import type { MyCase } from "@yuntera/db";
 import { Badge, formatDate, formatDateTime } from "@yuntera/ui";
 import type { Route } from "next";
@@ -39,7 +39,7 @@ export function CaseAnswers({ cases, showOrder }: { cases: MyCase[]; showOrder: 
               </>
             ) : null}
             {item.status === "open"
-              ? ` · le respondemos a más tardar el ${formatDate(item.answer_due_on)}`
+              ? ` · ${myCaseDueText(item.kind, formatDate(item.answer_due_on))}`
               : ""}
           </p>
           {item.answers.length === 0 ? (

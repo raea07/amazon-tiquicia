@@ -2,7 +2,7 @@
 
 import { COMPLAINT_CATEGORIES, COMPLAINT_DESCRIPTION_MAX } from "@yuntera/core";
 import { type ActionState, FormMessage, SubmitButton } from "@yuntera/next-kit/client";
-import { SelectField, TextAreaField, TextField } from "@yuntera/ui";
+import { SelectField, TextAreaField, TextField, touchLinkClass } from "@yuntera/ui";
 import Link from "next/link";
 import { useActionState } from "react";
 import { fileComplaint } from "@/app/complaint-actions";
@@ -17,7 +17,7 @@ export function ComplaintForm({ orderNumber }: { orderNumber: string | null }) {
       <div className="flex flex-col gap-4" data-testid="complaint-filed">
         <FormMessage state={state} />
         <p className="text-sm">
-          <Link href="/cuenta/casos" className="font-semibold text-link underline">
+          <Link href="/cuenta/casos" className={touchLinkClass("font-semibold")}>
             Ver sus consultas
           </Link>
         </p>

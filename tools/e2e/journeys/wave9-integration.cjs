@@ -82,7 +82,7 @@ const PAGES = ["/casos", "/casos/respuestas", "/casos/informe", "/clientes", "/s
   };
   const fits = async (page, what) =>
     check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0,
+      (await page.evaluate(() => document.documentElement.scrollWidth - 390)) <= 0,
       `${what} fits 390 px without sideways scrolling`,
     );
 

@@ -8,10 +8,13 @@
 //
 // Pages are read signed in as the demo account of each app. Since the wave 8
 // follow-ups it also reads a category page of the shop (its breadcrumb) and a
-// refunded order in the console ("Ver en Cobros"). The seed has no refunded
+// refunded order in the console ("Ver en Cobros"), and since wave 9 the
+// complaint form, «Sus consultas», Casos with a case, its saved answers and
+// monthly report, and Salud del sistema. The seed has no refunded
 // order: when the console lists none, the script makes one first, as the
 // demo shopper comprador3 through the API (a card order paid in the
-// simulation and cancelled at once), and says so.
+// simulation and cancelled at once), and says so. Likewise, when Casos lists
+// no case, it files a complaint as comprador3 first.
 
 const { chromium, request } = require("playwright");
 
@@ -61,6 +64,26 @@ async function refundedOrder() {
   }
 }
 
+/** A case for Casos to show, filed as comprador3 through the API when Casos lists none. */
+async function aCase() {
+  const ctx = await request.newContext();
+  try {
+    const token = await ctx.post(`${API}/auth/v1/token?grant_type=password`, {
+      headers: { apikey: KEY },
+      data: { email: "comprador3@yuntera.example", password: PASSWORD },
+    });
+    const { access_token } = await token.json();
+    const r = await ctx.post(`${API}/rest/v1/rpc/file_complaint`, {
+      headers: { apikey: KEY, authorization: `Bearer ${access_token}` },
+      data: { p_category: "other", p_description: "Consulta de prueba para medir los controles." },
+    });
+    if (r.status() >= 400) throw new Error(`file_complaint: ${r.status()} ${await r.text()}`);
+    console.log("Filed a complaint for Casos to list.");
+  } finally {
+    await ctx.dispose();
+  }
+}
+
 const APPS = [
   {
     base: WEB,
@@ -77,6 +100,8 @@ const APPS = [
       "/cuenta/notificaciones",
       "/pedidos",
       "#first-order",
+      "/reclamo",
+      "/cuenta/casos",
     ],
   },
   {
@@ -106,6 +131,11 @@ const APPS = [
       "/despacho",
       "/operacion/cierres",
       "/pagos-vendedores",
+      "/casos",
+      "#first-case",
+      "/casos/respuestas",
+      "/casos/informe",
+      "/salud",
     ],
   },
   {
@@ -174,6 +204,7 @@ function small() {
         const pattern = {
           "#first-order": /\/pedidos\/YT-/,
           "#refunded-order": /\/pedidos\/YT-/,
+          "#first-case": /\/casos\/[0-9a-f-]{36}/,
           "#first-location": /\/bodega\/ubicacion\?codigo=/,
           "#first-stop": /\/ruta\/[0-9a-f-]{36}/,
         }[path];
@@ -185,10 +216,16 @@ function small() {
           await page.reload({ waitUntil: "networkidle" });
           hrefs = await links();
         }
+        if (path === "#first-case" && !hrefs.some((h) => pattern.test(h ?? ""))) {
+          await aCase();
+          await page.reload({ waitUntil: "networkidle" });
+          hrefs = await links();
+        }
         const wanted = path;
         path = hrefs.find((h) => pattern.test(h ?? "")) ?? "";
         if (!path) {
           if (wanted === "#refunded-order") found.push(`${app.base} | no refunded order listed`);
+          if (wanted === "#first-case") found.push(`${app.base} | no case listed in Casos`);
           continue;
         }
       }

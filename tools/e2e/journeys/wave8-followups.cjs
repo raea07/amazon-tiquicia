@@ -91,8 +91,7 @@ async function as(email) {
       hasTouch: true,
       locale: "es-CR",
     });
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - 390);
   const height = async (locator) => (await locator.first().boundingBox())?.height ?? 0;
 
   const buyer = await as(SHOPPER);
