@@ -2003,6 +2003,15 @@ and no address is set. Behaviour on Vercel was not checked. Whether the
 free plan's limits hold at pilot volume is an estimate. The phone apps wait
 for store version 0.2.0; source maps are not uploaded.
 
+**Set up on 28 November 2026** for the four test websites: four projects, an
+e-mail alert and an uptime check of `health_ping`, with the websites
+deployed again with their addresses (the runbook's Sentry record). Each
+project also has a rule that removes the location from every event:
+Sentry works out a country, a region and sometimes a city from the network
+address a report arrives from, and stores them even with IP addresses not
+stored, which the first test showed. The rule is required for every future
+project, production included.
+
 ## 58. The look is Carreta, added beside today's names and switched app by app
 
 **Context.** The apps use the look of the first brand book. On 24 and

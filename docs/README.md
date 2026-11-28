@@ -11,7 +11,7 @@ web app for drivers and the warehouse, and the four native apps are built and
 tested on a development machine, with payments and electronic invoices
 running only against local fakes. A hosted preview exists: a Supabase
 project with all 47 migrations and the four web apps on Vercel behind a
-login (running `4e2ac0f` since 28 November 2026, error reports off), with payments simulated, no worker deployed and nothing sent, charged
+login (running `e7e8cd1` since 28 November 2026, with error reports to Sentry on), with payments simulated, no worker deployed and nothing sent, charged
 or invoiced. Nothing has run against the real payment gateway, Hacienda or a
 messaging provider, and no app has run on a phone. The shopper app's first
 builds are in Google Play's internal testing and in App Store Connect, and

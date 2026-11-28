@@ -2414,8 +2414,10 @@ real.
 ### Migrations 084700, 084800 and 085000 (wave 9)
 
 Three migrations of wave 9, merged on 27 November 2026 and **applied to the
-hosted preview on 28 November 2026** (it now has 47; its four web apps run
-`4e2ac0f`; what was done is in the next section). This section was written
+hosted preview on 28 November 2026** (it now has 47; its four web apps were
+deployed from `4e2ac0f` with error reports off, then deployed again from
+`e7e8cd1` with error reports on the same morning; what was done is in the
+next section and the Sentry block after it). This section was written
 before anyone applied them; the corrections that applying them brought are
 marked "(on the preview: …)". Apply them in filename order, in one sitting,
 then deploy the four web apps.
@@ -2560,7 +2562,9 @@ Do this in order.
    Versiones panel says the address is missing). `YUNTERA_BUILD_COMMIT` is
    passed by the deploy command (section 7), not stored.
    `NEXT_PUBLIC_SENTRY_DSN` per website **only once the Sentry projects
-   exist** (the block below); without it the websites report nothing.
+   exist** (the block below); without it the websites report nothing. (On
+   the preview: set after this deploy, on 28 November 2026, with a second
+   deploy.)
 7. **Deploy the four web apps** from the merged commit with the command of
    section 7.
 8. **Check afterwards**: in the console, Salud del sistema shows each line
@@ -2585,7 +2589,9 @@ by the owner of `ops_system_health` (seven jobs with their last runs),
 console's Versiones). **Still not verified there:** the Versiones row of the
 other three websites while they sit behind the Vercel login, a staff role
 other than administrator (the preview has one staff account; the SQL suites
-prove the roles), anything on a phone, and real Sentry.
+prove the roles), and anything on a phone. Real Sentry was set up after
+this round, the same morning (the Sentry block below), with what it did not
+verify listed there.
 
 ### What was done on the preview, 28 November 2026
 
@@ -2793,28 +2799,104 @@ check it straight after; set `YUNTERA_SELLER_URL` and `YUNTERA_FIELD_URL`
 before the deploy. Once the websites are public, Versiones reads all four
 commits.
 
-#### Later, by the owner's supervisor: the Sentry account
+#### The Sentry account, 28 November 2026
 
-From [error tracking](error-tracking.md#what-the-supervisor-creates-in-sentry);
-nothing of it is done yet.
+What was done, by the supervisor only, from 07:40 to 08:40 UTC, through
+Sentry's API and Vercel's API, under owner decision 57 (D50): the owner's
+existing Sentry account, free plan, only projects whose names start with
+`yuntera`, personal data removed, alerts by e-mail. The steps and their
+settings are in [error tracking](error-tracking.md#what-exists-in-sentry-and-how-to-repeat-it).
 
-1. In the owner's existing Sentry account (free plan), create four projects
-   of platform Next.js: `yuntera-web`, `yuntera-seller`, `yuntera-ops`,
-   `yuntera-field`.
-2. In each, Project Settings → Security & Privacy → Data Scrubbing: keep the
-   default scrubbers on, add the sensitive fields listed in error-tracking.md
-   and switch on "Prevent Storing of IP Addresses" (?).
-3. In each, Inbound Filters (?) → Allowed Domains: that website's own hosts,
-   one by one, never `*.vercel.app`; switch on Spike Protection (?).
-4. In each, an issue alert on a new issue, by e-mail to the owner.
-5. One uptime monitor: POST
-   `https://<project-ref>.supabase.co/rest/v1/rpc/health_ping`, headers
-   `apikey: <publishable key>` and `content-type: application/json`, body
-   `{}`, every 5 minutes; up means HTTP 200 with `{"ok":true}`; an e-mail
-   alert.
-6. Then set `NEXT_PUBLIC_SENTRY_DSN` on each Vercel project (Production and
-   Preview), deploy again with the commit, and check one report arrives.
-   Never give Sentry a protection-bypass secret.
+1. **Projects.** One team, `yuntera`, and four projects, platform Next.js,
+   created without Sentry's default alert: `yuntera-web`, `yuntera-seller`,
+   `yuntera-ops`, `yuntera-field`. Nothing else in the account was changed:
+   no organisation-wide setting, and the account's one other project with
+   its two alerts was left as it was.
+2. **Project settings**, in each of the four (the API's names): the data
+   scrubber on (`dataScrubber`), the default scrubbers on
+   (`dataScrubberDefaults`), the 13 additional sensitive fields
+   (`sensitiveFields`), "Prevent Storing of IP Addresses" on
+   (`scrubIPAddresses`), and Allowed Domains (`allowedDomains`) with that
+   website's production address only: `https://yuntera-web.vercel.app`,
+   `https://yuntera-vende.vercel.app`, `https://yuntera-central.vercel.app`,
+   `https://yuntera-campo.vercel.app`. So a report from a preview
+   deployment's own address is refused; only production deployments are
+   made. Spike protection was already on for the new projects. The screen
+   labels marked (?) in error-tracking.md were still not seen: the API was
+   used.
+3. **Found on the first test and fixed.** Sentry works out a country, a
+   region and sometimes a city from the network address a report arrives
+   from, and stores them on the event, even with "Prevent Storing of IP
+   Addresses" on (its documentation says so: Server-Side Data Scrubbing,
+   "Geographic Information"). Each of the four projects now has an Advanced
+   Data Scrubbing rule: [Remove] [Anything] from [`$user.geo.**`]. On the
+   second test the stored events carry an empty location and Sentry's own
+   note that the project's rule removed it. The first four test events
+   (sent from the build machine, not by a person) keep a United States
+   location; their four issues are resolved. This rule is required for any
+   future project, production included.
+4. **Alert.** Sentry has replaced project "issue alert rules" by Monitors &
+   Alerts (the old rule address of its API answers 404). One alert,
+   "Yuntera: aviso por correo de un problema nuevo": it fires when a problem
+   is seen for the first time or comes back after it was resolved; it sends
+   an e-mail to the problem's suggested assignees and, when there are none,
+   to all active members (the account has one member, the owner); at most
+   once every 30 minutes for one problem; it is connected to the four
+   projects and to the uptime monitor.
+5. **Uptime.** One monitor (the free plan has one; it was unused), in
+   project `yuntera-ops`, "Yuntera: base de datos (health_ping)": POST
+   `https://lfulotisyeyooxecwnox.supabase.co/rest/v1/rpc/health_ping` with
+   the headers `apikey: <the publishable key>` and
+   `content-type: application/json`, body `{}`, every 5 minutes, 10 seconds
+   allowed, down after 3 failed checks in a row and up again after 1 good
+   one (Sentry's defaults). 40 minutes after it was made, Sentry showed 1
+   check, passed, and none failed. Sentry keeps the answer of a failed check
+   (its default); this function answers `{"ok": true}` and nothing else.
+6. **Vercel settings.** `NEXT_PUBLIC_SENTRY_DSN` on each of the four
+   projects, plain, for Production and Preview, never Development, with that
+   project's public address.
+7. **Deploy** (08:28 to 08:31): all four websites from a clean checkout of
+   `e7e8cd1` with the commit flags of section 7 (`e7e8cd1` differs from
+   `4e2ac0f` only in documents and one SQL test), each ready and promoted,
+   built in 22 to 29 s: web `dpl_3iz5oacXsVmUqytSwzBqeu1foX3V`, vende
+   `dpl_GfDHZ2KbaLPrxcinv3b13RdVXULM`, central
+   `dpl_9ekDiaXGJEhxinVYCyEic2Ex3nZG`, campo
+   `dpl_6J4W5jFE56xUHYSWgfKf2PBUnyFP`. The test websites now run `e7e8cd1`
+   with error reports on (before: `4e2ac0f`, off).
+8. **Test**, done twice (08:32 and 08:34): headless Chromium at 390 px opened
+   `/ingresar` on each website through a Protection Bypass for Automation,
+   sent to that website's `vercel.app` host only, and made one error happen
+   in the page ("Prueba de despliegue: aviso de errores en <project>
+   (navegador)").
+   - **Seen in the browser:** each page's Content-Security-Policy
+     `connect-src` holds `'self'` and that project's own ingest address (the
+     seller centre's also holds its photo-upload address), nothing broader;
+     the browser contacted only the website and Sentry's ingest host; one
+     POST to the envelope address per error, answered 200; the bypass header
+     did not go to Sentry.
+   - **Seen in Sentry:** each project holds one problem with 2 events;
+     release `yuntera-web@e7e8cd1b7966` (and `yuntera-seller@…`,
+     `yuntera-ops@…`, `yuntera-field@…`), environment `production`, tag
+     `app` (`web`, `seller`, `ops`, `field`), only the error and the page's
+     address without its query; no user id, e-mail, name or IP address, no
+     request headers, cookies or body, no breadcrumbs, no browser name. The
+     four test problems were then marked resolved.
+   - The bypass secrets were made twice and revoked twice; 0 remain on each
+     project; the four addresses answer `302` to the Vercel login without
+     one.
+9. **Not verified:** an error on the server of a deployed website (no page
+   fails on purpose on a deployment; `/prueba-de-errores` is a 404 there;
+   the server path is proven only on a development machine with the
+   stand-in tracker); that the alert e-mails reached the owner's inbox (the
+   first test should have sent up to four; the owner checks); the uptime
+   alert on a real outage (none was provoked); that Sentry refuses a report
+   from another website or a storm (Allowed Domains and spike protection
+   are set, not attacked); the phone apps (not part of it yet).
+
+**To repeat for production**: the same steps, with the production websites'
+own addresses in Allowed Domains, the location rule in every project, and,
+on a paid plan if wanted, one uptime monitor per public website. Never give
+Sentry a protection-bypass secret.
 
 ## 4. Confirm the database is what the migrations say
 

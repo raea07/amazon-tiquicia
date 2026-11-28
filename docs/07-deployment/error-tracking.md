@@ -5,13 +5,20 @@ Error reports from the four websites (`apps/web`, `apps/seller`, `apps/ops`,
 sent. The owner decided this on 24 November 2026 (decision 57). The phone apps
 are not part of it yet (see the last section).
 
-**State.** Built and tested on this machine only: unit tests, a stand-in
-tracker in the tests, and a browser journey in a lane with the websites built
-to report to a stand-in. The four test websites on Vercel run this code since
-28 November 2026 with no address set: they load no tracker code (checked
-there: no request to any host but their own). No Sentry project exists yet
-and nothing has been sent to Sentry; the supervisor sets it up next. Every
-website is off until its address is set.
+**State.** On since 28 November 2026 on the four test websites on Vercel
+(commit `e7e8cd1`), each reporting to its own Sentry project (below). Tested
+on this machine (unit tests, a stand-in tracker in the tests, and a browser
+journey in a lane with the websites built to report to a stand-in) and on the
+four test websites on 28 November 2026: one error made to happen in each
+website's browser arrived in its project with only the fields below, an empty
+location, and nothing of the person (the record is in the
+[runbook](runbook-first-deploy.md#the-sentry-account-28-november-2026)).
+Not verified: an error on the server of a deployed website (no page fails on
+purpose there; the server path is proven only on this machine with the
+stand-in tracker); that the alert e-mails reach the owner's inbox; the
+uptime alert on a real outage; that Sentry refuses a report from another
+website or a storm (set, not attacked). A website without an address set
+stays off.
 
 Everything lives in one place, `packages/next-kit/src/error-reports/`, which
 the four websites use through three small files each: `src/instrumentation.ts`
@@ -35,6 +42,19 @@ out until someone allows it.
 | The runtime (Node.js version)                                                                                          | Breadcrumbs: clicks, typed text, console lines, visited addresses                                                     |
 |                                                                                                                        | Source lines and local variables of the stack; extra data; every other context; screenshots, session replay, feedback |
 |                                                                                                                        | Performance traces, profiles, sessions, reports about dropped events                                                  |
+|                                                                                                                        | Not stored: the IP address. The location Sentry derives from it is removed by a rule in each project (below)          |
+
+**The location Sentry derives.** Sentry works out a country, a region and
+sometimes a city from the network address a report arrives from, and stores
+them on the event, even with "Prevent Storing of IP Addresses" on (Sentry's
+documentation, Server-Side Data Scrubbing, "Geographic Information"). The
+websites cannot prevent it: the address belongs to the connection, not to the
+report. So each project has an Advanced Data Scrubbing rule that removes it
+(step 3 below). With the rule, a stored event carries an empty location and
+Sentry's own note that the project's rule removed it. This was found on the
+first test of 28 November 2026, before the rule existed: those four test
+events, sent from the build machine and not by a person, keep a United States
+location.
 
 Every string that is kept goes through `redactText`, which replaces:
 e-mail addresses, also as written in an address (`ana%40example.com`); Costa
@@ -71,7 +91,8 @@ above removes it there.
 
 The address is the project's DSN, a public value by design (it says where to
 send, and carries no secret). It is read when the website is **built**, so a
-change needs a new deployment.
+change needs a new deployment. Done for the four test websites on
+28 November 2026.
 
 1. In Sentry, open the website's project: Settings → Projects → `yuntera-web`
    (or `-seller`, `-ops`, `-field`) → Client Keys (DSN). Copy the DSN.
@@ -104,49 +125,84 @@ script, frame or image comes from Sentry, and there is no tunnel route.
 - **Completely:** remove `NEXT_PUBLIC_SENTRY_DSN` from the Vercel project and
   redeploy. The website then loads no tracker code at all.
 
-## What the supervisor creates in Sentry
+## What exists in Sentry, and how to repeat it
 
-Only projects whose names start with `yuntera` (decision 57).
+The supervisor set this up on 28 November 2026 (07:40 to 08:40 UTC) in the
+owner's existing Sentry account, on the free plan, through Sentry's API; the
+API's names are in brackets. Only projects whose names start with `yuntera`
+(decision 57). Nothing else in the account was changed: no
+organisation-wide setting, and the account's one other project and its two
+alerts stay as they were. The screen labels marked (?) were still not seen
+by anyone, because the API was used. For production, repeat every step with
+the production websites' own addresses (step 4).
 
-1. Four projects, platform Next.js: `yuntera-web`, `yuntera-seller`,
-   `yuntera-ops`, `yuntera-field`.
+1. One team, `yuntera`, and four projects, platform Next.js, created without
+   Sentry's default alert: `yuntera-web`, `yuntera-seller`, `yuntera-ops`,
+   `yuntera-field`.
 2. In each project: Project Settings → Security & Privacy → section "DATA
-   SCRUBBING". Keep "Data Scrubber" (?) and "Use Default Scrubbers" (?) on. In
-   "Additional Sensitive Fields" add `email`, `correo`, `phone`, `telefono`,
-   `cedula`, `address`, `direccion`, `senas`, `pin`, `delivery_pin`,
-   `delivery_code`, `password`, `token`. Switch on "Prevent Storing of IP
-   Addresses" (?). (If the organisation has the same settings, they apply on
-   top.) Sentry's documentation names the section and "Additional Sensitive
-   Fields"; the other labels marked (?) were not seen in the account.
-3. In each project: Alerts → an issue alert "a new issue is created" (?) →
-   send an e-mail to the owner.
-4. Required, to protect the shared free quota (5,000 errors a month for all
-   four projects together; the DSN is public, so anyone can post with it):
+   SCRUBBING". "Data Scrubber" (?) on (`dataScrubber`) and "Use Default
+   Scrubbers" (?) on (`dataScrubberDefaults`). In "Additional Sensitive
+   Fields" (`sensitiveFields`) the 13 fields `email`, `correo`, `phone`,
+   `telefono`, `cedula`, `address`, `direccion`, `senas`, `pin`,
+   `delivery_pin`, `delivery_code`, `password`, `token`. "Prevent Storing of
+   IP Addresses" (?) on (`scrubIPAddresses`). These are project settings; if
+   the organisation has the same settings, they apply on top. Sentry's
+   documentation names the section and "Additional Sensitive Fields".
+3. **Required**, in each project: the location rule. In the same section,
+   Advanced Data Scrubbing (?): the rule [Remove] [Anything] from
+   [`$user.geo.**`]. Without it, Sentry stores a country, a region and
+   sometimes a city for every report (see "The location Sentry derives"
+   above). Check it on the first test report: its location is empty, with
+   Sentry's note that the project's rule removed it.
+4. **Required**, to protect the shared free quota (5,000 errors a month for
+   all four projects together; the DSN is public, so anyone can post with
+   it):
    - In each project: Project Settings → Inbound Filters (?) → "Allowed
-     Domains" (?): list that website's own hosts, production and preview,
-     one by one. Do not enter `*.vercel.app`: it would let every website
-     on Vercel through. Sentry then refuses browser reports from any other
-     site.
-     It checks only requests that carry an `Origin` or `Referer` header, so
-     it does not cover a script posting directly.
-   - Settings → Spike Protection (?): switch it on for the four projects
-     ("Enable All" (?)). It cuts a sudden storm from one project.
+     Domains" (?) (`allowedDomains`): that website's production address
+     only. Today `https://yuntera-web.vercel.app` for `yuntera-web`,
+     `https://yuntera-vende.vercel.app` for `yuntera-seller`,
+     `https://yuntera-central.vercel.app` for `yuntera-ops` and
+     `https://yuntera-campo.vercel.app` for `yuntera-field`. Only production
+     deployments are made, so a report from a preview deployment's own
+     address is refused. Do not enter `*.vercel.app`: it would let every
+     website on Vercel through. Sentry then refuses browser reports from any
+     other site. It checks only requests that carry an `Origin` or `Referer`
+     header, so it does not cover a script posting directly.
+   - Spike Protection (?): it cuts a sudden storm from one project. It was
+     already on for the four new projects, so nothing was switched. For a
+     new project, check that it is on.
    - A rate limit per client key (Client Keys (DSN) → Configure) is, by
      Sentry's documentation (read 27 November 2026), only on the Business
      and Enterprise plans, so it is not available on the free plan.
-5. One uptime monitor (the free plan has one): method POST, address
-   `https://<project-ref>.supabase.co/rest/v1/rpc/health_ping`, headers
-   `apikey: <the project's publishable key>` and
-   `content-type: application/json`, body `{}`, every 5 minutes. The
-   publishable key is public by design. `health_ping` is the database's
-   health function (migration `084800`, granted to visitors; it answers
-   `{"ok": true}` and nothing else). Up means HTTP 200 with that body;
-   anything else, or no answer within 10 seconds, is down. Until `084800` is
-   applied on the project, the monitor has nothing to call. Then an alert
-   rule on uptime issues, by e-mail.
-6. Then set each website's DSN as above, and check one report arrives by
-   opening a page and making an error happen (the drill page below exists
-   only on this machine).
+5. One alert, in Sentry's Monitors & Alerts (?). Sentry has replaced the
+   project "issue alert rules" by Monitors & Alerts; the old rule address of
+   its API answers 404. The alert is "Yuntera: aviso por correo de un
+   problema nuevo". It fires when a problem is seen for the first time, or
+   comes back after it was resolved. It sends an e-mail to the problem's
+   suggested assignees and, when there are none, to all active members (the
+   account has one member, the owner). It sends at most once every 30
+   minutes for one problem. It is connected to the four projects and to the
+   uptime monitor; connect a new project to it.
+6. One uptime monitor (the free plan has one), in project `yuntera-ops`:
+   "Yuntera: base de datos (health_ping)". Method POST, address
+   `https://lfulotisyeyooxecwnox.supabase.co/rest/v1/rpc/health_ping`,
+   headers `apikey: <the project's publishable key>` and
+   `content-type: application/json`, body `{}`, every 5 minutes, 10 seconds
+   allowed. It is down after 3 failed checks in a row and up again after 1
+   good one (Sentry's defaults). The publishable key is public by design.
+   `health_ping` is the database's health function (migration `084800`,
+   granted to visitors); it answers `{"ok": true}` and nothing else, so the
+   answer Sentry keeps of a failed check (its default) holds nothing
+   personal. On a new database, the monitor has nothing to call until
+   `084800` is applied.
+7. Then set each website's DSN on its Vercel project (see "Switching it on"),
+   and deploy it again.
+8. Then test each website: open a page, make one error happen in the
+   browser, and check in Sentry that one problem arrived with only the
+   fields above and an empty location. Mark the test problems resolved. The
+   drill page below exists only on this machine; on 28 November 2026 a
+   script made the error happen in the page. Never give Sentry a
+   protection-bypass secret.
 
 **Why the four test websites are not watched from outside.** The preview
 websites sit behind Vercel's sign-in wall (Deployment Protection): an outside

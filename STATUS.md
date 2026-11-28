@@ -32,8 +32,13 @@ deployed with this code (`4e2ac0f`), error reports off.** The suites pass
 there and the browser checks passed; what was done and what differed is in
 the
 [runbook](docs/07-deployment/runbook-first-deploy.md#what-was-done-on-the-preview-28-november-2026).
-No Sentry project exists yet: the supervisor sets it up next, and the
-websites report nothing until then.
+**The same morning the supervisor set up the four Sentry projects, an e-mail
+alert and an uptime check of the database, and deployed the four web apps
+again from `e7e8cd1` with error reports on.** A test error from each
+website's browser arrived in Sentry with nothing of the person; an error on
+a deployed website's server and the alert e-mails reaching you are not
+verified (the
+[runbook](docs/07-deployment/runbook-first-deploy.md#the-sentry-account-28-november-2026)).
 On 28 November 2026 two decisions the owner made on 27 November were built
 into wave 9. D55: the console's order page shows the delivery phone only
 after "Mostrar contacto" with a reason, and Auditoría records every look
@@ -192,19 +197,22 @@ theme colours and the status words, and English is not built.
 Payments and electronic invoices now exist as code, run against local fakes
 of the gateway and of Hacienda: nothing has charged a card, refunded money or
 sent a document to Hacienda, and no message is sent for real (see "Not
-built"). The four websites can report errors to Sentry with personal data
-removed, but no Sentry project exists and no address is set, so they send
-nothing.
+built"). Since 28 November 2026 the four test websites report errors to
+Sentry with personal data removed, one project each, with an e-mail alert;
+an uptime check calls the database every 5 minutes.
 
 ## What needs you
 
 In the order that unblocks the most.
 
 0. **Wave 9 is on the hosted preview.** Migrations `084700`, `084800` and
-   `085000` were applied there on 28 November 2026 and the four web apps run
-   this code (`4e2ac0f`), with error reports off; nothing is needed from you
-   for that. No Sentry project exists yet: the supervisor creates it next,
-   with the steps in the runbook. Your decisions D55 and D56 are built in
+   `085000` were applied there on 28 November 2026. The four web apps run
+   `e7e8cd1` since 08:31 UTC that day, with error reports on; nothing is
+   needed from you for that. **Check your e-mail for Sentry's alerts.** The
+   test of 28 November 2026 should have sent up to four e-mails from Sentry
+   titled with "Prueba de despliegue". If none arrived, tell the
+   supervisor: the alert may need your notification settings in Sentry.
+   Your decisions D55 and D56 are built in
    wave 9 and recorded in
    [`owner-decisions.md`](docs/00-strategy/owner-decisions.md), with D57,
    the order of the rebuild. Someone must answer on Saturday mornings from
@@ -420,7 +428,7 @@ In the order that unblocks the most.
 | Seller centre        | `apps/seller`                                                      | Shop registration, listings with an itemised fee preview, editing a listing (changes to a published one wait for review), prices, stock, stock sent to the warehouse, packing, per-order statements, what is available, pending and on its way to the bank, a request to change the payout account, and the team (invitations that the invited person accepts) and requests to change the shop's name, fiscal details or contact. Selling an existing product of another shop (found by name, brand or barcode, no review), switching variants off and on, taking a listing back to draft, the Tienda page (description and logo, both reviewed), and offers paused below the price floor with the reason and a one-step fix. A photo manager on each listing (resized in the browser, reviewed before they show), the shop's notification settings, an optional second factor. Inventario's "Historial de existencias": every change to the shop's stock, with the warehouse's reason for a count correction (084300)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Internal console     | `apps/ops`                                                         | Daily queues, orders, manual confirmation of transfers, route planning and dispatch, cash settlement, returns and refunds, complaints, content reports, product and listing-edit review, seller verification, staff, drivers, warehouse workers, payout account approvals, payout runs, audit trail, shop-change requests, routes released by a driver who stopped being active, recording a return's goods back, checking in a returned parcel and releasing a locked delivery code. Photo review and take-down, the messages each order produced and the stuck ones with a resend button, staff's second factor (enrolment, the second step at sign-in, an administrator's reset of a colleague's). Offers a fee change paused (`/tarifas`), a listing edit that would pause other shops' offers shown with a confirmation, shops' logos (`/catalogo/logotipos`) and descriptions (`/cambios-tienda`). Catálogo: categories (create, rename with redirect, move, order, hide, delete if unused), brands (create, rename, hide, merge), search synonyms with a preview, review moderation with reasons, and correcting, taking down and putting back a published product (the console's catalogue forms work without JavaScript), and on dispatch a door position outside the country or a closing received late. Order search by name without the name in the address; navigation that folds into a menu on a phone. Operación (084000): delivery zones (create, edit, switch off and on, delete if unused), districts moved between zones or marked not served with a preview of what they touch, holidays, zone closures with an end that can change, warehouse locations, stuck routes (remove a pending stop, close a route) and, for administrators, the operational settings; brands deleted when no product names them (084100); the order page tells a parcel taken off a route from a failed delivery. Wave 7: stopping a packed parcel from the staff order page, with a confirmation that names the order and the money (084200); a single closed day opened again under Cierres; districts that follow their canton's zone again; Operación → Ubicaciones lists the warehouse's moves and count corrections with who made them (084300) |
 | Support desk         | `apps/ops`, `apps/web`, `apps/shop-native`                         | Wave 9, on the preview since 28 November 2026 (`084700`). Casos: every complaint, return request, content report and recorded WhatsApp, phone or e-mail contact is a case with its due times and a clock in words; internal notes, answers with saved answers, assignment, reopening and the monthly report. The customer view shows a customer's contact only with a reason, on the audit trail. Shoppers file a complaint at `/reclamo` (and in the app) and read staff's answers in "Sus consultas".                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| System health        | `apps/ops`, `packages/next-kit`                                    | Wave 9, on the preview since 28 November 2026 (`084800`). Salud del sistema: one line per check for each role, with the page where it is fixed; for administrators the commit of each web app, the newest migration and the phone builds. `health_ping` answers an outside uptime check. The websites' error reports go to Sentry with personal data removed, off until an address is set.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| System health        | `apps/ops`, `packages/next-kit`                                    | Wave 9, on the preview since 28 November 2026 (`084800`). Salud del sistema: one line per check for each role, with the page where it is fixed; for administrators the commit of each web app, the newest migration and the phone builds. `health_ping` answers an outside uptime check (Sentry's, every 5 minutes, since 28 November 2026). The websites' error reports go to Sentry with personal data removed, on for the four test websites since 28 November 2026 (off on a website without an address).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Routes and warehouse | `apps/field`                                                       | Driver: the day's route with each stop's district, navigation links, delivery against the customer's code, cash, failed deliveries, position sharing. Warehouse: pick lists with the scanned code checked by the database, packing, receiving, stock lookup, checking in a returned parcel. A suspended driver sees a plain message and no route. Password reset and account deletion as in the other apps. A stop Central removed reads "Omitida" with what to do with the parcel, and the route's count leaves it out ("0 de 1 entregadas · 1 omitida"). Since wave 7: Bodega → Ubicaciones opens a location by its code and shows what it holds, what open picks wait for and what is free, moves free units to another shelf and corrects a count with a reason; a returned parcel staff stopped reads "Nunca salió de la bodega"; a stop removed before the route started still says not to collect its parcel after the start                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Database             | `supabase/`                                                        | 47 migrations (all 47 on the hosted preview), 104 tables (65 public, 39 private), 309 functions in `public` (287 for signed-in users, 18 of them also open to visitors, 22 server-side only), no table, view or sequence reachable by an app role, two storage buckets with their rules, row-level security on every table as a second lock, double-entry ledger, one register for every refund and one way back for each, stock ledger, the 494 districts of Costa Rica with delivery zones, demo data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Domain logic         | `packages/core`                                                    | Money and IVA, fees, the offer order (one rule shared with the database by a parity test), search ranking, sourcing, delivery promise, routing, risk scoring, seller score, Costa Rican identifiers, IBANs, phones and Plus Codes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -602,7 +610,7 @@ were deployed from `4e2ac0f` with error reports off.
   data that it could not delete.
 - **Still not verified:** anything on a phone; a real payment gateway; the
   phone apps' new screens, which are in no store build; real Sentry (the
-  supervisor sets it up next; the websites report nothing until then); the
+  supervisor set it up after this round; see the next block); the
   staff roles other than administrator, proven only by the SQL suites,
   because the preview has one staff account.
 - **Left on the preview:** YT-102947 (`comprador`) and YT-102948 (a
@@ -613,6 +621,41 @@ were deployed from `4e2ac0f` with error reports off.
   is deployed); two looks at a contact and the two phone builds (shop
   0.1.0 (4), Android and iPhone) on the audit trail. Stock, offers,
   `app_settings` and the ledger's balances are as before.
+
+**Error alerts on the test websites, 28 November 2026** (07:40 to 08:40
+UTC, by the supervisor through Sentry's API and Vercel's API; the steps are
+in the
+[runbook](docs/07-deployment/runbook-first-deploy.md#the-sentry-account-28-november-2026)).
+Four Sentry projects (`yuntera-web`, `yuntera-seller`, `yuntera-ops`,
+`yuntera-field`) with the data scrubber, the 13 sensitive fields, "Prevent
+Storing of IP Addresses" and each website's production address as its only
+allowed domain; one e-mail alert on a new or returning problem; one uptime
+monitor on `health_ping` every 5 minutes. `NEXT_PUBLIC_SENTRY_DSN` set on
+the four Vercel projects, and the four web apps deployed again from
+`e7e8cd1` (08:28 to 08:31); they ran `4e2ac0f` with reports off before.
+
+- **Verified there:** headless Chromium at 390 px made one error happen in
+  the page of `/ingresar` on each website, twice. The page's
+  Content-Security-Policy allows only the website and its own ingest
+  address (the seller centre also its photo uploads); the browser contacted
+  only the website and Sentry; one report per error, answered 200; the
+  bypass header did not reach Sentry. Each project holds one problem with
+  2 events, release `yuntera-<website>@e7e8cd1b7966`, environment
+  `production`, its `app` tag, the error and the page's address without its
+  query, and no user, IP address, headers, cookies, body, breadcrumbs or
+  browser name. The uptime monitor's first check passed. The test problems
+  were marked resolved; the bypass secrets were revoked (0 remain).
+- **Found and fixed:** Sentry derives a country, a region and sometimes a
+  city from the address a report arrives from, even with IP addresses not
+  stored. Each project now has a rule that removes it; the second test's
+  events carry an empty location. The first four test events, sent from
+  the build machine, keep a United States location.
+- **Still not verified:** an error on the server of a deployed website
+  (proven only on a development machine with the stand-in tracker); that
+  the alert e-mails reached your inbox ("What needs you", item 0); the
+  uptime alert on a real outage; that Sentry refuses reports from another
+  website or a storm (set, not attacked); the phone apps (not part of it
+  yet).
 
 **Wave 9 joined with stage 1 of the rebuild, on a development machine on
 27 and 28 November 2026** (lane 16 of `tools/dev/stack.sh`; lane 11 for the
@@ -1344,11 +1387,14 @@ D2 in the decisions and the Android release in the store documents" is done
 - **Error and outage alerts.** Decided on 24 November 2026: Sentry, on the
   free plan of your existing account, with personal data removed
   (decision 57). The four websites' error reports are built and merged in
-  wave 9, off until a Sentry address is set; deployed to the preview with
-  reports off on 28 November 2026. The
-  Sentry account part is not done: no project, alert or uptime check
-  exists. The phone apps get it with store version 0.2.0, because it is a
-  native module.
+  wave 9, off until a Sentry address is set. On 28 November 2026 the
+  Sentry account part was set up for the four test websites: four projects,
+  one e-mail alert and one uptime check of the database, with reports on
+  since the deploy of `e7e8cd1`. Not verified: an error on a deployed
+  website's server, the alert e-mails reaching you, and the uptime alert on
+  a real outage. For production the same steps are repeated with the
+  production addresses. The phone apps get it with store version 0.2.0,
+  because it is a native module.
 
 **Before the pilot with real money**
 
@@ -1385,9 +1431,10 @@ D2 in the decisions and the Android release in the store documents" is done
   built file, not the source line. Checked in Chromium only; the page that
   replaces the whole layout on a failure (`global-error`) only by a unit
   test.
-- **Nothing of wave 9 has run** on the hosted project, against real Sentry,
-  on Vercel or on a phone. It was checked on this machine only (see "How it
-  was checked").
+- **Not run for wave 9:** an error on the server of a deployed website (no
+  page fails on purpose there), a real outage for the uptime alert, and
+  anything on a phone. Wave 9 ran on the hosted preview and against real
+  Sentry on 28 November 2026 (see "How it was checked").
 - **The Régimen Simplificado notice** on the listings of sellers in that
   regime (compliance §3). No screen of the shop reads `sellers.tax_regime`.
   It is needed only if owner decision D27 admits such sellers.
@@ -1633,7 +1680,8 @@ ones worth knowing about:
   inside the staff console; error and outage alerts go through your
   existing Sentry account on its free plan, with personal data and the
   delivery code removed before anything is sent. Both are built and merged
-  in wave 9, on the preview since 28 November 2026 (error reports off); mine while building are in decisions
+  in wave 9, on the preview since 28 November 2026 (error reports on since
+  that morning, set up by the supervisor); mine while building are in decisions
   56, 57 and 61 to 68 (among them: the delivery code never reaches staff in
   either direction, the targets live only in the database, an answer's
   text never travels in a message, `health_ping` answers nothing but "ok",
