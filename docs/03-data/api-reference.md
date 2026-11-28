@@ -592,9 +592,9 @@ where n.nspname = 'public' and p.prokind = 'f'
 order by 1;
 ```
 
-At the time of writing (through 085000): 308 functions, all definer, 18 of
+At the time of writing (through 085000): 309 functions, all definer, 18 of
 them open to visitors (17 the apps and the uptime check call, plus
-`check_request`), 286 callable
+`check_request`), 287 callable
 by signed-in users subject to their own checks, 22 for one server-side role
 only (20 `worker_*` for `service_role`: 10 notifications, 4 payments, 6
 invoicing; the Auth hook for `supabase_auth_admin`), and one

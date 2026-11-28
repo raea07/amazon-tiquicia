@@ -411,7 +411,12 @@ an order's delivery phone this way but not a customer's account contact
 what a call about that delivery needs. Drivers keep the recipient's name
 and phone on their own stops (`driver_today`, the field app and the driver
 app), unchanged, because they need it at the door; the warehouse sees no
-phone.
+phone. One answer still gives staff a shopper's contact without a recorded
+look: `invoice_detail` gives finance (and the seller that issued it) a
+factura's receiver with the e-mail the shopper gave for it. No console or
+seller page shows that e-mail today, but the answer carries it. The factura
+must carry it by law, so it was left as it is; taking it out of the staff
+answer, or behind a look, is a change to the invoicing area of its own.
 
 ### Who sees what: Casos and Salud del sistema
 
