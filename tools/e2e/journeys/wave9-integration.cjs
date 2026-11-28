@@ -24,6 +24,7 @@ const { chromium } = require("playwright");
 const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
 const { word } = require("../lib/words.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error("DATABASE_URL is not set: run through tools/dev/stack.sh e2e");
@@ -81,10 +82,7 @@ const PAGES = ["/casos", "/casos/respuestas", "/casos/informe", "/clientes", "/s
     return page;
   };
   const fits = async (page, what) =>
-    check(
-      (await page.evaluate(() => document.documentElement.scrollWidth - 390)) <= 0,
-      `${what} fits 390 px without sideways scrolling`,
-    );
+    check((await kit.overflowPx(page)) <= 0, `${what} fits 390 px without sideways scrolling`);
 
   // A customer with a case: the shopper's order with a live delivery code,
   // and a complaint in which they typed that code.

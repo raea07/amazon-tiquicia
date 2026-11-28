@@ -6,6 +6,7 @@
 
 const { chromium, request } = require("playwright");
 const field = require("../lib/field.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const BASE = field.BASE;
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -82,10 +83,7 @@ async function pinFor(email, tracking) {
   log("route card:", (await field.todaySummary(page)).slice(0, 170));
   const stops = await field.stopsShown(page);
   log("stops:", stops.count, "| first:", stops.first.slice(0, 150));
-  log(
-    "overflow px:",
-    await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
-  );
+  log("overflow px:", await kit.overflowPx(page));
   await page.waitForTimeout(1500);
   log("position note:", await field.positionNote(page));
   await page.screenshot({ path: SHOTS + "/f1-route.png", fullPage: true });
@@ -167,10 +165,7 @@ async function pinFor(email, tracking) {
   await signIn(w, "bodega@yuntera.example");
   log("warehouse lands on:", new URL(w.url()).pathname, "|", await field.heading(w));
   log("board:", await field.boardSections(w));
-  log(
-    "overflow px:",
-    await w.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
-  );
+  log("overflow px:", await kit.overflowPx(w));
   await w.screenshot({ path: SHOTS + "/f4-warehouse.png", fullPage: true });
 
   await field.openParcelToPick(w);

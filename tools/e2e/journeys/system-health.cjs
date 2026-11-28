@@ -25,6 +25,7 @@ const { execFileSync, spawnSync } = require("node:child_process");
 const { readFileSync } = require("node:fs");
 const { chromium, request } = require("playwright");
 const ops = require("../lib/ops.cjs");
+const kit = require("../lib/kit.cjs");
 
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
@@ -79,7 +80,7 @@ function sql(statement) {
     isMobile: true,
     hasTouch: true,
   };
-  const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - 390);
+  const overflow = (page) => kit.overflowPx(page);
   async function signIn(email, path, options = desktop) {
     const page = await (await browser.newContext(options)).newPage();
     watch(page);

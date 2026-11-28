@@ -11,6 +11,7 @@ const web = require("../lib/web.cjs");
 const seller = require("../lib/seller.cjs");
 const ops = require("../lib/ops.cjs");
 const { word } = require("../lib/words.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
 const log = (...a) => console.log(...a);
@@ -36,8 +37,7 @@ const ARCHIVED = "/p/teclado-mecanico-compacto-nimbo";
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = (page) => kit.overflowPx(page);
 
   // Three people, three browsers: a shopper who is not signed in, the seller, and staff.
   // The shopper comes back several times. Each visit is a fresh browser: on a second

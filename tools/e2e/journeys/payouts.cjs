@@ -10,6 +10,7 @@ const { chromium, request } = require("playwright");
 const seller = require("../lib/seller.cjs");
 const ops = require("../lib/ops.cjs");
 const { word } = require("../lib/words.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const SELLER = process.env.SELLER_URL || "http://127.0.0.1:3001";
 const OPS = process.env.OPS_URL || "http://127.0.0.1:3002";
@@ -321,11 +322,7 @@ async function rpcAs(email, fn, args = {}) {
     await m.setViewportSize({ width: 390, height: 844 });
     for (const path of paths) {
       await m.goto(base + path, { waitUntil: "networkidle" });
-      const overflow = await m.evaluate(
-        // Against the phone's width itself: with isMobile the layout viewport
-        // grows to fit wide content, so innerWidth would hide the overflow.
-        () => document.documentElement.scrollWidth - 390,
-      );
+      const overflow = await kit.overflowPx(m);
       log(`mobile ${name} ${path.slice(0, 30)} overflow px:`, overflow);
       expect(overflow <= 0, `${name} ${path} fits a 390 px screen`);
       await m.screenshot({

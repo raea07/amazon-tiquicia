@@ -547,3 +547,43 @@ Object.assign(module.exports, {
   teamToldShown,
   retryErrorPage,
 });
+
+// ── Sideways scroll, measured against the screen ───────────────────────────
+// In a phone context (isMobile) a page that is too wide widens the layout
+// viewport, and window.innerWidth with it, so `scrollWidth - innerWidth`
+// reads 0 however wide the page is. overflowPx measures the document's
+// scrollWidth against the width the context was opened with
+// (page.viewportSize()), which the page cannot change.
+//
+// KNOWN_TOO_WIDE: pages that existed before wave 9 and are too wide until
+// the stage of the rebuild that redraws them. Each is reported when it is
+// measured, and is not a failure while it stays within the width listed. The
+// list may only shrink: a page wider than listed fails, a page that fits
+// again is reported so its line is taken out, and no line is added for a
+// page wave 9 or later work made.
+const KNOWN_TOO_WIDE = [
+  // { route: /^\/example$/, screen: 390, measured: 412, stage: 2 },
+];
+
+/** How many px the page is wider than the context's screen (0 or less: it fits). */
+async function overflowPx(page) {
+  const screen = page.viewportSize()?.width;
+  if (!screen) throw new Error("overflowPx: the page's context has no viewport width");
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth);
+  const route = new URL(page.url()).pathname;
+  const known = KNOWN_TOO_WIDE.find((k) => k.screen === screen && k.route.test(route));
+  if (known && wide > screen && wide <= known.measured) {
+    process.stdout.write(
+      `  (known too wide until stage ${known.stage} of the rebuild: ${route} is ${wide} px at ${screen}, listed at ${known.measured})\n`,
+    );
+    return 0;
+  }
+  if (known && wide <= screen) {
+    process.stdout.write(
+      `  (${route} fits ${screen} px now: take its line out of KNOWN_TOO_WIDE in tools/e2e/lib/kit.cjs)\n`,
+    );
+  }
+  return wide - screen;
+}
+
+Object.assign(module.exports, { overflowPx, KNOWN_TOO_WIDE });

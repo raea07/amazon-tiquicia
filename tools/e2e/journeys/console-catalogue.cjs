@@ -11,6 +11,7 @@
 const { chromium } = require("playwright");
 const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
 const log = (...a) => console.log(...a);
@@ -30,8 +31,7 @@ const log = (...a) => console.log(...a);
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = (page) => kit.overflowPx(page);
 
   // The shop, as a visitor who is not signed in. Each visit is a fresh browser (see
   // listing-edit.cjs: Chromium's own cache of prefetches stalls "networkidle" otherwise).

@@ -27,6 +27,7 @@ const { chromium } = require("playwright");
 const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
 const { word } = require("../lib/words.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const DATABASE_URL =
   process.env.DATABASE_URL || "postgres://postgres:postgres@127.0.0.1:5432/yuntera_local";
@@ -71,9 +72,10 @@ function sql(statement) {
       hasTouch: true,
       locale: "es-CR",
     });
-  // Measured against the screen's 390 px, not innerWidth: in a phone context
-  // a page that is too wide widens the layout viewport, and innerWidth with it.
-  const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - 390);
+  // Measured against the context's screen (kit.overflowPx), not innerWidth: in
+  // a phone context a page that is too wide widens the layout viewport, and
+  // innerWidth with it.
+  const overflow = (page) => kit.overflowPx(page);
   const fits = async (page, what) =>
     check((await overflow(page)) <= 0, `${what} fits 390 px without sideways scrolling`);
 
@@ -162,6 +164,9 @@ function sql(statement) {
     "with its stamp in words and the time left",
   );
   await fits(support, "Casos");
+  // Atención lists the complaint with its long word while it is open.
+  await ops.open(support, "/atencion");
+  await fits(support, "Atención with the long complaint");
   await support.screenshot({ path: SHOTS + "/sc3-cases-list.png", fullPage: true });
 
   await ops.openCase(support, caseId);
@@ -219,6 +224,8 @@ function sql(statement) {
   await web.openOrder(shopper, orderNumber);
   const onOrder = await web.orderCasesText(shopper);
   check(onOrder.includes("Le enviamos el cargador"), "and on the order's page");
+  // The answer holds a long URL: the order page must still fit the screen.
+  await fits(shopper, "the order page with the long answer");
   check(
     !(await web.mainText(shopper)).includes("Nota interna de prueba"),
     "the order page shows no note",
@@ -235,6 +242,7 @@ function sql(statement) {
     sql(`select id from private.cases where kind = 'contact' and channel = 'whatsapp'
     order by created_at desc limit 1`);
   check(contactCase.length === 36, "the WhatsApp contact is a case of the order");
+  await fits(support, "the console order page with its cases");
   await ops.openCustomerFromOrder(support);
   const customerPath = new URL(support.url()).pathname;
   check(

@@ -11,6 +11,7 @@
 
 const { chromium, request } = require("playwright");
 const web = require("../lib/web.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const BASE = web.BASE;
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -100,10 +101,7 @@ async function refreshTokenOf(context) {
   });
   await web.openReady(page, "/ingresar");
   await web.openForgotPassword(page);
-  log(
-    "mobile /recuperar overflow px:",
-    await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
-  );
+  log("mobile /recuperar overflow px:", await kit.overflowPx(page));
   const unknown = await web.askResetLink(page, "nadie-aqui@yuntera.example");
   await web.openReady(page, "/recuperar");
   const known = await web.askResetLink(page, EMAIL);

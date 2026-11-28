@@ -16,6 +16,7 @@ const web = require("../lib/web.cjs");
 const seller = require("../lib/seller.cjs");
 const ops = require("../lib/ops.cjs");
 const { word } = require("../lib/words.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const FAKE = process.env.FAKE_PROVIDERS_URL || "http://127.0.0.1:54323";
 const SHOPPER = "comprador@yuntera.example";
@@ -60,8 +61,7 @@ async function until(what, fn, seconds = 40) {
     isMobile: true,
     hasTouch: true,
   };
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = (page) => kit.overflowPx(page);
 
   // ── 1. The shopper chooses WhatsApp ─────────────────────────────────────
   const shopper = await (await browser.newContext(desktop)).newPage();

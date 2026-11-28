@@ -53,7 +53,7 @@ export function CaseAnswers({ cases, showOrder }: { cases: MyCase[]; showOrder: 
                   <p className="text-xs text-ink-muted">
                     Respuesta de {answer.author ?? "Yuntera"} · {formatDateTime(answer.created_at)}
                   </p>
-                  <p className="mt-1 whitespace-pre-line break-words">{answer.body}</p>
+                  <p className="mt-1 whitespace-pre-line wrap-anywhere">{answer.body}</p>
                 </li>
               ))}
             </ol>

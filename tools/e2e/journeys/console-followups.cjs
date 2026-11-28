@@ -29,6 +29,7 @@ const { ownRoute } = require("../lib/own-route.cjs");
 const ops = require("../lib/ops.cjs");
 const field = require("../lib/field.cjs");
 const { word } = require("../lib/words.cjs");
+const kit = require("../lib/kit.cjs");
 
 /**
  * The history line the staff order page writes for a stop taken off a route
@@ -79,8 +80,7 @@ async function rpcAs(email, calls) {
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = (page) => kit.overflowPx(page);
   const phone = (extra = {}) =>
     browser.newContext({
       viewport: { width: 390, height: 844 },

@@ -32,8 +32,9 @@
 // (getByRole, locator, waitForSelector…): screen steps live in lib/.
 //
 // The size checks (rule 20.5.3) are counted too, so a change that drops one
-// shows up: `scrollWidth` (sideways scroll at a width) and `boundingBox`
-// (the size of a control) in the journey files.
+// shows up: `scrollWidth` or `overflowPx(` (sideways scroll at a width,
+// measured through lib/kit.cjs against the context's screen) and
+// `boundingBox` (the size of a control) in the journey files.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -132,7 +133,9 @@ for (const file of files) {
   }
   const role = (source.match(/getByRole\(/g) ?? []).length;
   const testid = (source.match(/data-testid|getByTestId\(|\btestid\(/g) ?? []).length;
-  const scroll = file.startsWith("journeys/") ? (source.match(/scrollWidth/g) ?? []).length : 0;
+  const scroll = file.startsWith("journeys/")
+    ? (source.match(/scrollWidth|overflowPx\(/g) ?? []).length
+    : 0;
   const box = file.startsWith("journeys/") ? (source.match(/boundingBox\(/g) ?? []).length : 0;
   // An element found in a journey file instead of a helper (rule 1 of README.md).
   const lookup = file.startsWith("journeys/")

@@ -20,6 +20,7 @@ const web = require("../lib/web.cjs");
 const seller = require("../lib/seller.cjs");
 const ops = require("../lib/ops.cjs");
 const { word } = require("../lib/words.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
 const SELLER = seller.BASE;
@@ -52,8 +53,7 @@ const REASON = "Se ve la caja de otra marca junto al producto; tómela sin ella.
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = (page) => kit.overflowPx(page);
   // The session the apps keep in their cookie, for playing a client of our own.
   const tokenOf = async (context) => {
     const cookie = (await context.cookies()).find((c) => /^sb-.*-auth-token$/.test(c.name));

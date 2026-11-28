@@ -21,6 +21,7 @@ const { chromium, request } = require("playwright");
 const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
 const { word } = require("../lib/words.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
 const FAKE_PAY = process.env.FAKE_PAY_URL || "http://127.0.0.1:54324";
@@ -66,8 +67,7 @@ async function until(what, fn, seconds = 40) {
     isMobile: true,
     hasTouch: true,
   };
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = (page) => kit.overflowPx(page);
   const signIn = (page, app, email, expectPath) => app.signInLandingOn(page, email, expectPath);
 
   // ── 0. The administrator switches to the gateway's test environment ────

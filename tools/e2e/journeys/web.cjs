@@ -6,6 +6,7 @@
 
 const { chromium } = require("playwright");
 const web = require("../lib/web.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const BASE = web.BASE;
 const PASSWORD = process.env.SEED_PASSWORD || "yuntera-local-dev";
@@ -127,14 +128,11 @@ const log = (...a) => console.log(...a);
   });
   const m = await phone.newPage();
   await web.open(m, "/");
-  const overflow = await m.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = await kit.overflowPx(m);
   log("mobile horizontal overflow px:", overflow);
   await m.screenshot({ path: SHOTS + "/08-mobile-home.png", fullPage: false });
   await web.open(m, "/p/laptop-14-nimbo-libro");
-  log(
-    "mobile pdp overflow px:",
-    await m.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
-  );
+  log("mobile pdp overflow px:", await kit.overflowPx(m));
   await m.screenshot({ path: SHOTS + "/09-mobile-product.png", fullPage: true });
 
   log("\nERRORS:", errors.length ? errors : "none");

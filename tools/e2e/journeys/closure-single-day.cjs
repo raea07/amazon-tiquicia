@@ -17,6 +17,7 @@ const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
 const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -203,9 +204,7 @@ const calendar = () =>
   await ops.openClosures(phone);
   const phoneSingle = ops.firstSingleDay(phone);
   await ops.showSingleDay(phoneSingle);
-  const width = await phone.evaluate(
-    () => document.documentElement.scrollWidth - window.innerWidth,
-  );
+  const width = await kit.overflowPx(phone);
   check(width <= 0, "the closures page has no sideways scrolling at 390 px");
   const targets = await phoneSingle.evaluate((li) =>
     [...li.querySelectorAll("summary, button")].map((el) =>

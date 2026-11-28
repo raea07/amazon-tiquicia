@@ -19,6 +19,7 @@ const { chromium, request } = require("playwright");
 const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
 const field = require("../lib/field.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -84,8 +85,7 @@ async function as(email) {
       hasTouch: true,
       locale: "es-CR",
     });
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = (page) => kit.overflowPx(page);
   /** The height of a link, as a finger meets it. */
   const height = async (locator) => (await locator.first().boundingBox())?.height ?? 0;
 

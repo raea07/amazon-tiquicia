@@ -38,6 +38,7 @@ const { createHmac } = require("node:crypto");
 const { chromium, request } = require("playwright");
 const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
+const kit = require("../lib/kit.cjs");
 
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
@@ -96,8 +97,7 @@ async function go(page, url) {
   await page.goto(url, { waitUntil: "load" });
   await ops.hydrated(page);
 }
-const overflow = (page) =>
-  page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+const overflow = (page) => kit.overflowPx(page);
 
 (async () => {
   const browser = await chromium.launch();

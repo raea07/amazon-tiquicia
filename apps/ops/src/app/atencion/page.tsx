@@ -80,7 +80,9 @@ async function Queues() {
                     vendido por {item.seller_name ?? "—"}
                   </p>
                   {item.reason ? (
-                    <p className="mt-2 rounded-md bg-surface-muted p-3">“{item.reason}”</p>
+                    <p className="mt-2 rounded-md bg-surface-muted p-3 wrap-anywhere">
+                      “{item.reason}”
+                    </p>
                   ) : null}
                   <p className="mt-2">
                     A reembolsar:{" "}
@@ -170,7 +172,9 @@ async function Queues() {
                   {item.order_number ? " · " : ""}
                   <OrderLink number={item.order_number} />
                 </p>
-                <p className="mt-2 rounded-md bg-surface-muted p-3">“{item.description}”</p>
+                <p className="mt-2 rounded-md bg-surface-muted p-3 wrap-anywhere">
+                  “{item.description}”
+                </p>
                 {canDecide ? (
                   <div className="mt-4 border-t border-border pt-4">
                     <DecisionForm
@@ -210,7 +214,9 @@ async function Queues() {
                   : {item.target_label ?? "ya no existe"} · {formatDateTime(item.created_at)}
                 </p>
                 {item.details ? (
-                  <p className="mt-2 rounded-md bg-surface-muted p-3">“{item.details}”</p>
+                  <p className="mt-2 rounded-md bg-surface-muted p-3 wrap-anywhere">
+                    “{item.details}”
+                  </p>
                 ) : null}
                 {catalogue && item.target_label && item.target_type !== "seller" ? (
                   <p className="mt-2">

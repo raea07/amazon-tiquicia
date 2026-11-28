@@ -19,6 +19,7 @@ const { chromium, request } = require("playwright");
 const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
 const fieldApp = require("../lib/field.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
@@ -91,9 +92,7 @@ async function as(email) {
       ...extra,
     });
   const noSideways = async (page, label) => {
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
-    );
+    const overflow = await kit.overflowPx(page);
     log(`${label}: overflow px`, overflow);
     check(overflow <= 0, `${label} scrolls sideways at 390 px`);
   };

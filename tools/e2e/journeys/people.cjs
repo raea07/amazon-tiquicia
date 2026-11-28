@@ -8,6 +8,7 @@
 const { chromium, request } = require("playwright");
 const ops = require("../lib/ops.cjs");
 const { word } = require("../lib/words.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
@@ -232,11 +233,7 @@ async function rpcAs(email, fn, args = {}) {
   await signIn(m, "central@yuntera.example", "/");
   for (const path of ["/personal", "/repartidores", "/bodegas"]) {
     await ops.open(m, path);
-    const overflow = await m.evaluate(
-      // Against the phone's width itself: with isMobile the layout viewport
-      // grows to fit wide content, so innerWidth would hide the overflow.
-      () => document.documentElement.scrollWidth - 390,
-    );
+    const overflow = await kit.overflowPx(m);
     log(`mobile ${path} overflow px:`, overflow);
     expect(overflow <= 0, `${path} fits a 390 px screen`);
     await m.screenshot({

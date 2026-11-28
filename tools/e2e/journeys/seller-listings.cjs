@@ -20,6 +20,7 @@ const web = require("../lib/web.cjs");
 const seller = require("../lib/seller.cjs");
 const { word } = require("../lib/words.cjs");
 const ops = require("../lib/ops.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const WEB = web.BASE;
 const SELLER = seller.BASE;
@@ -48,8 +49,7 @@ const DESCRIPTION =
       if (r.status() >= 500) errors.push(`HTTP ${r.status()} ${r.url()}`);
     });
   };
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = (page) => kit.overflowPx(page);
   const desktop = () =>
     browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "es-CR" });
   const phoneOf = async (context) =>

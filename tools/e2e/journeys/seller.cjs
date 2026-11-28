@@ -6,6 +6,7 @@
 
 const { chromium } = require("playwright");
 const seller = require("../lib/seller.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const BASE = process.env.SELLER_URL || "http://127.0.0.1:3001";
 const log = (...a) => console.log(...a);
@@ -144,10 +145,7 @@ const log = (...a) => console.log(...a);
   const p3 = await c3.newPage();
   watch(p3);
   await seller.open(p3, "/registro");
-  log(
-    "mobile /registro overflow px:",
-    await p3.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
-  );
+  log("mobile /registro overflow px:", await kit.overflowPx(p3));
   const stamp = Date.now().toString().slice(-7);
   await seller.registerAccount(p3, {
     name: "Rosa Vargas Mena",
@@ -174,10 +172,7 @@ const log = (...a) => console.log(...a);
     "|",
     (await seller.statusMessages(p3)).map((t) => t.slice(0, 60)),
   );
-  log(
-    "mobile dashboard overflow px:",
-    await p3.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
-  );
+  log("mobile dashboard overflow px:", await kit.overflowPx(p3));
   await p3.screenshot({ path: SHOTS + "/s8-mobile-new-shop.png", fullPage: true });
   await seller.open(p3, "/productos");
   log("new shop listings:", await seller.firstSubheading(p3));

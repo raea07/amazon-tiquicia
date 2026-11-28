@@ -46,8 +46,8 @@ async function Replies() {
               </>
             ) : (
               <>
-                <p className="font-semibold">{reply.title}</p>
-                <p className="mt-2 whitespace-pre-line break-words">{reply.body}</p>
+                <p className="font-semibold wrap-anywhere">{reply.title}</p>
+                <p className="mt-2 whitespace-pre-line wrap-anywhere">{reply.body}</p>
               </>
             )}
             <p className="mt-2 text-xs text-ink-muted">

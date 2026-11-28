@@ -18,6 +18,7 @@ const { spawnSync } = require("node:child_process");
 const { chromium, request } = require("playwright");
 const ops = require("../lib/ops.cjs");
 const web = require("../lib/web.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const BASE = process.env.OPS_URL || "http://127.0.0.1:3002";
 const WEB = process.env.WEB_URL || "http://127.0.0.1:3000";
@@ -243,10 +244,7 @@ async function settle(page, expected) {
   await signIn(colleague.page, COLLEAGUE);
   await colleague.page.waitForURL((u) => new URL(u).pathname === "/dos-pasos");
   log("colleague lands on:", path(colleague.page), "|", await ops.statusText(colleague.page));
-  log(
-    "mobile /dos-pasos overflow px:",
-    await colleague.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
-  );
+  log("mobile /dos-pasos overflow px:", await kit.overflowPx(colleague.page));
   await colleague.page.screenshot({ path: SHOTS + "/m3-forced-enrolment.png", fullPage: true });
   await go(colleague.page, BASE + "/atencion");
   log(

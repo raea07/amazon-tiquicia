@@ -243,7 +243,7 @@ async function rpcAs(email) {
     "|",
     (await kit.mainText(m)).slice(0, 60),
     "| overflow px:",
-    await m.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+    await kit.overflowPx(m),
   );
   expect(missing.status() === 404, "the browser did not get a 404 for an unknown product");
   await m.screenshot({ path: SHOTS + "/sc1-not-found-mobile.png" });

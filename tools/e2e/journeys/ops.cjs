@@ -6,6 +6,7 @@
 
 const { chromium, request } = require("playwright");
 const ops = require("../lib/ops.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const BASE = ops.BASE;
 const API = process.env.API_URL || "http://127.0.0.1:54321";
@@ -197,10 +198,7 @@ async function rpcAs(email, calls) {
   await signIn(m, "central@yuntera.example", "/");
   for (const path of ["/", "/despacho", "/pedidos", "/atencion"]) {
     await ops.open(m, path);
-    log(
-      `mobile ${path} overflow px:`,
-      await m.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
-    );
+    log(`mobile ${path} overflow px:`, await kit.overflowPx(m));
   }
   await m.screenshot({ path: SHOTS + "/o8-mobile.png" });
 

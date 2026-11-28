@@ -26,6 +26,7 @@ const { chromium, request } = require("playwright");
 const field = require("../lib/field.cjs");
 const seller = require("../lib/seller.cjs");
 const ops = require("../lib/ops.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
@@ -102,11 +103,11 @@ async function rpcAs(email, calls) {
           );
       }
       return {
-        overflow: document.documentElement.scrollWidth - window.innerWidth,
         h1: [...document.querySelectorAll("h1")].filter(visible).length,
         small,
       };
     });
+    found.overflow = await kit.overflowPx(page);
     log(`${name}:`, JSON.stringify(found));
     check(found.overflow <= 0, `${name}: no sideways scroll at 390 px`);
     check(found.h1 === 1, `${name}: one page title`);

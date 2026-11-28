@@ -474,8 +474,8 @@ async function supportDesk(browser, order) {
       );
     };
     await told("server failure");
-    const wide = await page.evaluate(() => document.documentElement.scrollWidth);
-    expect(wide <= 390, `${site.app}: the error page is ${wide} px wide at 390`);
+    const over = await kit.overflowPx(page);
+    expect(over <= 0, `${site.app}: the error page is ${over} px wider than 390`);
     await page.screenshot({
       path: `${SHOTS}/er-${site.app}-error-page.png`,
       fullPage: true,

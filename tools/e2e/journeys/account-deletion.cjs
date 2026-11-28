@@ -13,6 +13,7 @@
 
 const { chromium, request } = require("playwright");
 const web = require("../lib/web.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
@@ -53,8 +54,7 @@ async function mail(to, kind) {
 }
 
 const path = (page) => new URL(page.url()).pathname;
-const overflow = (page) =>
-  page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+const overflow = (page) => kit.overflowPx(page);
 
 (async () => {
   await api("POST", "/dev/settings", { confirm_email: "on" });

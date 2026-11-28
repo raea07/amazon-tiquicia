@@ -74,8 +74,7 @@ async function until(what, fn, seconds = 60) {
     isMobile: true,
     hasTouch: true,
   };
-  const overflow = (page) =>
-    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const overflow = (page) => kit.overflowPx(page);
   async function signIn(base, email, path, options = desktop) {
     const page = await (await browser.newContext(options)).newPage();
     watch(page);

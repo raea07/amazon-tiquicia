@@ -23,6 +23,7 @@ const web = require("../lib/web.cjs");
 const ops = require("../lib/ops.cjs");
 const fieldApp = require("../lib/field.cjs");
 const { word } = require("../lib/words.cjs");
+const kit = require("../lib/kit.cjs");
 const SHOTS = process.env.E2E_SHOTS || require("node:os").tmpdir();
 const API = process.env.API_URL || "http://127.0.0.1:54321";
 const KEY = process.env.API_KEY || "sb_publishable_local_development_only";
@@ -257,10 +258,7 @@ async function as(email) {
     (await web.mainText(w)).includes("Le dimos un código de entrega nuevo"),
     "and is told why it changed",
   );
-  log(
-    "shopper page overflow px:",
-    await w.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
-  );
+  log("shopper page overflow px:", await kit.overflowPx(w));
   await w.screenshot({ path: SHOTS + "/i4-shopper-new-code.png", fullPage: true });
   await web3.close();
   const delivered3 = await driver.rpc("driver_complete_stop", {
@@ -285,10 +283,7 @@ async function as(email) {
   const coming = await fieldApp.firstReturningParcel(f, 1);
   log("warehouse board:", coming.slice(0, 160));
   check(coming.includes(shippedDetail.shipments[0].tracking_code), "the parcel is on the board");
-  log(
-    "warehouse board overflow px:",
-    await f.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
-  );
+  log("warehouse board overflow px:", await kit.overflowPx(f));
   await f.screenshot({ path: SHOTS + "/i5a-warehouse-returning.png", fullPage: true });
   await field.close();
 
@@ -328,9 +323,7 @@ async function as(email) {
     `/pedidos/${shipped.order_number}`,
   ]) {
     await ops.open(m, path);
-    const overflow = await m.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
-    );
+    const overflow = await kit.overflowPx(m);
     log(`mobile ${path} overflow px:`, overflow);
     check(overflow <= 0, `${path} scrolls sideways on a phone`);
   }

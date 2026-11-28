@@ -20,8 +20,11 @@ is a 5xx, or the browser asks anything of a host that is not this machine
    (later `packages/core`), with the viewer whose screen it is; never a string.
 5. A message without a test id is read by its words with `kit.waitForMessage`,
    inside a helper only.
-6. Size checks (`scrollWidth`, `boundingBox`) stay in the journey files, at 390
-   and 1280 px. Nobody loosens one in the same change as a screen.
+6. Size checks stay in the journey files, at 390 and 1280 px: the width with
+   `kit.overflowPx(page)` (the document's `scrollWidth` against the width the
+   context was opened with, never `innerWidth`, which a phone context widens
+   with the page), the size of a control with `boundingBox`. Nobody loosens
+   one in the same change as a screen.
 7. An app builder may change that app's helper file; journey files belong to the
    journey owner. A test id may be added, never renamed or dropped.
 8. From the repository root, `node tools/e2e/selectors.mjs --check` (classes,
