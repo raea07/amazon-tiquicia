@@ -1211,7 +1211,7 @@ Object.assign(module.exports, {
 /** Opens Ayuda and gives the service hours it says, as one line (U+00A0 as a space). */
 async function helpServiceHours(page) {
   await openReady(page, "/ayuda");
-  return (await text(testid(main(page), "service-hours"))).replace(/ /g, " ");
+  return (await text(testid(main(page), "service-hours"))).replace(/\u00a0/g, " ");
 }
 
 Object.assign(module.exports, { helpServiceHours });

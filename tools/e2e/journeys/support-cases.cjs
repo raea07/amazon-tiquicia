@@ -297,7 +297,7 @@ function sql(statement) {
     "the look is one audit row with the order, the actor and the reason, without the phone",
   );
   await fits(support, "the console order page after the look");
-  await support.screenshot({ path: SHOTS + "/sc5b-order-delivery-phone.png", fullPage: true });
+  await support.screenshot({ path: `${SHOTS}/sc5b-order-delivery-phone.png`, fullPage: true });
 
   await ops.openCustomerFromOrder(support);
   const customerPath = new URL(support.url()).pathname;
