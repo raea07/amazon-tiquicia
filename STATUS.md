@@ -532,6 +532,27 @@ How the new parts work, in short:
 change to code; only Markdown changed after the journeys. Not run: anything on
 the hosted project, against real Sentry, on Vercel or on a phone.
 
+- **Three outside checks of the join** (the whole tree, security, and a
+  person walking the screens at 390 and 1280 px) found one critical, three
+  major and six minor problems; all are fixed except three minor ones
+  listed under "Not built". (1, critical) A staff note was a free oracle for
+  a customer's live delivery codes: guesses written as `0/6/5/7 0/6/5/8 …`
+  passed the guard uncounted, and the case page then showed `••••` exactly
+  where a guess was a live code. Now a text staff wrote is shown as
+  written, never masked, and the guard reads the same shapes as the mask
+  (decision 61). (2) Ten parallel calls of one writer passed the lock-out
+  of 3 refusals and the allowance of 20 numbers an hour; one writer's
+  texts are now checked one after another (race J8: 10 of 10 rounds wrong
+  before, 0 after). (3) The console's case page scrolled sideways at
+  390 px with a long word or URL, and the journeys' width check could not
+  see it in a phone context; both are fixed. (4) A return's case card
+  promised «le respondemos» by its resolution day beside the order's
+  «2 horas hábiles»; only a complaint says that now. Also fixed: a code
+  inside an unbroken longer number reached staff unmasked; «Eliminar» on
+  saved answers and «Ver sus consultas» were under 44 px, and
+  `touch-targets.cjs` now reads wave 9's pages; the index link to decision
+  64; suite `196` failed between 00:00 and 06:00 UTC (it used the UTC date
+  for a store build).
 - **What the join changed**: wave 9's decisions are numbered 61 to 68, after
   the main line's 59 and 60. Wave 9's status words come from the one module
   (`packages/core/src/status-words.ts`): a case reads «Por responder»,
@@ -1099,6 +1120,14 @@ D2 in the decisions and the Android release in the store documents" is done
   the shop's complaint form and «Sus consultas» move in stage 2. The ratchet
   counts of `web`, `ops` and `shop-native` were raised by what these pages
   measure.
+- **Three minor findings of the join's outside checks, left for later
+  stages.** A shopper reads «Por responder» on their own case, which can
+  read as if they must answer: the module has one word per case state for
+  every viewer (SISTEMA.md §4.3), and a shopper's word is designed in
+  stage 2. A form's refusal is not tied to its field (no `aria-invalid`):
+  that is the shared `FormMessage` and field work of stage 1, part 2. The
+  error pages have no `h1` (their title is `EmptyState`'s `h2`, as on the
+  main line before): the same shared work.
 
 **Decided on 24 and 27 November 2026, not built**
 
