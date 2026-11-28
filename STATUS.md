@@ -622,7 +622,7 @@ were deployed from `4e2ac0f` with error reports off.
   0.1.0 (4), Android and iPhone) on the audit trail. Stock, offers,
   `app_settings` and the ledger's balances are as before.
 
-**Error alerts on the test websites, 28 November 2026** (07:40 to 08:40
+**Error alerts on the test websites, 28 November 2026** (07:15 to 08:41
 UTC, by the supervisor through Sentry's API and Vercel's API; the steps are
 in the
 [runbook](docs/07-deployment/runbook-first-deploy.md#the-sentry-account-28-november-2026)).
@@ -643,7 +643,7 @@ the four Vercel projects, and the four web apps deployed again from
   2 events, release `yuntera-<website>@e7e8cd1b7966`, environment
   `production`, its `app` tag, the error and the page's address without its
   query, and no user, IP address, headers, cookies, body, breadcrumbs or
-  browser name. The uptime monitor's first check passed. The test problems
+  browser name. The uptime monitor's first 3 checks passed. The test problems
   were marked resolved; the bypass secrets were revoked (0 remain).
 - **Found and fixed:** Sentry derives a country, a region and sometimes a
   city from the address a report arrives from, even with IP addresses not

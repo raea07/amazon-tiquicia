@@ -2801,7 +2801,7 @@ commits.
 
 #### The Sentry account, 28 November 2026
 
-What was done, by the supervisor only, from 07:40 to 08:40 UTC, through
+What was done, by the supervisor only, from 07:15 to 08:41 UTC, through
 Sentry's API and Vercel's API, under owner decision 57 (D50): the owner's
 existing Sentry account, free plan, only projects whose names start with
 `yuntera`, personal data removed, alerts by e-mail. The steps and their
@@ -2849,8 +2849,8 @@ settings are in [error tracking](error-tracking.md#what-exists-in-sentry-and-how
    the headers `apikey: <the publishable key>` and
    `content-type: application/json`, body `{}`, every 5 minutes, 10 seconds
    allowed, down after 3 failed checks in a row and up again after 1 good
-   one (Sentry's defaults). 40 minutes after it was made, Sentry showed 1
-   check, passed, and none failed. Sentry keeps the answer of a failed check
+   one (Sentry's defaults). In its first 15 minutes (08:26 to 08:41 UTC) Sentry recorded 3
+   checks, all passed. Sentry keeps the answer of a failed check
    (its default); this function answers `{"ok": true}` and nothing else.
 6. **Vercel settings.** `NEXT_PUBLIC_SENTRY_DSN` on each of the four
    projects, plain, for Production and Preview, never Development, with that
@@ -2863,7 +2863,7 @@ settings are in [error tracking](error-tracking.md#what-exists-in-sentry-and-how
    `dpl_9ekDiaXGJEhxinVYCyEic2Ex3nZG`, campo
    `dpl_6J4W5jFE56xUHYSWgfKf2PBUnyFP`. The test websites now run `e7e8cd1`
    with error reports on (before: `4e2ac0f`, off).
-8. **Test**, done twice (08:32 and 08:34): headless Chromium at 390 px opened
+8. **Test**, done twice (08:31 and 08:34): headless Chromium at 390 px opened
    `/ingresar` on each website through a Protection Bypass for Automation,
    sent to that website's `vercel.app` host only, and made one error happen
    in the page ("Prueba de despliegue: aviso de errores en <project>

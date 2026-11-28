@@ -127,7 +127,7 @@ script, frame or image comes from Sentry, and there is no tunnel route.
 
 ## What exists in Sentry, and how to repeat it
 
-The supervisor set this up on 28 November 2026 (07:40 to 08:40 UTC) in the
+The supervisor set this up on 28 November 2026 (07:15 to 08:41 UTC) in the
 owner's existing Sentry account, on the free plan, through Sentry's API; the
 API's names are in brackets. Only projects whose names start with `yuntera`
 (decision 57). Nothing else in the account was changed: no
